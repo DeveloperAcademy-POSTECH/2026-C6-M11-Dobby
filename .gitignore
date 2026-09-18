@@ -127,3 +127,11 @@ xcuserdata
 
 # User-specific stuff
 .idea/
+
+### Visual Studio / VS Code ###
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
