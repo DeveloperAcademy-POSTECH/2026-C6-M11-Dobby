@@ -96,16 +96,6 @@ private func makePreviewHistory(
     )
 }
 
-#Preview("작은 화면 · 큰 글자", traits: .fixedLayout(width: 320, height: 568)) {
-    ExportView(
-        history: makePreviewHistory(
-            scenario: "accessibility",
-            openedChannels: [.instagram]
-        )
-    )
-        .environment(\.dynamicTypeSize, .accessibility3)
-}
-
 #Preview("탭하면 방문 체크") {
     ExportView(history: makePreviewHistory(scenario: "success"))
         .environment(\.openURL, OpenURLAction { _ in .handled })
