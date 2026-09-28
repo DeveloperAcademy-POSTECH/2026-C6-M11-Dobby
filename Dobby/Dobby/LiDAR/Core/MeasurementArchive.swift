@@ -89,6 +89,32 @@ actor MeasurementArchive {
         return builder.report()
     }
 
+    func validationReport() throws -> MeasurementValidationReport {
+        var builder = MeasurementValidationReportBuilder()
+        guard FileManager.default.fileExists(atPath: folder.path) else { return builder.report() }
+        let directories = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        for directory in directories where UUID(uuidString: directory.lastPathComponent) != nil {
+            try Task.checkCancellation()
+            do {
+                let summary = try JSONDecoder().decode(MeasurementSummary.self,
+                    from: Data(contentsOf: directory.appendingPathComponent("summary.json")))
+                let record = try Self.decode(from: directory.appendingPathComponent("measurement.json"))
+                guard record.id == summary.id, record.id.uuidString == directory.lastPathComponent,
+                      record.savedAt == summary.savedAt else { throw ArchiveError.invalidFile }
+                builder.add(record)
+            } catch { builder.addUnreadableRecord() }
+        }
+        return builder.report()
+    }
+
+    func exportValidation(_ report: MeasurementValidationReport, markdown: Bool) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("DobbyValidationExports", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("lidar-validation-\(UUID().uuidString)." + (markdown ? "md" : "csv"))
+        try (markdown ? report.markdown : report.csv).write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
     func exportBaselineCSV(_ report: BaselineReport) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("DobbyBaselineExports", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

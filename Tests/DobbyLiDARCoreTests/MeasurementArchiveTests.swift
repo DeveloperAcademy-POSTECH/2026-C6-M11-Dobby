@@ -149,6 +149,33 @@ final class MeasurementArchiveTests: XCTestCase {
         XCTAssertEqual(restored.result.values.first?.meters, original.result.values.first?.meters)
     }
 
+    func testMultiItemReferencesAndFinalReportSurviveArchiveRoundTrip() async throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let archive = MeasurementArchive(folder: folder)
+        var original = record()
+        original.snapshot.frame.source = .sceneDepth // Fabricated contract fixture, not sensor evidence.
+        original.landmarks.origin = .manual
+        original.definitions.append(.init(id: "second", title: "같은 구간", landmarkIDs: ["A", "B"]))
+        original.referenceCentimeters = nil
+        original.referenceByDefinitionCentimeters = ["test": 50, "second": 49]
+        _ = try await archive.save(original)
+        let restored = try await archive.load(original.id)
+        XCTAssertEqual(restored.referenceByDefinitionCentimeters, original.referenceByDefinitionCentimeters)
+        let report = try await archive.validationReport()
+        XCTAssertEqual(report.manual.attempts, 2)
+        XCTAssertEqual(report.manual.compared, 2)
+        XCTAssertEqual(report.automated.attempts, 0)
+        let csv = try await archive.exportValidation(report, markdown: false)
+        let markdown = try await archive.exportValidation(report, markdown: true)
+        // Foundation's String file initializer consumes the UTF-8 BOM. Compare
+        // exported bytes so the Excel-compatible BOM is verified, not discarded.
+        XCTAssertEqual(try Data(contentsOf: csv), Data(report.csv.utf8))
+        XCTAssertEqual(try String(contentsOf: markdown, encoding: .utf8), report.markdown)
+        try? FileManager.default.removeItem(at: csv)
+        try? FileManager.default.removeItem(at: markdown)
+    }
+
     func testImportRejectsMalformedJSONAndEmptyFile() async throws {
         let folder = temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
