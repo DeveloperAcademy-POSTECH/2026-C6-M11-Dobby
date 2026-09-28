@@ -59,7 +59,11 @@ nonisolated struct MeasurementFrame: Codable, Sendable {
 nonisolated struct CaptureSnapshot: Codable, Sendable {
     var frame: MeasurementFrame
     var imageJPEG: Data
-
+    /// Optional comparison output from the very same ARFrame. The primary
+    /// measurement continues to use raw sceneDepth; smoothing is not assumed
+    /// to improve physical accuracy. Older archives omit both optional fields.
+    var smoothedFrame: MeasurementFrame? = nil
+    var selectionSummary: CaptureSelectionSummary? = nil
 }
 
 nonisolated enum LandmarkOrigin: String, Codable, Sendable {
