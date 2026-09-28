@@ -69,6 +69,34 @@ actor MeasurementArchive {
             }.sorted { $0.savedAt > $1.savedAt }
     }
 
+    func baselineReport() throws -> BaselineReport {
+        var builder = BaselineReportBuilder()
+        guard FileManager.default.fileExists(atPath: folder.path) else { return builder.report() }
+        let directories = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        for directory in directories where UUID(uuidString: directory.lastPathComponent) != nil {
+            try Task.checkCancellation()
+            let url = directory.appendingPathComponent("measurement.json")
+            do {
+                let summary = try JSONDecoder().decode(MeasurementSummary.self,
+                    from: Data(contentsOf: directory.appendingPathComponent("summary.json")))
+                let record = try Self.decode(from: url)
+                guard record.id == summary.id, record.id.uuidString == directory.lastPathComponent,
+                      record.savedAt == summary.savedAt else { throw ArchiveError.invalidFile }
+                builder.add(record)
+            }
+            catch { builder.addUnreadableRecord() }
+        }
+        return builder.report()
+    }
+
+    func exportBaselineCSV(_ report: BaselineReport) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("DobbyBaselineExports", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("lidar-baseline-\(UUID().uuidString).csv")
+        try report.csv.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
     func load(_ id: UUID) throws -> SavedMeasurement {
         let url = folder.appendingPathComponent(id.uuidString).appendingPathComponent("measurement.json")
         return try Self.decode(from: url)

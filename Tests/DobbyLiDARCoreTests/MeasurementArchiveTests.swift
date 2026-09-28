@@ -204,6 +204,42 @@ final class MeasurementArchiveTests: XCTestCase {
         XCTAssertEqual(summary.status, .unavailable)
     }
 
+    func testFailedSaveDoesNotEnterBaselineAndPreservesExistingDirectory() async throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let archive = MeasurementArchive(folder: folder)
+        var candidate = record()
+        candidate.snapshot.frame.source = .sceneDepth
+        candidate.landmarks.origin = .manual
+        let directory = folder.appendingPathComponent(candidate.id.uuidString)
+        // Reproduce a destination at which writing the summary cannot succeed.
+        let occupied = directory.appendingPathComponent("summary.json")
+        try FileManager.default.createDirectory(at: occupied, withIntermediateDirectories: true)
+        do {
+            _ = try await archive.save(candidate)
+            XCTFail("Saving over an occupied destination should fail")
+        } catch { }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: occupied.path))
+        let summaries = try await archive.summaries()
+        let report = try await archive.baselineReport()
+        XCTAssertTrue(summaries.isEmpty)
+        XCTAssertTrue(report.samples.isEmpty, "A failed save must not count as a completed baseline record")
+    }
+
+    func testInterruptedRecordWithoutSummaryIsExcludedFromBaseline() async throws {
+        let folder = temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var candidate = record()
+        candidate.snapshot.frame.source = .sceneDepth
+        candidate.landmarks.origin = .manual
+        let directory = folder.appendingPathComponent(candidate.id.uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(candidate).write(to: directory.appendingPathComponent("measurement.json"))
+        let report = try await MeasurementArchive(folder: folder).baselineReport()
+        XCTAssertEqual(report.samples.count, 0)
+        XCTAssertEqual(report.malformedRecords, 1)
+    }
+
     func testSavePublishesBothFilesAndDoesNotOverwriteExistingRecord() async throws {
         let folder = temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
