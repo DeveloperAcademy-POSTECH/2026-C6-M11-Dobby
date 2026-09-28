@@ -4,24 +4,41 @@ import UIKit
 
 struct LiDARLabView: View {
     @StateObject private var capture: ARKitCaptureProvider
-    @StateObject private var automatic: AutomaticMeasurementViewModel
+    @State private var automaticService: RecordedMeasurementService?
+    @State private var demoService: RecordedMeasurementService
+    @State private var automaticPhase: AutomaticMeasurementPhase = .idle
+    @State private var isAutomaticRunning = false
+    @State private var automaticError: String?
+    @State private var automaticRunID: UUID?
+    @State private var automaticTask: Task<Void, Never>?
+    @State private var pendingAutomaticOutput: RecordedMeasurementOutput?
+    @State private var automaticRecordingError: String?
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showCamera = false
     @State private var showReadinessDemo = false
     @State private var showBaseline = false
     @State private var showValidation = false
     @State private var automaticMode = false
-    @State private var automaticSession: AutomaticMeasurementSessionModel?
-    @State private var session: MeasurementSessionModel?
+    @State private var automaticSession: AutomaticMeasurement?
+    @State private var session: ManualMeasurement?
     @State private var records: [MeasurementSummary] = []
     @State private var demo: DemoScenario = .flat
     @State private var showImporter = false
     @State private var errorMessage: String?
-    private let archive = MeasurementArchive()
+    @State private var archive = MeasurementArchive()
 
     init(landmarkProvider: (any GarmentLandmarkProviding)? = nil) {
         let camera = ARKitCaptureProvider()
         _capture = StateObject(wrappedValue: camera)
-        _automatic = StateObject(wrappedValue: AutomaticMeasurementViewModel(camera: camera, provider: landmarkProvider))
+        let journal = LiDARAppServices.attemptJournal
+        _automaticService = State(initialValue: landmarkProvider.map { provider in
+            RecordedMeasurementService(workflow: AutomaticMeasurementWorkflow(camera: camera,
+                landmarks: provider, definitions: MeasurementDefinition.longSleeve,
+                expectedLandmarkOrigin: .model), journal: journal)
+        })
+        _demoService = State(initialValue: RecordedMeasurementService(workflow: AutomaticMeasurementWorkflow(
+            camera: IntegrationDemoCamera(), landmarks: IntegrationDemoLandmarks(),
+            definitions: IntegrationDemoLandmarks.definitions, expectedLandmarkOrigin: .synthetic), journal: journal))
     }
 
     var body: some View {
@@ -51,24 +68,29 @@ struct LiDARLabView: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         Label("자동 측정 연결", systemImage: "point.3.connected.trianglepath.dotted").font(.headline)
-                        Text(automatic.hasModel ? "촬영한 한 프레임에서 측정점과 모든 항목의 치수를 계산합니다."
+                        Text((automaticService != nil) ? "촬영한 한 프레임에서 측정점과 모든 항목의 치수를 계산합니다."
                              : "의류 ML 모델 연결 대기 중입니다. 아래 합성 테스트로 촬영→측정점 수신→치수 계산·부분 실패·저장을 확인할 수 있습니다.")
                             .font(.subheadline).foregroundStyle(.secondary)
                         Button { automaticMode = true; showCamera = true } label: {
                             Label("ML 자동 측정 촬영", systemImage: "camera.badge.ellipsis").frame(maxWidth: .infinity)
-                        }.buttonStyle(.borderedProminent).disabled(!automatic.hasModel || !capture.isSupported || automatic.isRunning)
+                        }.buttonStyle(.borderedProminent).disabled(!(automaticService != nil) || !capture.isSupported || isAutomaticRunning)
                         Button {
-                            Task {
-                                await automatic.runDemo()
-                                if let value = automatic.session { automaticSession = value }
+                            automaticTask = Task {
+                                do { _ = try await runAutomatic(using: demoService, orientation: .up, synthetic: true) }
+                                catch is CancellationError { }
+                                catch {
+                                    if (error as? any AutomaticMeasurementFailureClassifying)?.automaticMeasurementFailureCode != .cancelled {
+                                        automaticError = error.localizedDescription
+                                    }
+                                }
                             }
                         } label: { Label("합성 자동 연결 테스트", systemImage: "play.rectangle").frame(maxWidth: .infinity) }
-                            .buttonStyle(.bordered).disabled(automatic.isRunning).accessibilityIdentifier("openAutomaticDemo")
-                        if automatic.isRunning {
-                            ProgressView(automatic.phaseLabel)
-                            Button("자동 측정 취소") { automatic.cancel() }
+                            .buttonStyle(.bordered).disabled(isAutomaticRunning).accessibilityIdentifier("openAutomaticDemo")
+                        if isAutomaticRunning {
+                            ProgressView(automaticPhaseLabel)
+                            Button("자동 측정 취소") { cancelAutomatic() }
                         }
-                        if let message = automatic.errorMessage { Text(message).font(.caption).foregroundStyle(.orange) }
+                        if let message = automaticError { Text(message).font(.caption).foregroundStyle(.orange) }
                     }.labCard()
 
                     VStack(alignment: .leading, spacing: 14) {
@@ -80,7 +102,8 @@ struct LiDARLabView: View {
                         }.pickerStyle(.segmented)
                         Button {
                             let value = DemoSnapshotFactory.make(demo)
-                            session = MeasurementSessionModel(snapshot: value.snapshot, landmarks: value.landmarks, expectedMeters: value.expected)
+                            session = ManualMeasurement(snapshot: value.snapshot, landmarks: value.landmarks,
+                                expectedMeters: value.expected, testContext: .init(deviceModel: SnapshotPresentation.deviceIdentifier))
                         } label: { Label("데모 테스트 열기", systemImage: "play.circle.fill").frame(maxWidth: .infinity) }
                             .buttonStyle(.bordered).accessibilityIdentifier("openDemo")
                     }.labCard()
@@ -134,10 +157,12 @@ struct LiDARLabView: View {
             }.background(Color(.systemGroupedBackground))
                 .navigationTitle("측정 실험실").navigationBarTitleDisplayMode(.inline)
                 .task { await refreshRecords() }
+                .onChange(of: scenePhase) { _, phase in if phase != .active { cancelAutomatic() } }
+                .onDisappear { if !showCamera { cancelAutomatic() } }
                 .sheet(isPresented: $showBaseline) { BaselineReportView(archive: archive) }
                 .sheet(isPresented: $showValidation) { MeasurementValidationReportView(archive: archive) }
                 .sheet(item: $automaticSession, onDismiss: { Task { await refreshRecords() } }) { model in
-                    AutomaticMeasurementResultView(model: model, archive: archive)
+                    AutomaticMeasurementResultView(model: model, archive: archive, recordingError: automaticRecordingError)
                 }
                 .sheet(isPresented: $showReadinessDemo) { LiveReadinessDemoView() }
                 .sheet(item: $session, onDismiss: { Task { await refreshRecords() } }) { model in
@@ -146,15 +171,25 @@ struct LiDARLabView: View {
                 .fullScreenCover(isPresented: $showCamera, onDismiss: {
                     if let snapshot = pendingSnapshot {
                         pendingSnapshot = nil
-                        if automaticMode { automaticSession = automatic.session }
-                        else { session = MeasurementSessionModel(snapshot: snapshot) }
+                        if automaticMode, let completed = pendingAutomaticOutput {
+                            pendingAutomaticOutput = nil
+                            automaticRecordingError = completed.recordingError
+                            automaticSession = AutomaticMeasurement(output: completed.workflowOutput,
+                                context: .init(deviceModel: SnapshotPresentation.deviceIdentifier))
+                        } else if !automaticMode {
+                            session = ManualMeasurement(snapshot: snapshot,
+                                testContext: .init(deviceModel: SnapshotPresentation.deviceIdentifier))
+                        }
                     }
                 }) {
                     LiDARCameraView(provider: capture, onCapture: { snapshot in
                         pendingSnapshot = snapshot
                         showCamera = false
-                    }, captureAction: automaticMode ? { try await automatic.runLive(orientation: $0) } : nil,
-                       progressText: automaticMode ? automatic.phaseLabel : nil)
+                    }, captureAction: automaticMode ? { orientation in
+                        guard let automaticService else { throw ArchiveError.invalidFile }
+                        return try await runAutomatic(using: automaticService, orientation: orientation, synthetic: false)
+                    } : nil,
+                       progressText: automaticMode ? automaticPhaseLabel : nil)
                 }
                 .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                     Task {
@@ -170,6 +205,67 @@ struct LiDARLabView: View {
                     Button("확인", role: .cancel) { errorMessage = nil }
                 } message: { Text(errorMessage ?? "") }
         }.tint(.teal)
+    }
+
+    // These are presentation tasks and transient UI states. Domain execution and
+    // durable attempt logging remain in the injected, non-observable service.
+    private var automaticPhaseLabel: String {
+        switch automaticPhase {
+        case .idle: "촬영 준비"
+        case .capturing: "사진과 깊이를 고정하는 중…"
+        case .detectingLandmarks: "같은 사진에서 측정점을 받는 중…"
+        case .measuring: "측정점의 실제 길이를 계산하는 중…"
+        case .completed: "계산 완료"
+        case .failed: "자동 측정 실패"
+        case .cancelled: "자동 측정 취소"
+        }
+    }
+
+    private func cancelAutomatic() {
+        guard isAutomaticRunning else { return }
+        automaticRunID = nil
+        automaticTask?.cancel()
+        automaticService?.cancel()
+        demoService.cancel()
+        pendingAutomaticOutput = nil
+        automaticPhase = .cancelled
+    }
+
+    private func runAutomatic(using service: RecordedMeasurementService, orientation: ImageOrientation,
+                              synthetic: Bool) async throws -> CaptureSnapshot {
+        guard !isAutomaticRunning else { throw CancellationError() }
+        let token = UUID()
+        automaticRunID = token
+        isAutomaticRunning = true
+        automaticError = nil
+        automaticPhase = .capturing
+        pendingAutomaticOutput = nil
+        defer {
+            isAutomaticRunning = false
+            if automaticRunID == token { automaticRunID = nil }
+        }
+        do {
+            let completed = try await service.run(orientation: orientation,
+                purpose: synthetic ? .fixture : .automaticModel, isSynthetic: synthetic,
+                deviceContext: synthetic ? "Synthetic integration fixture" : SnapshotPresentation.deviceIdentifier,
+                onPhaseChange: { phase in
+                    guard automaticRunID == token else { return }
+                    automaticPhase = phase
+                    if !synthetic, phase == .detectingLandmarks { capture.stop() }
+                })
+            guard automaticRunID == token, !Task.isCancelled else { throw CancellationError() }
+            if synthetic {
+                automaticRecordingError = completed.recordingError
+                automaticSession = AutomaticMeasurement(output: completed.workflowOutput,
+                    context: .init(deviceModel: "Synthetic fixture"))
+            } else { pendingAutomaticOutput = completed }
+            return completed.workflowOutput.snapshot
+        } catch {
+            if automaticRunID != token || Task.isCancelled { throw CancellationError() }
+            let cancelled = (error as? any AutomaticMeasurementFailureClassifying)?.automaticMeasurementFailureCode == .cancelled
+            automaticPhase = cancelled ? .cancelled : .failed
+            throw error
+        }
     }
 
     @State private var pendingSnapshot: CaptureSnapshot?
@@ -189,8 +285,11 @@ struct LiDARLabView: View {
             throw ArchiveError.invalidFile
         }
         if record.definitions.count > 1 || record.landmarks.origin == .model {
-            let value = AutomaticMeasurementSessionModel(record: record)
-            await value.replay()
+            var value = AutomaticMeasurement(record: record)
+            let replayed = await MeasurementPipeline().measure(snapshot: value.snapshot, landmarks: value.landmarks,
+                definitions: value.definitions, options: value.options)
+            guard value.apply(replayed), !Task.isCancelled else { throw ArchiveError.invalidFile }
+            automaticRecordingError = nil
             automaticSession = value
             return
         }
@@ -199,8 +298,9 @@ struct LiDARLabView: View {
         selectedPoints.points = definition.landmarkIDs.map { id in
             record.landmarks.points.first(where: { $0.id == id }) ?? .init(id: id, point: .init(x: 0.5, y: 0.5), confidence: nil, isVisible: false)
         }
-        let model = MeasurementSessionModel(snapshot: record.snapshot, landmarks: selectedPoints,
-            definition: definition, referenceCentimeters: record.referenceCentimeters, options: record.options, testContext: record.testContext)
+        let model = ManualMeasurement(snapshot: record.snapshot, landmarks: selectedPoints,
+            definition: definition, referenceCentimeters: record.referenceCentimeters, options: record.options,
+            testContext: record.testContext ?? .init(deviceModel: SnapshotPresentation.deviceIdentifier))
         session = model
     }
 }
