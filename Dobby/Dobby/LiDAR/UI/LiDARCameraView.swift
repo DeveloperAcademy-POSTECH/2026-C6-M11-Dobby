@@ -71,8 +71,45 @@ struct LiDARCameraView: View {
             }
             LiveReadinessStatusView(readiness: provider.liveReadiness)
             if !provider.isRunning, !takingPhoto {
-                Text(provider.guidance).font(.subheadline).padding(12)
+                Text(captureGuidance).font(.subheadline).padding(12)
                     .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+    }
+
+    /// Presentation belongs to the view; the adapter publishes camera facts.
+    private var captureGuidance: String {
+        switch provider.state {
+        case .idle:
+            return "카메라를 시작하거나 샘플을 불러와 주세요."
+        case .requestingPermission:
+            return "카메라 권한을 확인하고 있습니다."
+        case .unavailable(.unsupportedDevice):
+            return ARKitCaptureError.unsupportedDevice.localizedDescription
+        case .unavailable(.cameraPermissionDenied):
+            return ARKitCaptureError.cameraPermissionDenied.localizedDescription
+        case .interrupted:
+            return ARKitCaptureError.interrupted.localizedDescription
+        case .failed(let reason):
+            return ARKitCaptureError.sessionFailed(reason).localizedDescription
+        case .starting, .ready, .capturing:
+            guard let status = provider.frameStatus else {
+                return "옷 전체가 보이도록 카메라를 향해 주세요. 깊이를 준비하고 있습니다."
+            }
+            guard status.hasDepth else {
+                return "LiDAR 깊이를 준비하고 있습니다. 렌즈를 가리지 말고 잠시 기다려 주세요."
+            }
+            switch status.tracking {
+            case .normal:
+                return "옷을 펴고 소매와 밑단까지 화면에 들어오게 해 주세요."
+            case .excessiveMotion:
+                return "카메라 움직임이 큽니다. 잠시 멈춘 뒤 촬영하면 더 안정적입니다."
+            case .insufficientFeatures:
+                return "주변 무늬가 부족합니다. 조명을 밝게 하고 옷과 배경을 함께 보여 주세요."
+            case .limited:
+                return "카메라 위치를 파악하고 있습니다. 잠시 안정적으로 잡아 주세요."
+            case .unavailable:
+                return "카메라 위치 추적을 준비하고 있습니다."
             }
         }
     }

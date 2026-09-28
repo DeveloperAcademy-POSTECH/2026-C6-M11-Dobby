@@ -12,8 +12,27 @@ nonisolated enum CaptureState: Equatable, Sendable {
     case ready
     case capturing
     case interrupted
-    case unavailable
+    case unavailable(CaptureUnavailableReason)
     case failed(String)
+}
+
+nonisolated enum CaptureUnavailableReason: Equatable, Sendable {
+    case unsupportedDevice
+    case cameraPermissionDenied
+}
+
+/// Camera facts only. Views decide how to describe these observations.
+nonisolated struct CaptureFrameStatus: Equatable, Sendable {
+    var hasDepth: Bool
+    var tracking: CaptureTrackingStatus
+}
+
+nonisolated enum CaptureTrackingStatus: Equatable, Sendable {
+    case normal
+    case excessiveMotion
+    case insufficientFeatures
+    case limited
+    case unavailable
 }
 
 nonisolated enum ARKitCaptureError: LocalizedError, Sendable, AutomaticMeasurementFailureClassifying {
@@ -61,7 +80,7 @@ nonisolated enum ARKitCaptureError: LocalizedError, Sendable, AutomaticMeasureme
 final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotProviding {
     let session = ARSession()
     @Published private(set) var state: CaptureState = .idle
-    @Published private(set) var guidance = "카메라를 시작하거나 샘플을 불러와 주세요."
+    @Published private(set) var frameStatus: CaptureFrameStatus?
     @Published private(set) var isRunning = false
     @Published private(set) var liveReadiness = LiveCaptureReadiness.waiting
 
@@ -86,8 +105,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     func start() async {
         guard !isRunning, !permissionRequestInProgress else { return }
         guard isSupported else {
-            state = .unavailable
-            guidance = ARKitCaptureError.unsupportedDevice.localizedDescription
+            state = .unavailable(.unsupportedDevice)
             return
         }
 
@@ -97,7 +115,6 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         generation = identifier
         permissionRequestInProgress = true
         state = .requestingPermission
-        guidance = "카메라 권한을 확인하고 있습니다."
         defer {
             if generation == identifier { permissionRequestInProgress = false }
         }
@@ -112,8 +129,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         guard generation == identifier else { return }
         guard !Task.isCancelled else { stop(); return }
         guard authorized else {
-            state = .unavailable
-            guidance = ARKitCaptureError.cameraPermissionDenied.localizedDescription
+            state = .unavailable(.cameraPermissionDenied)
             return
         }
 
@@ -128,7 +144,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         resetReadiness()
         startFreshnessMonitor(sessionID: identifier)
         state = .starting
-        guidance = "옷 전체가 보이도록 카메라를 향해 주세요. 깊이를 준비하고 있습니다."
+        frameStatus = nil
         isRunning = true
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
     }
@@ -144,7 +160,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         session.pause()
         isRunning = false
         state = .idle
-        guidance = "카메라를 시작하거나 샘플을 불러와 주세요."
+        frameStatus = nil
     }
 
     func capture(orientation: ImageOrientation) async throws -> CaptureSnapshot {
@@ -180,17 +196,17 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         }
     }
 
-    private func receive(_ update: CaptureGuidance) {
+    private func receive(_ update: CaptureObservation) {
         guard generation == update.sessionID, isRunning else { return }
         guard freshnessGate.recordCamera(
             timestamp: update.timestamp, receivedAt: ProcessInfo.processInfo.systemUptime,
-            trackingStable: update.trackingStable, hasDepth: update.hasDepth
+            trackingStable: update.trackingStable, hasDepth: update.status.hasDepth
         ) else { return }
-        guidance = update.message
-        if state == .starting, update.hasDepth { state = .ready }
-        if !update.trackingStable || !update.hasDepth {
+        frameStatus = update.status
+        if state == .starting, update.status.hasDepth { state = .ready }
+        if !update.trackingStable || !update.status.hasDepth {
             liveAnalyzer.invalidateReadiness()
-            liveReadiness = .status(update.hasDepth ? .unstable : .noDepth, timestamp: update.timestamp)
+            liveReadiness = .status(update.status.hasDepth ? .unstable : .noDepth, timestamp: update.timestamp)
         }
     }
 
@@ -251,7 +267,6 @@ extension ARKitCaptureProvider: ARSessionDelegate {
             state = .interrupted
             freshnessTask?.cancel()
             resetReadiness()
-            guidance = ARKitCaptureError.interrupted.localizedDescription
         }
     }
 
@@ -274,18 +289,16 @@ extension ARKitCaptureProvider: ARSessionDelegate {
         Task { @MainActor [weak self] in
             guard let self, generation == identifier else { return }
             isRunning = false
-            state = .failed(failure.localizedDescription)
+            state = .failed(error.localizedDescription)
             freshnessTask?.cancel()
             resetReadiness()
-            guidance = failure.localizedDescription
         }
     }
 }
 
-private nonisolated struct CaptureGuidance: Sendable {
+private nonisolated struct CaptureObservation: Sendable {
     var sessionID: UUID
-    var message: String
-    var hasDepth: Bool
+    var status: CaptureFrameStatus
     var trackingStable: Bool
     var timestamp: TimeInterval
 }
@@ -302,8 +315,8 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
     private var copying = false
     private var selector: CaptureFrameSelector?
     private var selectedCandidate: CopiedCaptureCandidate?
-    private var lastGuidanceTime: TimeInterval = -.infinity
-    private var lastGuidancePose: simd_float4x4?
+    private var lastObservationTime: TimeInterval = -.infinity
+    private var lastObservationPose: simd_float4x4?
     private var previousFramePose: simd_float4x4?
     private var previousFrameTime: TimeInterval?
 
@@ -321,8 +334,8 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         selectedCandidate = nil
         identifier = sessionID
         acceptsFrames = true
-        lastGuidanceTime = -.infinity
-        lastGuidancePose = nil
+        lastObservationTime = -.infinity
+        lastObservationPose = nil
         previousFramePose = nil
         previousFrameTime = nil
         lock.unlock()
@@ -389,10 +402,10 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         }
     }
 
-    func consume(_ frame: ARFrame) -> CaptureGuidance? {
+    func consume(_ frame: ARFrame) -> CaptureObservation? {
         lock.lock()
         guard let identifier, acceptsFrames else { lock.unlock(); return nil }
-        let elapsed = frame.timestamp - lastGuidanceTime
+        let elapsed = frame.timestamp - lastObservationTime
         let shouldPublish = elapsed >= 0.33
         let trackingNormal: Bool
         if case .normal = frame.camera.trackingState { trackingNormal = true }
@@ -401,7 +414,7 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         if case .normal = frame.camera.trackingState { trackingStable = true }
         if shouldPublish {
             let pose = frame.camera.transform
-            if let previous = lastGuidancePose, elapsed > 0, elapsed <= 2 {
+            if let previous = lastObservationPose, elapsed > 0, elapsed <= 2 {
                 let speed = Double(simd_distance(pose.columns.3, previous.columns.3)) / elapsed
                 let currentRotation = simd_quatf(pose)
                 let previousRotation = simd_quatf(previous)
@@ -409,8 +422,8 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
                 let angle = 2 * acos(min(1, abs(Double(relativeRotation.real))))
                 trackingStable = trackingStable && speed < 0.10 && angle / elapsed < 12 * .pi / 180
             }
-            lastGuidanceTime = frame.timestamp
-            lastGuidancePose = pose
+            lastObservationTime = frame.timestamp
+            lastObservationPose = pose
         }
         var translationSpeed: Double?
         var angularSpeed: Double?
@@ -434,9 +447,11 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         } else { request = nil }
         lock.unlock()
 
-        let update: CaptureGuidance? = shouldPublish
-            ? CaptureGuidance(sessionID: identifier, message: Self.message(for: frame),
-                              hasDepth: frame.sceneDepth != nil, trackingStable: trackingStable, timestamp: frame.timestamp)
+        let update: CaptureObservation? = shouldPublish
+            ? CaptureObservation(sessionID: identifier,
+                                 status: CaptureFrameStatus(hasDepth: frame.sceneDepth != nil,
+                                                            tracking: Self.trackingStatus(for: frame.camera.trackingState)),
+                                 trackingStable: trackingStable, timestamp: frame.timestamp)
             : nil
 
         if let request {
@@ -525,14 +540,13 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         if stillCurrent { request.finish(result) }
     }
 
-    private static func message(for frame: ARFrame) -> String {
-        guard frame.sceneDepth != nil else { return "LiDAR 깊이를 준비하고 있습니다. 렌즈를 가리지 말고 잠시 기다려 주세요." }
-        switch frame.camera.trackingState {
-        case .normal: return "옷을 펴고 소매와 밑단까지 화면에 들어오게 해 주세요."
-        case .limited(.excessiveMotion): return "카메라 움직임이 큽니다. 잠시 멈춘 뒤 촬영하면 더 안정적입니다."
-        case .limited(.insufficientFeatures): return "주변 무늬가 부족합니다. 조명을 밝게 하고 옷과 배경을 함께 보여 주세요."
-        case .limited: return "카메라 위치를 파악하고 있습니다. 잠시 안정적으로 잡아 주세요."
-        case .notAvailable: return "카메라 위치 추적을 준비하고 있습니다."
+    private static func trackingStatus(for state: ARCamera.TrackingState) -> CaptureTrackingStatus {
+        switch state {
+        case .normal: .normal
+        case .limited(.excessiveMotion): .excessiveMotion
+        case .limited(.insufficientFeatures): .insufficientFeatures
+        case .limited: .limited
+        case .notAvailable: .unavailable
         }
     }
 
