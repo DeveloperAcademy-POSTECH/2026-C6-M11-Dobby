@@ -1,0 +1,348 @@
+import Foundation
+
+/// Resolves a frozen RGB/depth frame and its matching landmarks into straight 3D lengths.
+/// Positions use optical coordinates: x right, y down, z forward, all in metres.
+/// `valid` describes input support, not a guaranteed physical error in centimetres.
+nonisolated struct LiDARMeasurementEngine {
+    static let algorithmVersion = "lidar-unprojection-1.0.1"
+    private let options: MeasurementOptions
+
+    init(options: MeasurementOptions = .init()) {
+        self.options = options
+    }
+
+    func measure(
+        frame: MeasurementFrame,
+        landmarks: GarmentLandmarkSet,
+        definitions: [MeasurementDefinition]
+    ) -> GarmentMeasurementResult {
+        let globalFailure = validate(frame: frame, landmarks: landmarks)
+        let groupedPoints = Dictionary(grouping: landmarks.points, by: \.id)
+        let groupedDefinitions = Dictionary(grouping: definitions, by: \.id)
+        var resolved: [String: PointResolution] = [:]
+        var pointFailures: [String: MeasurementFailure] = [:]
+
+        let values = definitions.map { definition -> MeasurementValue in
+            func unavailable(_ failure: MeasurementFailure, points: [ResolvedLandmark] = []) -> MeasurementValue {
+                .init(id: definition.id, title: definition.title, meters: nil,
+                      status: .unavailable, failure: failure, points: points)
+            }
+            if let globalFailure { return unavailable(globalFailure) }
+            guard !definition.id.isEmpty, groupedDefinitions[definition.id]?.count == 1,
+                  definition.landmarkIDs.count >= 2, definition.landmarkIDs.count <= 64,
+                  definition.landmarkIDs.allSatisfy({ !$0.isEmpty }),
+                  zip(definition.landmarkIDs, definition.landmarkIDs.dropFirst()).allSatisfy({ $0 != $1 })
+            else { return unavailable(.invalidDefinition) }
+
+            var points: [ResolvedLandmark] = []
+            var uncertain = false
+            var firstFailure: MeasurementFailure?
+            for id in definition.landmarkIDs {
+                if resolved[id] == nil && pointFailures[id] == nil {
+                    if let candidates = groupedPoints[id], candidates.count > 1 {
+                        pointFailures[id] = .duplicateLandmark
+                    } else if let landmark = groupedPoints[id]?.first {
+                        switch resolve(landmark, frame: frame, set: landmarks) {
+                        case .success(let value): resolved[id] = value
+                        case .failure(let error): pointFailures[id] = error
+                        }
+                    } else {
+                        pointFailures[id] = .missingLandmark
+                    }
+                }
+                if let error = pointFailures[id] {
+                    if firstFailure == nil { firstFailure = error }
+                } else if let value = resolved[id] {
+                    points.append(value.landmark)
+                    uncertain = uncertain || value.uncertain
+                }
+            }
+            if let firstFailure { return unavailable(firstFailure, points: points) }
+            let meters = zip(points, points.dropFirst()).reduce(0.0) { sum, pair in
+                let a = pair.0.position, b = pair.1.position
+                // hypot scales its operands before squaring, preserving representable
+                // distances that would otherwise overflow or underflow along an axis.
+                return sum + hypot(hypot(a.x - b.x, a.y - b.y), a.z - b.z)
+            }
+            guard meters.isFinite, meters > 0 else { return unavailable(.invalidDefinition, points: points) }
+            return .init(id: definition.id, title: definition.title, meters: meters,
+                         status: uncertain ? .uncertain : .valid, failure: nil, points: points)
+        }
+        return .init(sessionID: frame.sessionID, frameID: frame.frameID,
+                     algorithmVersion: Self.algorithmVersion, source: frame.source, values: values)
+    }
+
+    private func validate(frame: MeasurementFrame, landmarks: GarmentLandmarkSet) -> MeasurementFailure? {
+        guard frame.sessionID == landmarks.sessionID, frame.frameID == landmarks.frameID else { return .frameMismatch }
+        guard (1...12).contains(options.sampleRadius),
+              options.minimumSamples >= 3,
+              options.minimumSamples <= square(2 * options.sampleRadius + 1),
+              options.minimumDepthMeters.isFinite, options.minimumDepthMeters > 0,
+              options.maximumDepthMeters.isFinite, options.maximumDepthMeters > options.minimumDepthMeters,
+              options.minimumSensorConfidence <= 2,
+              options.minimumModelConfidence.isFinite, (0...1).contains(options.minimumModelConfidence),
+              options.maximumPlaneResidualMeters.isFinite, options.maximumPlaneResidualMeters > 0,
+              options.maximumDepthSpreadMeters.isFinite, options.maximumDepthSpreadMeters > 0
+        else { return .invalidOptions }
+        let k = frame.intrinsics
+        guard frame.imageSize.isValid, k.referenceSize == frame.imageSize,
+              frame.timestamp.isFinite,
+              k.fx.isFinite, k.fy.isFinite, k.cx.isFinite, k.cy.isFinite,
+              k.fx > 0, k.fy > 0,
+              k.cx >= 0, k.cx < Double(frame.imageSize.width),
+              k.cy >= 0, k.cy < Double(frame.imageSize.height)
+        else { return .invalidCalibration }
+        // Finite positive intrinsics alone do not guarantee representable camera rays.
+        // Reject corrupted calibration before it can put infinities in a saved result.
+        let extremeRays = [
+            -k.cx / k.fx, (Double(frame.imageSize.width) - k.cx) / k.fx,
+            -k.cy / k.fy, (Double(frame.imageSize.height) - k.cy) / k.fy
+        ]
+        guard extremeRays.allSatisfy({ ($0 * options.maximumDepthMeters).isFinite })
+        else { return .invalidCalibration }
+        let depth = frame.depth
+        guard depth.size.isValid, sameAspect(depth.size, frame.imageSize),
+              depth.values.count == depth.size.width * depth.size.height
+        else { return .invalidDepthMap }
+        if let confidence = depth.confidence {
+            guard confidence.count == depth.values.count, confidence.allSatisfy({ $0 <= 2 }) else { return .invalidDepthMap }
+        }
+        if let mask = landmarks.mask {
+            guard mask.size.isValid, sameAspect(mask.size, frame.imageSize),
+                  mask.values.count == mask.size.width * mask.size.height,
+                  mask.values.allSatisfy({ $0 <= 1 }) else { return .invalidMask }
+        }
+        return nil
+    }
+
+    private func sameAspect(_ first: PixelSize, _ second: PixelSize) -> Bool {
+        first.width * second.height == first.height * second.width
+    }
+
+    private func resolve(
+        _ landmark: GarmentLandmark,
+        frame: MeasurementFrame,
+        set: GarmentLandmarkSet
+    ) -> Result<PointResolution, MeasurementFailure> {
+        guard landmark.point.isValid else { return .failure(.outOfBounds) }
+        guard landmark.isVisible else { return .failure(.occludedLandmark) }
+        if let confidence = landmark.confidence {
+            guard confidence.isFinite, (0...1).contains(confidence),
+                  set.origin != .model || confidence >= options.minimumModelConfidence
+            else { return .failure(.lowLandmarkConfidence) }
+        }
+        let target = landmark.point
+        let map = frame.depth
+        let targetX = target.x * Double(map.size.width)
+        let targetY = target.y * Double(map.size.height)
+        let centerX = Int(targetX), centerY = Int(targetY)
+        let targetInsideMask: Bool
+        if let mask = set.mask {
+            let x = min(mask.size.width - 1, Int(target.x * Double(mask.size.width)))
+            let y = min(mask.size.height - 1, Int(target.y * Double(mask.size.height)))
+            targetInsideMask = mask.values[y * mask.size.width + x] == 1
+        } else {
+            targetInsideMask = true
+        }
+        var samples: [DepthSample] = []
+        var candidateCount = 0
+        for y in max(0, centerY - options.sampleRadius)...min(map.size.height - 1, centerY + options.sampleRadius) {
+            for x in max(0, centerX - options.sampleRadius)...min(map.size.width - 1, centerX + options.sampleRadius) {
+                candidateCount += 1
+                let nx = (Double(x) + 0.5) / Double(map.size.width)
+                let ny = (Double(y) + 0.5) / Double(map.size.height)
+                if let mask = set.mask {
+                    let mx = min(mask.size.width - 1, Int(nx * Double(mask.size.width)))
+                    let my = min(mask.size.height - 1, Int(ny * Double(mask.size.height)))
+                    if mask.values[my * mask.size.width + mx] == 0 { continue }
+                }
+                let index = y * map.size.width + x
+                let z = Double(map.values[index])
+                guard z.isFinite, z >= options.minimumDepthMeters, z <= options.maximumDepthMeters else { continue }
+                let confidence = map.confidence?[index]
+                if let confidence, confidence < options.minimumSensorConfidence { continue }
+                let ray = cameraRay(.init(x: nx, y: ny), frame: frame)
+                samples.append(.init(x: Double(x) + 0.5, y: Double(y) + 0.5,
+                                     rayX: ray.x, rayY: ray.y, z: z, confidence: confidence))
+            }
+        }
+        guard samples.count >= options.minimumSamples else { return .failure(.insufficientDepth) }
+
+        // Separate depth surfaces before fitting; a plane must never bridge garment and background.
+        let sorted = samples.sorted { $0.z < $1.z }
+        let gap = max(0.012, median(sorted.map(\.z)) * 0.012)
+        var clusters: [[DepthSample]] = []
+        for sample in sorted {
+            if let previous = clusters.last?.last, sample.z - previous.z <= gap {
+                clusters[clusters.count - 1].append(sample)
+            } else {
+                clusters.append([sample])
+            }
+        }
+        let supported = clusters.filter { $0.count >= options.minimumSamples }
+        guard !supported.isEmpty else { return .failure(.insufficientDepth) }
+        func nearestDistance(_ cluster: [DepthSample]) -> Double {
+            cluster.map { square($0.x - targetX) + square($0.y - targetY) }.min() ?? .infinity
+        }
+        // Prefer a supported foreground surface adjacent to an outline point. A distant foreground
+        // object does not displace a strongly supported surface directly beneath the point.
+        var chosen = supported.min { nearestDistance($0) < nearestDistance($1) }!
+        if let foreground = supported.first, nearestDistance(foreground) <= 2.25 {
+            chosen = foreground
+        }
+        let centerDepth = median(chosen.map(\.z))
+        let mad = median(chosen.map { abs($0.z - centerDepth) })
+        let cutoff = max(0.004, 3.5 * 1.4826 * mad)
+        chosen = chosen.filter { abs($0.z - centerDepth) <= cutoff }
+        guard chosen.count >= options.minimumSamples else { return .failure(.insufficientDepth) }
+        let ray = cameraRay(target, frame: frame)
+        let spread = percentile(chosen.map(\.z), 0.9) - percentile(chosen.map(\.z), 0.1)
+        var plane: PlaneEstimate?
+        if options.useLocalPlane, isNearSupport(x: targetX, y: targetY, samples: chosen) {
+            plane = fitPlane(samples: chosen, rayX: ray.x, rayY: ray.y, targetX: targetX, targetY: targetY)
+        }
+        let z = plane?.depth ?? median(chosen.map(\.z))
+        let lowSensorConfidence = chosen.contains { ($0.confidence ?? 0) < 2 }
+        let uncertain = map.confidence == nil || lowSensorConfidence || plane == nil || clusters.count > 1
+            || (set.origin == .model && landmark.confidence == nil)
+            // A mask hole may still be inside the sample convex hull. Interpolation can
+            // supply an estimate, but cannot prove the landmark belongs to the garment.
+            || !targetInsideMask
+        let point = ResolvedLandmark(
+            id: landmark.id, imagePoint: target,
+            position: .init(x: ray.x * z, y: ray.y * z, z: z),
+            quality: .init(validSamples: plane?.sampleCount ?? chosen.count,
+                           candidateSamples: candidateCount,
+                           confidenceAvailable: map.confidence != nil,
+                           depthSpreadMeters: spread,
+                           planeResidualMeters: plane?.residual,
+                           method: plane == nil ? .robustMedian : .localPlane)
+        )
+        // A median from spatially distant support is not a substitute for the depth at the landmark.
+        guard nearestDistance(chosen) <= square(Double(options.sampleRadius)) else { return .failure(.insufficientDepth) }
+        // Excessive spread without a well-supported surface fit cannot supply trustworthy depth.
+        if plane == nil && spread > options.maximumDepthSpreadMeters { return .failure(.insufficientDepth) }
+        return .success(.init(landmark: point, uncertain: uncertain))
+    }
+
+    private func cameraRay(_ point: ImagePoint, frame: MeasurementFrame) -> (x: Double, y: Double) {
+        let k = frame.intrinsics
+        return ((point.x * Double(frame.imageSize.width) - k.cx) / k.fx,
+                (point.y * Double(frame.imageSize.height) - k.cy) / k.fy)
+    }
+
+    /// A plane has linear inverse axial depth over normalized camera rays: 1/z = a*x + b*y + c.
+    /// Centering at the requested ray avoids solving the poorly scaled raw 3x3 normal equations.
+    private func fitPlane(
+        samples: [DepthSample], rayX: Double, rayY: Double, targetX: Double, targetY: Double
+    ) -> PlaneEstimate? {
+        var retained = samples
+        for iteration in 0..<3 {
+            guard retained.count >= options.minimumSamples else { return nil }
+            let n = Double(retained.count)
+            let meanX = retained.reduce(0.0) { $0 + $1.rayX - rayX } / n
+            let meanY = retained.reduce(0.0) { $0 + $1.rayY - rayY } / n
+            let meanD = retained.reduce(0.0) { $0 + 1 / $1.z } / n
+            var xx = 0.0, xy = 0.0, yy = 0.0, xd = 0.0, yd = 0.0
+            for sample in retained {
+                let x = sample.rayX - rayX - meanX
+                let y = sample.rayY - rayY - meanY
+                let d = 1 / sample.z - meanD
+                xx += x * x; xy += x * y; yy += y * y; xd += x * d; yd += y * d
+            }
+            let determinant = xx * yy - xy * xy
+            let trace = xx + yy
+            guard trace > 0, determinant > trace * trace * 0.001 else { return nil }
+            let a = (xd * yy - yd * xy) / determinant
+            let b = (yd * xx - xd * xy) / determinant
+            let c = meanD - a * meanX - b * meanY
+            guard c.isFinite, c > 0 else { return nil }
+            let depth = 1 / c
+            guard depth >= options.minimumDepthMeters, depth <= options.maximumDepthMeters else { return nil }
+            var residuals: [Double] = []
+            for sample in retained {
+                let inverse = a * (sample.rayX - rayX) + b * (sample.rayY - rayY) + c
+                guard inverse.isFinite, inverse > 0 else { return nil }
+                residuals.append(sample.z - 1 / inverse)
+            }
+            let medianResidual = median(residuals)
+            let mad = median(residuals.map { abs($0 - medianResidual) })
+            let cutoff = max(0.002, 3.5 * 1.4826 * mad)
+            let filtered = zip(retained, residuals).filter { abs($0.1 - medianResidual) <= cutoff }.map(\.0)
+            if iteration < 2 && filtered.count < retained.count {
+                retained = filtered
+                continue
+            }
+            let rms = sqrt(residuals.reduce(0.0) { $0 + $1 * $1 } / n)
+            let low = retained.map(\.z).min()!, high = retained.map(\.z).max()!
+            guard rms <= options.maximumPlaneResidualMeters,
+                  depth >= low - options.maximumPlaneResidualMeters,
+                  depth <= high + options.maximumPlaneResidualMeters else { return nil }
+            // Recheck spatial support after residual rejection, which can remove an entire side.
+            guard isNearSupport(x: targetX, y: targetY, samples: retained) else { return nil }
+            return .init(depth: depth, residual: rms, sampleCount: retained.count)
+        }
+        return nil
+    }
+
+    /// Permit only subpixel extension beyond the sample hull, needed at a garment's silhouette.
+    private func isNearSupport(x: Double, y: Double, samples: [DepthSample]) -> Bool {
+        let sorted = samples.sorted { $0.x == $1.x ? $0.y < $1.y : $0.x < $1.x }
+        guard sorted.count >= 3 else { return false }
+        func cross(_ o: DepthSample, _ a: DepthSample, _ b: DepthSample) -> Double {
+            (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+        }
+        var lower: [DepthSample] = [], upper: [DepthSample] = []
+        for sample in sorted {
+            while lower.count >= 2 && cross(lower[lower.count - 2], lower.last!, sample) <= 0 { lower.removeLast() }
+            lower.append(sample)
+        }
+        for sample in sorted.reversed() {
+            while upper.count >= 2 && cross(upper[upper.count - 2], upper.last!, sample) <= 0 { upper.removeLast() }
+            upper.append(sample)
+        }
+        let hull = Array(lower.dropLast()) + Array(upper.dropLast())
+        guard hull.count >= 3 else { return false }
+        var inside = true
+        var distanceSquared = Double.infinity
+        for i in hull.indices {
+            let a = hull[i], b = hull[(i + 1) % hull.count]
+            let dx = b.x - a.x, dy = b.y - a.y
+            if dx * (y - a.y) - dy * (x - a.x) < -1e-9 { inside = false }
+            let t = max(0, min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy)))
+            distanceSquared = min(distanceSquared, square(x - a.x - t * dx) + square(y - a.y - t * dy))
+        }
+        return inside || distanceSquared <= 0.75 * 0.75
+    }
+
+    private func median(_ values: [Double]) -> Double { percentile(values, 0.5) }
+
+    private func percentile(_ values: [Double], _ fraction: Double) -> Double {
+        let sorted = values.sorted()
+        let position = fraction * Double(sorted.count - 1)
+        let lower = Int(position), upper = min(sorted.count - 1, lower + 1)
+        return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - Double(lower))
+    }
+
+    private func square<T: Numeric>(_ value: T) -> T { value * value }
+}
+
+nonisolated private struct PointResolution {
+    var landmark: ResolvedLandmark
+    var uncertain: Bool
+}
+
+nonisolated private struct DepthSample {
+    var x: Double
+    var y: Double
+    var rayX: Double
+    var rayY: Double
+    var z: Double
+    var confidence: UInt8?
+}
+
+nonisolated private struct PlaneEstimate {
+    var depth: Double
+    var residual: Double
+    var sampleCount: Int
+}
