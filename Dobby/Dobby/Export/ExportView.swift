@@ -7,25 +7,36 @@ struct ExportView: View {
     let onSelectChannel: (ExportChannel) -> Void
 
     var body: some View {
-        GeometryReader { geometry in
-            ScrollView {
-                ExportChannelListView(
-                    openedChannels: openedChannels,
-                    onSelectChannel: onSelectChannel
-                )
-                .frame(maxWidth: 540)
-                .padding(.horizontal, 30)
-                .padding(.vertical, 32)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: geometry.size.height)
+        NavigationStack {
+            GeometryReader { geometry in
+                ScrollView {
+                    ExportChannelListView(
+                        openedChannels: openedChannels,
+                        onSelectChannel: onSelectChannel
+                    )
+                    .frame(maxWidth: 540)
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 32)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: geometry.size.height)
+                }
+            }
+            .background(Color.white)
+            .navigationTitle("내보내기")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(.labelNormal)
+                    .accessibilityLabel("닫기")
+                    .accessibilityIdentifier("export.close")
+                }
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ExportHeaderView {
-                dismiss()
-            }
-        }
-        .background(Color.white)
         .preferredColorScheme(.light)
     }
 }
