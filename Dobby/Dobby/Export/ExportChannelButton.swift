@@ -40,3 +40,23 @@ struct ExportChannelButton: View {
         .accessibilityIdentifier("export.channel.\(channel.rawValue)")
     }
 }
+
+#Preview("방문 전", traits: .sizeThatFitsLayout) {
+    ExportChannelButton(channel: .instagram, hasOpenedLink: false, action: {})
+        .padding()
+}
+
+#Preview("방문 후", traits: .sizeThatFitsLayout) {
+    ExportChannelButton(channel: .instagram, hasOpenedLink: true, action: {})
+        .padding()
+}
+
+#Preview("네이버스토어", traits: .sizeThatFitsLayout) {
+    ExportChannelButton(channel: .naverStore, hasOpenedLink: false, action: {})
+        .padding()
+}
+
+#Preview("카페24", traits: .sizeThatFitsLayout) {
+    ExportChannelButton(channel: .cafe24, hasOpenedLink: false, action: {})
+        .padding()
+}

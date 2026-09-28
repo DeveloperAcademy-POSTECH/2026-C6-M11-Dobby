@@ -5,7 +5,7 @@ struct ExportHeaderView: View {
 
     var body: some View {
         Text("내보내기")
-            .font(.title3.weight(.semibold))
+            .font(.headline.weight(.regular))
             .foregroundStyle(.black)
             .frame(maxWidth: .infinity)
             .frame(minHeight: 52)
@@ -32,4 +32,8 @@ struct ExportHeaderView: View {
             .padding(.vertical, 8)
             .background(.white)
     }
+}
+
+#Preview("내보내기 헤더", traits: .sizeThatFitsLayout) {
+    ExportHeaderView(onClose: {})
 }

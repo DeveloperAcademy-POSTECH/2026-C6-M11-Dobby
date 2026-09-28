@@ -17,3 +17,18 @@ struct ExportChannelListView: View {
         }
     }
 }
+
+#Preview("처음 방문", traits: .sizeThatFitsLayout) {
+    ExportChannelListView(openedChannels: [], onSelectChannel: { _ in })
+        .padding(30)
+}
+
+#Preview("일부 방문", traits: .sizeThatFitsLayout) {
+    ExportChannelListView(openedChannels: [.instagram], onSelectChannel: { _ in })
+        .padding(30)
+}
+
+#Preview("모두 방문", traits: .sizeThatFitsLayout) {
+    ExportChannelListView(openedChannels: Set(ExportChannel.allCases), onSelectChannel: { _ in })
+        .padding(30)
+}
