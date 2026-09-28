@@ -46,6 +46,88 @@ final class LiDARFlowTests: XCTestCase {
     }
 
     @MainActor
+    func testAutomaticReferenceValidationAndEditedSaveState() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        let demo = app.buttons["openAutomaticDemo"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 10))
+        reveal(demo, in: app)
+        demo.tap()
+        XCTAssertTrue(app.staticTexts["automaticValue_test"].waitForExistence(timeout: 10))
+        let reference = app.textFields["automaticReference_test"]
+        replaceText(in: reference, with: "0", app: app)
+        let save = app.buttons["saveAutomaticMeasurement"]
+        reveal(save, in: app)
+        save.tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "0보다 큰 숫자")).firstMatch.exists)
+        let saved = app.staticTexts["automaticMeasurementSaved"]
+        let share = app.buttons["사진·깊이·전체 측정점 공유"]
+        XCTAssertFalse(saved.exists)
+        XCTAssertFalse(share.exists)
+        alert.buttons["확인"].tap()
+
+        replaceText(in: reference, with: "50", app: app)
+        reveal(save, in: app)
+        save.tap()
+        XCTAssertTrue(saved.waitForExistence(timeout: 10))
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+
+        // A saved URL belongs to the exact inputs that were persisted. Editing
+        // the reference must not leave a stale success badge or share action.
+        replaceText(in: reference, with: "51", app: app)
+        reveal(save, in: app)
+        XCTAssertTrue(saved.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(share.waitForNonExistence(timeout: 5))
+        save.tap()
+        XCTAssertTrue(saved.waitForExistence(timeout: 10))
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testManualReferenceValidationAndEditedContextSaveState() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        let demo = app.buttons["openDemo"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 10))
+        reveal(demo, in: app)
+        demo.tap()
+        XCTAssertTrue(app.staticTexts["measurementValue"].waitForExistence(timeout: 10))
+        let reference = app.textFields["referenceCentimeters"]
+        replaceText(in: reference, with: "0", app: app)
+        let save = app.buttons["saveMeasurement"]
+        reveal(save, in: app)
+        save.tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "0보다 큰 숫자")).firstMatch.exists)
+        let saved = app.staticTexts["measurementSaved"]
+        let share = app.buttons["사진·깊이·측정점 JSON 공유"]
+        XCTAssertFalse(saved.exists)
+        XCTAssertFalse(share.exists)
+        alert.buttons["확인"].tap()
+
+        replaceText(in: reference, with: "50", app: app)
+        reveal(save, in: app)
+        save.tap()
+        XCTAssertTrue(saved.waitForExistence(timeout: 10))
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+
+        // Context edits also invalidate the saved presentation, even though the
+        // geometry and its calculated 50 cm result have not changed.
+        replaceText(in: app.textFields["testSpecimen"], with: "MV edited specimen", app: app)
+        reveal(save, in: app)
+        XCTAssertTrue(saved.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(share.waitForNonExistence(timeout: 5))
+        save.tap()
+        XCTAssertTrue(saved.waitForExistence(timeout: 10))
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testFinalValidationSeparatesSyntheticAndPhysicalEvidence() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -187,6 +269,17 @@ final class LiDARFlowTests: XCTestCase {
         let reference = app.textFields["referenceCentimeters"]
         reveal(reference, in: app)
         XCTAssertNotEqual(reference.value as? String, "50.00")
+    }
+
+    @MainActor
+    private func replaceText(in field: XCUIElement, with text: String, app: XCUIApplication) {
+        reveal(field, in: app)
+        XCTAssertTrue(field.isHittable)
+        // Tap the trailing side so the insertion point follows the current text.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let current = field.value as? String ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + text)
+        XCTAssertEqual(field.value as? String, text)
     }
 
     @MainActor

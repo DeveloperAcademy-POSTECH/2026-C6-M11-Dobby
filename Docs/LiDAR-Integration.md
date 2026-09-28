@@ -149,3 +149,9 @@ Apple API 참고: [일반 전경 마스크 요청](https://developer.apple.com/d
 `AutomaticMeasurementWorkflow`가 공통 CaptureSnapshotProviding과 GarmentLandmarkProviding을 연결한다. `expectedLandmarkOrigin: .model`을 지정한 실제 경로는 합성 프레임·잘못된 점 출처·모델 버전 누락을 거절한다. 성공 시 모든 항목과 동일 snapshot/landmarks/options를 반환하고, 실패 시 단계와 원인을 보존한다.
 
 workflow를 유지해 취소에 비협조적인 작업도 최대 2개로 제한한다. 시도 기록과 보고서의 목적별 분모, 다중 항목 줄자값과 실측 인수 항목은 [인수·연결 안내](LiDAR-Handoff.md)를 따른다. 자동점 재계산은 현재 엔진에 저장된 점을 넣는 것이며, 새 모델로 재추론한 정확도 평가가 아니다.
+
+## MV 화면 연결 (9/28)
+
+`RecordedMeasurementService`가 위 workflow와 `MeasurementAttemptJournal`을 묶어 실행 결과와 기록 오류를 반환한다. 화면 전환·진행 문구·알림은 View가 관리하며 서비스에는 저장하지 않는다. 자동 결과는 `AutomaticMeasurement`, 수동 편집은 `ManualMeasurement` 값 모델로 전달한다. `MeasurementDetailView(model:archive:)`에는 `ManualMeasurement`를 전달한다.
+
+카메라/ML provider 계약과 `LiDARLabView(landmarkProvider:)` 주입 지점은 유지한다. 카메라 어댑터의 표시 문자열 `guidance`는 `CaptureState`·`CaptureFrameStatus`로 바뀌었으며 화면에서 표시 문구로 변환한다. 세부 책임은 [MV 구조](LiDAR-Architecture.md)를 따른다.
