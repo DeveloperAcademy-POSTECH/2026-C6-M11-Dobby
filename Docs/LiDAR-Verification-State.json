@@ -1,0 +1,99 @@
+{
+  "verifiedAt": "2026-09-27T12:04:06.724725+00:00",
+  "branch": "feat/3-LiDAR-Module",
+  "algorithmVersion": "lidar-unprojection-1.0.1",
+  "coreTests": {
+    "passed": 170,
+    "failed": 0,
+    "log": "/tmp/dobby-roadmap-core-final.log"
+  },
+  "iPhoneUITests": {
+    "device": "iPhone 17 Pro simulator / iOS 26.4",
+    "passed": 7,
+    "failed": 0,
+    "resultBundle": "/tmp/dobby-lidar-ui.Pc9Nbv/Results.xcresult",
+    "log": "/tmp/dobby-roadmap-iphone-ui.log"
+  },
+  "iPadUITests": {
+    "device": "iPad Pro 13-inch M5 simulator / iPadOS 26.4",
+    "passed": 7,
+    "failed": 0,
+    "resultBundle": "/tmp/dobby-lidar-ui.6MXNND/Results.xcresult",
+    "log": "/tmp/dobby-roadmap-ipad-ui.log"
+  },
+  "deviceBuild": {
+    "result": "passed",
+    "signed": false,
+    "log": "/tmp/dobby-roadmap-device-final.log"
+  },
+  "physicalSensorValidation": {
+    "status": "pending",
+    "targetDevice": "iPhone 17 Pro",
+    "reason": "User is currently unable to take physical measurements; installation remains user-managed."
+  },
+  "teamIntegration": {
+    "camera": "capture protocol, ARKit test adapter and automatic workflow ready; Mason implementation not provided",
+    "garmentML": "provider injection, source/frame contract and synthetic end-to-end fixture ready; Ichi trained model not provided"
+  },
+  "automation": {
+    "id": "lidar-9-30",
+    "cadence": "Every 4 hours until 2026-09-30 KST; inspect changes, test/fix only actionable changes"
+  },
+  "sha256": {
+    "Dobby/Dobby/ContentView.swift": "6bfcb3b7fdf1e43e71f67dc73061f4dc6531d42fa7513e426ee77d217629e7da",
+    "Dobby/Dobby/DobbyApp.swift": "c20b4bca1519908dec942c8bbe4e1f6569b41d16348906a6dbc2408acf5a5b45",
+    "Dobby/Dobby/LiDAR/Capture/ARKitCaptureProvider.swift": "ab2e2c01142ef1713a94d7fd87954fbddf4f398bfd4af5a937a81df68e81ff9e",
+    "Dobby/Dobby/LiDAR/Capture/LiveForegroundAnalyzer.swift": "f265351423dbc1a147daf17b54ab1d88afeacad66867a4468dea94a37aba07ba",
+    "Dobby/Dobby/LiDAR/Core/AutomaticMeasurementWorkflow.swift": "19096c67e88efc94f72720b637aee5cf7ae5403a032b516135ddb5b1a7859822",
+    "Dobby/Dobby/LiDAR/Core/BaselineValidation.swift": "49c6032f67c8734428b6d018bc2178774c99aa0df64d8b14b19fc5a0dec89043",
+    "Dobby/Dobby/LiDAR/Core/CaptureFrameSelection.swift": "75a0c83863485675b0f0314265dde7101a887d09b76d42b5b3e7ab082e4dadf9",
+    "Dobby/Dobby/LiDAR/Core/GarmentMeasurementCatalog.swift": "0a574f1dc8abde60fb7b742cb552b4e85de120ef91f7d4152e707a102f8466d3",
+    "Dobby/Dobby/LiDAR/Core/ImageCoordinateTransform.swift": "46a93478a2ec3ff6a44e5fb7c5a369bde51cb1aa4d135f9bdb0f2bb6e535e835",
+    "Dobby/Dobby/LiDAR/Core/LiveCaptureReadiness.swift": "0d39527dc26a80d34c797ca2390d6d4bce7254c642c691e3e6707f3bb46e0532",
+    "Dobby/Dobby/LiDAR/Core/LiveReadinessFreshnessGate.swift": "dbaf04cca58054177cab15e50bc0ebecd24ed27990da04c0d80361027880a3e0",
+    "Dobby/Dobby/LiDAR/Core/ManualLandmarkEditing.swift": "f83999f3d8aab5f666f4f065d7fccaeda570e5f1a31090b8b8105e3a2076ebfa",
+    "Dobby/Dobby/LiDAR/Core/MeasurementArchive.swift": "5e8bac32ca6535b0452fbb51b241e33d7fa50105905c162c7d0680cb831fb197",
+    "Dobby/Dobby/LiDAR/Core/MeasurementAttemptJournal.swift": "ee9a1c74b3845fb8b4d73d31e61a76a27523c3788f5cdfdd81191668f749b070",
+    "Dobby/Dobby/LiDAR/Core/MeasurementContracts.swift": "52d25dff3b3a0b0d0fc09bb7991d6727dc7838a44a6d37f63e6e947ce5728db1",
+    "Dobby/Dobby/LiDAR/Core/MeasurementEngine.swift": "c04dd05cbb389cdc369d9c443aa14f21a7de7aa87806e61c2fcafac25ab3fa19",
+    "Dobby/Dobby/LiDAR/Core/MeasurementValidationReport.swift": "7f077580b0268fbba55118bb80e075113a54f40f0d2fc7affc0ce7a3b64c9609",
+    "Dobby/Dobby/LiDAR/Core/SyntheticFixtures.swift": "bcc2a60d26c4ec10bac3842add7afd99878222cc16b30b9393e3ed0754ae2db8",
+    "Dobby/Dobby/LiDAR/UI/AutomaticMeasurementView.swift": "ec13741bf58da7c460b076184861e27a02befeaf99c1cc13d3a92cbd7f5c8053",
+    "Dobby/Dobby/LiDAR/UI/BaselineReportView.swift": "52d30da0f5b716fb1b406d7eb8875261af879425eb631d5e8b1882124aa8cec5",
+    "Dobby/Dobby/LiDAR/UI/CaptureAttemptRecorder.swift": "51c0a4c413b2e302fb7dbc379c425d8740b0c635fe6004d5920e955853237e48",
+    "Dobby/Dobby/LiDAR/UI/LiDARCameraView.swift": "1d15f6ea413242deb7c34361d5e83062a24e8f78eae662a2e63f1cc0112ca734",
+    "Dobby/Dobby/LiDAR/UI/LiDARLabView.swift": "409b34cc3490f703c55aa2c5c6932ef3ba04b34a53060d40e1be70b656e0ef68",
+    "Dobby/Dobby/LiDAR/UI/LiveReadinessStatusView.swift": "453e11eced218312a3eb39c1207e6a9ac7e7cde2eeea447473cdf032ef44cf63",
+    "Dobby/Dobby/LiDAR/UI/MeasurementDetailView.swift": "bd5c17c8d5cfa4a8ffdc213ac51ac6c450c7a74de8cc1ace8d18e52c599ced87",
+    "Dobby/Dobby/LiDAR/UI/MeasurementSessionModel.swift": "303f12a02b2838a53bad75b0af3342ec6dcaf16f47b8fd1474a3a6bf41f724ce",
+    "Dobby/Dobby/LiDAR/UI/MeasurementValidationReportView.swift": "d745444038f9bbd15970819f89b5d6b28a98d3f750276aa9476f9a9473479c8d",
+    "Dobby/Dobby.xcodeproj/project.pbxproj": "0b89a8209c8e84aac3be9ea09b8973a5b68f08a9a502610d89d92314b9b2476d",
+    "Package.swift": "8e79e7d07eec0582105c5c4897c81818e7c89806e9606f91e01a7d56bd9b879e",
+    "Tests/DobbyLiDARCoreTests/AutomaticMeasurementWorkflowTests.swift": "c5a10d670e020974ad9ee57c1254d8be65906bd4d650a000f8ab468b616c9110",
+    "Tests/DobbyLiDARCoreTests/BaselineValidationTests.swift": "422e4e2fed32fb7ebb17ea7011d9a0672fd99be553001bc42dc2a79bc7a2bfdb",
+    "Tests/DobbyLiDARCoreTests/CaptureFrameSelectionTests.swift": "70e4ef06793321ca28af0218cb01df0cd55c3b49103a41659c823682bf2fc13a",
+    "Tests/DobbyLiDARCoreTests/GarmentMeasurementCatalogTests.swift": "abb105fb90e41031ac9f8225d6afc923fe7ee79d0b63f52321d7b8ed9d79c084",
+    "Tests/DobbyLiDARCoreTests/LiveCaptureReadinessTests.swift": "2a374663c58268a0b6817ac99445d286ffd0a7225f08eed94acdf2f7176341b4",
+    "Tests/DobbyLiDARCoreTests/LiveReadinessFreshnessGateTests.swift": "96a914e49d984568db1b396ff010ec947a3055c97fb79486805262e74451a901",
+    "Tests/DobbyLiDARCoreTests/ManualLandmarkEditingTests.swift": "81d68f550d9691fa830bd37f6f786e483b4c0cdb1c33b0e83b20fe33a40f6506",
+    "Tests/DobbyLiDARCoreTests/MeasurementArchiveTests.swift": "853f3f43e3fec2024c6be27377e04970a51be3492ae65405b5b7a72343e4670d",
+    "Tests/DobbyLiDARCoreTests/MeasurementAttemptJournalTests.swift": "b1191b654ac6662a1a9036acc3d4bddebe95ba85366a26f875e298f3d90f1169",
+    "Tests/DobbyLiDARCoreTests/MeasurementEngineTests.swift": "29a05d6390677e6c63e242bb05f484828748803a75139169d2b279f23bfe313f",
+    "Tests/DobbyLiDARCoreTests/MeasurementValidationReportTests.swift": "584670a99e03a28754cef376ba88d3e74e2f7a5bbfc5bc32bd4878cb00a7856d",
+    "Tests/DobbyUITests/LiDARFlowTests.swift": "1b7b9e58b2f207e68776c3a6232c7f97a5885bd06d67a616d9899df346044bc0",
+    "Tools/run-ui-tests.sh": "dd0500f241032d5fb483d96355b980fed514e4ba59f6c3c16b39881f3e2dd660"
+  },
+  "captureSelection": {
+    "policyVersion": "depth-confidence-motion-v1",
+    "windowSeconds": 0.35,
+    "physicalLatencyAndAccuracy": "pending",
+    "sameFrameSmoothedComparison": "implemented; no physical records"
+  },
+  "roadmapSoftware": {
+    "through": "2026-09-30",
+    "automaticWorkflow": "implemented with same-frame matching, partial results, cancellation, timeout, bounded draining workers and provenance checks",
+    "attemptJournal": "implemented; manual capture, automatic workflow and synthetic runs separated; no physical records provided",
+    "finalValidationReport": "implemented; manual/model error groups, same-frame comparison, CSV and Markdown; physical acceptance pending",
+    "handoff": "Docs/LiDAR-Handoff.md"
+  }
+}
