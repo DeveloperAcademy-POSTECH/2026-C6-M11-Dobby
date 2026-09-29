@@ -135,3 +135,7 @@ xcuserdata
 *.suo
 *.userosscache
 *.sln.docstates
+
+### Local project guidance and notes ###
+/AGENTS.md
+/docs/
