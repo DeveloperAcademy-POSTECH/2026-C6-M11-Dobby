@@ -3,6 +3,10 @@ import UniformTypeIdentifiers
 import UIKit
 
 struct LiDARLabView: View {
+    private let bottomProvider: CoreMLBottomLandmarkProvider?
+    private let bottomModelLoadError: String?
+    private let usesBottomModel: Bool
+    @State private var showBottomRecognition = false
     @StateObject private var capture: ARKitCaptureProvider
     @State private var automaticService: RecordedMeasurementService?
     @State private var demoService: RecordedMeasurementService
@@ -28,12 +32,26 @@ struct LiDARLabView: View {
     @State private var archive = MeasurementArchive()
 
     init(landmarkProvider: (any GarmentLandmarkProviding)? = nil) {
+        let bundled: CoreMLBottomLandmarkProvider?
+        let loadingError: String?
+        do {
+            bundled = try CoreMLBottomLandmarkProvider.bundled()
+            loadingError = nil
+        } catch {
+            bundled = nil
+            loadingError = error.localizedDescription
+        }
+        self.bottomProvider = bundled
+        self.bottomModelLoadError = loadingError
+        self.usesBottomModel = landmarkProvider == nil && bundled != nil
+        let provider: (any GarmentLandmarkProviding)? = landmarkProvider ?? bundled
+        let definitions = landmarkProvider == nil ? (bundled?.schema.measurementDefinitions ?? []) : MeasurementDefinition.longSleeve
         let camera = ARKitCaptureProvider()
         _capture = StateObject(wrappedValue: camera)
         let journal = LiDARAppServices.attemptJournal
-        _automaticService = State(initialValue: landmarkProvider.map { provider in
+        _automaticService = State(initialValue: provider.map { provider in
             RecordedMeasurementService(workflow: AutomaticMeasurementWorkflow(camera: camera,
-                landmarks: provider, definitions: MeasurementDefinition.longSleeve,
+                landmarks: provider, definitions: definitions,
                 expectedLandmarkOrigin: .model), journal: journal)
         })
         _demoService = State(initialValue: RecordedMeasurementService(workflow: AutomaticMeasurementWorkflow(
@@ -62,18 +80,29 @@ struct LiDARLabView: View {
                         Button { showReadinessDemo = true } label: {
                             Label("실시간 안내 미리보기", systemImage: "viewfinder.circle").frame(maxWidth: .infinity)
                         }.buttonStyle(.bordered).accessibilityIdentifier("openReadinessDemo")
-                        Text("이 화면은 거리 엔진 검증용입니다. 의류 측정점 자동 검출은 ML 모듈이 연결되면 같은 엔진을 사용합니다.")
+                        Text("수동 촬영은 두 점을 직접 지정합니다. 아래 하의 자동 측정에서는 모델이 바지·반바지의 측정점을 찾습니다.")
                             .font(.caption).foregroundStyle(.secondary)
                     }.labCard()
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Label("자동 측정 연결", systemImage: "point.3.connected.trianglepath.dotted").font(.headline)
-                        Text((automaticService != nil) ? "촬영한 한 프레임에서 측정점과 모든 항목의 치수를 계산합니다."
+                        Label(usesBottomModel ? "하의 자동 인식 · LiDAR 측정" : "자동 측정 연결", systemImage: "point.3.connected.trianglepath.dotted").font(.headline)
+                        Text((automaticService != nil) ? (usesBottomModel ? "바지·반바지 한 벌을 허리는 위, 밑단은 아래로 펼쳐 촬영하세요. 허리·가랑이·양쪽 밑단을 찾아 같은 프레임의 LiDAR 깊이로 직선 치수를 계산합니다." : "촬영한 한 프레임에서 측정점과 모든 항목의 치수를 계산합니다.")
                              : "의류 ML 모델 연결 대기 중입니다. 아래 합성 테스트로 촬영→측정점 수신→치수 계산·부분 실패·저장을 확인할 수 있습니다.")
                             .font(.subheadline).foregroundStyle(.secondary)
                         Button { automaticMode = true; showCamera = true } label: {
-                            Label("ML 자동 측정 촬영", systemImage: "camera.badge.ellipsis").frame(maxWidth: .infinity)
+                            Label(usesBottomModel ? "하의 자동 측정 촬영" : "ML 자동 측정 촬영", systemImage: "camera.badge.ellipsis").frame(maxWidth: .infinity)
                         }.buttonStyle(.borderedProminent).disabled(!(automaticService != nil) || !capture.isSupported || isAutomaticRunning)
+                            .accessibilityIdentifier("startBottomAutomaticCapture")
+                        if bottomProvider != nil {
+                            Button { showBottomRecognition = true } label: {
+                                Label("하의 사진으로 인식 테스트", systemImage: "photo.badge.magnifyingglass").frame(maxWidth: .infinity)
+                            }.buttonStyle(.bordered).accessibilityIdentifier("openBottomRecognition")
+                            Text("사진 테스트는 점의 위치만 보여줍니다. cm 측정은 LiDAR 촬영에서 가능합니다. 치마·상의는 이 모델의 대상이 아닙니다.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        if let bottomModelLoadError {
+                            Text(bottomModelLoadError).font(.caption).foregroundStyle(.orange)
+                        }
                         Button {
                             automaticTask = Task {
                                 do { _ = try await runAutomatic(using: demoService, orientation: .up, synthetic: true) }
@@ -159,6 +188,9 @@ struct LiDARLabView: View {
                 .task { await refreshRecords() }
                 .onChange(of: scenePhase) { _, phase in if phase != .active { cancelAutomatic() } }
                 .onDisappear { if !showCamera { cancelAutomatic() } }
+                .sheet(isPresented: $showBottomRecognition) {
+                    if let bottomProvider { BottomRecognitionView(provider: bottomProvider) }
+                }
                 .sheet(isPresented: $showBaseline) { BaselineReportView(archive: archive) }
                 .sheet(isPresented: $showValidation) { MeasurementValidationReportView(archive: archive) }
                 .sheet(item: $automaticSession, onDismiss: { Task { await refreshRecords() } }) { model in
@@ -175,7 +207,7 @@ struct LiDARLabView: View {
                             pendingAutomaticOutput = nil
                             automaticRecordingError = completed.recordingError
                             automaticSession = AutomaticMeasurement(output: completed.workflowOutput,
-                                context: .init(deviceModel: SnapshotPresentation.deviceIdentifier))
+                                context: .init(category: usesBottomModel ? .bottoms : .top, deviceModel: SnapshotPresentation.deviceIdentifier))
                         } else if !automaticMode {
                             session = ManualMeasurement(snapshot: snapshot,
                                 testContext: .init(deviceModel: SnapshotPresentation.deviceIdentifier))

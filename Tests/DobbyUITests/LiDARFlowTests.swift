@@ -2,6 +2,22 @@ import XCTest
 
 final class LiDARFlowTests: XCTestCase {
     @MainActor
+    func testBundledBottomModelOffersPhotoRecognitionWithoutLiDAR() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        let open = app.buttons["openBottomRecognition"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10), "Bundled model and schema must load")
+        reveal(open, in: app)
+        open.tap()
+        XCTAssertTrue(app.buttons["pickBottomPhoto"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["바지·반바지 인식 테스트"].exists)
+        XCTAssertTrue(app.otherElements["bottomRecognitionEmpty"].exists || app.staticTexts["하의 사진을 선택해 주세요"].exists)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "cm 치수는 계산하지 않습니다")).firstMatch.exists)
+        app.buttons["완료"].tap()
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+    }
+    @MainActor
     func testAutomaticFixturePreservesPartialResultsAndReopensAllItems() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
