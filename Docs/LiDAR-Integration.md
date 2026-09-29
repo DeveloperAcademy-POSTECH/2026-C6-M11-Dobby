@@ -47,7 +47,7 @@ protocol GarmentLandmarkProviding: Sendable {
 | 총장 | `neckSide` → `hemBelowNeck` |
 | 소매 | `shoulderLeft` → `cuffLeft` |
 
-좌우는 착용자 기준으로 통일하는 것을 제안하며 학습 라벨과 팀 측정 기준을 확정해야 한다. 임의 점 배열 순서에 의존하지 않는다. 모델 점수는 `confidence`에, 가림은 `isVisible`에 전달한다. origin은 `.model`, 실제 모델 버전도 기록한다. 수동점은 `.manual`이고 모델 신뢰도로 위장하지 않는다.
+위 상의 계약의 좌우 기준은 학습 라벨과 팀 측정 기준을 확정해야 한다. 새 bottom7 하의 모델의 좌우는 제공 스키마대로 **정방향 이미지 기준**이며 착용자 기준으로 바꾸지 않는다. 임의 점 배열 순서에 의존하지 않는다. 모델 점수는 `confidence`에, 가림은 `isVisible`에 전달한다. origin은 `.model`, 실제 모델 버전도 기록한다. 수동점은 `.manual`이고 모델 신뢰도로 위장하지 않는다.
 
 마스크는 선택 사항이며 원본 전체 이미지와 정합된 0/1 배열을 제공한다. 크롭된 모델 마스크를 그대로 보내지 않는다.
 
@@ -155,3 +155,8 @@ workflow를 유지해 취소에 비협조적인 작업도 최대 2개로 제한�
 `RecordedMeasurementService`가 위 workflow와 `MeasurementAttemptJournal`을 묶어 실행 결과와 기록 오류를 반환한다. 화면 전환·진행 문구·알림은 View가 관리하며 서비스에는 저장하지 않는다. 자동 결과는 `AutomaticMeasurement`, 수동 편집은 `ManualMeasurement` 값 모델로 전달한다. `MeasurementDetailView(model:archive:)`에는 `ManualMeasurement`를 전달한다.
 
 카메라/ML provider 계약과 `LiDARLabView(landmarkProvider:)` 주입 지점은 유지한다. 카메라 어댑터의 표시 문자열 `guidance`는 `CaptureState`·`CaptureFrameStatus`로 바뀌었으며 화면에서 표시 문구로 변환한다. 세부 책임은 [MV 구조](LiDAR-Architecture.md)를 따른다.
+
+
+## 제공 하의 모델 연결 (9/28)
+
+`CoreMLBottomLandmarkProvider`가 기본 실제 자동 촬영에 연결된다. 하의의 측정 정의는 `provider.schema.measurementDefinitions`로 생성하며 상의나 수동 바지 프리셋 ID를 혼용하지 않는다. `LiDARLabView(landmarkProvider:)`로 다른 공급자를 주입하는 기존 상의 경로도 유지한다. 모델 입력 형식, 좌표 복원, 대상 범위와 실측 한계는 [하의 인식 모델 안내](Bottom-Recognition.md)를 참고한다. 새 모델은 마스크를 출력하지 않으며 현재 실시간 전경 분석기를 대체하지 않는다.

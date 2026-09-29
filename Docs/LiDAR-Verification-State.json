@@ -1,65 +1,35 @@
 {
-  "verifiedAt": "2026-09-28T02:41:10.069510+00:00",
+  "verifiedAt": "2026-09-28T13:45:06.187296+00:00",
   "branch": "feat/3-LiDAR-Module",
   "algorithmVersion": "lidar-unprojection-1.0.1",
   "coreTests": {
-    "passed": 201,
+    "passed": 224,
     "failed": 0,
-    "log": "/tmp/dobby-mv-core.log"
+    "log": "/tmp/dobby-bottom-core.log"
   },
   "iPhoneUITests": {
     "device": "iPhone 17 Pro simulator / iOS 26.4",
-    "status": "passed_after_targeted_rerun",
-    "passed": 9,
+    "status": "passed",
+    "scope": "all 10 tests",
+    "passed": 10,
     "failed": 0,
-    "initialRun": {
-      "passed": 8,
-      "failed": 1,
-      "log": "/tmp/dobby-mv-iphone-ui.log",
-      "resultBundle": "/tmp/dobby-lidar-ui.EdvBLY/Results.xcresult"
-    },
-    "reruns": [
-      {
-        "passed": 1,
-        "failed": 0,
-        "log": "/tmp/dobby-mv-iphone-retry.log",
-        "resultBundle": "/tmp/dobby-mv-iphone-missing-retry.xcresult"
-      }
-    ],
-    "note": "Unique test cases, not summed executions. Initial failure was UI event synthesis timeout; unchanged build passed targeted rerun."
+    "log": "/tmp/dobby-bottom-iphone-ui.log",
+    "resultBundle": "/tmp/dobby-lidar-ui.WIwPGu/Results.xcresult"
   },
   "iPadUITests": {
     "device": "iPad Pro 13-inch M5 simulator / iPadOS 26.4",
-    "status": "passed_after_targeted_reruns",
-    "passed": 9,
+    "status": "passed",
+    "scope": "targeted new bottom photo entry and existing automatic partial-result save/reopen flow; not full 10-test suite",
+    "passed": 2,
     "failed": 0,
-    "initialRun": {
-      "passed": 7,
-      "failed": 2,
-      "log": "/tmp/dobby-mv-ipad-ui.log",
-      "resultBundleComplete": false
-    },
-    "reruns": [
-      {
-        "passed": 1,
-        "failed": 1,
-        "log": "/tmp/dobby-mv-ipad-retry.log",
-        "resultBundle": "/tmp/dobby-mv-ipad-failures-retry.xcresult",
-        "note": "Manual input test passed. Readiness runner was terminated while cleaning up the earlier stalled xcodebuild."
-      },
-      {
-        "passed": 1,
-        "failed": 0,
-        "log": "/tmp/dobby-mv-ipad-readiness-retry.log",
-        "resultBundle": "/tmp/dobby-mv-ipad-readiness-retry.xcresult"
-      }
-    ],
-    "note": "Unique test cases, not summed executions. UI timeouts and runner interruption resolved by rerunning only failed cases with unchanged build. Run device UI tests sequentially."
+    "log": "/tmp/dobby-bottom-ipad-ui.log",
+    "resultBundle": "/tmp/dobby-bottom-ipad.xcresult"
   },
   "deviceBuild": {
     "result": "passed",
     "signed": false,
-    "log": "/tmp/dobby-mv-device.log"
+    "log": "/tmp/dobby-bottom-device.log",
+    "modelResourcesIncluded": true
   },
   "physicalSensorValidation": {
     "status": "pending",
@@ -68,7 +38,7 @@
   },
   "teamIntegration": {
     "camera": "capture protocol, ARKit test adapter and automatic workflow ready; Mason implementation not provided",
-    "garmentML": "provider injection, source/frame contract and synthetic end-to-end fixture ready; Ichi trained model not provided"
+    "garmentML": "User-provided bottom7 Core ML model linked through CoreMLBottomLandmarkProvider; model mask absent, real LiDAR capture/ground-truth accuracy pending; upper-garment model not supplied"
   },
   "automation": {
     "id": "lidar-9-30",
@@ -79,10 +49,12 @@
     "Dobby/Dobby/ContentView.swift": "6bfcb3b7fdf1e43e71f67dc73061f4dc6531d42fa7513e426ee77d217629e7da",
     "Dobby/Dobby/DobbyApp.swift": "c20b4bca1519908dec942c8bbe4e1f6569b41d16348906a6dbc2408acf5a5b45",
     "Dobby/Dobby/LiDAR/Capture/ARKitCaptureProvider.swift": "9eaff7e1e5adc1948d49b523cb2914bc8d56803dcf257a1d3a89529a7ea8c3a4",
+    "Dobby/Dobby/LiDAR/Capture/CoreMLBottomLandmarkProvider.swift": "4939b1deeca5b96cd3418a56b03aa981a6b4d244cb5f948eb682e07a51764754",
     "Dobby/Dobby/LiDAR/Capture/LiveForegroundAnalyzer.swift": "f265351423dbc1a147daf17b54ab1d88afeacad66867a4468dea94a37aba07ba",
     "Dobby/Dobby/LiDAR/Core/AutomaticMeasurement.swift": "06fb50771ad1da2b1c25d3ed8c005ffa4db649389406c5141b9a497beb514387",
     "Dobby/Dobby/LiDAR/Core/AutomaticMeasurementWorkflow.swift": "19096c67e88efc94f72720b637aee5cf7ae5403a032b516135ddb5b1a7859822",
     "Dobby/Dobby/LiDAR/Core/BaselineValidation.swift": "49c6032f67c8734428b6d018bc2178774c99aa0df64d8b14b19fc5a0dec89043",
+    "Dobby/Dobby/LiDAR/Core/BottomLandmarkDecoder.swift": "dd9408eaa618fcdb9698358ed187f72efab16fddbe611c2901e273e0ecd0d199",
     "Dobby/Dobby/LiDAR/Core/CaptureFrameSelection.swift": "75a0c83863485675b0f0314265dde7101a887d09b76d42b5b3e7ab082e4dadf9",
     "Dobby/Dobby/LiDAR/Core/GarmentMeasurementCatalog.swift": "0a574f1dc8abde60fb7b742cb552b4e85de120ef91f7d4152e707a102f8466d3",
     "Dobby/Dobby/LiDAR/Core/ImageCoordinateTransform.swift": "46a93478a2ec3ff6a44e5fb7c5a369bde51cb1aa4d135f9bdb0f2bb6e535e835",
@@ -97,12 +69,17 @@
     "Dobby/Dobby/LiDAR/Core/MeasurementValidationReport.swift": "7f077580b0268fbba55118bb80e075113a54f40f0d2fc7affc0ce7a3b64c9609",
     "Dobby/Dobby/LiDAR/Core/RecordedMeasurementService.swift": "a8cb8d5469a08cec35828ac150660860eb8801bafc07260b52cae93c41900442",
     "Dobby/Dobby/LiDAR/Core/SyntheticFixtures.swift": "bcc2a60d26c4ec10bac3842add7afd99878222cc16b30b9393e3ed0754ae2db8",
+    "Dobby/Dobby/LiDAR/Models/BottomLandmarks.mlpackage/Data/com.apple.CoreML/model.mlmodel": "74077ac751ea213b657e1e266ef08bd18a9beb1d4215aa08c65146460dc56690",
+    "Dobby/Dobby/LiDAR/Models/BottomLandmarks.mlpackage/Data/com.apple.CoreML/weights/weight.bin": "976144d4d65247b322a9b3afc3076883a65058c86e9fdc7704f35389f54caa10",
+    "Dobby/Dobby/LiDAR/Models/BottomLandmarks.mlpackage/Manifest.json": "8303dc1db24624d1f91f49a03a4484de6f57153c96ab7593a4a2623ead53363a",
+    "Dobby/Dobby/LiDAR/Models/schema_bottom7.json": "4c7784fdd3719a1b6631150689210c391906415393d292789db91f457a041bc6",
     "Dobby/Dobby/LiDAR/UI/AutomaticMeasurementView.swift": "215c75fc0671fca32004956fdec22d4ee358fe0999e1a1646f76f5c927428558",
     "Dobby/Dobby/LiDAR/UI/BaselineReportView.swift": "52d30da0f5b716fb1b406d7eb8875261af879425eb631d5e8b1882124aa8cec5",
+    "Dobby/Dobby/LiDAR/UI/BottomRecognitionView.swift": "715451713a6c640b1a5216b8abf0b9636536e3136980c9b4c09e0bf864659f61",
     "Dobby/Dobby/LiDAR/UI/CaptureAttemptRecorder.swift": "51c0a4c413b2e302fb7dbc379c425d8740b0c635fe6004d5920e955853237e48",
     "Dobby/Dobby/LiDAR/UI/IntegrationDemoFixtures.swift": "07662f2bd1dcec98f61149104da17461cde878a7574d75d143a06f70e735d7b6",
     "Dobby/Dobby/LiDAR/UI/LiDARCameraView.swift": "cda4bf6e1669537400915be815f0f1d78ff4b9a1aa926c9bbdabe1e4d24b74e0",
-    "Dobby/Dobby/LiDAR/UI/LiDARLabView.swift": "918db89d067cb0b020431f98e7c6830c62cf44aacfe49324da896d9130b7c03d",
+    "Dobby/Dobby/LiDAR/UI/LiDARLabView.swift": "473ef5b2491e1cf74f527546ef923f60078c101ec14c1a867efa3f37ce2780f0",
     "Dobby/Dobby/LiDAR/UI/LiveReadinessStatusView.swift": "453e11eced218312a3eb39c1207e6a9ac7e7cde2eeea447473cdf032ef44cf63",
     "Dobby/Dobby/LiDAR/UI/MeasurementDetailView.swift": "7079d60dc26116eed6a73cdaf5922b3d8a53a80943360577ff9ce1bc5da93b0f",
     "Dobby/Dobby/LiDAR/UI/MeasurementValidationReportView.swift": "d745444038f9bbd15970819f89b5d6b28a98d3f750276aa9476f9a9473479c8d",
@@ -111,6 +88,7 @@
     "Tests/DobbyLiDARCoreTests/AutomaticMeasurementModelTests.swift": "093676a36a2193068489c461ea0b68d72ae25f0464a53d71558f03dbab347569",
     "Tests/DobbyLiDARCoreTests/AutomaticMeasurementWorkflowTests.swift": "c5a10d670e020974ad9ee57c1254d8be65906bd4d650a000f8ab468b616c9110",
     "Tests/DobbyLiDARCoreTests/BaselineValidationTests.swift": "422e4e2fed32fb7ebb17ea7011d9a0672fd99be553001bc42dc2a79bc7a2bfdb",
+    "Tests/DobbyLiDARCoreTests/BottomLandmarkDecoderTests.swift": "f414707a35b4a6cb6c4bc3fd410784cfb4094bd4bd83185dc0d15ff2f3eecb7e",
     "Tests/DobbyLiDARCoreTests/CaptureFrameSelectionTests.swift": "70e4ef06793321ca28af0218cb01df0cd55c3b49103a41659c823682bf2fc13a",
     "Tests/DobbyLiDARCoreTests/GarmentMeasurementCatalogTests.swift": "abb105fb90e41031ac9f8225d6afc923fe7ee79d0b63f52321d7b8ed9d79c084",
     "Tests/DobbyLiDARCoreTests/LiveCaptureReadinessTests.swift": "2a374663c58268a0b6817ac99445d286ffd0a7225f08eed94acdf2f7176341b4",
@@ -122,8 +100,10 @@
     "Tests/DobbyLiDARCoreTests/MeasurementEngineTests.swift": "29a05d6390677e6c63e242bb05f484828748803a75139169d2b279f23bfe313f",
     "Tests/DobbyLiDARCoreTests/MeasurementValidationReportTests.swift": "584670a99e03a28754cef376ba88d3e74e2f7a5bbfc5bc32bd4878cb00a7856d",
     "Tests/DobbyLiDARCoreTests/RecordedMeasurementServiceTests.swift": "674484c187b22446f9fcaf04a6b63ed47fa7bb0080d4e2f621df1be4fb1e52f4",
-    "Tests/DobbyUITests/LiDARFlowTests.swift": "bb144ca37779136c26439686458ed57fd8edbdcd672ce370670261dd940c8e66",
-    "Tools/run-ui-tests.sh": "dd0500f241032d5fb483d96355b980fed514e4ba59f6c3c16b39881f3e2dd660"
+    "Tests/DobbyUITests/LiDARFlowTests.swift": "646894d0bd7f1aa7791781a447f9a79f1b889f4bdf51a6e2685fa0939d7c5e02",
+    "Tools/run-ui-tests.sh": "dd0500f241032d5fb483d96355b980fed514e4ba59f6c3c16b39881f3e2dd660",
+    "Tools/validate-bottom-model.swift": "14017b60ab16ab17f6644686f522707ab43ca2790c8382f495594ef08daa0195",
+    "Tools/validate-bottom-provider.swift": "36f0fa19ef371cddfe9e43c9b309df4df78d6e866055a02502b549620f5b6b0d"
   },
   "captureSelection": {
     "policyVersion": "depth-confidence-motion-v1",
@@ -155,9 +135,99 @@
     "uncommitted": true,
     "note": "Existing user signing and Xcode upgrade settings were preserved. Device build used these settings with code signing disabled; they are excluded from refactoring commits."
   },
-  "postValidationFormatting": {
-    "file": "Dobby/Dobby/LiDAR/UI/IntegrationDemoFixtures.swift",
-    "change": "Removed one empty line at EOF; executable source unchanged.",
-    "testedSha256": "dc2bec4e5109f77308d62cabe5a8a2d746462bfefaabaf9665cf6c4a734de845"
-  }
+  "previousMVVerification": {
+    "verifiedAt": "2026-09-28T02:41:10.069510+00:00",
+    "coreTests": {
+      "passed": 201,
+      "failed": 0,
+      "log": "/tmp/dobby-mv-core.log"
+    },
+    "iPhoneUITests": {
+      "device": "iPhone 17 Pro simulator / iOS 26.4",
+      "status": "passed_after_targeted_rerun",
+      "passed": 9,
+      "failed": 0,
+      "initialRun": {
+        "passed": 8,
+        "failed": 1,
+        "log": "/tmp/dobby-mv-iphone-ui.log",
+        "resultBundle": "/tmp/dobby-lidar-ui.EdvBLY/Results.xcresult"
+      },
+      "reruns": [
+        {
+          "passed": 1,
+          "failed": 0,
+          "log": "/tmp/dobby-mv-iphone-retry.log",
+          "resultBundle": "/tmp/dobby-mv-iphone-missing-retry.xcresult"
+        }
+      ],
+      "note": "Unique test cases, not summed executions. Initial failure was UI event synthesis timeout; unchanged build passed targeted rerun."
+    },
+    "iPadUITests": {
+      "device": "iPad Pro 13-inch M5 simulator / iPadOS 26.4",
+      "status": "passed_after_targeted_reruns",
+      "passed": 9,
+      "failed": 0,
+      "initialRun": {
+        "passed": 7,
+        "failed": 2,
+        "log": "/tmp/dobby-mv-ipad-ui.log",
+        "resultBundleComplete": false
+      },
+      "reruns": [
+        {
+          "passed": 1,
+          "failed": 1,
+          "log": "/tmp/dobby-mv-ipad-retry.log",
+          "resultBundle": "/tmp/dobby-mv-ipad-failures-retry.xcresult",
+          "note": "Manual input test passed. Readiness runner was terminated while cleaning up the earlier stalled xcodebuild."
+        },
+        {
+          "passed": 1,
+          "failed": 0,
+          "log": "/tmp/dobby-mv-ipad-readiness-retry.log",
+          "resultBundle": "/tmp/dobby-mv-ipad-readiness-retry.xcresult"
+        }
+      ],
+      "note": "Unique test cases, not summed executions. UI timeouts and runner interruption resolved by rerunning only failed cases with unchanged build. Run device UI tests sequentially."
+    }
+  },
+  "bottomModel": {
+    "modelVersion": "bottom7-976144d4d652",
+    "weightsSHA256": "976144d4d65247b322a9b3afc3076883a65058c86e9fdc7704f35389f54caa10",
+    "scope": "flat-laid upright pants/shorts, single garment",
+    "trainedThisSession": false,
+    "originalModelPreserved": true,
+    "actualModelPhotoInferences": 3,
+    "realInferenceOrientationRoundTrips": [
+      "right",
+      "down",
+      "left"
+    ],
+    "physicalGroundTruthAvailable": false,
+    "pointGroundTruthAvailable": false,
+    "report": "Docs/Validation/bottom-provider-2026-09-28.json",
+    "licenseMetadata": "AGPL-3.0",
+    "datasetPermissionsIndependentlyVerified": false
+  },
+  "knownIssues": [
+    {
+      "id": "bottom-rise-perspective-midpoint",
+      "severity": "P2",
+      "status": "open",
+      "reviewedAt": "2026-09-29",
+      "file": "Dobby/Dobby/LiDAR/Core/BottomLandmarkDecoder.swift",
+      "cause": "2D image midpoint is unprojected as the physical 3D waist midpoint",
+      "reproduction": {
+        "kind": "synthetic exact geometry, not physical sensor measurements",
+        "waistCentimeters": 60,
+        "referenceRiseCentimeters": 30,
+        "computedRiseCentimeters": 31.81980475,
+        "status": "valid",
+        "planeYawDegrees": 45,
+        "waistCenterDepthMeters": 0.6
+      },
+      "fixIncluded": false
+    }
+  ]
 }

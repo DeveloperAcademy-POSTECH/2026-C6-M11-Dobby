@@ -10,10 +10,11 @@
 | --- | --- | --- |
 | Model | `ManualMeasurement`, `AutomaticMeasurement` | 측정 사진·깊이·점·정의·결과·수치형 줄자 기준값·촬영 조건, 데이터 변경 규칙 |
 | Model의 공통 데이터 | `CaptureSnapshot`, `GarmentLandmarkSet`, `GarmentMeasurementResult`, `SavedMeasurement` | 카메라·ML·거리 엔진·저장이 주고받는 값 |
-| View | `LiDARLabView`, `MeasurementDetailView`, `AutomaticMeasurementResultView` | 입력 문자열·선택한 점·화면 전환·오류 알림·로딩 표시·공유 URL·이미지 캐시 |
+| View | `LiDARLabView`, `MeasurementDetailView`, `AutomaticMeasurementResultView`, `BottomRecognitionView` | 입력 문자열·선택한 점·화면 전환·오류 알림·로딩 표시·공유 URL·이미지 캐시 |
 | 계산 서비스 | `LiDARMeasurementEngine`, `MeasurementPipeline` | 깊이 역투영·품질 검증·거리 계산, UI와 분리된 실행 |
 | 자동 실행 서비스 | `AutomaticMeasurementWorkflow`, `RecordedMeasurementService` | 같은 프레임의 촬영→ML→계산, 취소·시간 제한·작업 상한·시도 기록 |
 | 입출력 서비스 | `ARKitCaptureProvider`, `MeasurementArchive`, `MeasurementAttemptJournal` | 카메라 세션, 원본 캡처, 측정 저장, 성공·실패 기록 |
+| ML 서비스 | `CoreMLBottomLandmarkProvider` | 하의 모델 캐시·사진 전처리·추론. Foundation Core의 schema/decoder와 연동 |
 | 표시 보조 | `SnapshotPresentation` | 사진 방향·화면 비율·기기명 표시. Core에서 UIKit을 사용하지 않도록 분리 |
 
 `Core/`의 Model과 서비스는 SwiftUI·UIKit·Combine을 가져오지 않는다. 순수 Swift Package 테스트에서 UI 없이 실행할 수 있다.
