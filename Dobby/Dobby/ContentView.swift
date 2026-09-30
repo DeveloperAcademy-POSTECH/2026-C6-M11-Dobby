@@ -1,29 +1,38 @@
 import SwiftUI
 
 struct ContentView: View {
+    let product: ExportProduct
     @State private var showExport = false
-    @State private var showCopyRequest = false
-    @State private var coordinator = CopyCoordinator()
-    @Environment(\.scenePhase) private var phase
+    @State private var showFruits = false
+    @State private var restoredProduct: ExportProduct?
+    @State private var controller = CopyActivityController()
+
     var body: some View {
         NavigationStack {
-            List {
-                NavigationLink("상품 정보 빠른 복사 · 후르츠 우선") { QuickCopyView() }
-                Button("내보내기 채널") { showExport = true }
+            VStack(spacing: 24) {
+                ExportProductHeader(product: product)
+                Button("내보내기") {
+                    restoredProduct = nil
+                    showFruits = false
+                    showExport = true
+                }
+                .buttonStyle(.borderedProminent).tint(.orange)
             }
-            .navigationTitle("Dobby")
-            .navigationDestination(isPresented: $showCopyRequest) { CopyRequestView(coordinator: coordinator) }
+            .padding()
+            .navigationTitle("상품 정보")
         }
-        .sheet(isPresented: $showExport) { ExportView() }
+        .fullScreenCover(isPresented: $showExport) {
+            ExportView(product: restoredProduct ?? product, controller: controller, showFruits: $showFruits)
+        }
         .onOpenURL { url in
-            guard url.scheme == "dobby-copy" else { return }
-            showExport = false
-            showCopyRequest = true
-            if url != CopyRoute.home {
-                coordinator.receive(url)
-                coordinator.processIfActive(phase)
-            }
+            guard url.scheme == "dobby-copy", url.host == "home" else { return }
+            controller.refresh()
+            if let session = controller.session, session.productID != product.id {
+                restoredProduct = ExportProduct(id: session.productID, imageData: nil,
+                                                fruits: session.payload, instagram: session.payload)
+            } else { restoredProduct = nil }
+            showFruits = true
+            showExport = true
         }
-        .onChange(of: phase) { _, newPhase in coordinator.processIfActive(newPhase) }
     }
 }

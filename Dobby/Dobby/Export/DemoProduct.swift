@@ -38,8 +38,3 @@ extension ProductCopyPayload {
                     price: channel == .fruits ? "56000" : "65000", length: "59", waist: "43", thigh: "32")
     }
 }
-
-extension ExportProduct {
-    static let demo = ExportProduct(id: "levis-550-example", imageData: nil,
-                                    fruits: .sample(for: .fruits), instagram: .sample(for: .instagram))
-}

@@ -9,6 +9,11 @@ struct ExportProduct: Identifiable {
     var name: String { fruits.productName }
 }
 
+extension ExportProduct {
+    static let demo = ExportProduct(id: "levis-550-example", imageData: nil,
+                                    fruits: .sample(for: .fruits), instagram: .sample(for: .instagram))
+}
+
 struct ExportProductHeader: View {
     let product: ExportProduct
     var body: some View {

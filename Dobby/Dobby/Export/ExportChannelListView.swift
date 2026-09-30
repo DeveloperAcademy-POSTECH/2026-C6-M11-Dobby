@@ -5,7 +5,7 @@ struct ExportChannelListView: View {
     let onSelectChannel: (ExportChannel) -> Void
 
     var body: some View {
-        VStack(spacing: 36) {
+        VStack(spacing: 16) {
             ForEach(ExportChannel.allCases) { channel in
                 ExportChannelButton(
                     channel: channel,
