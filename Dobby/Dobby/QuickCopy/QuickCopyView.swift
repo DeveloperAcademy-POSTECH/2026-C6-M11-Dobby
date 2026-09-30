@@ -10,6 +10,7 @@ struct QuickCopyView: View {
     var body: some View {
         List {
             NavigationLink("Dynamic Island 복사 도우미") { CopyActivitySetupView() }
+            NavigationLink("기기 검증 결과") { QuickCopyResultsView() }
             Section("샘플 상품 · 실제 제공된 본문") {
                 Text(payload.productName).font(.headline)
                 Picker("내보낼 채널", selection: $channel) {
@@ -57,6 +58,7 @@ struct QuickCopyView: View {
             UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: value]], options: [.localOnly: true])
             copied.insert(recordKey)
             message = "\(channel.title) · \(title) 복사 실행"
+            CopyJournal.append(message)
         } label: {
             Label(title, systemImage: copied.contains(recordKey) ? "checkmark.circle" : "doc.on.doc")
         }

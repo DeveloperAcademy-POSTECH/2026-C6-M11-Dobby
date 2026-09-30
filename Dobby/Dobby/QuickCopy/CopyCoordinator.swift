@@ -79,6 +79,7 @@ struct CopyRequestView: View {
             }
             Text("앱 전환으로 기존 후르츠 작성 화면에 직접 돌아갈 수 있습니다. 링크로 다시 열면 홈이나 새 화면이 열릴 수 있습니다.").font(.caption)
             NavigationLink("도우미 설정") { CopyActivitySetupView() }
+            NavigationLink("기기 검증 결과") { QuickCopyResultsView() }
         }
         .navigationTitle("상품 정보 복사")
         .onAppear { coordinator.processIfActive(phase) }

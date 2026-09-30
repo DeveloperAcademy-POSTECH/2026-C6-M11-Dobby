@@ -1,6 +1,7 @@
 import ActivityKit
 import Observation
 import Foundation
+import UIKit
 
 @MainActor @Observable
 final class CopyActivityController {
@@ -42,6 +43,7 @@ final class CopyActivityController {
                                      content: ActivityContent(state: .init(), staleDate: next.createdAt.addingTimeInterval(8 * 3600)), pushType: nil)
             session = next
             message = "\(channel.title) · \(mode.title) 시작"
+            CopyJournal.append(message)
         } catch {
             ProductCopyStore.invalidate(); session = nil
             message = "시작 실패: \(error.localizedDescription)"
@@ -57,6 +59,7 @@ final class CopyActivityController {
         }
         busy = false
         message = "도우미를 종료했습니다. 클립보드는 유지됩니다."
+        CopyJournal.append("도우미 종료")
     }
 }
 
@@ -70,6 +73,13 @@ struct CopyActivitySetupView: View {
 
     var body: some View {
         Form {
+            Section("실험 전 준비") {
+                Button("기준값 BASELINE 복사") {
+                    UIPasteboard.general.setItems([["public.utf8-plain-text": "BASELINE"]], options: [.localOnly: true])
+                    CopyJournal.append("기준값 BASELINE 쓰기 실행")
+                }
+                Text("외부 입력란에서 BASELINE이 아닌 선택한 상품 값이 붙는지 확인하세요. 버튼 실행만으로 복사 성공을 판정하지 않습니다.").font(.caption)
+            }
             Section("도우미 설정") {
                 Picker("채널", selection: $channel) {
                     ForEach(CopyChannel.allCases) { Text($0.title).tag($0) }
@@ -90,6 +100,10 @@ struct CopyActivitySetupView: View {
                 Button("상태 새로고침") { controller.refresh() }
                 Button("도우미 종료", role: .destructive) { Task { await controller.stop() } }
                     .disabled(controller.busy)
+            }
+            Section("확인 방법") {
+                Text("후르츠 작성 화면 → Island 길게 누르기 → 복사 항목 선택 → 입력란 붙여넣기. 앱 경유 모드는 우리 앱을 거칩니다. 링크 재열기는 작성 화면 복귀를 보장하지 않습니다.")
+                NavigationLink("기기 검증 결과") { QuickCopyResultsView() }
             }
         }
         .navigationTitle("Dynamic Island 도우미")
