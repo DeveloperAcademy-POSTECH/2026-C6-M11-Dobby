@@ -1,6 +1,6 @@
 import Foundation
 
-enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
+nonisolated enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
     case productName, description, brand, measurements
     var id: String { rawValue }
     var title: String {
@@ -13,7 +13,7 @@ enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum CopyChannel: String, Codable, CaseIterable, Identifiable {
+nonisolated enum CopyChannel: String, Codable, CaseIterable, Identifiable {
     case fruits, instagram
     var id: String { rawValue }
     var title: String { self == .fruits ? "후르츠패밀리" : "Instagram" }
@@ -22,7 +22,7 @@ enum CopyChannel: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum CopyExperimentMode: String, Codable, CaseIterable, Identifiable {
+nonisolated enum CopyExperimentMode: String, Codable, CaseIterable, Identifiable {
     case direct, foreground, foregroundAndOpen
     var id: String { rawValue }
     var title: String {
@@ -34,7 +34,7 @@ enum CopyExperimentMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct ProductCopyPayload: Codable {
+nonisolated struct ProductCopyPayload: Codable {
     let productName: String
     let description: String
     let brand: String
@@ -90,7 +90,7 @@ struct ProductCopyPayload: Codable {
     }
 }
 
-struct ProductCopySession: Codable, Identifiable {
+nonisolated struct ProductCopySession: Codable, Identifiable {
     let id: UUID
     let channel: CopyChannel
     let mode: CopyExperimentMode

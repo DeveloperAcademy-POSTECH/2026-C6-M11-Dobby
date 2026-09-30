@@ -9,6 +9,7 @@ struct QuickCopyView: View {
 
     var body: some View {
         List {
+            NavigationLink("Dynamic Island 복사 도우미") { CopyActivitySetupView() }
             Section("샘플 상품 · 실제 제공된 본문") {
                 Text(payload.productName).font(.headline)
                 Picker("내보낼 채널", selection: $channel) {
