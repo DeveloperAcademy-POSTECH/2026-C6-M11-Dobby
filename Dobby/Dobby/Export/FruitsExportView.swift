@@ -50,6 +50,7 @@ struct FruitsExportView: View {
                 }.padding(24).padding(.bottom, 16)
                 Color(.systemGroupedBackground).frame(height: 8)
                 VStack(alignment: .leading, spacing: 20) {
+                    ShortcutCopySetupSection()
                     Text("어떻게 내보내나요?").font(.title2.bold())
                     step(1, "게시글 작성 화면으로 이동해주세요")
                     step(2, "다이나믹 아일랜드를 길게 누른 뒤 복사해주세요")
