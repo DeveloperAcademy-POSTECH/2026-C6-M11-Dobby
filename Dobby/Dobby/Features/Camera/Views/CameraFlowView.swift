@@ -6,127 +6,82 @@
 //
 
 import SwiftUI
+import AVFoundation
 
-/// System permission followed by a mock capture flow; live preview/capture are later steps.
+/// 상세 촬영 → 사진 선택의 구조 확인용 화면. Hi-Fi UI와 실제 촬영은 후속 작업.
+/// 상위 NavigationStack에 삽입하며 화면 이동 중 같은 Model을 유지한다.
 struct CameraFlowView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var model: CameraModel
+    let model: ProductPhotoModel
     @State private var permission: CameraPermission
-    @State private var state: CameraFlowState = .preview
+    let onComplete: (ProductPhotoOutput) -> Void
+    @State private var captureRequested = false
+    @State private var failureMessage: String?
 
-    init(model: CameraModel, permission: CameraPermission? = nil) {
-        _model = State(initialValue: model)
-        _permission = State(initialValue: permission ?? CameraPermission(authorizer: SystemCameraAuthorization()))
+    init(model: ProductPhotoModel, permission: CameraPermission,
+         onComplete: @escaping (ProductPhotoOutput) -> Void) {
+        self.model = model
+        _permission = State(initialValue: permission)
+        self.onComplete = onComplete
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    Text("목 데모 · 실제 촬영·측정 없음")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.secondary)
-                    CameraPermissionGate(permission: permission) { stageContent }
-                }
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-                .padding()
-            }
-            .navigationTitle("카메라 흐름")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("닫기", systemImage: "xmark") { dismiss() }
-                        .accessibilityIdentifier("camera.closeDemo")
-                }
-            }
-            .task(id: state) {
-                await performPendingAction()
-            }
-        }
-        .onDisappear { restartDemo() }
-    }
-
-    @ViewBuilder
-    private var stageContent: some View {
-        switch state {
-        case .preview:
-            stage("실측 촬영", description: "옷이 잘리지 않게 카메라 안에 넣어주세요. 현재는 프리뷰 자리만 표시합니다.")
-            Button("목 촬영본 만들기") { state = .capturing }
-                .buttonStyle(.borderedProminent)
-        case .capturing:
-            ProgressView("목 촬영본 준비 중")
-        case .review:
-            stage("촬영본 확인", description: "현재 상품에 연결된 목 촬영본입니다. 이미지 파일은 생성되지 않았습니다.")
-            Button("목 처리로 계속") { state = .processing }
-                .buttonStyle(.borderedProminent)
-            Button("데모 처음부터", action: restartDemo)
-        case .processing:
-            ProgressView("목 처리 중")
-        case .result:
-            stage("실측 결과 확인", description: "결과 연결을 확인했습니다. 실제 측정값과 신뢰도는 아직 없습니다.")
-            if let result = model.draft.processingResult {
-                LabeledContent("결과 출처", value: result.source.rawValue)
-                LabeledContent("처리 상태", value: result.outcome.rawValue)
-                Text("촬영 ID: \(result.captureID.uuidString)")
-                    .font(.caption)
+        ScrollView {
+            VStack(spacing: 24) {
+                Text("구조 확인용 목 데모 · 실제 촬영·측정 없음")
+                    .font(.subheadline.bold())
                     .foregroundStyle(.secondary)
-                Button("완료 접점 확인") {
-                    if model.canHandoff { state = .handoff }
+                Text("전달받은 실측샷 1장 · 상세 사진 \(model.detailPhotos.count)장")
+                CameraPermissionGate(permission: permission) {
+                    VStack(spacing: 20) {
+                        Text("카메라 프리뷰 자리")
+                            .frame(maxWidth: .infinity, minHeight: 180)
+                            .background(.quaternary)
+                        Button("목 상세 사진 추가") { captureRequested = true }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(captureRequested || model.isCapturing)
+                            .accessibilityIdentifier("camera.captureDetail")
+                        if model.isCapturing { ProgressView("목 사진 준비 중") }
+                    }
                 }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!model.canHandoff)
+                if let failureMessage {
+                    Text(failureMessage).foregroundStyle(.red)
+                    Text("기존 사진은 유지됩니다. 권한을 확인한 뒤 다시 촬영해 주세요.")
+                }
+                // 기존 사진 선택에는 카메라 권한이 필요하지 않다.
+                NavigationLink("제품 사진 선택") {
+                    ProductPhotoSelectionView(model: model, onComplete: onComplete)
+                }
+                .disabled(captureRequested || model.isCapturing)
+                .accessibilityIdentifier("camera.selectPhotos")
             }
-            Button("데모 처음부터", action: restartDemo)
-        case .handoff:
-            stage("다음 단계 연결 준비", description: "같은 상품의 촬영본과 처리 결과를 전달할 위치입니다. 상세 촬영은 이번 범위에 포함되지 않습니다.")
-            Button("데모 처음부터", action: restartDemo)
-            Button("닫기") { dismiss() }
-        case .failed(let failure):
-            stage("데모 연결 오류", description: failure.message)
-            Button("데모 처음부터", action: restartDemo)
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
+            .padding()
         }
-    }
-
-    private func performPendingAction() async {
-        let expectedState = state
-        let sessionID = model.draft.sessionID
-        guard expectedState == .capturing || expectedState == .processing else { return }
-        do {
-            if expectedState == .capturing {
-                try await model.capture()
-            } else {
-                try await model.process()
+        .navigationTitle("제품 상세 촬영")
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: captureRequested) {
+            guard captureRequested else { return }
+            failureMessage = nil
+            do {
+                permission.refresh()
+                guard permission.status == .authorized else {
+                    captureRequested = false
+                    return
+                }
+                try await model.captureDetail()
+            } catch {
+                if !(error is CancellationError) && !Task.isCancelled {
+                    failureMessage = (error as? CameraFailure ?? .captureFailed).message
+                }
             }
-            try Task.checkCancellation()
-            guard state == expectedState, model.draft.sessionID == sessionID else { return }
-            state = expectedState == .capturing ? .review : .result
-        } catch {
-            guard state == expectedState,
-                  model.draft.sessionID == sessionID else { return }
-            if error is CancellationError || Task.isCancelled {
-                state = expectedState == .capturing ? .preview : .review
-            } else {
-                state = .failed((error as? CameraFailure) ??
-                    (expectedState == .capturing ? .captureFailed : .processingFailed))
-            }
+            captureRequested = false
         }
-    }
-
-    private func restartDemo() {
-        model.reset()
-        state = .preview
-    }
-
-    private func stage(_ title: String, description: String) -> some View {
-        VStack(spacing: 16) {
-            Text(title).font(.title2.bold())
-            Text(description)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        .onChange(of: permission.status) { _, status in
+            if status != .authorized { captureRequested = false }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
+        // 화면 이탈은 요청만 취소한다. 사진과 선택 결과는 초기화하지 않는다.
+        .onDisappear { captureRequested = false }
     }
 }
 

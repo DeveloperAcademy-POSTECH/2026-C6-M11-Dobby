@@ -7,9 +7,12 @@
 
 import SwiftUI
 
-/// Reviews system permission and mock capture. Previews explicitly inject mock permission.
+/// 이전 실측 화면을 목 입력으로 대체한다. 실제 앱 연결은 이 조립 지점에서 교체한다.
 struct CameraDemoEntryView: View {
     @State private var isPresented = false
+    @State private var model: ProductPhotoModel?
+    @State private var completed: ProductPhotoOutput?
+    @State private var inputError: String?
     private let authorizer: any CameraAuthorizing
 
     init(authorizer: (any CameraAuthorizing)? = nil) {
@@ -18,18 +21,51 @@ struct CameraDemoEntryView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text("카메라 목 데모")
+            Text("상세 촬영·사진 선택 목 데모")
                 .font(.title2.bold())
-            Text("카메라 권한은 실제로 확인하며, 촬영과 측정은 목 데이터로 동작합니다.")
+            Text("실측샷을 전달받은 뒤 시작합니다. 권한은 실제로 확인하며 상세 사진은 목 데이터입니다.")
                 .foregroundStyle(.secondary)
-            Button("카메라 흐름 살펴보기") { isPresented = true }
+            Button("카메라 흐름 살펴보기", action: startDemo)
                 .buttonStyle(.borderedProminent)
+            if let completed {
+                Text("완료 결과 수신: 선택 \(completed.selectedPhotos.count)장 / 상세 \(completed.detailPhotos.count)장")
+            }
+            if let inputError { Text(inputError).foregroundStyle(.red) }
         }
         .padding()
         .fullScreenCover(isPresented: $isPresented) {
-            CameraFlowView(model: CameraModel(
-                captureProvider: MockCameraService(), processor: MockCaptureProcessor()
-            ), permission: CameraPermission(authorizer: authorizer))
+            if let model {
+                NavigationStack {
+                    CameraFlowView(model: model, permission: CameraPermission(authorizer: authorizer)) { output in
+                        completed = output
+                        isPresented = false
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("닫기") { isPresented = false }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func startDemo() {
+        // 데모만 ID와 실측샷을 만든다. 실제 진입에서는 상위 화면의 입력을 사용한다.
+        let measurement = CapturedAsset(
+            id: UUID(), sessionID: UUID(), garmentID: UUID(),
+            purpose: .measurement, capturedAt: Date(), source: .mockPlaceholder
+        )
+        do {
+            model = try ProductPhotoModel(input: ProductPhotoInput(
+                sessionID: measurement.sessionID, garmentID: measurement.garmentID,
+                measurement: measurement
+            ), captureProvider: MockCameraService(purpose: .detail))
+            completed = nil
+            inputError = nil
+            isPresented = true
+        } catch {
+            inputError = "입력 사진을 확인해 주세요."
         }
     }
 }
