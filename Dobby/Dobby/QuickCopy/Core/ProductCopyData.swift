@@ -58,9 +58,29 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
     }
 }
 
+nonisolated struct CopyDiagnosticResult: Codable, Identifiable {
+    let id: UUID
+    let sessionID: UUID
+    let field: ProductCopyField
+    let executionMode: String
+    let canContinueInForeground: Bool
+    let processName: String
+    let bundleIdentifier: String
+    let beforeChangeCount: Int
+    let afterChangeCount: Int
+    let readBackMatches: Bool
+    let elapsedMilliseconds: Int
+    let createdAt: Date
+
+    var writeVerified: Bool {
+        afterChangeCount > beforeChangeCount && readBackMatches
+    }
+}
+
 @MainActor
 enum ProductCopyStore {
     private static let sessionKey = "quickCopy.session.v2"
+    private static let diagnosticsKey = "quickCopy.diagnostics.v1"
     private static let logger = Logger(subsystem: "com.dobby.Dobby", category: "QuickCopy")
 
     static func save(_ session: ProductCopySession) throws {
@@ -85,5 +105,26 @@ enum ProductCopyStore {
     static func invalidate() {
         UserDefaults.standard.removeObject(forKey: sessionKey)
         logger.notice("Copy session invalidated")
+    }
+
+    static func saveDiagnostic(_ result: CopyDiagnosticResult) {
+        let updated = Array(([result] + diagnostics()).prefix(100))
+        guard let data = try? JSONEncoder().encode(updated) else {
+            logger.error("Copy diagnostic result could not be encoded")
+            return
+        }
+        UserDefaults.standard.set(data, forKey: diagnosticsKey)
+    }
+
+    static func diagnostics() -> [CopyDiagnosticResult] {
+        guard let data = UserDefaults.standard.data(forKey: diagnosticsKey),
+              let results = try? JSONDecoder().decode([CopyDiagnosticResult].self, from: data) else {
+            return []
+        }
+        return results
+    }
+
+    static func clearDiagnostics() {
+        UserDefaults.standard.removeObject(forKey: diagnosticsKey)
     }
 }

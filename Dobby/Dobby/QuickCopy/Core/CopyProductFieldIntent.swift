@@ -15,7 +15,14 @@ struct CopyProductFieldIntent: LiveActivityIntent {
     init(sessionID: String, field: String) { self.sessionID = sessionID; self.field = field }
 
     @MainActor func perform() async throws -> some IntentResult {
-        Self.logger.notice("[1/6] Live Activity copy button tapped. session=\(sessionID, privacy: .public) field=\(field, privacy: .public)")
+        let attemptID = UUID()
+        let startedAt = Date()
+        let currentMode = systemContext.currentMode
+        let executionMode = currentMode == .background ? "background" : "foreground"
+        let canContinueInForeground = currentMode.canContinueInForeground
+        Self.logger.notice(
+            "[1/6][\(attemptID.uuidString, privacy: .public)] Live Activity copy button tapped. session=\(sessionID, privacy: .public) field=\(field, privacy: .public) mode=\(executionMode, privacy: .public) canContinueInForeground=\(canContinueInForeground)"
+        )
 
         guard let id = UUID(uuidString: sessionID) else {
             Self.logger.error("[FAILED 2/6] Invalid session UUID: \(sessionID, privacy: .public)")
@@ -65,15 +72,35 @@ struct CopyProductFieldIntent: LiveActivityIntent {
         )
         let afterChangeCount = pasteboard.changeCount
         let readBackMatches = pasteboard.string == value
-        if afterChangeCount > beforeChangeCount && readBackMatches {
-            Self.logger.notice("[6/6] Pasteboard write verified. afterChangeCount=\(afterChangeCount)")
+        let elapsedMilliseconds = Int(Date().timeIntervalSince(startedAt) * 1_000)
+        let result = CopyDiagnosticResult(
+            id: attemptID,
+            sessionID: id,
+            field: copyField,
+            executionMode: executionMode,
+            canContinueInForeground: canContinueInForeground,
+            processName: processName,
+            bundleIdentifier: bundleIdentifier,
+            beforeChangeCount: beforeChangeCount,
+            afterChangeCount: afterChangeCount,
+            readBackMatches: readBackMatches,
+            elapsedMilliseconds: elapsedMilliseconds,
+            createdAt: Date()
+        )
+        ProductCopyStore.saveDiagnostic(result)
+
+        if result.writeVerified {
+            Self.logger.notice("[6/6][\(attemptID.uuidString, privacy: .public)] Pasteboard write verified. afterChangeCount=\(afterChangeCount) elapsedMs=\(elapsedMilliseconds)")
         } else {
             Self.logger.error(
-                "[FAILED 6/6] Pasteboard write could not be verified. before=\(beforeChangeCount) after=\(afterChangeCount) readBackMatches=\(readBackMatches) process=\(processName, privacy: .public) bundle=\(bundleIdentifier, privacy: .public)"
+                "[FAILED 6/6][\(attemptID.uuidString, privacy: .public)] Pasteboard write could not be verified. before=\(beforeChangeCount) after=\(afterChangeCount) readBackMatches=\(readBackMatches) mode=\(executionMode, privacy: .public) canContinueInForeground=\(canContinueInForeground) process=\(processName, privacy: .public) bundle=\(bundleIdentifier, privacy: .public) elapsedMs=\(elapsedMilliseconds)"
             )
         }
 
-        await activity.update(ActivityContent(state: .init(lastAttemptedField: copyField.rawValue, message: "입력란에 붙여넣어주세요"), staleDate: session.createdAt.addingTimeInterval(8 * 3600)))
+        let message = result.writeVerified
+            ? "복사 확인됨 · 입력란에 붙여넣어주세요"
+            : "복사 확인 실패 · Dobby에서 다시 확인해주세요"
+        await activity.update(ActivityContent(state: .init(lastAttemptedField: copyField.rawValue, message: message), staleDate: session.createdAt.addingTimeInterval(8 * 3600)))
         Self.logger.notice("Live Activity status message updated")
         return .result()
     }
