@@ -7,7 +7,6 @@
 
 /// View-owned demo routes, not OS authorization or domain model state.
 enum CameraFlowState: Equatable {
-    case permissionIntro
     case preview
     case capturing
     case review

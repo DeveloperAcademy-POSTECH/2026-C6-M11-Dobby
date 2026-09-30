@@ -7,14 +7,16 @@
 
 import SwiftUI
 
-/// Reviewable navigation scaffold. Figma screen styling and real camera behavior are later steps.
+/// System permission followed by a mock capture flow; live preview/capture are later steps.
 struct CameraFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: CameraModel
-    @State private var state: CameraFlowState = .permissionIntro
+    @State private var permission: CameraPermission
+    @State private var state: CameraFlowState = .preview
 
-    init(model: CameraModel) {
+    init(model: CameraModel, permission: CameraPermission? = nil) {
         _model = State(initialValue: model)
+        _permission = State(initialValue: permission ?? CameraPermission(authorizer: SystemCameraAuthorization()))
     }
 
     var body: some View {
@@ -24,7 +26,7 @@ struct CameraFlowView: View {
                     Text("목 데모 · 실제 촬영·측정 없음")
                         .font(.subheadline.bold())
                         .foregroundStyle(.secondary)
-                    stageContent
+                    CameraPermissionGate(permission: permission) { stageContent }
                 }
                 .frame(maxWidth: 560)
                 .frame(maxWidth: .infinity)
@@ -48,10 +50,6 @@ struct CameraFlowView: View {
     @ViewBuilder
     private var stageContent: some View {
         switch state {
-        case .permissionIntro:
-            stage("카메라 권한", description: "실제 권한 요청은 다음 구현 단계에서 연결합니다.")
-            Button("목 흐름으로 계속") { state = .preview }
-                .buttonStyle(.borderedProminent)
         case .preview:
             stage("실측 촬영", description: "옷이 잘리지 않게 카메라 안에 넣어주세요. 현재는 프리뷰 자리만 표시합니다.")
             Button("목 촬영본 만들기") { state = .capturing }
@@ -117,7 +115,7 @@ struct CameraFlowView: View {
 
     private func restartDemo() {
         model.reset()
-        state = .permissionIntro
+        state = .preview
     }
 
     private func stage(_ title: String, description: String) -> some View {
@@ -133,5 +131,5 @@ struct CameraFlowView: View {
 }
 
 #Preview {
-    CameraDemoEntryView()
+    CameraDemoEntryView(authorizer: MockCameraAuthorization())
 }
