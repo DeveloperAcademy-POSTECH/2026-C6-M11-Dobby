@@ -4,12 +4,15 @@ import Foundation
 import ImageIO
 import Vision
 
-/// Generic foreground segmentation, deliberately separate from the future garment ML adapter.
-/// Analysis is sampled, never queued per frame, and cannot delay a shutter request with Vision work.
+/// Bounded semantic garment recognition and foreground segmentation of one RGB frame.
+/// A foreground mask alone never publishes garment recognition or readiness.
 nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.dobby.lidar.live-foreground", qos: .userInitiated)
     private let lock = NSLock()
     private let context = CIContext(options: [.cacheIntermediates: false])
+    private let foreground = GarmentForegroundMaskAnalyzer()
+    private let recognizer: (any GarmentImageRecognizing)?
+    private var orientation: ImageOrientation = .right
     private var identifier: UUID?
     private var readinessEpoch = UUID()
     private var busy = false
@@ -23,6 +26,23 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     private var evaluatorEpoch: UUID?
 
     private let minimumInterval: TimeInterval = 0.6
+
+    init(recognizer: (any GarmentImageRecognizing)? = nil) {
+        self.recognizer = recognizer
+    }
+
+    func setOrientation(_ value: ImageOrientation) {
+        lock.lock(); defer { lock.unlock() }
+        guard value != orientation else { return }
+        orientation = value
+        readinessEpoch = UUID()
+        lastSubmissionTime = -.infinity
+    }
+
+    func isCurrent(_ readiness: LiveCaptureReadiness) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return identifier != nil && readiness.analysisEpoch == readinessEpoch
+    }
 
     func reset(sessionID: UUID?) {
         lock.lock(); defer { lock.unlock() }
@@ -55,6 +75,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         }
         busy = true
         let epoch = readinessEpoch
+        let imageOrientation = orientation
         lastSubmissionTime = frame.timestamp
         var trackingStable = false
         if case .normal = frame.camera.trackingState { trackingStable = true }
@@ -90,28 +111,71 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
             image: buffer,
             imageSize: PixelSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer)),
             depth: frame.sceneDepth.flatMap(Self.copyDepth),
-            trackingStable: trackingStable
+            trackingStable: trackingStable,
+            orientation: imageOrientation
         )
         queue.async { [self] in
-            let evidence = autoreleasepool { analyze(job) }
-            lock.lock()
-            let canEvaluate = identifier == job.sessionID && readinessEpoch == job.readinessEpoch
-            if !canEvaluate { busy = false }
-            lock.unlock()
-            guard canEvaluate else { return }
-
-            if evaluatorEpoch != job.readinessEpoch {
-                evaluator.reset()
-                evaluatorEpoch = job.readinessEpoch
+            guard isCurrent(job) else {
+                finish(emptyEvidence(for: job), job: job, completion: completion)
+                return
             }
-            let result = evaluator.evaluate(evidence)
-
-            lock.lock()
-            busy = false
-            let canPublish = identifier == job.sessionID && readinessEpoch == job.readinessEpoch
-            lock.unlock()
-            if canPublish { completion(job.sessionID, result) }
+            // Render an owned raw RGB copy before crossing an async model call.
+            // Only this one job is in flight, including its segmentation step.
+            let image: CGImage?
+            image = autoreleasepool {
+                let raw = CIImage(cvPixelBuffer: job.image)
+                return context.createCGImage(raw,
+                    from: CGRect(x: 0, y: 0, width: job.imageSize.width, height: job.imageSize.height),
+                    format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB), deferred: false)
+            }
+            guard let image, let recognizer else {
+                var evidence = self.emptyEvidence(for: job)
+                evidence.analysisFailed = image == nil
+                self.finish(evidence, job: job, completion: completion)
+                return
+            }
+            Task {
+                let recognition: Result<GarmentImageRecognition, Error>
+                do { recognition = .success(try await recognizer.recognizeImage(image, orientation: job.orientation)) }
+                catch { recognition = .failure(error) }
+                self.queue.async {
+                    guard self.isCurrent(job) else {
+                        self.finish(self.emptyEvidence(for: job), job: job, completion: completion)
+                        return
+                    }
+                    let evidence = autoreleasepool { self.analyze(job, image: image, recognition: recognition) }
+                    self.finish(evidence, job: job, completion: completion)
+                }
+            }
         }
+    }
+
+    private func isCurrent(_ job: AnalysisJob) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return identifier == job.sessionID && readinessEpoch == job.readinessEpoch
+    }
+
+    /// Called only on the serial analysis queue. The epoch protects camera
+    /// restart, motion invalidation and orientation changes while ML was running.
+    private func finish(_ evidence: LiveCaptureEvidence, job: AnalysisJob,
+                        completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
+        lock.lock()
+        let canEvaluate = identifier == job.sessionID && readinessEpoch == job.readinessEpoch
+        if !canEvaluate { busy = false }
+        lock.unlock()
+        guard canEvaluate else { return }
+        if evaluatorEpoch != job.readinessEpoch {
+            evaluator.reset()
+            evaluatorEpoch = job.readinessEpoch
+        }
+        var result = evaluator.evaluate(evidence)
+        result.imageOrientation = job.orientation
+        result.analysisEpoch = job.readinessEpoch
+        lock.lock()
+        busy = false
+        let canPublish = identifier == job.sessionID && readinessEpoch == job.readinessEpoch
+        lock.unlock()
+        if canPublish { completion(job.sessionID, result) }
     }
 
     private static func rotationMatrix(_ pose: simd_float4x4) -> simd_float3x3 {
@@ -122,145 +186,39 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         ))
     }
 
-    private func analyze(_ job: AnalysisJob) -> LiveCaptureEvidence {
-        var evidence = LiveCaptureEvidence(
-            timestamp: job.timestamp,
-            candidateCount: 0,
-            bounds: nil,
-            mask: nil,
-            imageSize: job.imageSize,
-            depth: job.depth,
-            trackingStable: job.trackingStable
-        )
+    private func emptyEvidence(for job: AnalysisJob) -> LiveCaptureEvidence {
+        .init(timestamp: job.timestamp, candidateCount: 0, bounds: nil, mask: nil,
+              imageSize: job.imageSize, depth: job.depth, trackingStable: job.trackingStable)
+    }
+
+    private func analyze(_ job: AnalysisJob, image: CGImage,
+                         recognition: Result<GarmentImageRecognition, Error>) -> LiveCaptureEvidence {
+        var evidence = emptyEvidence(for: job)
         do {
-            let size = try Self.analysisSize(for: job.imageSize)
-            let scale = Double(size.width) / Double(job.imageSize.width)
-            let input = CIImage(cvPixelBuffer: job.image).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-            guard let image = context.createCGImage(input,
-                from: CGRect(x: 0, y: 0, width: size.width, height: size.height),
-                format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()) else {
-                throw AnalysisError.invalidImage
-            }
-            // Sensor-raster coordinates remain unrotated. Display orientation is
-            // applied only when the camera UI draws the resulting bounds.
-            let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
-            let request = VNGenerateForegroundInstanceMaskRequest()
-            try handler.perform([request])
-            guard let observation = request.results?.first, !observation.allInstances.isEmpty else {
+            let prediction = try recognition.get()
+            guard prediction.detectionConfidence.isFinite,
+                  (0.25...1).contains(prediction.detectionConfidence),
+                  !prediction.modelVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return evidence
             }
-
-            let histogram = Self.instanceHistogram(observation.instanceMask)
-            let ranked = observation.allInstances.sorted {
-                let left = histogram?[$0] ?? 0
-                let right = histogram?[$1] ?? 0
-                return left == right ? $0 < $1 : left > right
-            }
-            // Bound work in cluttered scenes. A full-image mask is used for
-            // geometry; instanceMask's low-resolution square is never treated
-            // as if it were already aligned to the rectangular camera image.
-            var largest: MaskSummary?
-            var meaningfulCount = 0
-            for instance in ranked.prefix(4) {
-                let scaledMask = try observation.generateScaledMaskForImage(
-                    forInstances: IndexSet(integer: instance), from: handler)
-                let summary = try Self.summarize(scaledMask, expectedSize: size)
-                guard summary.foregroundCount >= Int(ceil(Double(size.width * size.height) * 0.02)) else {
-                    continue
-                }
-                meaningfulCount += 1
-                if summary.foregroundCount > (largest?.foregroundCount ?? 0) { largest = summary }
-            }
-            if ranked.count > 4 {
-                let lowResolutionArea = CVPixelBufferGetWidth(observation.instanceMask)
-                    * CVPixelBufferGetHeight(observation.instanceMask)
-                let unexaminedCandidate = ranked.dropFirst(4).contains {
-                    // A conservative clutter check; do not give a green signal
-                    // when a substantial instance was omitted by the work limit.
-                    guard let histogram else { return true }
-                    return Double(histogram[$0] ?? 0) >= Double(lowResolutionArea) * 0.01
-                }
-                if unexaminedCandidate { meaningfulCount = max(2, meaningfulCount + 1) }
-            }
-            evidence.candidateCount = meaningfulCount
-            evidence.mask = largest?.mask
-            evidence.bounds = largest?.bounds
+            let selection = try foreground.analyze(image, points: prediction.points)
+            evidence.candidateCount = 1
+            evidence.mask = selection.mask
+            evidence.bounds = selection.bounds
+            evidence.recognitionModelVersion = prediction.modelVersion
+        } catch BottomLandmarkError.noDetection {
+            // The generic foreground may be a hand, bag or furniture. Do not
+            // draw a garment silhouette when the model found no garment.
+        } catch BottomLandmarkError.multipleGarments {
+            evidence.candidateCount = 2
+        } catch GarmentMaskAssociationError.multipleForegrounds {
+            evidence.candidateCount = 2
+        } catch GarmentMaskAssociationError.noForeground {
+        } catch GarmentMaskAssociationError.unmatchedGarment {
         } catch {
             evidence.analysisFailed = true
         }
         return evidence
-    }
-
-    private static func analysisSize(for original: PixelSize) throws -> PixelSize {
-        guard original.isValid else { throw AnalysisError.invalidImage }
-        // Preserve the exact full-frame aspect ratio, including the mask's
-        // relation to the original image and depth, without letterboxing.
-        var a = original.width
-        var b = original.height
-        while b != 0 { let remainder = a % b; a = b; b = remainder }
-        let unitWidth = original.width / a
-        let unitHeight = original.height / a
-        let multiplier = min(a, 512 / max(unitWidth, unitHeight))
-        guard multiplier > 0 else { throw AnalysisError.invalidImage }
-        return PixelSize(width: unitWidth * multiplier, height: unitHeight * multiplier)
-    }
-
-    private static func instanceHistogram(_ buffer: CVPixelBuffer) -> [Int: Int]? {
-        guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_OneComponent8,
-              CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return nil }
-        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }
-        let width = CVPixelBufferGetWidth(buffer)
-        let height = CVPixelBufferGetHeight(buffer)
-        let stride = CVPixelBufferGetBytesPerRow(buffer)
-        guard stride >= width else { return nil }
-        var histogram: [Int: Int] = [:]
-        for y in 0..<height {
-            let row = base.advanced(by: y * stride).assumingMemoryBound(to: UInt8.self)
-            for x in 0..<width where row[x] != 0 { histogram[Int(row[x]), default: 0] += 1 }
-        }
-        return histogram
-    }
-
-    private static func summarize(_ buffer: CVPixelBuffer, expectedSize: PixelSize) throws -> MaskSummary {
-        let width = CVPixelBufferGetWidth(buffer)
-        let height = CVPixelBufferGetHeight(buffer)
-        let format = CVPixelBufferGetPixelFormatType(buffer)
-        guard width == expectedSize.width, height == expectedSize.height,
-              format == kCVPixelFormatType_OneComponent32Float || format == kCVPixelFormatType_OneComponent8,
-              CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else {
-            throw AnalysisError.invalidMask
-        }
-        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-        guard let base = CVPixelBufferGetBaseAddress(buffer) else { throw AnalysisError.invalidMask }
-        let stride = CVPixelBufferGetBytesPerRow(buffer)
-        let bytesPerPixel = format == kCVPixelFormatType_OneComponent32Float ? MemoryLayout<Float>.stride : 1
-        guard stride >= width * bytesPerPixel else { throw AnalysisError.invalidMask }
-        var values = [UInt8](repeating: 0, count: width * height)
-        var minX = width, minY = height, maxX = -1, maxY = -1, count = 0
-        for y in 0..<height {
-            let row = base.advanced(by: y * stride)
-            for x in 0..<width {
-                let included: Bool
-                if format == kCVPixelFormatType_OneComponent32Float {
-                    let value = row.assumingMemoryBound(to: Float.self)[x]
-                    included = value.isFinite && value >= 0.5
-                } else {
-                    included = row.assumingMemoryBound(to: UInt8.self)[x] >= 128
-                }
-                if included {
-                    values[y * width + x] = 1
-                    minX = min(minX, x); minY = min(minY, y)
-                    maxX = max(maxX, x); maxY = max(maxY, y)
-                    count += 1
-                }
-            }
-        }
-        let bounds: NormalizedRect? = count > 0 ? NormalizedRect(
-            x: Double(minX) / Double(width), y: Double(minY) / Double(height),
-            width: Double(maxX - minX + 1) / Double(width), height: Double(maxY - minY + 1) / Double(height)
-        ) : nil
-        return MaskSummary(mask: GarmentMask(size: expectedSize, values: values), bounds: bounds, foregroundCount: count)
     }
 
     private static func copyDepth(_ source: ARDepthData) -> DepthMap? {
@@ -315,14 +273,5 @@ private nonisolated struct AnalysisJob: @unchecked Sendable {
     var imageSize: PixelSize
     var depth: DepthMap?
     var trackingStable: Bool
-}
-
-private nonisolated struct MaskSummary {
-    var mask: GarmentMask
-    var bounds: NormalizedRect?
-    var foregroundCount: Int
-}
-
-private nonisolated enum AnalysisError: Error {
-    case invalidImage, invalidMask
+    var orientation: ImageOrientation
 }

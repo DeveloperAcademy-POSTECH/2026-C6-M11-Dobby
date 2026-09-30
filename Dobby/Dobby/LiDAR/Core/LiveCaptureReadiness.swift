@@ -25,7 +25,8 @@ nonisolated struct NormalizedRect: Codable, Sendable, Equatable {
 }
 
 /// The mask and depth must belong to this exact RGB frame and cover its complete field of view.
-/// Foreground detection only finds an object: it does not establish that the object is clothing.
+/// A model version is supplied only after semantic landmarks have been matched
+/// to the single foreground mask from this same image.
 nonisolated struct LiveCaptureEvidence: Sendable {
     var timestamp: TimeInterval
     var candidateCount: Int
@@ -35,6 +36,7 @@ nonisolated struct LiveCaptureEvidence: Sendable {
     var depth: DepthMap?
     var trackingStable: Bool
     var analysisFailed: Bool = false
+    var recognitionModelVersion: String? = nil
 }
 
 nonisolated enum LiveReadinessState: String, Codable, Sendable {
@@ -42,7 +44,8 @@ nonisolated enum LiveReadinessState: String, Codable, Sendable {
     case noDepth, lowDepth, unstable, steadying, ready, analysisFailed
 }
 
-/// Advisory capture quality, not a guarantee of garment recognition or centimetre accuracy.
+/// A matched garment silhouette plus advisory capture quality, not a guarantee
+/// of landmark position or centimetre accuracy.
 /// Coverage denominators are foreground depth pixels, never the full image or bounding box.
 nonisolated struct LiveCaptureReadiness: Codable, Sendable, Equatable {
     var state: LiveReadinessState
@@ -53,6 +56,16 @@ nonisolated struct LiveCaptureReadiness: Codable, Sendable, Equatable {
     /// Boundary pixels with valid, medium-or-high confidence depth / all boundary pixels.
     var boundaryCoverage: Double? = nil
     var medianDepthMeters: Double? = nil
+    /// Binary silhouette in full, unrotated RGB coordinates. Never a bounding box.
+    var silhouette: GarmentMask? = nil
+    var recognitionModelVersion: String? = nil
+    var imageOrientation: ImageOrientation? = nil
+    /// Runtime identity rejects completions queued before an analysis reset.
+    var analysisEpoch: UUID? = nil
+
+    var garmentRecognized: Bool {
+        silhouette != nil && !(recognitionModelVersion?.isEmpty ?? true)
+    }
 
     var isReady: Bool { state == .ready }
 }
@@ -126,6 +139,10 @@ nonisolated struct LiveReadinessEvaluator: Sendable {
         guard evidence.trackingStable else { return reject(.unstable, result) }
         guard evidence.candidateCount > 0 else { return reject(.searching, result) }
         guard evidence.candidateCount == 1 else { return reject(.multipleObjects, result) }
+        guard let modelVersion = evidence.recognitionModelVersion,
+              !modelVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return reject(.searching, result)
+        }
         guard let bounds = evidence.bounds, bounds.isValid,
               let mask = evidence.mask, validMask(mask, imageSize: evidence.imageSize) else {
             return reject(.analysisFailed, result)
@@ -149,6 +166,8 @@ nonisolated struct LiveReadinessEvaluator: Sendable {
         guard bounds.intersectionOverUnion(with: maskBounds) >= 0.70 else {
             return reject(.analysisFailed, result)
         }
+        result.silhouette = mask
+        result.recognitionModelVersion = modelVersion
         let margin = configuration.minimumImageEdgeMargin
         guard min(bounds.x, maskBounds.x) >= margin,
               min(bounds.y, maskBounds.y) >= margin,

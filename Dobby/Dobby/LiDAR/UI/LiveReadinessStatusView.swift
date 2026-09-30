@@ -61,8 +61,7 @@ extension LiveReadinessState {
     }
 }
 
-/// Green means usable depth in a stable foreground candidate, not semantic
-/// garment recognition, automatic landmarks, or a guarantee of cm accuracy.
+/// Garment recognition and usable depth are separate from centimetre accuracy.
 struct LiveReadinessStatusView: View {
     let readiness: LiveCaptureReadiness
 
@@ -80,7 +79,7 @@ struct LiveReadinessStatusView: View {
                     }
                 }.font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.85))
             }
-            Text("의류 종류 판별 전 · 전경 영역과 깊이 상태 안내")
+            Text(readiness.garmentRecognized ? "하의 인식 확인 · 영역과 깊이 상태 안내" : "옷 인식과 깊이 상태를 확인하고 있습니다")
                 .font(.caption2).foregroundStyle(.white.opacity(0.7))
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
             .foregroundStyle(.white)
@@ -162,6 +161,7 @@ private enum ReadinessDemoScenario: String, CaseIterable, Identifiable {
                      mask: .init(size: size, values: mask), imageSize: .init(width: 640, height: 480),
                      depth: self == .missing ? nil : .init(size: size, values: .init(repeating: 1, count: 80 * 60),
                          confidence: .init(repeating: self == .weak ? 1 : 2, count: 80 * 60)),
-                     trackingStable: self != .moving)
+                     trackingStable: self != .moving,
+                     recognitionModelVersion: "synthetic-readiness-preview")
     }
 }

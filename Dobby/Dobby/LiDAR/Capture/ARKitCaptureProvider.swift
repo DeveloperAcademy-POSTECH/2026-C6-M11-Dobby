@@ -90,16 +90,27 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     }
 
     private nonisolated let worker = CaptureWorker()
-    private nonisolated let liveAnalyzer = LiveForegroundAnalyzer()
+    private nonisolated let liveAnalyzer: LiveForegroundAnalyzer
     private var freshnessTask: Task<Void, Never>?
     private var freshnessGate = LiveReadinessFreshnessGate()
     private var generation: UUID?
     private var permissionRequestInProgress = false
+    private var imageOrientation: ImageOrientation = .right
 
-    override init() {
+    init(garmentRecognizer: (any GarmentImageRecognizing)? = nil) {
+        liveAnalyzer = LiveForegroundAnalyzer(recognizer: garmentRecognizer)
         super.init()
         session.delegate = self
         session.delegateQueue = worker.queue
+    }
+
+    /// The view forwards its actual preview orientation. An old model completion
+    /// must not paint a silhouette using a newer preview's rotation.
+    func updateImageOrientation(_ orientation: ImageOrientation) {
+        guard orientation != imageOrientation else { return }
+        imageOrientation = orientation
+        liveAnalyzer.setOrientation(orientation)
+        resetReadiness()
     }
 
     func start() async {
@@ -211,7 +222,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     }
 
     private func receiveLiveReadiness(sessionID: UUID, readiness: LiveCaptureReadiness) {
-        guard generation == sessionID, isRunning, let current = session.currentFrame else { return }
+        guard generation == sessionID, isRunning, readiness.imageOrientation == imageOrientation,
+              liveAnalyzer.isCurrent(readiness),
+              let current = session.currentFrame else { return }
         let trackingStable: Bool
         if case .normal = current.camera.trackingState { trackingStable = true }
         else { trackingStable = false }

@@ -104,18 +104,18 @@ let result = await MeasurementPipeline().measure(
 
 ### 메이슨: 영상·깊이와 화면 좌표
 
-- 같은 ARFrame의 RGB와 raw sceneDepth를 사용한다. Vision 작업은 별도 직렬 큐에서 최대 512px 영상으로 실행한다.
+- 같은 ARFrame의 RGB와 raw sceneDepth를 사용한다. 모델 추론과 Vision 작업은 화면 작업과 분리한다. 마스크 영상은 원본 종횡비를 유지하며 통상 최대 512px로 줄인다. 정확한 정수 종횡비로 축소할 수 없는 사진은 제한된 원본 크기를 사용한다.
 - 기본 최소 분석 간격은 0.6초다. 동시에 하나만 처리하며 대기 프레임을 쌓지 않는다. RGB 버퍼는 최대 한 장만 보관하고 ARFrame 자체는 보관하지 않는다.
 - 마스크는 원본 RGB 전체와 같은 종횡비이며 0/1 배열, bounds는 왼쪽 위 원점 정규화 좌표다. 크롭된 화면 좌표를 넣지 않는다.
 - 화면 테두리는 `ARFrame.displayTransform(for:viewportSize:)`로 회전과 aspect-fill 크롭을 반영한다.
 - 분석 결과가 2초 이상 오래되거나 카메라 프레임이 끊기면 성공 표시를 해제한다. 세션 교체·중단 결과는 폐기한다.
 - ARKit 추적 상태뿐 아니라 분석 프레임 사이의 이동 속도와 회전 속도로 움직임을 확인한다. 초기 기준은 0.10m/s, 12도/s 미만이며 실물 검증 후 조정한다.
 
-### 이치: 전경을 의류 모델로 교체
+### 의류 모델과 전경 마스크 연결
 
-현재 전경 마스크는 의류 전용 모델 출력이 아니다. 의류 모델을 연결할 때는 같은 프레임의 의류 후보 개수·전체 이미지 마스크·정규화 bounds를 `LiveCaptureEvidence`에 제공한다. 모델의 resize/padding/crop/rotation을 되돌려야 한다. `candidateCount`는 단순 전경 개수에서 실제 의류 후보 개수로 교체할 수 있다.
+현재 전경 마스크는 Vision에서, 의류 인식점은 하의 모델에서 얻는다. `GarmentMaskAssociation`이 같은 RGB의 원본 좌표에서 둘의 일치를 확인한다. 일반 전경만 발견했거나 여러 대상이 있으면 옷 인식 성공을 표시하지 않는다. 모델의 resize/padding/crop/rotation은 모두 복원한 뒤 매칭한다.
 
-현재 `LiveForegroundAnalyzer`의 `analyze`가 이 역할을 한다. 카메라 어댑터와 평가기는 유지하고 분석기 구현을 교체하면 된다. 학습 모델의 의류 판별과 측정점 품질 조건은 별도로 연결한 뒤 성공 문구를 바꾼다. 지금의 녹색 표시는 **대상 깊이 확보**까지만 뜻한다.
+`ARKitCaptureProvider(garmentRecognizer:)`로 모델을 주입한다. `LiveCaptureReadiness.silhouette`은 사각형 bounds가 아닌 실제 마스크이고, `garmentRecognized`가 참인 경우에만 옷 모양 오버레이를 표시한다. 방향 변경·세션 교체 시 기존 분석을 무효화한다. 파란 인식 표시도 cm 정확도 보증은 아니다. [촬영 화면 안내](Garment-Capture-Flow.md)를 참고한다.
 
 ### 초기 판정 기준
 
@@ -130,7 +130,7 @@ let result = await MeasurementPipeline().measure(
 | 시간 안정성 | 2개 이상의 관측, 최소 0.35초 |
 | 연속 후보 변화 | 사각형 IoU 0.8 이상, 중심 이동 0.025 이하, 중앙 깊이 변화 4cm 이하 |
 
-설정은 `LiveReadinessConfiguration`에 모여 있다. 위 수치는 초기 UX 판정값이며 센서 정밀도나 ML 정확도 검증 결과가 아니다. 기울어진 옷의 깊이는 위치에 따라 달라지므로 전체 깊이 분산만으로 거절하지 않는다. 촬영 버튼을 이 상태로 강제로 잠그지 않는다.
+설정은 `LiveReadinessConfiguration`에 모여 있다. 위 수치는 초기 UX 판정값이며 센서 정밀도나 ML 정확도 검증 결과가 아니다. 기울어진 옷의 깊이는 위치에 따라 달라지므로 전체 깊이 분산만으로 거절하지 않는다. 새 제품 실측 화면은 옷 인식과 준비 상태를 모두 충족해야 셔터가 활성화된다. 기존 실험실의 수동 촬영 경로는 카메라 실행 여부로 촬영을 허용한다.
 
 Apple API 참고: [일반 전경 마스크 요청](https://developer.apple.com/documentation/vision/vngenerateforegroundinstancemaskrequest), [ARKit 깊이 데이터](https://developer.apple.com/documentation/arkit/ardepthdata).
 
@@ -163,4 +163,4 @@ workflow를 유지해 취소에 비협조적인 작업도 최대 2개로 제한�
 
 ## 제공 하의 모델 연결 (9/28)
 
-`CoreMLBottomLandmarkProvider`가 기본 실제 자동 촬영에 연결된다. 하의의 측정 정의는 `provider.schema.measurementDefinitions`로 생성하며 상의나 수동 바지 프리셋 ID를 혼용하지 않는다. `LiDARLabView(landmarkProvider:)`로 다른 공급자를 주입하는 기존 상의 경로도 유지한다. 모델 입력 형식, 좌표 복원, 대상 범위와 실측 한계는 [하의 인식 모델 안내](Bottom-Recognition.md)를 참고한다. 새 모델은 마스크를 출력하지 않으며 현재 실시간 전경 분석기를 대체하지 않는다.
+`CoreMLBottomLandmarkProvider`가 기본 실제 자동 촬영에 연결된다. 하의의 측정 정의는 `provider.schema.measurementDefinitions`로 생성하며 상의나 수동 바지 프리셋 ID를 혼용하지 않는다. `LiDARLabView(landmarkProvider:)`로 다른 공급자를 주입하는 기존 상의 경로도 유지한다. 모델 입력 형식, 좌표 복원, 대상 범위와 실측 한계는 [하의 인식 모델 안내](Bottom-Recognition.md)를 참고한다. 하의 모델 자체의 마스크 출력 대신 같은 프레임의 Vision 실루엣을 결합한다. 실제 상의 자동 실측은 상의 모델·스키마·측정 정의를 별도로 연결해야 한다.

@@ -81,7 +81,7 @@ nonisolated struct GarmentLandmark: Codable, Sendable, Identifiable {
     var derivedFrom: [String]? = nil
 }
 
-nonisolated struct GarmentMask: Codable, Sendable {
+nonisolated struct GarmentMask: Codable, Sendable, Equatable {
     var size: PixelSize
     /// Registered to the complete original image. 0 = background, 1 = garment.
     var values: [UInt8]

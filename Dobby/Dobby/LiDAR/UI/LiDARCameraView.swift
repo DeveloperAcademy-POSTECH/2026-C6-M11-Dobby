@@ -43,6 +43,7 @@ struct LiDARCameraView: View {
             }.foregroundStyle(.white).background(.black)
         }
             .task { isVisible = true; await provider.start() }
+            .onChange(of: orientation) { _, value in provider.updateImageOrientation(value) }
             .onDisappear { isVisible = false; captureTask?.cancel(); provider.stop() }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await provider.start() } }
@@ -145,7 +146,7 @@ struct LiDARCameraView: View {
     }
 }
 
-private struct CameraPreview: UIViewRepresentable {
+struct CameraPreview: UIViewRepresentable {
     let session: ARSession
     let readiness: LiveCaptureReadiness
     @Binding var orientation: ImageOrientation
@@ -169,46 +170,55 @@ private struct CameraPreview: UIViewRepresentable {
         private var lastOrientation: UIInterfaceOrientation?
         var readiness = LiveCaptureReadiness.waiting
         private let outline = CAShapeLayer()
+        private var outlineTimestamp: TimeInterval?
+        private var contours: [[ImagePoint]] = []
 
         override init(frame: CGRect, options: [String: Any]? = nil) {
             super.init(frame: frame, options: options)
-            outline.fillColor = UIColor.clear.cgColor
-            outline.lineWidth = 3
-            outline.shadowColor = UIColor.black.cgColor
-            outline.shadowOpacity = 0.5
-            outline.shadowRadius = 3
+            outline.fillColor = UIColor(named: "CaptureRecognition")?.withAlphaComponent(0.24).cgColor
+            outline.fillRule = .evenOdd
+            outline.lineWidth = 2
+            outline.lineJoin = .round
             layer.addSublayer(outline)
             clipsToBounds = true
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
         func updateOutline() {
-            guard let box = readiness.bounds,
+            guard readiness.garmentRecognized, let mask = readiness.silhouette,
                   readiness.state != .unstable, readiness.state != .analyzing,
                   let frame = session.currentFrame,
                   frame.timestamp - readiness.timestamp <= 2,
                   let orientation = window?.windowScene?.effectiveGeometry.interfaceOrientation,
                   bounds.width > 0, bounds.height > 0 else {
                 outline.path = nil
+                outlineTimestamp = nil
+                contours = []
                 return
+            }
+            if outlineTimestamp != readiness.timestamp {
+                contours = GarmentSilhouetteGeometry.contours(from: mask) ?? []
+                outlineTimestamp = readiness.timestamp
             }
             // ARKit accounts for sensor orientation and the preview's aspect-fill
             // crop; a simple width/height scale would put the box on the wrong pixels.
             let transform = frame.displayTransform(for: orientation, viewportSize: bounds.size)
-            let corners = [CGPoint(x: box.x, y: box.y), CGPoint(x: box.x + box.width, y: box.y),
-                           CGPoint(x: box.x + box.width, y: box.y + box.height), CGPoint(x: box.x, y: box.y + box.height)]
-                .map { $0.applying(transform) }
-                .map { CGPoint(x: $0.x * bounds.width, y: $0.y * bounds.height) }
             let path = UIBezierPath()
-            path.move(to: corners[0])
-            for point in corners.dropFirst() { path.addLine(to: point) }
-            path.close()
+            for contour in contours {
+                for (index, point) in contour.enumerated() {
+                    let p = CGPoint(x: point.x, y: point.y).applying(transform)
+                    let mapped = CGPoint(x: p.x * bounds.width, y: p.y * bounds.height)
+                    if index == 0 { path.move(to: mapped) }
+                    else { path.addLine(to: mapped) }
+                }
+                path.close()
+            }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             outline.frame = bounds
             outline.path = path.cgPath
-            outline.strokeColor = (readiness.state == .ready ? UIColor.systemMint : UIColor.systemOrange).cgColor
-            outline.lineDashPattern = readiness.state == .ready ? nil : [8, 5]
+            outline.strokeColor = UIColor(named: "CaptureRecognition")?.cgColor
+            outline.lineDashPattern = nil
             CATransaction.commit()
         }
 

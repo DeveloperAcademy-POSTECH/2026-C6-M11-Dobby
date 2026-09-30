@@ -2,6 +2,7 @@
 // Run from the repository root on macOS with Xcode installed:
 // xcrun swiftc -parse-as-library Dobby/Dobby/LiDAR/Core/*.swift \
 //   Dobby/Dobby/LiDAR/Capture/CoreMLBottomLandmarkProvider.swift \
+//   Dobby/Dobby/LiDAR/Capture/GarmentForegroundMaskAnalyzer.swift \
 //   Tools/validate-bottom-provider.swift -o /tmp/validate-bottom-provider
 // /tmp/validate-bottom-provider <BottomLandmarks.mlpackage|mlmodelc> \
 //   <schema_bottom7.json> <photo> [photo ...] [--output /tmp/provider-report.json]

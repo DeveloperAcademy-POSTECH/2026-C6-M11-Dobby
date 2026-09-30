@@ -7,6 +7,7 @@ struct LiDARLabView: View {
     private let bottomModelLoadError: String?
     private let usesBottomModel: Bool
     @State private var showBottomRecognition = false
+    @State private var garmentFlow: GarmentFlowDestination?
     @StateObject private var capture: ARKitCaptureProvider
     @State private var automaticService: RecordedMeasurementService?
     @State private var demoService: RecordedMeasurementService
@@ -46,7 +47,7 @@ struct LiDARLabView: View {
         self.usesBottomModel = landmarkProvider == nil && bundled != nil
         let provider: (any GarmentLandmarkProviding)? = landmarkProvider ?? bundled
         let definitions = landmarkProvider == nil ? (bundled?.schema.measurementDefinitions ?? []) : MeasurementDefinition.longSleeve
-        let camera = ARKitCaptureProvider()
+        let camera = ARKitCaptureProvider(garmentRecognizer: bundled)
         _capture = StateObject(wrappedValue: camera)
         let journal = LiDARAppServices.attemptJournal
         _automaticService = State(initialValue: provider.map { provider in
@@ -69,6 +70,19 @@ struct LiDARLabView: View {
                         Text("사진 속 두 점을 실제 공간의 위치로 복원해 길이를 계산합니다.")
                             .foregroundStyle(.secondary)
                     }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("옷을 찍고, 실측을 확인하세요").font(.title3.bold())
+                        Text("옷 모양의 윤곽을 확인한 뒤 촬영하면 사진 위에 실측값이 표시됩니다. 현재 바지·반바지를 지원합니다.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        Button { garmentFlow = .live } label: {
+                            Label("실측 촬영", systemImage: "camera.fill").frame(maxWidth: .infinity).padding(.vertical, 6)
+                        }.buttonStyle(.borderedProminent).tint(GarmentCaptureStyle.accent)
+                            .accessibilityIdentifier("openGarmentCapture")
+                        Button("촬영 화면 미리보기") { garmentFlow = .preview }
+                            .font(.subheadline).accessibilityIdentifier("openGarmentPreview")
+                        Text("미리보기는 합성 화면이며 실제 옷 인식·센서 측정이 아닙니다.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }.labCard()
                     VStack(alignment: .leading, spacing: 14) {
                         Label("실제 기기로 측정", systemImage: "camera.fill").font(.headline)
                         Text(capture.isSupported ? "옷을 펼친 뒤 전체가 보이게 촬영하세요. 테스트 화면에서 두 점과 줄자 기준값을 지정할 수 있습니다." : "현재 기기에서는 LiDAR 촬영을 사용할 수 없습니다. 아래 데모로 계산과 저장을 테스트할 수 있습니다.")
@@ -190,6 +204,9 @@ struct LiDARLabView: View {
                 .onDisappear { if !showCamera { cancelAutomatic() } }
                 .sheet(isPresented: $showBottomRecognition) {
                     if let bottomProvider { BottomRecognitionView(provider: bottomProvider) }
+                }
+                .fullScreenCover(item: $garmentFlow, onDismiss: { Task { await refreshRecords() } }) { destination in
+                    GarmentCaptureFlowView(archive: archive, preview: destination == .preview)
                 }
                 .sheet(isPresented: $showBaseline) { BaselineReportView(archive: archive) }
                 .sheet(isPresented: $showValidation) { MeasurementValidationReportView(archive: archive) }
@@ -335,6 +352,11 @@ struct LiDARLabView: View {
             testContext: record.testContext ?? .init(deviceModel: SnapshotPresentation.deviceIdentifier))
         session = model
     }
+}
+
+private enum GarmentFlowDestination: String, Identifiable {
+    case live, preview
+    var id: String { rawValue }
 }
 
 enum DemoScenario: String, CaseIterable, Identifiable {

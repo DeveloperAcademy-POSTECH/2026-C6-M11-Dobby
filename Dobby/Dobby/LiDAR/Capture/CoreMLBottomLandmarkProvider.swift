@@ -37,12 +37,13 @@ nonisolated enum BottomModelError: Error, LocalizedError, AutomaticMeasurementFa
 
 /// A cached, serial inference service. Image processing and Core ML never run on
 /// the main actor. This adapter does not own a camera or invent depth for photos.
-actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding {
+actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecognizing {
     nonisolated let schema: BottomLandmarkSchema
     nonisolated let modelVersion = "bottom7-976144d4d652"
     private let modelURL: URL
     private var model: MLModel?
     private let context = CIContext(options: [.cacheIntermediates: false])
+    private let foreground = GarmentForegroundMaskAnalyzer()
 
     init(modelURL: URL, schema: BottomLandmarkSchema) {
         self.modelURL = modelURL
@@ -67,8 +68,20 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding {
         }
         let prediction = try infer(cg, orientation: snapshot.frame.orientation)
         try Task.checkCancellation()
+        // Recompute from this frozen RGB. A live preview mask belongs to an
+        // earlier frame and must never be attached to these measured points.
+        let selection = try foreground.analyze(cg, points: prediction.points)
+        try Task.checkCancellation()
         return GarmentLandmarkSet(sessionID: snapshot.frame.sessionID, frameID: snapshot.frame.frameID,
-            origin: .model, modelVersion: modelVersion, points: prediction.points, mask: nil)
+            origin: .model, modelVersion: modelVersion, points: prediction.points, mask: selection.mask)
+    }
+
+    func recognizeImage(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentImageRecognition {
+        try Task.checkCancellation()
+        let prediction = try infer(image, orientation: orientation)
+        try Task.checkCancellation()
+        return .init(points: prediction.points, detectionConfidence: prediction.detectionConfidence,
+                     modelVersion: modelVersion)
     }
 
     /// EXIF orientation (including mirrored photos) is baked in exactly once.

@@ -14,7 +14,7 @@ final class LiveCaptureReadinessTests: XCTestCase {
             mask: mask, imageSize: .init(width: 1_000, height: 800),
             depth: .init(size: size, values: .init(repeating: 1.2, count: 8_000),
                          confidence: .init(repeating: 2, count: 8_000)),
-            trackingStable: true
+            trackingStable: true, recognitionModelVersion: "analytic-garment-test"
         )
     }
 
@@ -29,6 +29,43 @@ final class LiveCaptureReadinessTests: XCTestCase {
         XCTAssertEqual(result.highConfidenceCoverage, 1)
         XCTAssertEqual(result.boundaryCoverage, 1)
         XCTAssertEqual(result.medianDepthMeters ?? 0, 1.2, accuracy: 0.0001)
+        XCTAssertTrue(result.garmentRecognized)
+        XCTAssertEqual(result.silhouette, evidence().mask)
+    }
+
+    func testUnclassifiedForegroundNeverPublishesGarmentSuccessOrSilhouette() {
+        var evaluator = LiveReadinessEvaluator()
+        var observation = evidence()
+        observation.recognitionModelVersion = nil
+        XCTAssertEqual(evaluator.evaluate(observation).state, .searching)
+        observation.timestamp = 2
+        let result = evaluator.evaluate(observation)
+        XCTAssertFalse(result.isReady)
+        XCTAssertFalse(result.garmentRecognized)
+        XCTAssertNil(result.silhouette)
+    }
+
+    func testNewNoDetectionDropsPreviouslyRecognizedSilhouette() {
+        var evaluator = LiveReadinessEvaluator()
+        _ = evaluator.evaluate(evidence())
+        XCTAssertTrue(evaluator.evaluate(evidence(timestamp: 1.5)).garmentRecognized)
+        var missing = evidence(timestamp: 2)
+        missing.candidateCount = 0
+        missing.recognitionModelVersion = nil
+        let result = evaluator.evaluate(missing)
+        XCTAssertFalse(result.garmentRecognized)
+        XCTAssertNil(result.silhouette)
+    }
+
+    func testDepthFailureKeepsRecognizedSilhouetteWithoutClaimingReady() {
+        var evaluator = LiveReadinessEvaluator()
+        var missingDepth = evidence()
+        missingDepth.depth = nil
+        let result = evaluator.evaluate(missingDepth)
+        XCTAssertEqual(result.state, .noDepth)
+        XCTAssertTrue(result.garmentRecognized)
+        XCTAssertFalse(result.isReady)
+        XCTAssertEqual(result.silhouette, missingDepth.mask)
     }
 
     func testNoObjectOrEmptyMaskCannotBeReady() {
