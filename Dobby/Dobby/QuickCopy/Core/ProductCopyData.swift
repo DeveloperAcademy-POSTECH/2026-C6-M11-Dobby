@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 nonisolated enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
     case productName, description, brand, measurements
@@ -60,14 +61,29 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
 @MainActor
 enum ProductCopyStore {
     private static let sessionKey = "quickCopy.session.v2"
+    private static let logger = Logger(subsystem: "com.dobby.Dobby", category: "QuickCopy")
+
     static func save(_ session: ProductCopySession) throws {
         UserDefaults.standard.set(try JSONEncoder().encode(session), forKey: sessionKey)
+        logger.notice("Copy session saved. session=\(session.id.uuidString, privacy: .public) product=\(session.productID, privacy: .public)")
     }
     static func load() -> ProductCopySession? {
-        guard let data = UserDefaults.standard.data(forKey: sessionKey),
-              let session = try? JSONDecoder().decode(ProductCopySession.self, from: data),
-              !session.isExpired else { return nil }
+        guard let data = UserDefaults.standard.data(forKey: sessionKey) else {
+            logger.error("Copy session data is missing from app UserDefaults")
+            return nil
+        }
+        guard let session = try? JSONDecoder().decode(ProductCopySession.self, from: data) else {
+            logger.error("Copy session data could not be decoded. byteCount=\(data.count)")
+            return nil
+        }
+        guard !session.isExpired else {
+            logger.error("Copy session expired. session=\(session.id.uuidString, privacy: .public)")
+            return nil
+        }
         return session
     }
-    static func invalidate() { UserDefaults.standard.removeObject(forKey: sessionKey) }
+    static func invalidate() {
+        UserDefaults.standard.removeObject(forKey: sessionKey)
+        logger.notice("Copy session invalidated")
+    }
 }
