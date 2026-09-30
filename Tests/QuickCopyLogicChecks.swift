@@ -1,77 +1,69 @@
 import Foundation
 
-@main struct QuickCopyLogicChecks {
+@main
+struct QuickCopyLogicChecks {
     static func main() throws {
         let fruits = ProductCopyPayload.sample(for: .fruits)
         let instagram = ProductCopyPayload.sample(for: .instagram)
-        precondition(fruits.price == "56000" && fruits.description.contains("Price- 56,000\n\n"))
+
+        precondition(fruits.price == "56000")
+        precondition(fruits.description.contains("Price- 56,000\n\n"))
         precondition(!fruits.description.contains("55,000"))
         precondition(instagram.description.contains("65,000 >팔로우 시 55,000"))
         precondition(fruits.description.contains("\n\nSize 59 43 32\n"))
         precondition(fruits.description.contains("😘") && fruits.description.contains("@okaoka_vtg"))
         precondition([fruits.length, fruits.waist, fruits.thigh] == ["59", "43", "32"])
+        precondition(fruits.value(for: .productName) == fruits.productName)
+        precondition(fruits.value(for: .description) == fruits.description)
         precondition(fruits.value(for: .brand) == "LEVI'S")
         precondition(fruits.value(for: .measurements) == "총장 59 cm\n허리 단면 43 cm\n허벅지 단면 32 cm")
+
         precondition(ProductCopyField.productName.copiedMessage == "상품명이 복사되었습니다.")
-        precondition(ProductCopyField.measurements.copyFailureMessage == "실측 사이즈 복사를 확인하지 못했습니다.")
-        let id = UUID(), now = Date()
-        let session = ProductCopySession(id: id, channel: .fruits, productID: "selected-product", payload: fruits, createdAt: now)
-        let restored = try JSONDecoder().decode(ProductCopySession.self, from: JSONEncoder().encode(session))
-        precondition(restored.id == id && restored.productID == "selected-product")
-        precondition(restored.payload == fruits && !restored.isExpired)
-        precondition(restored.effectiveWriteStrategy == .stringProperty)
-        let expired = ProductCopySession(id: id, channel: .fruits, productID: "selected-product", payload: fruits, createdAt: now.addingTimeInterval(-9 * 3600))
-        precondition(expired.isExpired)
-        precondition(session.canReuse(productID: "selected-product", payload: fruits))
-        precondition(!session.canReuse(productID: "another-product", payload: fruits))
-        precondition(!session.canReuse(productID: "selected-product", payload: instagram))
-        precondition(!expired.canReuse(productID: "selected-product", payload: fruits))
-        let diagnosticSession = ProductCopySession(
+        precondition(ProductCopyField.description.copiedMessage == "설명이 복사되었습니다.")
+        precondition(ProductCopyField.brand.copiedMessage == "브랜드명이 복사되었습니다.")
+        precondition(ProductCopyField.measurements.copiedMessage == "실측 사이즈가 복사되었습니다.")
+
+        let values = ProductCopyValues(
+            productName: fruits.productName,
+            description: fruits.description,
+            brand: fruits.brand,
+            measurements: fruits.measurements
+        )
+        precondition(values.value(for: .productName) == fruits.productName)
+        precondition(values.value(for: .description) == fruits.description)
+        precondition(values.value(for: .brand) == fruits.brand)
+        precondition(values.value(for: .measurements) == fruits.measurements)
+
+        let encodedValues = try JSONEncoder().encode(values)
+        precondition(!encodedValues.isEmpty && encodedValues.count < 3_500)
+
+        let id = UUID()
+        let now = Date()
+        let session = ProductCopySession(
             id: id,
             channel: .fruits,
             productID: "selected-product",
             payload: fruits,
-            createdAt: now,
-            writeStrategy: .stringProperty,
-            diagnosticToken: "A81F",
-            diagnosticCondition: "메모 앱 · 앱 전환 직후",
-            interactionMode: .foreground
+            createdAt: now
         )
-        let restoredDiagnostic = try JSONDecoder().decode(
+        let restored = try JSONDecoder().decode(
             ProductCopySession.self,
-            from: JSONEncoder().encode(diagnosticSession)
+            from: JSONEncoder().encode(session)
         )
-        precondition(restoredDiagnostic.effectiveWriteStrategy == .stringProperty)
-        precondition(restoredDiagnostic.diagnosticToken == "A81F")
-        precondition(restoredDiagnostic.interactionMode == .foreground)
-        precondition(!restoredDiagnostic.canReuse(productID: "selected-product", payload: fruits))
-        let copyURL = CopyRoute.url(sessionID: id, field: .productName)
-        precondition(CopyRoute.parse(copyURL) == CopyRequest(sessionID: id, field: .productName))
-        precondition(CopyRoute.parse(URL(string: copyURL.absoluteString + "&unexpected=value")!) == nil)
-        let diagnosticResult = CopyDiagnosticResult(
-            id: UUID(),
-            sessionID: id,
-            field: .productName,
-            executionMode: "background",
-            canContinueInForeground: true,
-            processName: "Dobby",
-            bundleIdentifier: "com.dobby.Dobby",
-            beforeChangeCount: 0,
-            afterChangeCount: 1,
-            readBackMatches: true,
-            elapsedMilliseconds: 12,
-            createdAt: now,
-            writeStrategy: .stringProperty,
-            diagnosticToken: "A81F",
-            diagnosticCondition: "메모 앱 · 앱 전환 직후"
+        precondition(restored.id == id && restored.productID == "selected-product")
+        precondition(restored.payload == fruits && !restored.isExpired)
+        precondition(session.canReuse(productID: "selected-product", payload: fruits))
+        precondition(!session.canReuse(productID: "another-product", payload: fruits))
+        precondition(!session.canReuse(productID: "selected-product", payload: instagram))
+
+        let expired = ProductCopySession(
+            id: id,
+            channel: .fruits,
+            productID: "selected-product",
+            payload: fruits,
+            createdAt: now.addingTimeInterval(-9 * 3_600)
         )
-        let restoredResult = try JSONDecoder().decode(
-            CopyDiagnosticResult.self,
-            from: JSONEncoder().encode(diagnosticResult)
-        )
-        precondition(restoredResult.writeVerified && restoredResult.diagnosticToken == "A81F")
-        precondition(fruits != instagram)
-        precondition(ProductCopyField(rawValue: "unknown") == nil)
-        print("PASS: channel data, copy mapping, session restore, diagnostic strategy and result persistence")
+        precondition(expired.isExpired)
+        print("PASS: product values, Island direct parameters, messages, attributes and session")
     }
 }

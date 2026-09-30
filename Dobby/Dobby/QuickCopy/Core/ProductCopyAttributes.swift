@@ -8,11 +8,5 @@ nonisolated struct ProductCopyAttributes: ActivityAttributes {
     }
     let sessionID: UUID
     let channelName: String
-    let interactionMode: CopyInteractionMode
-
-    init(sessionID: UUID, channelName: String, interactionMode: CopyInteractionMode = .direct) {
-        self.sessionID = sessionID
-        self.channelName = channelName
-        self.interactionMode = interactionMode
-    }
+    let values: ProductCopyValues
 }

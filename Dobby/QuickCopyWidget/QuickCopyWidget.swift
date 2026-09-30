@@ -8,7 +8,7 @@ struct QuickCopyWidget: Widget {
         ActivityConfiguration(for: ProductCopyAttributes.self) { context in
             VStack(alignment: .leading, spacing: 10) {
                 header(context.attributes.channelName)
-                ProductCopyPanel(sessionID: context.attributes.sessionID, interactionMode: context.attributes.interactionMode)
+                ProductCopyPanel(sessionID: context.attributes.sessionID, values: context.attributes.values)
                 Text(context.state.message).font(.caption2).foregroundStyle(.white.opacity(0.8))
             }.padding().activityBackgroundTint(.black)
                 .widgetURL(URL(string: "dobby-copy://home")!)
@@ -22,7 +22,7 @@ struct QuickCopyWidget: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 6) {
-                        ProductCopyPanel(sessionID: context.attributes.sessionID, interactionMode: context.attributes.interactionMode)
+                        ProductCopyPanel(sessionID: context.attributes.sessionID, values: context.attributes.values)
                         Text(context.state.message).font(.caption2).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                     }
                 }
@@ -41,14 +41,25 @@ struct QuickCopyWidget: Widget {
     }
 }
 
-#Preview("확장 Island", as: .dynamicIsland(.expanded), using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리")) {
+#Preview("확장 Island", as: .dynamicIsland(.expanded), using: previewAttributes) {
     QuickCopyWidget()
 } contentStates: { ProductCopyAttributes.ContentState() }
 
-#Preview("잠금 화면", as: .content, using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리")) {
+#Preview("잠금 화면", as: .content, using: previewAttributes) {
     QuickCopyWidget()
 } contentStates: { ProductCopyAttributes.ContentState() }
 
-#Preview("작은 Island", as: .dynamicIsland(.compact), using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리")) {
+#Preview("작은 Island", as: .dynamicIsland(.compact), using: previewAttributes) {
     QuickCopyWidget()
 } contentStates: { ProductCopyAttributes.ContentState() }
+
+private let previewAttributes = ProductCopyAttributes(
+    sessionID: UUID(),
+    channelName: "후루츠패밀리",
+    values: .init(
+        productName: "LEVI'S 550 커스텀 팬츠",
+        description: "상품 설명",
+        brand: "LEVI'S",
+        measurements: "총장 59 cm"
+    )
+)

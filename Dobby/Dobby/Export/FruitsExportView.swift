@@ -70,12 +70,6 @@ struct FruitsExportView: View {
                             .disabled(opening || controller.busy)
                     }.padding(.top, 16)
                     if !copiedMessage.isEmpty { Text(copiedMessage).font(.caption).foregroundStyle(.secondary) }
-#if DEBUG
-                    NavigationLink("아일랜드 복사 진단") {
-                        QuickCopyDiagnosticsView(product: product, controller: controller)
-                    }
-                    .font(.caption)
-#endif
                     if controller.session != nil {
                         Button("복사 도우미 종료", role: .destructive) { Task { await controller.stop() } }
                             .disabled(controller.busy || opening)

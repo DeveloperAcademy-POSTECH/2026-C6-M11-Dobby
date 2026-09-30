@@ -23,20 +23,13 @@ final class CopyActivityController {
     }
 
     @discardableResult
-    func start(
-        product: ExportProduct,
-        writeStrategy: CopyWriteStrategy = .stringProperty,
-        diagnosticToken: String? = nil,
-        diagnosticCondition: String? = nil,
-        interactionMode: CopyInteractionMode = .direct
-    ) async -> Bool {
+    func start(product: ExportProduct) async -> Bool {
         guard !busy else { return false }
         busy = true
         defer { busy = false }
         refresh()
-        if diagnosticToken == nil,
-           let session,
-           session.canReuse(productID: product.id, payload: product.fruits, writeStrategy: writeStrategy) {
+        if let session,
+           session.canReuse(productID: product.id, payload: product.fruits) {
             errorMessage = nil
             return true
         }
@@ -55,18 +48,19 @@ final class CopyActivityController {
             channel: .fruits,
             productID: product.id,
             payload: product.fruits,
-            createdAt: Date(),
-            writeStrategy: writeStrategy,
-            diagnosticToken: diagnosticToken,
-            diagnosticCondition: diagnosticCondition,
-            interactionMode: interactionMode
+            createdAt: Date()
         )
         do {
             try ProductCopyStore.save(next)
             _ = try Activity.request(attributes: ProductCopyAttributes(
                                          sessionID: next.id,
                                          channelName: next.channel.title,
-                                         interactionMode: interactionMode
+                                         values: .init(
+                                             productName: product.fruits.productName,
+                                             description: product.fruits.description,
+                                             brand: product.fruits.brand,
+                                             measurements: product.fruits.measurements
+                                         )
                                      ),
                                      content: ActivityContent(state: .init(), staleDate: next.createdAt.addingTimeInterval(8 * 3600)), pushType: nil)
             session = next
