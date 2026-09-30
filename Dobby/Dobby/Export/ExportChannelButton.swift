@@ -49,3 +49,8 @@ struct ExportChannelButton: View {
     ExportChannelButton(channel: .cafe24, hasOpenedLink: false, action: {})
         .padding()
 }
+
+#Preview("후루츠패밀리", traits: .sizeThatFitsLayout) {
+    ExportChannelButton(channel: .fruitsFamily, hasOpenedLink: false, action: {})
+        .padding()
+}
