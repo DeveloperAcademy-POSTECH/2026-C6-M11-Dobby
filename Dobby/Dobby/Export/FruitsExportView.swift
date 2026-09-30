@@ -25,7 +25,11 @@ struct FruitsExportView: View {
                         Task {
                             let started = await controller.start(product: product)
                             guard !Task.isCancelled else { opening = false; return }
-                            if started { openFruits() }
+                            if started {
+                                // 도우미 시작 중 사용자가 다른 앱으로 이동했다면 다시 전환시키지 않는다.
+                                if phase == .active { openFruits() }
+                                else { opening = false }
+                            }
                             else {
                                 opening = false
                                 showCopyFields = true
@@ -62,7 +66,8 @@ struct FruitsExportView: View {
                         copyButton("허벅지 단면 · \(product.fruits.thigh) cm", value: product.fruits.thigh)
                         Text("실측 전체 복사는 하나의 문장입니다. 개별 입력란에는 위 숫자를 각각 복사해주세요.")
                             .font(.caption).foregroundStyle(.secondary)
-                        Button("후루츠패밀리 앱 열기") { opening = true; openFruits() }.disabled(opening)
+                        Button("후루츠패밀리 앱 열기") { opening = true; openFruits() }
+                            .disabled(opening || controller.busy)
                     }.padding(.top, 16)
                     if !copiedMessage.isEmpty { Text(copiedMessage).font(.caption).foregroundStyle(.secondary) }
                     if controller.session != nil {
@@ -81,7 +86,7 @@ struct FruitsExportView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
-                    .accessibilityLabel("채널 선택으로 돌아가기").disabled(opening)
+                    .accessibilityLabel("채널 선택으로 돌아가기").disabled(opening || controller.busy)
             }
         }
         .onAppear { controller.refresh() }
@@ -98,7 +103,8 @@ struct FruitsExportView: View {
                 opening = false
                 if accepted { onOpened() }
                 else {
-                    alertMessage = "후루츠패밀리 앱으로 연결하지 못했어요. 앱이 설치되어 있다면 홈 화면에서 직접 열어주세요. 복사 도우미는 유지됩니다."
+                    let helper = controller.session != nil ? " 복사 도우미는 유지됩니다." : " 아래에서 상품 정보를 직접 복사할 수 있어요."
+                    alertMessage = "후루츠패밀리 앱으로 연결하지 못했어요. 앱이 설치되어 있다면 홈 화면에서 직접 열어주세요." + helper
                 }
             }
         }
@@ -117,9 +123,9 @@ struct FruitsExportView: View {
 
     private func step(_ number: Int, _ title: String) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            Text("\(number)").font(.body.weight(.semibold)).frame(width: 36, height: 36)
+            Text("\(number)").font(.body.weight(.semibold)).frame(width: 36, height: 36).fixedSize()
                 .background(Color.orange.opacity(0.3), in: Circle())
-            Text(title).font(.subheadline)
+            Text(title).font(.subheadline).fixedSize(horizontal: false, vertical: true)
         }
     }
 

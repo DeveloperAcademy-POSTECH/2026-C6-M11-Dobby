@@ -15,6 +15,8 @@ struct ExportChannelButton: View {
                     .frame(width: 48, height: 48)
                 Text(channel.title)
                     .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
                 Image(systemName: "checkmark")
@@ -28,6 +30,9 @@ struct ExportChannelButton: View {
             .contentShape(RoundedRectangle(cornerRadius: 28))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(channel.title)
+        .accessibilityValue(hasOpenedLink ? "열어본 채널" : "아직 열지 않은 채널")
     }
 }
 

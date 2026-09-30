@@ -28,7 +28,10 @@ final class CopyActivityController {
         busy = true
         defer { busy = false }
         refresh()
-        if let session, session.productID == product.id, session.payload == product.fruits { return true }
+        if let session, session.canReuse(productID: product.id, payload: product.fruits) {
+            errorMessage = nil
+            return true
+        }
         // 다른 상품의 활동은 권한 상태와 관계없이 먼저 무효화한다.
         ProductCopyStore.invalidate()
         session = nil

@@ -51,6 +51,10 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
     let payload: ProductCopyPayload
     let createdAt: Date
     var isExpired: Bool { Date().timeIntervalSince(createdAt) >= 8 * 60 * 60 }
+
+    func canReuse(productID: String, payload: ProductCopyPayload) -> Bool {
+        !isExpired && self.productID == productID && self.payload == payload
+    }
 }
 
 @MainActor

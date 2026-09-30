@@ -27,9 +27,12 @@ struct ContentView: View {
         .onOpenURL { url in
             guard url.scheme == "dobby-copy", url.host == "home" else { return }
             controller.refresh()
-            if let session = controller.session, session.productID != product.id {
-                restoredProduct = ExportProduct(id: session.productID, imageData: nil,
-                                                fruits: session.payload, instagram: session.payload)
+            if let session = controller.session {
+                // 같은 상품 ID라도 편집된 본문과 활동의 스냅샷은 다를 수 있다.
+                restoredProduct = ExportProduct(id: session.productID,
+                                                imageData: session.productID == product.id ? product.imageData : nil,
+                                                fruits: session.payload,
+                                                instagram: session.productID == product.id ? product.instagram : session.payload)
             } else { restoredProduct = nil }
             showFruits = true
             showExport = true
