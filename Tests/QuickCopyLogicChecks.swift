@@ -34,12 +34,7 @@ struct QuickCopyLogicChecks {
         precondition(values.value(for: .brand) == fruits.brand)
         precondition(values.value(for: .measurements) == fruits.measurements)
 
-        let shortcutValue = """
-        LEVI'S 550 보로 사시코 커스텀 팬츠
-
-        Size 59 43 32 😘
-        """
-        guard let shortcutURL = ShortcutCopyURLBuilder.url(for: shortcutValue),
+        guard let shortcutURL = ShortcutCopyURLBuilder.url(for: .productName),
               let shortcutComponents = URLComponents(url: shortcutURL, resolvingAgainstBaseURL: false) else {
             preconditionFailure("단축어 복사 URL을 생성할 수 없음")
         }
@@ -48,10 +43,11 @@ struct QuickCopyLogicChecks {
         } ?? [])
         precondition(shortcutComponents.scheme == "shortcuts")
         precondition(shortcutComponents.host == "run-shortcut")
-        precondition(shortcutQuery["name"] == "Dobby 복사")
-        precondition(shortcutQuery["input"] == "text")
-        precondition(shortcutQuery["text"] == shortcutValue)
-        precondition(ShortcutCopyURLBuilder.url(for: " \n ") == nil)
+        precondition(shortcutQuery["name"] == "Dobby 상품명 복사")
+        precondition(shortcutQuery["input"] == nil)
+        precondition(shortcutQuery["text"] == nil)
+        precondition(ShortcutCopyURLBuilder.url(forAppShortcutNamed: "") == nil)
+        precondition(ShortcutCopyURLBuilder.testURL != nil)
 
         let encodedValues = try JSONEncoder().encode(values)
         precondition(!encodedValues.isEmpty && encodedValues.count < 3_500)

@@ -1,25 +1,22 @@
 import Foundation
 
 nonisolated enum ShortcutCopyURLBuilder {
-    static let shortcutName = "Dobby 복사"
+    static let testShortcutName = "Dobby 테스트 복사"
 
-    static func url(for text: String) -> URL? {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-
+    static func url(forAppShortcutNamed name: String) -> URL? {
+        guard !name.isEmpty else { return nil }
         var components = URLComponents()
         components.scheme = "shortcuts"
         components.host = "run-shortcut"
         components.queryItems = [
-            URLQueryItem(name: "name", value: shortcutName),
-            URLQueryItem(name: "input", value: "text"),
-            URLQueryItem(name: "text", value: text)
+            URLQueryItem(name: "name", value: name)
         ]
         return components.url
     }
 
-    static var shortcutsAppURL: URL {
-        URL(string: "shortcuts://")!
+    static func url(for field: ProductCopyField) -> URL? {
+        url(forAppShortcutNamed: field.appShortcutName)
     }
+
+    static var testURL: URL? { url(forAppShortcutNamed: testShortcutName) }
 }

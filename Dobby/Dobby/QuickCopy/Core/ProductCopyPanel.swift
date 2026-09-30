@@ -26,7 +26,7 @@ struct ProductCopyPanel: View {
     }
     private func control(_ field: ProductCopyField) -> some View {
         Group {
-            if let url = ShortcutCopyURLBuilder.url(for: values.value(for: field)) {
+            if let url = ShortcutCopyURLBuilder.url(for: field) {
                 Link(destination: url) {
                     ProductCopyControlLabel(field: field)
                 }

@@ -21,6 +21,14 @@ nonisolated enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
         case .measurements: "실측 사이즈가 복사되었습니다."
         }
     }
+    var appShortcutName: String {
+        switch self {
+        case .productName: "Dobby 상품명 복사"
+        case .description: "Dobby 설명 복사"
+        case .brand: "Dobby 브랜드명 복사"
+        case .measurements: "Dobby 실측 사이즈 복사"
+        }
+    }
 }
 
 nonisolated enum CopyChannel: String, Codable, CaseIterable, Identifiable {
