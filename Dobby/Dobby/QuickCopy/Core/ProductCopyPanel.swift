@@ -1,4 +1,5 @@
 import SwiftUI
+import AppIntents
 
 struct ProductCopyControlLabel: View {
     let field: ProductCopyField
@@ -24,20 +25,15 @@ struct ProductCopyPanel: View {
             HStack(spacing: 8) { control(.brand); control(.measurements) }
         }
     }
-    private func control(_ field: ProductCopyField) -> some View {
-        Link(destination: CopyRoute.url(sessionID: sessionID, field: field)) {
-            ProductCopyControlLabel(field: field)
-        }.buttonStyle(.plain)
-    }
-}
-
-nonisolated enum CopyRoute {
-    static let home = URL(string: "dobby-copy://home")!
-    static func url(sessionID: UUID, field: ProductCopyField) -> URL {
-        var components = URLComponents()
-        components.scheme = "dobby-copy"
-        components.host = "copy"
-        components.queryItems = [URLQueryItem(name: "session", value: sessionID.uuidString), URLQueryItem(name: "field", value: field.rawValue)]
-        return components.url!
+    @ViewBuilder private func control(_ field: ProductCopyField) -> some View {
+        if mode == .direct {
+            Button(intent: CopyProductFieldIntent(sessionID: sessionID.uuidString, field: field.rawValue)) {
+                ProductCopyControlLabel(field: field)
+            }.buttonStyle(.plain)
+        } else {
+            Link(destination: CopyRoute.url(sessionID: sessionID, field: field)) {
+                ProductCopyControlLabel(field: field)
+            }.buttonStyle(.plain)
+        }
     }
 }
