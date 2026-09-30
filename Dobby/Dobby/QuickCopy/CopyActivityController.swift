@@ -25,7 +25,7 @@ final class CopyActivityController {
     @discardableResult
     func start(
         product: ExportProduct,
-        writeStrategy: CopyWriteStrategy = .setItemsLocalOnly,
+        writeStrategy: CopyWriteStrategy = .stringProperty,
         diagnosticToken: String? = nil,
         diagnosticCondition: String? = nil,
         interactionMode: CopyInteractionMode = .direct

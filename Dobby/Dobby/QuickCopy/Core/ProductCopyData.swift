@@ -12,6 +12,22 @@ nonisolated enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
         case .measurements: "실측 사이즈 복사"
         }
     }
+    var copiedMessage: String {
+        switch self {
+        case .productName: "상품명이 복사되었습니다."
+        case .description: "설명이 복사되었습니다."
+        case .brand: "브랜드명이 복사되었습니다."
+        case .measurements: "실측 사이즈가 복사되었습니다."
+        }
+    }
+    var copyFailureMessage: String {
+        switch self {
+        case .productName: "상품명 복사를 확인하지 못했습니다."
+        case .description: "설명 복사를 확인하지 못했습니다."
+        case .brand: "브랜드명 복사를 확인하지 못했습니다."
+        case .measurements: "실측 사이즈 복사를 확인하지 못했습니다."
+        }
+    }
 }
 
 nonisolated enum CopyChannel: String, Codable, CaseIterable, Identifiable {
@@ -88,7 +104,7 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
     let diagnosticCondition: String?
     let interactionMode: CopyInteractionMode?
     var isExpired: Bool { Date().timeIntervalSince(createdAt) >= 8 * 60 * 60 }
-    var effectiveWriteStrategy: CopyWriteStrategy { writeStrategy ?? .setItemsLocalOnly }
+    var effectiveWriteStrategy: CopyWriteStrategy { writeStrategy ?? .stringProperty }
 
     init(
         id: UUID,
@@ -130,7 +146,7 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
         interactionMode = try values.decodeIfPresent(CopyInteractionMode.self, forKey: .interactionMode)
     }
 
-    func canReuse(productID: String, payload: ProductCopyPayload, writeStrategy: CopyWriteStrategy = .setItemsLocalOnly) -> Bool {
+    func canReuse(productID: String, payload: ProductCopyPayload, writeStrategy: CopyWriteStrategy = .stringProperty) -> Bool {
         !isExpired && self.productID == productID && self.payload == payload
             && effectiveWriteStrategy == writeStrategy && diagnosticToken == nil
     }

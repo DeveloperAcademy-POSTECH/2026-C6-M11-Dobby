@@ -120,8 +120,8 @@ struct CopyProductFieldIntent: LiveActivityIntent {
         }
 
         let message = result.writeVerified
-            ? "복사 확인됨 · 입력란에 붙여넣어주세요"
-            : "복사 확인 실패 · Dobby에서 다시 확인해주세요"
+            ? copyField.copiedMessage
+            : copyField.copyFailureMessage
         await activity.update(ActivityContent(state: .init(lastAttemptedField: copyField.rawValue, message: message), staleDate: session.createdAt.addingTimeInterval(8 * 3600)))
         Self.logger.notice("Live Activity status message updated")
         return .result()
