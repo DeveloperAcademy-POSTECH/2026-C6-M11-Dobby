@@ -23,6 +23,23 @@ nonisolated enum CopyChannel: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+nonisolated enum CopyWriteStrategy: String, Codable, CaseIterable, Identifiable {
+    case setItemsLocalOnly
+    case setItemsShared
+    case stringProperty
+    case setObjects
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .setItemsLocalOnly: "setItems · localOnly"
+        case .setItemsShared: "setItems · 공유 허용"
+        case .stringProperty: "pasteboard.string"
+        case .setObjects: "setObjects · localOnly"
+        }
+    }
+}
+
 nonisolated struct ProductCopyPayload: Codable, Equatable {
     let productName: String
     let description: String
@@ -51,10 +68,52 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
     let productID: String
     let payload: ProductCopyPayload
     let createdAt: Date
+    let writeStrategy: CopyWriteStrategy?
+    let diagnosticToken: String?
+    let diagnosticCondition: String?
     var isExpired: Bool { Date().timeIntervalSince(createdAt) >= 8 * 60 * 60 }
+    var effectiveWriteStrategy: CopyWriteStrategy { writeStrategy ?? .setItemsLocalOnly }
 
-    func canReuse(productID: String, payload: ProductCopyPayload) -> Bool {
+    init(
+        id: UUID,
+        channel: CopyChannel,
+        productID: String,
+        payload: ProductCopyPayload,
+        createdAt: Date,
+        writeStrategy: CopyWriteStrategy? = nil,
+        diagnosticToken: String? = nil,
+        diagnosticCondition: String? = nil
+    ) {
+        self.id = id
+        self.channel = channel
+        self.productID = productID
+        self.payload = payload
+        self.createdAt = createdAt
+        self.writeStrategy = writeStrategy
+        self.diagnosticToken = diagnosticToken
+        self.diagnosticCondition = diagnosticCondition
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, channel, productID, payload, createdAt
+        case writeStrategy, diagnosticToken, diagnosticCondition
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        channel = try values.decode(CopyChannel.self, forKey: .channel)
+        productID = try values.decode(String.self, forKey: .productID)
+        payload = try values.decode(ProductCopyPayload.self, forKey: .payload)
+        createdAt = try values.decode(Date.self, forKey: .createdAt)
+        writeStrategy = try values.decodeIfPresent(CopyWriteStrategy.self, forKey: .writeStrategy)
+        diagnosticToken = try values.decodeIfPresent(String.self, forKey: .diagnosticToken)
+        diagnosticCondition = try values.decodeIfPresent(String.self, forKey: .diagnosticCondition)
+    }
+
+    func canReuse(productID: String, payload: ProductCopyPayload, writeStrategy: CopyWriteStrategy = .setItemsLocalOnly) -> Bool {
         !isExpired && self.productID == productID && self.payload == payload
+            && effectiveWriteStrategy == writeStrategy && diagnosticToken == nil
     }
 }
 
@@ -71,6 +130,69 @@ nonisolated struct CopyDiagnosticResult: Codable, Identifiable {
     let readBackMatches: Bool
     let elapsedMilliseconds: Int
     let createdAt: Date
+    let writeStrategy: CopyWriteStrategy?
+    let diagnosticToken: String?
+    let diagnosticCondition: String?
+
+    init(
+        id: UUID,
+        sessionID: UUID,
+        field: ProductCopyField,
+        executionMode: String,
+        canContinueInForeground: Bool,
+        processName: String,
+        bundleIdentifier: String,
+        beforeChangeCount: Int,
+        afterChangeCount: Int,
+        readBackMatches: Bool,
+        elapsedMilliseconds: Int,
+        createdAt: Date,
+        writeStrategy: CopyWriteStrategy? = nil,
+        diagnosticToken: String? = nil,
+        diagnosticCondition: String? = nil
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.field = field
+        self.executionMode = executionMode
+        self.canContinueInForeground = canContinueInForeground
+        self.processName = processName
+        self.bundleIdentifier = bundleIdentifier
+        self.beforeChangeCount = beforeChangeCount
+        self.afterChangeCount = afterChangeCount
+        self.readBackMatches = readBackMatches
+        self.elapsedMilliseconds = elapsedMilliseconds
+        self.createdAt = createdAt
+        self.writeStrategy = writeStrategy
+        self.diagnosticToken = diagnosticToken
+        self.diagnosticCondition = diagnosticCondition
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, sessionID, field, executionMode, canContinueInForeground
+        case processName, bundleIdentifier, beforeChangeCount, afterChangeCount
+        case readBackMatches, elapsedMilliseconds, createdAt
+        case writeStrategy, diagnosticToken, diagnosticCondition
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        sessionID = try values.decode(UUID.self, forKey: .sessionID)
+        field = try values.decode(ProductCopyField.self, forKey: .field)
+        executionMode = try values.decode(String.self, forKey: .executionMode)
+        canContinueInForeground = try values.decode(Bool.self, forKey: .canContinueInForeground)
+        processName = try values.decode(String.self, forKey: .processName)
+        bundleIdentifier = try values.decode(String.self, forKey: .bundleIdentifier)
+        beforeChangeCount = try values.decode(Int.self, forKey: .beforeChangeCount)
+        afterChangeCount = try values.decode(Int.self, forKey: .afterChangeCount)
+        readBackMatches = try values.decode(Bool.self, forKey: .readBackMatches)
+        elapsedMilliseconds = try values.decode(Int.self, forKey: .elapsedMilliseconds)
+        createdAt = try values.decode(Date.self, forKey: .createdAt)
+        writeStrategy = try values.decodeIfPresent(CopyWriteStrategy.self, forKey: .writeStrategy)
+        diagnosticToken = try values.decodeIfPresent(String.self, forKey: .diagnosticToken)
+        diagnosticCondition = try values.decodeIfPresent(String.self, forKey: .diagnosticCondition)
+    }
 
     var writeVerified: Bool {
         afterChangeCount > beforeChangeCount && readBackMatches

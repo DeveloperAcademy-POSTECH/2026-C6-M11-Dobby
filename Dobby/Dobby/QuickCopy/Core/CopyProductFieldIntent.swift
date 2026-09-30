@@ -53,7 +53,10 @@ struct CopyProductFieldIntent: LiveActivityIntent {
         }
         Self.logger.notice("[4/6] Matching Live Activity found. state=\(String(describing: activity.activityState), privacy: .public)")
 
-        let value = session.payload.value(for: copyField)
+        let originalValue = session.payload.value(for: copyField)
+        let value = session.diagnosticToken.map {
+            "[DOBBY-\(copyField.rawValue)-\($0)] \(originalValue)"
+        } ?? originalValue
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             Self.logger.error("[FAILED 5/6] Copy value is empty. field=\(copyField.rawValue, privacy: .public)")
             return .result()
@@ -66,10 +69,26 @@ struct CopyProductFieldIntent: LiveActivityIntent {
         Self.logger.notice(
             "[5/6] Pasteboard write starting. process=\(processName, privacy: .public) bundle=\(bundleIdentifier, privacy: .public) beforeChangeCount=\(beforeChangeCount) characterCount=\(value.count)"
         )
-        pasteboard.setItems(
-            [[UTType.utf8PlainText.identifier: value]],
-            options: [.localOnly: true]
-        )
+        switch session.effectiveWriteStrategy {
+        case .setItemsLocalOnly:
+            pasteboard.setItems(
+                [[UTType.utf8PlainText.identifier: value]],
+                options: [.localOnly: true]
+            )
+        case .setItemsShared:
+            pasteboard.setItems(
+                [[UTType.utf8PlainText.identifier: value]],
+                options: [:]
+            )
+        case .stringProperty:
+            pasteboard.string = value
+        case .setObjects:
+            pasteboard.setObjects(
+                [value as NSString],
+                localOnly: true,
+                expirationDate: nil
+            )
+        }
         let afterChangeCount = pasteboard.changeCount
         let readBackMatches = pasteboard.string == value
         let elapsedMilliseconds = Int(Date().timeIntervalSince(startedAt) * 1_000)
@@ -85,7 +104,10 @@ struct CopyProductFieldIntent: LiveActivityIntent {
             afterChangeCount: afterChangeCount,
             readBackMatches: readBackMatches,
             elapsedMilliseconds: elapsedMilliseconds,
-            createdAt: Date()
+            createdAt: Date(),
+            writeStrategy: session.effectiveWriteStrategy,
+            diagnosticToken: session.diagnosticToken,
+            diagnosticCondition: session.diagnosticCondition
         )
         ProductCopyStore.saveDiagnostic(result)
 

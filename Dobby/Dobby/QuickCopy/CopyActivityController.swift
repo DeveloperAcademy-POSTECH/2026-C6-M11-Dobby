@@ -23,12 +23,19 @@ final class CopyActivityController {
     }
 
     @discardableResult
-    func start(product: ExportProduct) async -> Bool {
+    func start(
+        product: ExportProduct,
+        writeStrategy: CopyWriteStrategy = .setItemsLocalOnly,
+        diagnosticToken: String? = nil,
+        diagnosticCondition: String? = nil
+    ) async -> Bool {
         guard !busy else { return false }
         busy = true
         defer { busy = false }
         refresh()
-        if let session, session.canReuse(productID: product.id, payload: product.fruits) {
+        if diagnosticToken == nil,
+           let session,
+           session.canReuse(productID: product.id, payload: product.fruits, writeStrategy: writeStrategy) {
             errorMessage = nil
             return true
         }
@@ -42,8 +49,16 @@ final class CopyActivityController {
             errorMessage = "실시간 현황을 사용할 수 없습니다. 아래 상품 정보에서 필요한 항목을 복사할 수 있어요."
             return false
         }
-        let next = ProductCopySession(id: UUID(), channel: .fruits, productID: product.id,
-                                      payload: product.fruits, createdAt: Date())
+        let next = ProductCopySession(
+            id: UUID(),
+            channel: .fruits,
+            productID: product.id,
+            payload: product.fruits,
+            createdAt: Date(),
+            writeStrategy: writeStrategy,
+            diagnosticToken: diagnosticToken,
+            diagnosticCondition: diagnosticCondition
+        )
         do {
             try ProductCopyStore.save(next)
             _ = try Activity.request(attributes: ProductCopyAttributes(sessionID: next.id, channelName: next.channel.title),

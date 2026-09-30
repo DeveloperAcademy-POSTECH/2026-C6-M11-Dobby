@@ -23,8 +23,47 @@ import Foundation
         precondition(!session.canReuse(productID: "another-product", payload: fruits))
         precondition(!session.canReuse(productID: "selected-product", payload: instagram))
         precondition(!expired.canReuse(productID: "selected-product", payload: fruits))
+        let diagnosticSession = ProductCopySession(
+            id: id,
+            channel: .fruits,
+            productID: "selected-product",
+            payload: fruits,
+            createdAt: now,
+            writeStrategy: .stringProperty,
+            diagnosticToken: "A81F",
+            diagnosticCondition: "메모 앱 · 앱 전환 직후"
+        )
+        let restoredDiagnostic = try JSONDecoder().decode(
+            ProductCopySession.self,
+            from: JSONEncoder().encode(diagnosticSession)
+        )
+        precondition(restoredDiagnostic.effectiveWriteStrategy == .stringProperty)
+        precondition(restoredDiagnostic.diagnosticToken == "A81F")
+        precondition(!restoredDiagnostic.canReuse(productID: "selected-product", payload: fruits))
+        let diagnosticResult = CopyDiagnosticResult(
+            id: UUID(),
+            sessionID: id,
+            field: .productName,
+            executionMode: "background",
+            canContinueInForeground: true,
+            processName: "Dobby",
+            bundleIdentifier: "com.dobby.Dobby",
+            beforeChangeCount: 0,
+            afterChangeCount: 1,
+            readBackMatches: true,
+            elapsedMilliseconds: 12,
+            createdAt: now,
+            writeStrategy: .stringProperty,
+            diagnosticToken: "A81F",
+            diagnosticCondition: "메모 앱 · 앱 전환 직후"
+        )
+        let restoredResult = try JSONDecoder().decode(
+            CopyDiagnosticResult.self,
+            from: JSONEncoder().encode(diagnosticResult)
+        )
+        precondition(restoredResult.writeVerified && restoredResult.diagnosticToken == "A81F")
         precondition(fruits != instagram)
         precondition(ProductCopyField(rawValue: "unknown") == nil)
-        print("PASS: channel data, paragraphs, copy field mapping, measurements, selected-product session restore and expiration")
+        print("PASS: channel data, copy mapping, session restore, diagnostic strategy and result persistence")
     }
 }
