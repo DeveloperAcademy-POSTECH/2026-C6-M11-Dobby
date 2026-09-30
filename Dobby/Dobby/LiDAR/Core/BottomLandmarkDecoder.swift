@@ -218,9 +218,11 @@ nonisolated struct BottomLandmarkDecoder: Sendable {
             let inputs = dependencies.compactMap { byID[$0] }
             guard inputs.count == dependencies.count else { continue }
             let count = Double(inputs.count)
+            // This 2D placeholder is for photo-only previews. The distance engine
+            // resolves derivedFrom in 3D, then reprojects its physical midpoint.
             let point = ImagePoint(x: inputs.reduce(0) { $0 + $1.point.x } / count,
                                    y: inputs.reduce(0) { $0 + $1.point.y } / count)
-            byID[id] = .init(id: id, point: point, confidence: inputs.compactMap(\.confidence).min(), isVisible: true)
+            byID[id] = .init(id: id, point: point, confidence: inputs.compactMap(\.confidence).min(), isVisible: true, derivedFrom: dependencies)
         }
         return .init(points: (schema.keypoints + schema.derivedOrder).compactMap { byID[$0] }, detectionConfidence: best.score)
     }

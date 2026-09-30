@@ -35,7 +35,7 @@ struct AutomaticMeasurementResultView: View {
                         Text("계산은 완료했지만 시도 기록을 마무리하지 못했습니다. 이 시도는 통계에서 미완료로 남습니다: \(recordingError)")
                             .font(.caption).foregroundStyle(.orange)
                     }
-                    AutomaticSnapshotView(snapshot: model.snapshot, image: image, landmarks: model.landmarks, definitions: model.definitions)
+                    AutomaticSnapshotView(snapshot: model.snapshot, image: image, landmarks: model.displayLandmarks, definitions: model.definitions)
                     Text("성공한 항목은 유지하고, 미검출·깊이 부족 항목은 사유를 따로 표시합니다.")
                         .font(.caption).foregroundStyle(.secondary)
                     ForEach(model.result.values) { value in

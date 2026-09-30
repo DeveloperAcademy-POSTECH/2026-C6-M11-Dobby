@@ -16,12 +16,14 @@ extension GarmentLandmarkSet {
             for other in points.indices {
                 points[other].isVisible = false
                 points[other].confidence = nil
+                points[other].derivedFrom = nil
             }
         }
 
         points[index].point = point
         points[index].isVisible = true
         points[index].confidence = nil
+        points[index].derivedFrom = nil
         origin = .manual
         modelVersion = nil
         return true

@@ -28,14 +28,14 @@ struct MeasurementDetailView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Label(model.snapshot.frame.source == .synthetic ? "합성 데이터 · 센서 정확도 검증용이 아닙니다" : "동일 프레임의 원본 사진 + LiDAR 깊이", systemImage: model.snapshot.frame.source == .synthetic ? "cube.transparent" : "checkmark.shield")
                         .font(.caption.weight(.semibold)).foregroundStyle(model.snapshot.frame.source == .synthetic ? .orange : .teal)
-                    MeasurementImageView(snapshot: model.snapshot, landmarks: model.landmarks, image: image,
+                    MeasurementImageView(snapshot: model.snapshot, landmarks: model.displayLandmarks, image: image,
                         activePointIndex: activePointIndex, placePoint: placePoint)
                         .aspectRatio(SnapshotPresentation.aspectRatio(for: model.snapshot), contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                     Text("A와 B를 차례로 누르거나 점을 끌어 위치를 바꾸세요. 옷의 경계가 사진 밖으로 잘리면 측정할 수 없습니다.")
                         .font(.subheadline).foregroundStyle(.secondary)
                     HStack {
-                        ForEach(Array(model.landmarks.points.enumerated()), id: \.offset) { index, point in
+                        ForEach(Array(model.displayLandmarks.points.enumerated()), id: \.offset) { index, point in
                             Button { activePointIndex = index } label: {
                                 Label("\(index == 0 ? "A" : "B") \(point.isVisible ? "지정됨" : "위치 지정")", systemImage: point.isVisible ? "checkmark.circle.fill" : "plus.circle")
                                     .frame(maxWidth: .infinity)
@@ -165,7 +165,7 @@ struct MeasurementDetailView: View {
 
     private func placePoint(displayPoint: ImagePoint, index: Int) {
         guard model.placePoint(displayPoint: displayPoint, index: index) else { return }
-        if let next = model.landmarks.points.firstIndex(where: { !$0.isVisible }) { activePointIndex = next }
+        if let next = model.displayLandmarks.points.firstIndex(where: { !$0.isVisible }) { activePointIndex = next }
         exportedURL = nil
     }
 
@@ -210,6 +210,14 @@ struct MeasurementDetailView: View {
         }
     }
 
+    private func samplingLabel(_ method: DepthSamplingMethod) -> String {
+        switch method {
+        case .localPlane: "국소 평면"
+        case .robustMedian: "주변 중앙값"
+        case .spatialAverage: "원본 측정점의 3D 평균"
+        }
+    }
+
     @ViewBuilder private var resultCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(model.definition.title).font(.headline)
@@ -237,7 +245,7 @@ struct MeasurementDetailView: View {
                         Spacer()
                         Text("표본 \(point.quality.validSamples)/\(point.quality.candidateSamples)")
                     }.font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    Text("\(point.quality.method == .localPlane ? "국소 평면" : "주변 중앙값") · 신뢰도 \(point.quality.confidenceAvailable ? "수신" : "없음")" + (point.quality.planeResidualMeters.map { String(format: " · 평면 잔차 %.1f mm", $0 * 1000) } ?? ""))
+                    Text("\(samplingLabel(point.quality.method)) · 신뢰도 \(point.quality.confidenceAvailable ? "수신" : "없음")" + (point.quality.planeResidualMeters.map { String(format: " · 평면 잔차 %.1f mm", $0 * 1000) } ?? ""))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }

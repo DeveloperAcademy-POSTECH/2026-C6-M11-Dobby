@@ -75,6 +75,10 @@ nonisolated struct GarmentLandmark: Codable, Sendable, Identifiable {
     var point: ImagePoint
     var confidence: Double?
     var isVisible: Bool = true
+    /// Source IDs whose resolved 3D positions are averaged; `point` is only a display hint.
+    /// Nil means a direct point, except for the documented legacy model migration.
+    /// Empty or invalid derivations must fail.
+    var derivedFrom: [String]? = nil
 }
 
 nonisolated struct GarmentMask: Codable, Sendable {
@@ -117,7 +121,7 @@ nonisolated enum MeasurementFailure: String, Error, Codable, Sendable {
 }
 
 nonisolated enum DepthSamplingMethod: String, Codable, Sendable {
-    case localPlane, robustMedian
+    case localPlane, robustMedian, spatialAverage
 }
 
 nonisolated struct PointQuality: Codable, Sendable {
@@ -134,6 +138,8 @@ nonisolated struct ResolvedLandmark: Codable, Sendable {
     var imagePoint: ImagePoint
     var position: Point3D
     var quality: PointQuality
+    /// Immediate contributors to a spatially derived point, absent for direct depth samples.
+    var sourceLandmarkIDs: [String]? = nil
 }
 
 nonisolated struct MeasurementValue: Codable, Sendable, Identifiable {

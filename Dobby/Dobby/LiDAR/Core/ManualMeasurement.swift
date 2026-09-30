@@ -49,6 +49,14 @@ nonisolated struct ManualMeasurement: Identifiable, Sendable {
 
     var useLocalPlane: Bool { options.useLocalPlane }
 
+    /// Only the definition endpoints are editable; supporting source points stay
+    /// in the model for 3D derivation until the user starts manual confirmation.
+    var displayLandmarks: GarmentLandmarkSet {
+        var displayed = landmarks.replacingDerivedImagePoints(with: result)
+        displayed.points = definition.landmarkIDs.compactMap { id in displayed.points.first { $0.id == id } }
+        return displayed
+    }
+
     mutating func selectCategory(_ category: GarmentCategory) {
         testContext.category = category
         if !category.definitions.contains(where: { $0.id == definition.id }), let first = category.definitions.first {
@@ -67,10 +75,16 @@ nonisolated struct ManualMeasurement: Identifiable, Sendable {
 
     @discardableResult
     mutating func placePoint(displayPoint: ImagePoint, index: Int) -> Bool {
-        guard landmarks.points.indices.contains(index), displayPoint.x.isFinite, displayPoint.y.isFinite else { return false }
+        guard definition.landmarkIDs.indices.contains(index), displayPoint.x.isFinite, displayPoint.y.isFinite else { return false }
         let original = ImageCoordinateTransform.displayToOriginal(displayPoint, orientation: snapshot.frame.orientation)
         let point = ImagePoint(x: min(0.999999, max(0, original.x)), y: min(0.999999, max(0, original.y)))
-        guard landmarks.placeManualLandmark(at: index, point: point) else { return false }
+        let editable = displayLandmarks
+        guard editable.points.count == definition.landmarkIDs.count else { return false }
+        // Once manual editing begins the two endpoints must be confirmed by hand;
+        // derived helper points must not survive as hidden sampling dependencies.
+        var updated = editable
+        guard updated.placeManualLandmark(at: index, point: point) else { return false }
+        landmarks = updated
         invalidateCalculation()
         return true
     }

@@ -78,14 +78,37 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
             testContext: context, referenceByDefinitionCentimeters: referenceByDefinitionCentimeters)
     }
 
+    var displayLandmarks: GarmentLandmarkSet {
+        landmarks.replacingDerivedImagePoints(with: result)
+    }
+
     func manualMeasurement(for definitionID: String) -> ManualMeasurement? {
         guard let definition = definitions.first(where: { $0.id == definitionID }),
               definition.landmarkIDs.count == 2 else { return nil }
         // Retain model provenance until both endpoints are explicitly confirmed.
         var selected = landmarks
-        selected.points = definition.landmarkIDs.map { id in
-            landmarks.points.first { $0.id == id }
-                ?? .init(id: id, point: .init(x: 0.5, y: 0.5), confidence: nil, isVisible: false)
+        selected.points = definition.landmarkIDs.flatMap { id -> [GarmentLandmark] in
+            let matches = landmarks.points.filter { $0.id == id }
+            // Merely opening the editor must preserve duplicate-ID failures.
+            // Only explicit manual confirmation may replace model endpoints.
+            return matches.isEmpty
+                ? [.init(id: id, point: .init(x: 0.5, y: 0.5), confidence: nil, isVisible: false)]
+                : matches
+        }
+        // Keep source points while the A/B editor still represents model output.
+        // Dropping waist endpoints would make its derived midpoint unresolvable.
+        var required = Set(definition.landmarkIDs)
+        var pending = definition.landmarkIDs
+        var cursor = 0
+        while cursor < pending.count && required.count <= 128 {
+            let id = pending[cursor]
+            cursor += 1
+            for sourceID in landmarks.effectiveDerivedSourceIDs(for: id) ?? [] where required.insert(sourceID).inserted {
+                pending.append(sourceID)
+            }
+        }
+        selected.points += landmarks.points.filter {
+            required.contains($0.id) && !definition.landmarkIDs.contains($0.id)
         }
         return ManualMeasurement(snapshot: snapshot, landmarks: selected, definition: definition,
             referenceCentimeters: referenceByDefinitionCentimeters[definitionID],

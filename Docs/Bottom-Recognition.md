@@ -25,13 +25,15 @@
 | crotch | 가랑이 |
 | hem_left_outer / hem_left_inner | 화면 왼쪽 다리 밑단 바깥 / 안쪽 |
 | hem_right_inner / hem_right_outer | 화면 오른쪽 다리 밑단 안쪽 / 바깥 |
-| waist_center | 허리 두 점의 이미지 좌표 평균으로 만든 파생점 |
+| waist_center | 허리 양 끝을 3D로 복원한 뒤 구한 중점. 깊이 없는 사진 테스트에서는 2D 평균을 표시용으로만 사용 |
 
-`schema_bottom7.json`의 keypoints 순서·derived·skeleton을 읽는다. 모델의 7개 점과 파생 중점으로 허리 단면, 밑위, 좌우 총장·밑단 단면·인심 **8개 직선 항목**을 생성한다. 둘레나 곡선 봉제선 길이가 아니다. 특히 허리 중앙은 2D 중점이므로, 기울어진 촬영에서는 실제 3D 허리 중점과 다를 수 있다. 밑위의 실물 정확도는 별도로 검증해야 한다.
+`schema_bottom7.json`의 keypoints 순서·derived·skeleton을 읽는다. 모델의 7개 점과 파생 중점으로 허리 단면, 밑위, 좌우 총장·밑단 단면·인심 **8개 직선 항목**을 생성한다. 둘레나 곡선 봉제선 길이가 아니다. LiDAR 측정에서는 허리 양 끝의 3D 좌표를 평균하고, 그 위치에서 가랑이까지의 거리를 계산한다. 화면에는 이 3D 중점을 다시 사진 좌표로 옮겨 표시한다. 계산 방식의 원근 오류는 수정했지만 밑위의 실물 정확도는 별도로 검증해야 한다.
 
 ## 처리 구조
 
 - `Core/BottomLandmarkDecoder.swift`: 스키마·연결선 검증, 정수 크기의 레터박스 좌표 역변환, 네 방향 회전 복원, 출력 후보 해석. Foundation만 사용한다.
+- `Core/MeasurementEngine.swift`: 파생점의 `derivedFrom` 원본 ID를 따라 깊이를 해석한 뒤 3D 평균을 계산한다. 누락·낮은 신뢰도·가림·깊이 실패를 보존하며, 해당 점을 쓰는 항목만 실패 처리한다.
+- `Core/ResolvedLandmarkCoordinates.swift`: 깊이가 있는 결과의 3D 중점을 재투영해 표시한다. 계산에 실패한 파생점은 잘못된 2D 중점으로 대신 표시하지 않는다.
 - `Capture/CoreMLBottomLandmarkProvider.swift`: 모델을 한 번 로드해 재사용하는 actor. 이미지 처리와 추론은 메인 화면 작업과 분리한다. 사진 프레임 크기와 sessionID/frameID를 보존하며 `GarmentLandmarkProviding` 계약으로 연결한다.
 - `UI/BottomRecognitionView.swift`: 사진 선택·로딩·오류·표시 상태를 관리한다. ViewModel을 추가하지 않았다.
 - `Models/BottomLandmarks.mlpackage`, `Models/schema_bottom7.json`: 제공 파일을 복사한 앱 리소스. Xcode 빌드 시 모델을 컴파일한다.
@@ -53,11 +55,15 @@
 
 추가 학습은 이미지별 7점 정답, 누락·가림 표시, 의류별 중복 없는 train/validation/test 구분이 준비된 뒤 진행한다. 모델 자신의 예측을 검증된 정답으로 사용하지 않는다.
 
-## 코드 리뷰에서 재현한 미수정 문제 (9/29)
+## 코드 리뷰 후 수정한 밑위 계산 (9/29)
 
-현재 `waist_center`는 2D 이미지 좌표의 평균이다. 허리 양 끝의 깊이가 다른 촬영에서는 실제 3D 중점과 달라 밑위에 오차가 생긴다. 정확한 측정점과 잡음 없는 45° 합성 평면(허리 60cm, 허리 중심 깊이 60cm)에서 밑위 정답 30cm가 **31.82cm, valid**로 계산되는 것을 현재 디코더와 거리 엔진으로 재현했다. 이는 실제 기기에서 측정한 오차가 아니라 계산 방식의 오류를 확인한 것이다.
+이전 구현의 `waist_center`는 2D 이미지 좌표의 평균이었다. 허리 양 끝의 깊이가 다른 촬영에서는 실제 3D 중점과 달라 밑위에 오차가 생겼다. 정확한 측정점과 잡음 없는 45° 합성 평면(허리 60cm, 허리 중심 깊이 60cm)에서 밑위 정답 30cm가 **31.82cm, valid**로 계산되는 것을 재현했다. 이는 실제 기기에서 측정한 오차가 아니라 계산 방식의 오류를 확인한 것이다.
 
-이번 ML 연동 커밋에는 이 수정이 포함되지 않는다. 후속 수정은 허리 양 끝을 먼저 3D로 복원한 뒤 중점을 계산하고, 표시용 좌표만 재투영하는 방향이다. 기존 224개 테스트 통과를 이 문제의 해결이나 실제 cm 정확도 보증으로 해석하지 않는다.
+수정된 `lidar-unprojection-1.0.2`는 허리 양 끝을 먼저 3D로 복원해 중점을 만든다. 파생점 위치의 깊이를 다시 읽지 않으며, 원본점의 품질과 불확실성을 이어받는다. 사진만 보는 테스트 화면의 2D 중점은 그대로 표시용 힌트이며 cm 계산에 사용하지 않는다.
+
+저장 시 `derivedFrom`과 결과의 `sourceLandmarkIDs`, `spatialAverage` 방법을 남긴다. 현재 앱은 이 선택 필드가 없는 과거 기록도 읽는다. 정확히 `bottom7-976144d4d652` 모델에서 생성한 옛 허리 중점은 재계산 시 같은 3D 방식으로 해석하고, 원본 허리점이 저장되지 않은 옛 기록은 해당 항목을 계산 불가로 처리한다. 새 결과에 추가된 `spatialAverage`를 모르는 구버전 앱이 새 기록을 읽는 것은 보장하지 않는다.
+
+수동점 비교로 전환할 때는 원본 허리점까지 유지해 동일한 계산을 보여준다. 사용자가 첫 점을 직접 지정하면 파생 관계를 제거하고 두 끝점을 다시 확인하도록 한다. 저장·다시 열기·수동 보정에서 2D 중점 계산으로 돌아가지 않도록 회귀 테스트를 추가했다. 합성 기하 테스트 통과는 모델 검출률이나 실제 센서 cm 정확도의 보증이 아니다.
 
 ## 파일 출처
 
@@ -70,6 +76,7 @@
 
 - `Tools/validate-bottom-model.swift`: 독립 Core ML 입출력·유한 값·레터박스 감사. 파일 머리말의 명령을 따른다.
 - `Tools/validate-bottom-provider.swift`: 실제 앱 provider와 같은 Core 소스를 컴파일해 사진 추론·좌표·프레임 출처 보존을 확인한다. 센서 깊이 정확도를 시험하는 도구는 아니다.
-- `swift test --scratch-path /tmp/dobby-bottom-core`: 기존 201개 + 새 좌표·스키마·후처리 회귀 23개, 총 224개.
+- `swift test --scratch-path /tmp/dobby-review-core`: 전체 Core 회귀. 파생점 기하, 원본점 실패 전파, 저장·다시 열기·수동 전환을 포함한다.
+- `DOBBY_UI_PHOTO_FIXTURES=1 Tools/run-ui-tests.sh 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' -only-testing:DobbyUITests/BottomPhotoFlowTests`: 임시 시뮬레이터의 합성 사진으로 실제 PhotosPicker 선택·교체·초기화를 확인한다. 기존 개인 사진첩을 사용하지 않는다.
 
 전체 빌드·화면 테스트 결과는 [LiDAR 검증 기록](LiDAR-Validation.md)에 기록한다.

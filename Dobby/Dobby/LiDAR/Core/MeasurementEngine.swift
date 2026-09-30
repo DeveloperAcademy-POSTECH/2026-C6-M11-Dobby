@@ -4,7 +4,7 @@ import Foundation
 /// Positions use optical coordinates: x right, y down, z forward, all in metres.
 /// `valid` describes input support, not a guaranteed physical error in centimetres.
 nonisolated struct LiDARMeasurementEngine {
-    static let algorithmVersion = "lidar-unprojection-1.0.1"
+    static let algorithmVersion = "lidar-unprojection-1.0.2"
     private let options: MeasurementOptions
 
     init(options: MeasurementOptions = .init()) {
@@ -22,6 +22,67 @@ nonisolated struct LiDARMeasurementEngine {
         var resolved: [String: PointResolution] = [:]
         var pointFailures: [String: MeasurementFailure] = [:]
 
+        // Resolve dependencies once per frame. A bad derived point only invalidates
+        // measurements that depend on it, not unrelated direct measurements.
+        func resolveID(_ id: String, visiting: inout Set<String>) -> Result<PointResolution, PointResolutionError> {
+            if let value = resolved[id] { return .success(value) }
+            if let failure = pointFailures[id] { return .failure(.init(reason: failure)) }
+            guard !visiting.contains(id) else {
+                pointFailures[id] = .invalidDefinition
+                return .failure(.init(reason: .invalidDefinition))
+            }
+            // This limit belongs to the current traversal, not to the requested
+            // landmark. Do not poison a later, shallower request with its failure.
+            guard visiting.count < 64 else {
+                return .failure(.init(reason: .invalidDefinition, canCache: false))
+            }
+            guard let candidates = groupedPoints[id], !candidates.isEmpty else {
+                pointFailures[id] = .missingLandmark
+                return .failure(.init(reason: .missingLandmark))
+            }
+            guard candidates.count == 1 else {
+                pointFailures[id] = .duplicateLandmark
+                return .failure(.init(reason: .duplicateLandmark))
+            }
+            let landmark = candidates[0]
+            let resolution: Result<PointResolution, PointResolutionError>
+            if let sourceIDs = landmarks.effectiveDerivedSourceIDs(for: id) {
+                if let failure = validateLandmark(landmark, origin: landmarks.origin) {
+                    resolution = .failure(.init(reason: failure))
+                } else if sourceIDs.count < 2 || sourceIDs.count > 64
+                    || sourceIDs.contains(where: { $0.isEmpty }) || Set(sourceIDs).count != sourceIDs.count {
+                    resolution = .failure(.init(reason: .invalidDefinition))
+                } else {
+                    visiting.insert(id)
+                    var sources: [PointResolution] = []
+                    var failure: PointResolutionError?
+                    for sourceID in sourceIDs {
+                        switch resolveID(sourceID, visiting: &visiting) {
+                        case .success(let value): sources.append(value)
+                        case .failure(let error):
+                            if failure == nil { failure = error }
+                        }
+                    }
+                    visiting.remove(id)
+                    if let failure {
+                        resolution = .failure(failure)
+                    } else {
+                        resolution = spatialAverage(landmark, sourceIDs: sourceIDs, sources: sources,
+                                                    frame: frame, origin: landmarks.origin)
+                            .mapError { .init(reason: $0) }
+                    }
+                }
+            } else {
+                resolution = resolve(landmark, frame: frame, set: landmarks).mapError { .init(reason: $0) }
+            }
+            switch resolution {
+            case .success(let value): resolved[id] = value
+            case .failure(let error):
+                if error.canCache { pointFailures[id] = error.reason }
+            }
+            return resolution
+        }
+
         let values = definitions.map { definition -> MeasurementValue in
             func unavailable(_ failure: MeasurementFailure, points: [ResolvedLandmark] = []) -> MeasurementValue {
                 .init(id: definition.id, title: definition.title, meters: nil,
@@ -38,21 +99,11 @@ nonisolated struct LiDARMeasurementEngine {
             var uncertain = false
             var firstFailure: MeasurementFailure?
             for id in definition.landmarkIDs {
-                if resolved[id] == nil && pointFailures[id] == nil {
-                    if let candidates = groupedPoints[id], candidates.count > 1 {
-                        pointFailures[id] = .duplicateLandmark
-                    } else if let landmark = groupedPoints[id]?.first {
-                        switch resolve(landmark, frame: frame, set: landmarks) {
-                        case .success(let value): resolved[id] = value
-                        case .failure(let error): pointFailures[id] = error
-                        }
-                    } else {
-                        pointFailures[id] = .missingLandmark
-                    }
-                }
-                if let error = pointFailures[id] {
-                    if firstFailure == nil { firstFailure = error }
-                } else if let value = resolved[id] {
+                var visiting: Set<String> = []
+                switch resolveID(id, visiting: &visiting) {
+                case .failure(let error):
+                    if firstFailure == nil { firstFailure = error.reason }
+                case .success(let value):
                     points.append(value.landmark)
                     uncertain = uncertain || value.uncertain
                 }
@@ -124,13 +175,7 @@ nonisolated struct LiDARMeasurementEngine {
         frame: MeasurementFrame,
         set: GarmentLandmarkSet
     ) -> Result<PointResolution, MeasurementFailure> {
-        guard landmark.point.isValid else { return .failure(.outOfBounds) }
-        guard landmark.isVisible else { return .failure(.occludedLandmark) }
-        if let confidence = landmark.confidence {
-            guard confidence.isFinite, (0...1).contains(confidence),
-                  set.origin != .model || confidence >= options.minimumModelConfidence
-            else { return .failure(.lowLandmarkConfidence) }
-        }
+        if let failure = validateLandmark(landmark, origin: set.origin) { return .failure(failure) }
         let target = landmark.point
         let map = frame.depth
         let targetX = target.x * Double(map.size.width)
@@ -223,6 +268,54 @@ nonisolated struct LiDARMeasurementEngine {
         // Excessive spread without a well-supported surface fit cannot supply trustworthy depth.
         if plane == nil && spread > options.maximumDepthSpreadMeters { return .failure(.insufficientDepth) }
         return .success(.init(landmark: point, uncertain: uncertain))
+    }
+
+    private func validateLandmark(_ landmark: GarmentLandmark, origin: LandmarkOrigin) -> MeasurementFailure? {
+        guard landmark.point.isValid else { return .outOfBounds }
+        guard landmark.isVisible else { return .occludedLandmark }
+        if let confidence = landmark.confidence {
+            guard confidence.isFinite, (0...1).contains(confidence),
+                  origin != .model || confidence >= options.minimumModelConfidence
+            else { return .lowLandmarkConfidence }
+        }
+        return nil
+    }
+
+    private func spatialAverage(
+        _ landmark: GarmentLandmark, sourceIDs: [String], sources: [PointResolution],
+        frame: MeasurementFrame, origin: LandmarkOrigin
+    ) -> Result<PointResolution, MeasurementFailure> {
+        let count = Double(sources.count)
+        // Divide first so a representable mean does not overflow while summing.
+        let position = sources.reduce(Point3D(x: 0, y: 0, z: 0)) { mean, source in
+            let p = source.landmark.position
+            return .init(x: mean.x + p.x / count, y: mean.y + p.y / count, z: mean.z + p.z / count)
+        }
+        guard position.x.isFinite, position.y.isFinite, position.z.isFinite, position.z > 0
+        else { return .failure(.invalidCalibration) }
+        let k = frame.intrinsics
+        let projected = ImagePoint(
+            x: (k.fx * (position.x / position.z) + k.cx) / Double(frame.imageSize.width),
+            y: (k.fy * (position.y / position.z) + k.cy) / Double(frame.imageSize.height)
+        )
+        guard projected.isValid else { return .failure(.outOfBounds) }
+        let qualities = sources.map { $0.landmark.quality }
+        // A derived point has no new sensor samples. Report the weakest support
+        // and worst spread/residual of its contributors, without improving status.
+        let residuals = qualities.compactMap(\.planeResidualMeters)
+        let quality = PointQuality(
+            validSamples: qualities.map(\.validSamples).min() ?? 0,
+            candidateSamples: qualities.map(\.candidateSamples).max() ?? 0,
+            confidenceAvailable: qualities.allSatisfy(\.confidenceAvailable),
+            depthSpreadMeters: qualities.map(\.depthSpreadMeters).max() ?? 0,
+            planeResidualMeters: residuals.count == qualities.count ? residuals.max() : nil,
+            method: .spatialAverage
+        )
+        return .success(.init(
+            landmark: .init(id: landmark.id, imagePoint: projected, position: position,
+                            quality: quality, sourceLandmarkIDs: sourceIDs),
+            uncertain: sources.contains(where: \.uncertain) || (origin == .model && landmark.confidence == nil)
+        ))
     }
 
     private func cameraRay(_ point: ImagePoint, frame: MeasurementFrame) -> (x: Double, y: Double) {
@@ -325,6 +418,13 @@ nonisolated struct LiDARMeasurementEngine {
     }
 
     private func square<T: Numeric>(_ value: T) -> T { value * value }
+}
+
+/// Recursion-budget exhaustion is contextual and must remain non-cacheable
+/// while it propagates through dependent points.
+nonisolated private struct PointResolutionError: Error {
+    var reason: MeasurementFailure
+    var canCache = true
 }
 
 nonisolated private struct PointResolution {

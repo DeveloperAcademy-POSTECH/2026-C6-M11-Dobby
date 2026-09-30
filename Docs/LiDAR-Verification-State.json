@@ -1,34 +1,50 @@
 {
-  "verifiedAt": "2026-09-28T13:45:06.187296+00:00",
+  "verifiedAt": "2026-09-29T01:27:00.900679+00:00",
   "branch": "feat/3-LiDAR-Module",
-  "algorithmVersion": "lidar-unprojection-1.0.1",
+  "algorithmVersion": "lidar-unprojection-1.0.2",
   "coreTests": {
-    "passed": 224,
+    "passed": 251,
     "failed": 0,
-    "log": "/tmp/dobby-bottom-core.log"
+    "log": "/tmp/dobby-review-core-final.log",
+    "newTests": {
+      "geometry": 20,
+      "lifecycle": 7
+    }
   },
   "iPhoneUITests": {
     "device": "iPhone 17 Pro simulator / iOS 26.4",
     "status": "passed",
-    "scope": "all 10 tests",
-    "passed": 10,
+    "scope": "3 targeted existing flows plus 1 real PhotosPicker error/replacement/reset test; not the full UI suite",
+    "passed": 4,
     "failed": 0,
-    "log": "/tmp/dobby-bottom-iphone-ui.log",
-    "resultBundle": "/tmp/dobby-lidar-ui.WIwPGu/Results.xcresult"
+    "runs": [
+      {
+        "passed": 3,
+        "failed": 0,
+        "scope": "automatic partial save/reopen, manual reference/edit/save, bottoms preset",
+        "log": "/tmp/dobby-review-regression-ui.log",
+        "resultBundle": "/tmp/dobby-review-regression-ui.xcresult"
+      },
+      {
+        "passed": 1,
+        "failed": 0,
+        "scope": "system photo picker; real provider noDetection and invalidImage; replacement and reset",
+        "log": "/tmp/dobby-review-photo-ui-final.log",
+        "resultBundle": "/tmp/dobby-lidar-ui.AJL0e8/Results.xcresult",
+        "fixtures": "synthetic blank PNGs on a disposable simulator; not physical or clothing accuracy evidence",
+        "initialTestHarnessFailures": "Two initial runs failed on Photos accessibility selection/tapping; test selectors corrected after inspecting UI; product code unchanged."
+      }
+    ]
   },
   "iPadUITests": {
     "device": "iPad Pro 13-inch M5 simulator / iPadOS 26.4",
-    "status": "passed",
-    "scope": "targeted new bottom photo entry and existing automatic partial-result save/reopen flow; not full 10-test suite",
-    "passed": 2,
-    "failed": 0,
-    "log": "/tmp/dobby-bottom-ipad-ui.log",
-    "resultBundle": "/tmp/dobby-bottom-ipad.xcresult"
+    "status": "not_rerun_for_review_fix",
+    "previousResults": "previousBottomIntegrationVerification.iPadUITests"
   },
   "deviceBuild": {
     "result": "passed",
     "signed": false,
-    "log": "/tmp/dobby-bottom-device.log",
+    "log": "/tmp/dobby-review-device-final.log",
     "modelResourcesIncluded": true
   },
   "physicalSensorValidation": {
@@ -51,29 +67,31 @@
     "Dobby/Dobby/LiDAR/Capture/ARKitCaptureProvider.swift": "9eaff7e1e5adc1948d49b523cb2914bc8d56803dcf257a1d3a89529a7ea8c3a4",
     "Dobby/Dobby/LiDAR/Capture/CoreMLBottomLandmarkProvider.swift": "4939b1deeca5b96cd3418a56b03aa981a6b4d244cb5f948eb682e07a51764754",
     "Dobby/Dobby/LiDAR/Capture/LiveForegroundAnalyzer.swift": "f265351423dbc1a147daf17b54ab1d88afeacad66867a4468dea94a37aba07ba",
-    "Dobby/Dobby/LiDAR/Core/AutomaticMeasurement.swift": "06fb50771ad1da2b1c25d3ed8c005ffa4db649389406c5141b9a497beb514387",
+    "Dobby/Dobby/LiDAR/Core/AutomaticMeasurement.swift": "88431e1b4680889d1058b10a7d2cff409fa350c45c2673862639473b704c6114",
     "Dobby/Dobby/LiDAR/Core/AutomaticMeasurementWorkflow.swift": "19096c67e88efc94f72720b637aee5cf7ae5403a032b516135ddb5b1a7859822",
     "Dobby/Dobby/LiDAR/Core/BaselineValidation.swift": "49c6032f67c8734428b6d018bc2178774c99aa0df64d8b14b19fc5a0dec89043",
-    "Dobby/Dobby/LiDAR/Core/BottomLandmarkDecoder.swift": "dd9408eaa618fcdb9698358ed187f72efab16fddbe611c2901e273e0ecd0d199",
+    "Dobby/Dobby/LiDAR/Core/BottomLandmarkDecoder.swift": "82733bf44fcfddb494c484aa705d840deddbeaf22219adc117f4b43767d16aa4",
     "Dobby/Dobby/LiDAR/Core/CaptureFrameSelection.swift": "75a0c83863485675b0f0314265dde7101a887d09b76d42b5b3e7ab082e4dadf9",
+    "Dobby/Dobby/LiDAR/Core/DerivedLandmarkGeometry.swift": "8d7df9df77226b7a098c41fa2bbadff784a7375282c33181a0e5f0c6ffd9312f",
     "Dobby/Dobby/LiDAR/Core/GarmentMeasurementCatalog.swift": "0a574f1dc8abde60fb7b742cb552b4e85de120ef91f7d4152e707a102f8466d3",
     "Dobby/Dobby/LiDAR/Core/ImageCoordinateTransform.swift": "46a93478a2ec3ff6a44e5fb7c5a369bde51cb1aa4d135f9bdb0f2bb6e535e835",
     "Dobby/Dobby/LiDAR/Core/LiveCaptureReadiness.swift": "0d39527dc26a80d34c797ca2390d6d4bce7254c642c691e3e6707f3bb46e0532",
     "Dobby/Dobby/LiDAR/Core/LiveReadinessFreshnessGate.swift": "dbaf04cca58054177cab15e50bc0ebecd24ed27990da04c0d80361027880a3e0",
-    "Dobby/Dobby/LiDAR/Core/ManualLandmarkEditing.swift": "f83999f3d8aab5f666f4f065d7fccaeda570e5f1a31090b8b8105e3a2076ebfa",
-    "Dobby/Dobby/LiDAR/Core/ManualMeasurement.swift": "1e129cf1cb80ed5042a5a89d059db65bdafa0d06892b414506c31a0b84a06631",
+    "Dobby/Dobby/LiDAR/Core/ManualLandmarkEditing.swift": "8f7b4af7a337c1fff6a8058b241f3cd4171a8f9df2068ee14568f675beeed6e8",
+    "Dobby/Dobby/LiDAR/Core/ManualMeasurement.swift": "aba84c105af208ee7b4e7606bdc696ac4e4fef83391a69f2b11174c86cc5170c",
     "Dobby/Dobby/LiDAR/Core/MeasurementArchive.swift": "5e8bac32ca6535b0452fbb51b241e33d7fa50105905c162c7d0680cb831fb197",
     "Dobby/Dobby/LiDAR/Core/MeasurementAttemptJournal.swift": "ee9a1c74b3845fb8b4d73d31e61a76a27523c3788f5cdfdd81191668f749b070",
-    "Dobby/Dobby/LiDAR/Core/MeasurementContracts.swift": "52d25dff3b3a0b0d0fc09bb7991d6727dc7838a44a6d37f63e6e947ce5728db1",
-    "Dobby/Dobby/LiDAR/Core/MeasurementEngine.swift": "c04dd05cbb389cdc369d9c443aa14f21a7de7aa87806e61c2fcafac25ab3fa19",
+    "Dobby/Dobby/LiDAR/Core/MeasurementContracts.swift": "86c59d4b122f9eab95e3d8870a076acb14930fefc3b1f8eb69adce6ac56e39df",
+    "Dobby/Dobby/LiDAR/Core/MeasurementEngine.swift": "1a41497b81bd747812f9d56e151972d7704cd3f3293dc44334870a98d136f18c",
     "Dobby/Dobby/LiDAR/Core/MeasurementValidationReport.swift": "7f077580b0268fbba55118bb80e075113a54f40f0d2fc7affc0ce7a3b64c9609",
     "Dobby/Dobby/LiDAR/Core/RecordedMeasurementService.swift": "a8cb8d5469a08cec35828ac150660860eb8801bafc07260b52cae93c41900442",
+    "Dobby/Dobby/LiDAR/Core/ResolvedLandmarkCoordinates.swift": "e981e862b78fc1487f69630073c2b3fa892fc4e934aaffd842ec6512d27400e2",
     "Dobby/Dobby/LiDAR/Core/SyntheticFixtures.swift": "bcc2a60d26c4ec10bac3842add7afd99878222cc16b30b9393e3ed0754ae2db8",
     "Dobby/Dobby/LiDAR/Models/BottomLandmarks.mlpackage/Data/com.apple.CoreML/model.mlmodel": "74077ac751ea213b657e1e266ef08bd18a9beb1d4215aa08c65146460dc56690",
     "Dobby/Dobby/LiDAR/Models/BottomLandmarks.mlpackage/Data/com.apple.CoreML/weights/weight.bin": "976144d4d65247b322a9b3afc3076883a65058c86e9fdc7704f35389f54caa10",
     "Dobby/Dobby/LiDAR/Models/BottomLandmarks.mlpackage/Manifest.json": "8303dc1db24624d1f91f49a03a4484de6f57153c96ab7593a4a2623ead53363a",
     "Dobby/Dobby/LiDAR/Models/schema_bottom7.json": "4c7784fdd3719a1b6631150689210c391906415393d292789db91f457a041bc6",
-    "Dobby/Dobby/LiDAR/UI/AutomaticMeasurementView.swift": "215c75fc0671fca32004956fdec22d4ee358fe0999e1a1646f76f5c927428558",
+    "Dobby/Dobby/LiDAR/UI/AutomaticMeasurementView.swift": "5dba3876a307bc24ce54a80950c0fe4a3f456a2f480376fc0f8501cfef3351a9",
     "Dobby/Dobby/LiDAR/UI/BaselineReportView.swift": "52d30da0f5b716fb1b406d7eb8875261af879425eb631d5e8b1882124aa8cec5",
     "Dobby/Dobby/LiDAR/UI/BottomRecognitionView.swift": "715451713a6c640b1a5216b8abf0b9636536e3136980c9b4c09e0bf864659f61",
     "Dobby/Dobby/LiDAR/UI/CaptureAttemptRecorder.swift": "51c0a4c413b2e302fb7dbc379c425d8740b0c635fe6004d5920e955853237e48",
@@ -81,7 +99,7 @@
     "Dobby/Dobby/LiDAR/UI/LiDARCameraView.swift": "cda4bf6e1669537400915be815f0f1d78ff4b9a1aa926c9bbdabe1e4d24b74e0",
     "Dobby/Dobby/LiDAR/UI/LiDARLabView.swift": "473ef5b2491e1cf74f527546ef923f60078c101ec14c1a867efa3f37ce2780f0",
     "Dobby/Dobby/LiDAR/UI/LiveReadinessStatusView.swift": "453e11eced218312a3eb39c1207e6a9ac7e7cde2eeea447473cdf032ef44cf63",
-    "Dobby/Dobby/LiDAR/UI/MeasurementDetailView.swift": "7079d60dc26116eed6a73cdaf5922b3d8a53a80943360577ff9ce1bc5da93b0f",
+    "Dobby/Dobby/LiDAR/UI/MeasurementDetailView.swift": "6357360985f240a5902f0eff1d62607550ed9d3cd34745c06e40b100a57489a1",
     "Dobby/Dobby/LiDAR/UI/MeasurementValidationReportView.swift": "d745444038f9bbd15970819f89b5d6b28a98d3f750276aa9476f9a9473479c8d",
     "Dobby/Dobby/LiDAR/UI/SnapshotPresentation.swift": "96326aac4ba228f098d78bbb488e17c9ccedfa2f38ff94bc5880106d5c6e2056",
     "Package.swift": "8e79e7d07eec0582105c5c4897c81818e7c89806e9606f91e01a7d56bd9b879e",
@@ -90,6 +108,8 @@
     "Tests/DobbyLiDARCoreTests/BaselineValidationTests.swift": "422e4e2fed32fb7ebb17ea7011d9a0672fd99be553001bc42dc2a79bc7a2bfdb",
     "Tests/DobbyLiDARCoreTests/BottomLandmarkDecoderTests.swift": "f414707a35b4a6cb6c4bc3fd410784cfb4094bd4bd83185dc0d15ff2f3eecb7e",
     "Tests/DobbyLiDARCoreTests/CaptureFrameSelectionTests.swift": "70e4ef06793321ca28af0218cb01df0cd55c3b49103a41659c823682bf2fc13a",
+    "Tests/DobbyLiDARCoreTests/DerivedLandmarkGeometryTests.swift": "6fb422a344036914ff1329f2647c56ebf2de11f723f4860ff365067b833655ef",
+    "Tests/DobbyLiDARCoreTests/DerivedLandmarkLifecycleTests.swift": "35f53d8477a04d179ae315917ff9415b27756244a0e39ddcb56801445a8b67f1",
     "Tests/DobbyLiDARCoreTests/GarmentMeasurementCatalogTests.swift": "abb105fb90e41031ac9f8225d6afc923fe7ee79d0b63f52321d7b8ed9d79c084",
     "Tests/DobbyLiDARCoreTests/LiveCaptureReadinessTests.swift": "2a374663c58268a0b6817ac99445d286ffd0a7225f08eed94acdf2f7176341b4",
     "Tests/DobbyLiDARCoreTests/LiveReadinessFreshnessGateTests.swift": "96a914e49d984568db1b396ff010ec947a3055c97fb79486805262e74451a901",
@@ -100,8 +120,9 @@
     "Tests/DobbyLiDARCoreTests/MeasurementEngineTests.swift": "29a05d6390677e6c63e242bb05f484828748803a75139169d2b279f23bfe313f",
     "Tests/DobbyLiDARCoreTests/MeasurementValidationReportTests.swift": "584670a99e03a28754cef376ba88d3e74e2f7a5bbfc5bc32bd4878cb00a7856d",
     "Tests/DobbyLiDARCoreTests/RecordedMeasurementServiceTests.swift": "674484c187b22446f9fcaf04a6b63ed47fa7bb0080d4e2f621df1be4fb1e52f4",
+    "Tests/DobbyUITests/BottomPhotoFlowTests.swift": "56ab9723aa65c262954e30b79e3384781ba3c12ce1416380fd324a326594f980",
     "Tests/DobbyUITests/LiDARFlowTests.swift": "646894d0bd7f1aa7791781a447f9a79f1b889f4bdf51a6e2685fa0939d7c5e02",
-    "Tools/run-ui-tests.sh": "dd0500f241032d5fb483d96355b980fed514e4ba59f6c3c16b39881f3e2dd660",
+    "Tools/run-ui-tests.sh": "c1557f835fe7615ac8a9e2ff248a2c5ffec31e254c990145ea1badfca407da71",
     "Tools/validate-bottom-model.swift": "14017b60ab16ab17f6644686f522707ab43ca2790c8382f495594ef08daa0195",
     "Tools/validate-bottom-provider.swift": "36f0fa19ef371cddfe9e43c9b309df4df78d6e866055a02502b549620f5b6b0d"
   },
@@ -129,7 +150,8 @@
     "viewModelTypesRemoved": true,
     "document": "Docs/LiDAR-Architecture.md",
     "distanceAlgorithmChanged": false,
-    "storedSchemaChanged": false
+    "storedSchemaChanged": false,
+    "scopeNote": "distanceAlgorithmChanged/storedSchemaChanged above describe the earlier MV refactor; this subsequent review fix changes the midpoint algorithm and adds optional landmark provenance fields."
   },
   "localProjectSettings": {
     "uncommitted": true,
@@ -214,7 +236,7 @@
     {
       "id": "bottom-rise-perspective-midpoint",
       "severity": "P2",
-      "status": "open",
+      "status": "resolved",
       "reviewedAt": "2026-09-29",
       "file": "Dobby/Dobby/LiDAR/Core/BottomLandmarkDecoder.swift",
       "cause": "2D image midpoint is unprojected as the physical 3D waist midpoint",
@@ -227,7 +249,74 @@
         "planeYawDegrees": 45,
         "waistCenterDepthMeters": 0.6
       },
-      "fixIncluded": false
+      "fixIncluded": true,
+      "committed": false,
+      "algorithmVersion": "lidar-unprojection-1.0.2",
+      "correctedRiseCentimeters": 29.999999840264103,
+      "evidence": "Tests/DobbyLiDARCoreTests/DerivedLandmarkGeometryTests.swift"
     }
-  ]
+  ],
+  "previousBottomIntegrationVerification": {
+    "verifiedAt": "2026-09-28T13:45:06.187296+00:00",
+    "algorithmVersion": "lidar-unprojection-1.0.1",
+    "coreTests": {
+      "passed": 224,
+      "failed": 0,
+      "log": "/tmp/dobby-bottom-core.log"
+    },
+    "iPhoneUITests": {
+      "device": "iPhone 17 Pro simulator / iOS 26.4",
+      "status": "passed",
+      "scope": "all 10 tests",
+      "passed": 10,
+      "failed": 0,
+      "log": "/tmp/dobby-bottom-iphone-ui.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.WIwPGu/Results.xcresult"
+    },
+    "iPadUITests": {
+      "device": "iPad Pro 13-inch M5 simulator / iPadOS 26.4",
+      "status": "passed",
+      "scope": "targeted new bottom photo entry and existing automatic partial-result save/reopen flow; not full 10-test suite",
+      "passed": 2,
+      "failed": 0,
+      "log": "/tmp/dobby-bottom-ipad-ui.log",
+      "resultBundle": "/tmp/dobby-bottom-ipad.xcresult"
+    },
+    "deviceBuild": {
+      "result": "passed",
+      "signed": false,
+      "log": "/tmp/dobby-bottom-device.log",
+      "modelResourcesIncluded": true
+    }
+  },
+  "reviewFixes": {
+    "date": "2026-09-29",
+    "committed": false,
+    "pushed": false,
+    "pushRequiresExplicitUserRequest": true,
+    "provenance": "derivedFrom input IDs and sourceLandmarkIDs output IDs, spatialAverage method; legacy exact bottom7 model replay supported",
+    "archiveCompatibility": "Current reader accepts old absent optional fields. Older apps may reject new spatialAverage enum values.",
+    "additionalRegressionFixes": [
+      {
+        "issue": "Recursion-budget failure cached on valid source and shallower derived nodes",
+        "reproductionLog": "/tmp/dobby-derived-depth-limit.log",
+        "status": "resolved"
+      },
+      {
+        "issue": "Manual comparison selected the first of duplicate model endpoint IDs and removed the failure before manual confirmation",
+        "reproductionLog": "/tmp/dobby-review-duplicate-before.log",
+        "status": "resolved"
+      }
+    ],
+    "unchanged": [
+      "model weights",
+      "sensor thresholds",
+      "user Xcode/signing settings"
+    ],
+    "limitations": [
+      "No physical cm accuracy measurements",
+      "No successful garment-result or in-flight replacement/cancellation photo UI regression",
+      "No new training or measured detection-rate improvement"
+    ]
+  }
 }

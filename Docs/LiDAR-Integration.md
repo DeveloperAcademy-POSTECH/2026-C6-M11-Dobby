@@ -49,6 +49,10 @@ protocol GarmentLandmarkProviding: Sendable {
 
 위 상의 계약의 좌우 기준은 학습 라벨과 팀 측정 기준을 확정해야 한다. 새 bottom7 하의 모델의 좌우는 제공 스키마대로 **정방향 이미지 기준**이며 착용자 기준으로 바꾸지 않는다. 임의 점 배열 순서에 의존하지 않는다. 모델 점수는 `confidence`에, 가림은 `isVisible`에 전달한다. origin은 `.model`, 실제 모델 버전도 기록한다. 수동점은 `.manual`이고 모델 신뢰도로 위장하지 않는다.
 
+중점처럼 다른 점에서 계산하는 파생점은 `GarmentLandmark.derivedFrom`에 원본 ID 배열을 함께 보낸다. 예를 들어 `waist_center`는 `["waist_left", "waist_right"]`다. 원본 점도 같은 `GarmentLandmarkSet.points`에 포함해야 한다. 거리 엔진은 원본 점을 먼저 3D로 복원한 후 그 좌표들의 산술평균을 사용하며, 파생점의 `point`는 깊이 없는 사진 화면을 위한 표시 힌트다. 원본 점의 실패나 불확실성이 파생점에도 전파된다. 직접 예측·수동 지정한 점은 `derivedFrom: nil`이다. 빈 배열·중복 ID·순환 관계는 유효한 직접점으로 대신 처리하지 않는다.
+
+계산 결과의 파생점은 `quality.method == .spatialAverage`이고 `sourceLandmarkIDs`에 즉시 참조한 원본 ID를 남긴다. `ResolvedLandmark.imagePoint`는 계산된 3D 위치를 원본 사진에 재투영한 좌표다. 깊이가 있는 결과 화면은 이 좌표를 사용해야 한다. 과거 bottom7 기록의 호환 규칙과 수동 전환 정책은 [하의 모델 안내](Bottom-Recognition.md)를 따른다.
+
 마스크는 선택 사항이며 원본 전체 이미지와 정합된 0/1 배열을 제공한다. 크롭된 모델 마스크를 그대로 보내지 않는다.
 
 ## 호출 예
