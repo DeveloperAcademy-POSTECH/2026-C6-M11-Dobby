@@ -8,10 +8,10 @@ struct QuickCopyWidget: Widget {
         ActivityConfiguration(for: ProductCopyAttributes.self) { context in
             VStack(alignment: .leading, spacing: 10) {
                 header(context.attributes.channelName)
-                ProductCopyPanel(sessionID: context.attributes.sessionID, mode: context.attributes.mode)
+                ProductCopyPanel(sessionID: context.attributes.sessionID)
                 Text(context.state.message).font(.caption2).foregroundStyle(.white.opacity(0.8))
             }.padding().activityBackgroundTint(.black)
-                .widgetURL(CopyRoute.home)
+                .widgetURL(URL(string: "dobby-copy://home")!)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -22,14 +22,14 @@ struct QuickCopyWidget: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 6) {
-                        ProductCopyPanel(sessionID: context.attributes.sessionID, mode: context.attributes.mode)
+                        ProductCopyPanel(sessionID: context.attributes.sessionID)
                         Text(context.state.message).font(.caption2).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                     }
                 }
             } compactLeading: { Image(systemName: "doc.on.doc").foregroundStyle(.orange) }
               compactTrailing: { Text("복사").foregroundStyle(.white) }
               minimal: { Image(systemName: "doc.on.doc").foregroundStyle(.orange) }
-                .widgetURL(CopyRoute.home)
+                .widgetURL(URL(string: "dobby-copy://home")!)
         }
     }
     private func header(_ channel: String) -> some View {
@@ -41,14 +41,14 @@ struct QuickCopyWidget: Widget {
     }
 }
 
-#Preview("확장 Island", as: .dynamicIsland(.expanded), using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리", mode: .foreground)) {
+#Preview("확장 Island", as: .dynamicIsland(.expanded), using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리")) {
     QuickCopyWidget()
 } contentStates: { ProductCopyAttributes.ContentState() }
 
-#Preview("잠금 화면", as: .content, using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리", mode: .foreground)) {
+#Preview("잠금 화면", as: .content, using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리")) {
     QuickCopyWidget()
 } contentStates: { ProductCopyAttributes.ContentState() }
 
-#Preview("작은 Island", as: .dynamicIsland(.compact), using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리", mode: .foreground)) {
+#Preview("작은 Island", as: .dynamicIsland(.compact), using: ProductCopyAttributes(sessionID: UUID(), channelName: "후르츠패밀리")) {
     QuickCopyWidget()
 } contentStates: { ProductCopyAttributes.ContentState() }

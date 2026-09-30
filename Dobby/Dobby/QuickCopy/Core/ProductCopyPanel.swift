@@ -18,22 +18,15 @@ struct ProductCopyControlLabel: View {
 
 struct ProductCopyPanel: View {
     let sessionID: UUID
-    let mode: CopyExperimentMode
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) { control(.productName); control(.description) }
             HStack(spacing: 8) { control(.brand); control(.measurements) }
         }
     }
-    @ViewBuilder private func control(_ field: ProductCopyField) -> some View {
-        if mode == .direct {
-            Button(intent: CopyProductFieldIntent(sessionID: sessionID.uuidString, field: field.rawValue)) {
-                ProductCopyControlLabel(field: field)
-            }.buttonStyle(.plain)
-        } else {
-            Link(destination: CopyRoute.url(sessionID: sessionID, field: field)) {
-                ProductCopyControlLabel(field: field)
-            }.buttonStyle(.plain)
-        }
+    private func control(_ field: ProductCopyField) -> some View {
+        Button(intent: CopyProductFieldIntent(sessionID: sessionID.uuidString, field: field.rawValue)) {
+            ProductCopyControlLabel(field: field)
+        }.buttonStyle(.plain)
     }
 }
