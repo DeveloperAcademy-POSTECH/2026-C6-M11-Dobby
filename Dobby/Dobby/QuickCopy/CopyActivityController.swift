@@ -27,7 +27,8 @@ final class CopyActivityController {
         product: ExportProduct,
         writeStrategy: CopyWriteStrategy = .setItemsLocalOnly,
         diagnosticToken: String? = nil,
-        diagnosticCondition: String? = nil
+        diagnosticCondition: String? = nil,
+        interactionMode: CopyInteractionMode = .direct
     ) async -> Bool {
         guard !busy else { return false }
         busy = true
@@ -57,11 +58,16 @@ final class CopyActivityController {
             createdAt: Date(),
             writeStrategy: writeStrategy,
             diagnosticToken: diagnosticToken,
-            diagnosticCondition: diagnosticCondition
+            diagnosticCondition: diagnosticCondition,
+            interactionMode: interactionMode
         )
         do {
             try ProductCopyStore.save(next)
-            _ = try Activity.request(attributes: ProductCopyAttributes(sessionID: next.id, channelName: next.channel.title),
+            _ = try Activity.request(attributes: ProductCopyAttributes(
+                                         sessionID: next.id,
+                                         channelName: next.channel.title,
+                                         interactionMode: interactionMode
+                                     ),
                                      content: ActivityContent(state: .init(), staleDate: next.createdAt.addingTimeInterval(8 * 3600)), pushType: nil)
             session = next
             errorMessage = nil

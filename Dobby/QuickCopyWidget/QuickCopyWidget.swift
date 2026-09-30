@@ -8,7 +8,7 @@ struct QuickCopyWidget: Widget {
         ActivityConfiguration(for: ProductCopyAttributes.self) { context in
             VStack(alignment: .leading, spacing: 10) {
                 header(context.attributes.channelName)
-                ProductCopyPanel(sessionID: context.attributes.sessionID)
+                ProductCopyPanel(sessionID: context.attributes.sessionID, interactionMode: context.attributes.interactionMode)
                 Text(context.state.message).font(.caption2).foregroundStyle(.white.opacity(0.8))
             }.padding().activityBackgroundTint(.black)
                 .widgetURL(URL(string: "dobby-copy://home")!)
@@ -22,7 +22,7 @@ struct QuickCopyWidget: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 6) {
-                        ProductCopyPanel(sessionID: context.attributes.sessionID)
+                        ProductCopyPanel(sessionID: context.attributes.sessionID, interactionMode: context.attributes.interactionMode)
                         Text(context.state.message).font(.caption2).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                     }
                 }

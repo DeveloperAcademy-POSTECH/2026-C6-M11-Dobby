@@ -6,6 +6,8 @@ struct ContentView: View {
     @State private var showFruits = false
     @State private var restoredProduct: ExportProduct?
     @State private var controller = CopyActivityController()
+    @State private var legacyCopyBridge = LegacyCopyBridge()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -25,6 +27,11 @@ struct ContentView: View {
             ExportView(product: restoredProduct ?? product, controller: controller, showFruits: $showFruits)
         }
         .onOpenURL { url in
+            if url.scheme == "dobby-copy", url.host == "copy" {
+                legacyCopyBridge.receive(url)
+                legacyCopyBridge.processIfActive(scenePhase)
+                return
+            }
             guard url.scheme == "dobby-copy", url.host == "home" else { return }
             controller.refresh()
             if let session = controller.session {
@@ -36,6 +43,9 @@ struct ContentView: View {
             } else { restoredProduct = nil }
             showFruits = true
             showExport = true
+        }
+        .onChange(of: scenePhase) { _, phase in
+            legacyCopyBridge.processIfActive(phase)
         }
     }
 }

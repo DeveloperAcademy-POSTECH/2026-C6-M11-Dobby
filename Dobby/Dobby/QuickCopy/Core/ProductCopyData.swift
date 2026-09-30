@@ -40,6 +40,21 @@ nonisolated enum CopyWriteStrategy: String, Codable, CaseIterable, Identifiable 
     }
 }
 
+nonisolated enum CopyInteractionMode: String, Codable, CaseIterable, Identifiable {
+    case direct
+    case foreground
+    case foregroundAndOpen
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .direct: "Island에서 직접 복사"
+        case .foreground: "Dobby에서 복사 · 직접 복귀"
+        case .foregroundAndOpen: "Dobby에서 복사 · 후루츠 다시 열기"
+        }
+    }
+}
+
 nonisolated struct ProductCopyPayload: Codable, Equatable {
     let productName: String
     let description: String
@@ -71,6 +86,7 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
     let writeStrategy: CopyWriteStrategy?
     let diagnosticToken: String?
     let diagnosticCondition: String?
+    let interactionMode: CopyInteractionMode?
     var isExpired: Bool { Date().timeIntervalSince(createdAt) >= 8 * 60 * 60 }
     var effectiveWriteStrategy: CopyWriteStrategy { writeStrategy ?? .setItemsLocalOnly }
 
@@ -82,7 +98,8 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
         createdAt: Date,
         writeStrategy: CopyWriteStrategy? = nil,
         diagnosticToken: String? = nil,
-        diagnosticCondition: String? = nil
+        diagnosticCondition: String? = nil,
+        interactionMode: CopyInteractionMode? = nil
     ) {
         self.id = id
         self.channel = channel
@@ -92,11 +109,12 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
         self.writeStrategy = writeStrategy
         self.diagnosticToken = diagnosticToken
         self.diagnosticCondition = diagnosticCondition
+        self.interactionMode = interactionMode
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, channel, productID, payload, createdAt
-        case writeStrategy, diagnosticToken, diagnosticCondition
+        case writeStrategy, diagnosticToken, diagnosticCondition, interactionMode
     }
 
     init(from decoder: Decoder) throws {
@@ -109,6 +127,7 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
         writeStrategy = try values.decodeIfPresent(CopyWriteStrategy.self, forKey: .writeStrategy)
         diagnosticToken = try values.decodeIfPresent(String.self, forKey: .diagnosticToken)
         diagnosticCondition = try values.decodeIfPresent(String.self, forKey: .diagnosticCondition)
+        interactionMode = try values.decodeIfPresent(CopyInteractionMode.self, forKey: .interactionMode)
     }
 
     func canReuse(productID: String, payload: ProductCopyPayload, writeStrategy: CopyWriteStrategy = .setItemsLocalOnly) -> Bool {
