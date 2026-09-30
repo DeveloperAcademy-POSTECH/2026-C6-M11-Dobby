@@ -31,7 +31,8 @@ import Foundation
             createdAt: now,
             writeStrategy: .stringProperty,
             diagnosticToken: "A81F",
-            diagnosticCondition: "메모 앱 · 앱 전환 직후"
+            diagnosticCondition: "메모 앱 · 앱 전환 직후",
+            interactionMode: .foreground
         )
         let restoredDiagnostic = try JSONDecoder().decode(
             ProductCopySession.self,
@@ -39,7 +40,11 @@ import Foundation
         )
         precondition(restoredDiagnostic.effectiveWriteStrategy == .stringProperty)
         precondition(restoredDiagnostic.diagnosticToken == "A81F")
+        precondition(restoredDiagnostic.interactionMode == .foreground)
         precondition(!restoredDiagnostic.canReuse(productID: "selected-product", payload: fruits))
+        let copyURL = CopyRoute.url(sessionID: id, field: .productName)
+        precondition(CopyRoute.parse(copyURL) == CopyRequest(sessionID: id, field: .productName))
+        precondition(CopyRoute.parse(URL(string: copyURL.absoluteString + "&unexpected=value")!) == nil)
         let diagnosticResult = CopyDiagnosticResult(
             id: UUID(),
             sessionID: id,

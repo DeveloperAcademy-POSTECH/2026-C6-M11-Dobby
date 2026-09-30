@@ -23,6 +23,7 @@ struct QuickCopyDiagnosticsView: View {
     let controller: CopyActivityController
 
     @Environment(\.scenePhase) private var scenePhase
+    @State private var interactionMode = CopyInteractionMode.direct
     @State private var strategy = CopyWriteStrategy.setItemsLocalOnly
     @State private var condition = CopyDiagnosticCondition.immediately
     @State private var target = CopyDiagnosticTarget.notes
@@ -34,6 +35,11 @@ struct QuickCopyDiagnosticsView: View {
     var body: some View {
         Form {
             Section("테스트 설정") {
+                Picker("아일랜드 동작", selection: $interactionMode) {
+                    ForEach(CopyInteractionMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
                 Picker("클립보드 방식", selection: $strategy) {
                     ForEach(CopyWriteStrategy.allCases) { strategy in
                         Text(strategy.title).tag(strategy)
@@ -54,6 +60,7 @@ struct QuickCopyDiagnosticsView: View {
                 }
                 .disabled(controller.busy)
                 Text(status).font(.caption).foregroundStyle(.secondary)
+                Text(interactionDescription).font(.caption).foregroundStyle(.secondary)
             }
 
             if !token.isEmpty {
@@ -118,7 +125,8 @@ struct QuickCopyDiagnosticsView: View {
             product: product,
             writeStrategy: strategy,
             diagnosticToken: nextToken,
-            diagnosticCondition: "\(target.rawValue) · \(condition.rawValue)"
+            diagnosticCondition: "\(interactionMode.title) · \(target.rawValue) · \(condition.rawValue)",
+            interactionMode: interactionMode
         )
         if started {
             token = nextToken
@@ -137,6 +145,17 @@ struct QuickCopyDiagnosticsView: View {
             if !accepted {
                 Task { @MainActor in status = "후루츠패밀리를 직접 열어주세요." }
             }
+        }
+    }
+
+    private var interactionDescription: String {
+        switch interactionMode {
+        case .direct:
+            "현재 제품 방식입니다. 대상 앱 화면을 유지한 채 백그라운드에서 복사를 시도합니다."
+        case .foreground:
+            "이전 테크 바이어빌리티 방식입니다. 아일랜드 버튼이 Dobby를 열고, 활성화된 뒤 복사합니다. 이후 대상 앱으로 직접 돌아가세요."
+        case .foregroundAndOpen:
+            "이전 테크 바이어빌리티 방식입니다. Dobby에서 복사한 뒤 후루츠 링크를 다시 엽니다. 기존 작성 화면 유지 여부도 확인하세요."
         }
     }
 
