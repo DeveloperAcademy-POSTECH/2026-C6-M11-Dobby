@@ -16,21 +16,9 @@ nonisolated enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
 nonisolated enum CopyChannel: String, Codable, CaseIterable, Identifiable {
     case fruits, instagram
     var id: String { rawValue }
-    var title: String { self == .fruits ? "후르츠패밀리" : "Instagram" }
+    var title: String { self == .fruits ? "후루츠패밀리" : "Instagram" }
     var destination: URL {
         URL(string: self == .fruits ? "https://fruitsfamily.com/" : "https://www.instagram.com/")!
-    }
-}
-
-nonisolated enum CopyExperimentMode: String, Codable, CaseIterable, Identifiable {
-    case direct, foreground, foregroundAndOpen
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .direct: "직접 복사 실험"
-        case .foreground: "앱에서 복사 · 직접 복귀"
-        case .foregroundAndOpen: "앱에서 복사 · 서비스 링크 열기"
-        }
     }
 }
 
@@ -59,7 +47,7 @@ nonisolated struct ProductCopyPayload: Codable, Equatable {
 nonisolated struct ProductCopySession: Codable, Identifiable {
     let id: UUID
     let channel: CopyChannel
-    let mode: CopyExperimentMode
+    let productID: String
     let payload: ProductCopyPayload
     let createdAt: Date
     var isExpired: Bool { Date().timeIntervalSince(createdAt) >= 8 * 60 * 60 }
@@ -67,7 +55,7 @@ nonisolated struct ProductCopySession: Codable, Identifiable {
 
 @MainActor
 enum ProductCopyStore {
-    private static let sessionKey = "quickCopy.session.v1"
+    private static let sessionKey = "quickCopy.session.v2"
     static func save(_ session: ProductCopySession) throws {
         UserDefaults.standard.set(try JSONEncoder().encode(session), forKey: sessionKey)
     }
