@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		BB0000000000000000000005 /* QuickCopyWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000004 /* QuickCopyWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		CC0000000000000000000005 /* DobbyKeyboard.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000004 /* DobbyKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -17,6 +18,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = BB0000000000000000000003;
 			remoteInfo = QuickCopyWidget;
+		};
+		CC0000000000000000000007 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 96ABF140305C239A009CB38B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CC0000000000000000000003;
+			remoteInfo = DobbyKeyboard;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -28,6 +36,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				BB0000000000000000000005 /* QuickCopyWidget.appex in Embed App Extensions */,
+				CC0000000000000000000005 /* DobbyKeyboard.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -37,6 +46,7 @@
 /* Begin PBXFileReference section */
 		96ABF148305C239A009CB38B /* Dobby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dobby.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000000004 /* QuickCopyWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = QuickCopyWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC0000000000000000000004 /* DobbyKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = DobbyKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -53,6 +63,13 @@
 				QuickCopyInfo.plist,
 			);
 			target = 96ABF147305C239A009CB38B /* Dobby */;
+		};
+		CC0000000000000000000015 /* Exceptions for "DobbyKeyboard" folder in "DobbyKeyboard" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CC0000000000000000000003 /* DobbyKeyboard */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -78,6 +95,19 @@
 			path = QuickCopyWidget;
 			sourceTree = "<group>";
 		};
+		CC0000000000000000000001 /* Dobby/KeyboardShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Dobby/KeyboardShared;
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000002 /* DobbyKeyboard */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CC0000000000000000000015 /* Exceptions for "DobbyKeyboard" folder in "DobbyKeyboard" target */,
+			);
+			path = DobbyKeyboard;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +125,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CC0000000000000000000010 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -104,6 +141,8 @@
 				96ABF14A305C239A009CB38B /* Dobby */,
 				BB0000000000000000000001 /* Dobby/QuickCopy/Core */,
 				BB0000000000000000000002 /* QuickCopyWidget */,
+				CC0000000000000000000001 /* Dobby/KeyboardShared */,
+				CC0000000000000000000002 /* DobbyKeyboard */,
 				96ABF149305C239A009CB38B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -113,6 +152,7 @@
 			children = (
 				96ABF148305C239A009CB38B /* Dobby.app */,
 				BB0000000000000000000004 /* QuickCopyWidget.appex */,
+				CC0000000000000000000004 /* DobbyKeyboard.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -133,6 +173,7 @@
 			);
 			dependencies = (
 				BB0000000000000000000008 /* PBXTargetDependency */,
+				CC0000000000000000000008 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				96ABF14A305C239A009CB38B /* Dobby */,
@@ -165,6 +206,27 @@
 			productReference = BB0000000000000000000004 /* QuickCopyWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		CC0000000000000000000003 /* DobbyKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CC0000000000000000000012 /* Build configuration list for PBXNativeTarget "DobbyKeyboard" */;
+			buildPhases = (
+				CC0000000000000000000009 /* Sources */,
+				CC0000000000000000000010 /* Frameworks */,
+				CC0000000000000000000011 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CC0000000000000000000001 /* Dobby/KeyboardShared */,
+				CC0000000000000000000002 /* DobbyKeyboard */,
+			);
+			name = DobbyKeyboard;
+			productName = DobbyKeyboard;
+			productReference = CC0000000000000000000004 /* DobbyKeyboard.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -176,6 +238,9 @@
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					96ABF147305C239A009CB38B = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					CC0000000000000000000003 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
 				};
@@ -196,6 +261,7 @@
 			targets = (
 				96ABF147305C239A009CB38B /* Dobby */,
 				BB0000000000000000000003 /* QuickCopyWidget */,
+				CC0000000000000000000003 /* DobbyKeyboard */,
 			);
 		};
 /* End PBXProject section */
@@ -209,6 +275,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BB0000000000000000000011 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CC0000000000000000000011 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -232,6 +305,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CC0000000000000000000009 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -239,6 +319,11 @@
 			isa = PBXTargetDependency;
 			target = BB0000000000000000000003 /* QuickCopyWidget */;
 			targetProxy = BB0000000000000000000007 /* PBXContainerItemProxy */;
+		};
+		CC0000000000000000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CC0000000000000000000003 /* DobbyKeyboard */;
+			targetProxy = CC0000000000000000000007 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -368,9 +453,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_ENTITLEMENTS = Dobby/Dobby.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 6246824QY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Dobby/QuickCopyInfo.plist;
@@ -407,9 +493,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_ENTITLEMENTS = Dobby/Dobby.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 6246824QY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Dobby/QuickCopyInfo.plist;
@@ -446,6 +533,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6246824QY4;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = QuickCopyWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Dobby Quick Copy";
@@ -471,6 +559,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6246824QY4;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = QuickCopyWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Dobby Quick Copy";
@@ -482,6 +571,60 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dobby.Dobby.QuickCopyWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		CC0000000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = DobbyKeyboard/DobbyKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6246824QY4;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DobbyKeyboard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Dobby 상품 입력";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dobby.Dobby.Keyboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CC0000000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = DobbyKeyboard/DobbyKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6246824QY4;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DobbyKeyboard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Dobby 상품 입력";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dobby.Dobby.Keyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -516,6 +659,15 @@
 			buildConfigurations = (
 				BB0000000000000000000013 /* Debug */,
 				BB0000000000000000000014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CC0000000000000000000012 /* Build configuration list for PBXNativeTarget "DobbyKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CC0000000000000000000013 /* Debug */,
+				CC0000000000000000000014 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

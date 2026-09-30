@@ -27,6 +27,7 @@ final class CopyActivityController {
         guard !busy else { return false }
         busy = true
         defer { busy = false }
+        saveForKeyboard(product.fruits)
         refresh()
         if let session,
            session.canReuse(productID: product.id, payload: product.fruits) {
@@ -94,6 +95,19 @@ final class CopyActivityController {
         await activity.update(ActivityContent(
             state: .init(lastAttemptedField: field.rawValue, message: field.copiedMessage),
             staleDate: nil
+        ))
+    }
+
+    private func saveForKeyboard(_ payload: ProductCopyPayload) {
+        try? KeyboardProductStore.save(.init(
+            productName: payload.productName,
+            description: payload.description,
+            brand: payload.brand,
+            measurements: payload.measurements,
+            price: payload.price,
+            length: payload.length,
+            waist: payload.waist,
+            thigh: payload.thigh
         ))
     }
 }

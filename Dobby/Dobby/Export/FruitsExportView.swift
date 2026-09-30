@@ -50,6 +50,7 @@ struct FruitsExportView: View {
                 }.padding(24).padding(.bottom, 16)
                 Color(.systemGroupedBackground).frame(height: 8)
                 VStack(alignment: .leading, spacing: 20) {
+                    keyboardGuide
                     ShortcutCopySetupSection()
                     Text("어떻게 내보내나요?").font(.title2.bold())
                     step(1, "게시글 작성 화면으로 이동해주세요")
@@ -128,6 +129,21 @@ struct FruitsExportView: View {
                 .background(Color.orange.opacity(0.3), in: Circle())
             Text(title).font(.subheadline).fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var keyboardGuide: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Dobby 키보드로 바로 입력", systemImage: "keyboard")
+                .font(.headline)
+            Text("최초 1회: iPhone 설정 > 일반 > 키보드 > 키보드 > 새로운 키보드 추가에서 'Dobby 상품 입력'을 추가해주세요.")
+            Text("후루츠 입력란을 누른 뒤 키보드의 🌐를 길게 눌러 Dobby를 선택하고, 상품명·설명·가격·실측 버튼을 누르세요.")
+            Text("전체 접근 허용은 켜지 않아도 됩니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+        .padding(18)
+        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 20))
     }
 
     private var islandIllustration: some View {
