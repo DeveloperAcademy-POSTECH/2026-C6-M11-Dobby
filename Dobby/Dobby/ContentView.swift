@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     let product: ExportProduct
@@ -25,6 +26,22 @@ struct ContentView: View {
             ExportView(product: restoredProduct ?? product, controller: controller, showFruits: $showFruits)
         }
         .onOpenURL { url in
+            if ForegroundCopyRelay.canHandle(url) {
+                let result = ForegroundCopyRelay.handle(url)
+                guard result.copied, let destination = result.destination else { return }
+                Task { @MainActor in
+                    if let field = result.field {
+                        controller.refresh()
+                        await controller.markCopied(field)
+                    }
+                    try? await Task.sleep(for: .milliseconds(150))
+                    _ = await UIApplication.shared.open(
+                        destination,
+                        options: [.universalLinksOnly: true]
+                    )
+                }
+                return
+            }
             guard url.scheme == "dobby-copy", url.host == "home" else { return }
             controller.refresh()
             if let session = controller.session {

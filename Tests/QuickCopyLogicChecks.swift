@@ -34,20 +34,17 @@ struct QuickCopyLogicChecks {
         precondition(values.value(for: .brand) == fruits.brand)
         precondition(values.value(for: .measurements) == fruits.measurements)
 
-        guard let shortcutURL = ShortcutCopyURLBuilder.url(for: .productName),
+        guard let shortcutURL = ForegroundCopyURLBuilder.url(for: .productName),
               let shortcutComponents = URLComponents(url: shortcutURL, resolvingAgainstBaseURL: false) else {
             preconditionFailure("단축어 복사 URL을 생성할 수 없음")
         }
         let shortcutQuery = Dictionary(uniqueKeysWithValues: shortcutComponents.queryItems?.compactMap {
             item in item.value.map { (item.name, $0) }
         } ?? [])
-        precondition(shortcutComponents.scheme == "shortcuts")
-        precondition(shortcutComponents.host == "run-shortcut")
-        precondition(shortcutQuery["name"] == "Dobby 상품명 복사")
-        precondition(shortcutQuery["input"] == nil)
-        precondition(shortcutQuery["text"] == nil)
-        precondition(ShortcutCopyURLBuilder.url(forAppShortcutNamed: "") == nil)
-        precondition(ShortcutCopyURLBuilder.testURL != nil)
+        precondition(shortcutComponents.scheme == "dobby-copy")
+        precondition(shortcutComponents.host == "copy")
+        precondition(shortcutQuery["field"] == ProductCopyField.productName.rawValue)
+        precondition(ForegroundCopyURLBuilder.testURL.absoluteString == "dobby-copy://copy-test")
 
         let encodedValues = try JSONEncoder().encode(values)
         precondition(!encodedValues.isEmpty && encodedValues.count < 3_500)
@@ -79,6 +76,6 @@ struct QuickCopyLogicChecks {
             createdAt: now.addingTimeInterval(-9 * 3_600)
         )
         precondition(expired.isExpired)
-        print("PASS: product values, Shortcut URL, messages, attributes and session")
+        print("PASS: product values, foreground relay URL, messages, attributes and session")
     }
 }

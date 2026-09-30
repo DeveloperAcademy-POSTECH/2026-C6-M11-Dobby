@@ -83,4 +83,17 @@ final class CopyActivityController {
         }
         busy = false
     }
+
+    func markCopied(_ field: ProductCopyField) async {
+        guard let session,
+              let activity = Activity<ProductCopyAttributes>.activities.first(where: {
+                  $0.attributes.sessionID == session.id
+                      && ($0.activityState == .active || $0.activityState == .stale)
+              }) else { return }
+
+        await activity.update(ActivityContent(
+            state: .init(lastAttemptedField: field.rawValue, message: field.copiedMessage),
+            staleDate: nil
+        ))
+    }
 }
