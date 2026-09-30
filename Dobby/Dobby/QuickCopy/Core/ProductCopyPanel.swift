@@ -1,5 +1,4 @@
 import SwiftUI
-import AppIntents
 
 struct ProductCopyControlLabel: View {
     let field: ProductCopyField
@@ -26,12 +25,16 @@ struct ProductCopyPanel: View {
         }
     }
     private func control(_ field: ProductCopyField) -> some View {
-        Button(intent: CopyProductFieldIntent(
-            sessionID: sessionID.uuidString,
-            field: field,
-            text: values.value(for: field)
-        )) {
-            ProductCopyControlLabel(field: field)
-        }.buttonStyle(.plain)
+        Group {
+            if let url = ShortcutCopyURLBuilder.url(for: values.value(for: field)) {
+                Link(destination: url) {
+                    ProductCopyControlLabel(field: field)
+                }
+            } else {
+                ProductCopyControlLabel(field: field)
+                    .opacity(0.5)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
