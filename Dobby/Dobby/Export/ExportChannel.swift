@@ -1,7 +1,12 @@
 import Foundation
 
-/// 공통 상품 모델의 채널에 내보내기 화면용 표시·연결 정보를 더합니다.
-extension ExportChannel: Identifiable {
+/// 내보내기 화면에 표시할 채널입니다. rawValue는 방문 기록 식별자로 유지합니다.
+enum ExportChannel: String, CaseIterable, Identifiable {
+    case instagram
+    case naverStore
+    case cafe24
+    case fruitsFamily
+
     var id: String { rawValue }
 
     var title: String {
