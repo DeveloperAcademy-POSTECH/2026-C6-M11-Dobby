@@ -1,0 +1,65 @@
+{
+  "platform": "macOS adapter comparison; no real depth or centimetres",
+  "photos": [
+    {
+      "photo": "shf_000009_front.jpg",
+      "pointOutputIdentical": true,
+      "detectionConfidenceIdentical": true
+    },
+    {
+      "photo": "alexey_0098b991-e36e-4ef1-b5ee-4154b21e2a92.jpg",
+      "pointOutputIdentical": true,
+      "detectionConfidenceIdentical": true
+    },
+    {
+      "photo": "alexey_00f4bb77-5cbd-4c81-98b5-42647b8d0c64.jpg",
+      "pointOutputIdentical": true,
+      "detectionConfidenceIdentical": true
+    }
+  ],
+  "orientationChecks": [
+    {
+      "orientation": "up",
+      "pointDeltaUnchanged": true,
+      "maskErrorUnchanged": true
+    },
+    {
+      "orientation": "right",
+      "pointDeltaUnchanged": true,
+      "maskErrorUnchanged": true
+    },
+    {
+      "orientation": "down",
+      "pointDeltaUnchanged": true,
+      "maskErrorUnchanged": true
+    },
+    {
+      "orientation": "left",
+      "pointDeltaUnchanged": true,
+      "maskErrorUnchanged": true
+    }
+  ],
+  "emptyImages": [
+    {
+      "source": "synthetic:800x600:uniformGray=0.0",
+      "rawAcceptanceUnchanged": true,
+      "captureRejected": true
+    },
+    {
+      "source": "synthetic:800x600:uniformGray=0.4470588235294118",
+      "rawAcceptanceUnchanged": true,
+      "captureRejected": true
+    },
+    {
+      "source": "synthetic:800x600:uniformGray=1.0",
+      "rawAcceptanceUnchanged": true,
+      "captureRejected": true
+    }
+  ],
+  "allComparedOutputsPreserved": true,
+  "limitations": [
+    "Two of three selected bottom photos fail foreground association; the first also failed all foreground rotation checks before these changes.",
+    "The bottom pose model detects blank black and gray photos; the frozen capture adapter rejects all three blank images by foreground checks. This pre-existing behavior is preserved.",
+    "These photos have no independent landmark/length ground truth."
+  ]
+}

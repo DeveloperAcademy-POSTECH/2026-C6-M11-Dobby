@@ -3,6 +3,7 @@ import UIKit
 
 struct ContentView: View {
     let product: ExportProduct
+    @State private var showLiDAR = false
     @State private var showExport = false
     @State private var showFruits = false
     @State private var restoredProduct: ExportProduct?
@@ -11,16 +12,40 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
+                Button {
+                    showLiDAR = true
+                } label: {
+                    Label("옷 촬영 · 실측", systemImage: "ruler")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("openLiDARLab")
+
                 ExportProductHeader(product: product)
                 Button("내보내기") {
                     restoredProduct = nil
                     showFruits = false
                     showExport = true
                 }
-                .buttonStyle(.borderedProminent).tint(.orange)
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .accessibilityIdentifier("openExportChannels")
             }
             .padding()
             .navigationTitle("상품 정보")
+        }
+        .fullScreenCover(isPresented: $showLiDAR) {
+            LiDARLabView()
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    HStack {
+                        Spacer()
+                        Button("닫기") { showLiDAR = false }
+                            .font(.body.weight(.semibold))
+                            .accessibilityIdentifier("closeLiDARLab")
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(.bar)
+                }
         }
         .fullScreenCover(isPresented: $showExport) {
             ExportView(product: restoredProduct ?? product, controller: controller, showFruits: $showFruits)
@@ -46,13 +71,21 @@ struct ContentView: View {
             controller.refresh()
             if let session = controller.session {
                 // 같은 상품 ID라도 편집된 본문과 활동의 스냅샷은 다를 수 있다.
-                restoredProduct = ExportProduct(id: session.productID,
-                                                imageData: session.productID == product.id ? product.imageData : nil,
-                                                fruits: session.payload,
-                                                instagram: session.productID == product.id ? product.instagram : session.payload)
-            } else { restoredProduct = nil }
+                restoredProduct = ExportProduct(
+                    id: session.productID,
+                    imageData: session.productID == product.id ? product.imageData : nil,
+                    fruits: session.payload,
+                    instagram: session.productID == product.id ? product.instagram : session.payload
+                )
+            } else {
+                restoredProduct = nil
+            }
             showFruits = true
             showExport = true
         }
     }
+}
+
+#Preview {
+    ContentView(product: .demo)
 }

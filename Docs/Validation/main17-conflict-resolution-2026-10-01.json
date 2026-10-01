@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-01",
+  "featureBeforeIntegration": "cb4f0c2466aac5c9f4887fa7d705c0456eaa70d6",
+  "incomingMain": "ca72115160babcf6816233df35233aee9f4a8703",
+  "changes": {
+    "enum": "Use main GarmentEnums without duplicate ExportChannel or unused display helpers; retain Codable on canonical sales ExportChannel.",
+    "layout": "Preserve main nested Dobby/Dobby app and assets paths; rename feature ContentView without changing its body.",
+    "project": "Remove12 obsolete root file/resource reference lines; synchronized app sources, signing and widget remain unchanged.",
+    "uiRunner": "Use nested app folder without root source/asset paths or widget duplication."
+  },
+  "sourceSHA256": {
+    "Dobby/Dobby/ContentView.swift": "2f438f76c9d4143219e3bca5996c7a50b09e6d1f854a9f942e131c2f97dcd82e",
+    "Dobby/Dobby/DobbyApp.swift": "c20b4bca1519908dec942c8bbe4e1f6569b41d16348906a6dbc2408acf5a5b45",
+    "Dobby/Dobby.xcodeproj/project.pbxproj": "061fa9ec134831d8af4185a36a38ec778b3437716d4cd8baf7aa8107d9f58cf8",
+    "Dobby/Dobby/Models/GarmentEnums.swift": "e2dc43e5aaa4eef22dfc2cdc3901744a02f1ffaa286275b57638c50ee2847633",
+    "Dobby/Dobby/Export/ExportChannel.swift": "20df0b6a0b0d123a190e2ea1b5b7005bb514b2f26ed3d2e36330cfb7ac336b87",
+    "Tools/run-ui-tests.sh": "e64906d16e0706efc4ffba8a189779a1c83b99623054802b7ca67eea3e171bb2"
+  },
+  "verification": {
+    "core": {
+      "passed": 360,
+      "failed": 0,
+      "log": "/tmp/dobby-main17-conflict-core-20261001.log"
+    },
+    "nativeDeviceBuild": {
+      "Debug": "PASS",
+      "Release": "PASS",
+      "signed": false,
+      "debugLog": "/tmp/dobby-main17-conflict-debug-20261001.log",
+      "releaseLog": "/tmp/dobby-main17-conflict-release-20261001.log",
+      "classifierCompiled": true,
+      "widgetEmbedded": true,
+      "assetsCompiled": true,
+      "cameraUsageDescription": true,
+      "copyURLScheme": true,
+      "liveActivities": true
+    },
+    "uiAndCompatibility": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "routing": 5,
+      "automaticCaptureFlow": 2,
+      "bundledModelRuntime": 2,
+      "exportChannelCompatibility": 1,
+      "simulator": "iPhone17Pro / iOS26.4",
+      "log": "/tmp/dobby-main17-conflict-ui-20261001.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.KKHfA8/Results.xcresult",
+      "attachments": "/tmp/dobby-main17-conflict-ui-attachments-20261001",
+      "screenshotsReviewed": [
+        "top recognition",
+        "top result",
+        "bottom recognition"
+      ]
+    },
+    "automaticRecognitionSourceHashesPreserved": true,
+    "unmergedFiles": 0
+  },
+  "scope": "Resolve conflict on feature branch; final PR merge belongs to the human author. Synthetic UI and model probes do not establish physical iPhone camera/LiDAR accuracy or performance."
+}
