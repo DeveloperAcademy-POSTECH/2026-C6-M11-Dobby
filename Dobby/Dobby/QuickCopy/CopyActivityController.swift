@@ -28,8 +28,12 @@ final class CopyActivityController {
         busy = true
         defer { busy = false }
         refresh()
+        let measurementItems = product.copyMeasurements
+            .filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { ProductCopyMeasurement(id: $0.id, title: $0.title, value: $0.value) }
         if let session,
-           session.canReuse(productID: product.id, payload: product.fruits) {
+           session.canReuse(productID: product.id, payload: product.fruits,
+                            measurementItems: measurementItems) {
             errorMessage = nil
             return true
         }
@@ -48,6 +52,7 @@ final class CopyActivityController {
             channel: .fruits,
             productID: product.id,
             payload: product.fruits,
+            measurementItems: measurementItems,
             createdAt: Date()
         )
         do {
@@ -59,7 +64,8 @@ final class CopyActivityController {
                                              productName: product.fruits.productName,
                                              description: product.fruits.description,
                                              brand: product.fruits.brand,
-                                             measurements: product.fruits.measurements
+                                             measurements: product.fruits.measurements,
+                                             measurementItems: measurementItems
                                          )
                                      ),
                                      content: ActivityContent(state: .init(), staleDate: next.createdAt.addingTimeInterval(8 * 3600)), pushType: nil)

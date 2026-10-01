@@ -75,7 +75,10 @@ struct ContentView: View {
                     id: session.productID,
                     imageData: session.productID == product.id ? product.imageData : nil,
                     fruits: session.payload,
-                    instagram: session.productID == product.id ? product.instagram : session.payload
+                    instagram: session.productID == product.id ? product.instagram : session.payload,
+                    detailMeasurements: session.measurementItems?.map {
+                        ExportMeasurement(id: $0.id, title: $0.title, value: $0.value)
+                    }
                 )
             } else {
                 restoredProduct = nil

@@ -58,6 +58,7 @@ nonisolated struct ProductCopyValues: Codable, Equatable, Hashable {
     let description: String
     let brand: String
     let measurements: String
+    var measurementItems: [ProductCopyMeasurement]? = nil
 
     func value(for field: ProductCopyField) -> String {
         switch field {
@@ -69,17 +70,28 @@ nonisolated struct ProductCopyValues: Codable, Equatable, Hashable {
     }
 }
 
+/// Live Activity에 표시할 실제 저장 실측값이다. 의류 종류를 추측하지 않고
+/// SwiftData의 `MeasuredValue`와 같은 표시명/값 순서를 그대로 전달한다.
+nonisolated struct ProductCopyMeasurement: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let title: String
+    let value: String
+}
+
 nonisolated struct ProductCopySession: Codable, Identifiable {
     let id: UUID
     let channel: CopyChannel
     let productID: String
     let payload: ProductCopyPayload
+    var measurementItems: [ProductCopyMeasurement]? = nil
     let createdAt: Date
 
     var isExpired: Bool { Date().timeIntervalSince(createdAt) >= 8 * 60 * 60 }
 
-    func canReuse(productID: String, payload: ProductCopyPayload) -> Bool {
+    func canReuse(productID: String, payload: ProductCopyPayload,
+                  measurementItems: [ProductCopyMeasurement]) -> Bool {
         !isExpired && self.productID == productID && self.payload == payload
+            && (self.measurementItems ?? []) == measurementItems
     }
 }
 
