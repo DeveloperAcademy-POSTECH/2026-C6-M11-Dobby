@@ -5,6 +5,7 @@ struct ExportChannelButton: View {
     let channel: ExportChannel
     let hasOpenedLink: Bool
     let action: () -> Void
+    var titleOverride: String? = nil
 
     var body: some View {
         Button(action: action) {
@@ -13,7 +14,7 @@ struct ExportChannelButton: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 48, height: 48)
-                Text(channel.title)
+                Text(titleOverride ?? channel.title)
                     .font(.subheadline.weight(.semibold))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -31,7 +32,7 @@ struct ExportChannelButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(channel.title)
+        .accessibilityLabel(titleOverride ?? channel.title)
         .accessibilityValue(hasOpenedLink ? "열어본 채널" : "아직 열지 않은 채널")
     }
 }

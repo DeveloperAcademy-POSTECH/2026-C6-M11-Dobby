@@ -9,13 +9,18 @@ struct ExportView: View {
     @State private var history = ExportHistoryStore()
     @State private var isShowingOpenError = false
     @State private var isOpeningLink = false
+    @State private var showDetailCopy = false
+    @State private var openedFruitsMethods: Set<FruitsExportMethod> = []
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
                     ExportProductHeader(product: product)
-                    ExportChannelListView(openedChannels: history.openedChannels, onSelectChannel: didSelectChannel)
+                    ExportChannelListView(openedChannels: history.openedChannels,
+                                          onSelectChannel: didSelectChannel,
+                                          openedFruitsMethods: openedFruitsMethods,
+                                          onSelectFruits: selectFruits)
                 }.padding(.horizontal, 24).padding(.bottom, 24)
             }
             .navigationTitle("내보내기")
@@ -28,13 +33,33 @@ struct ExportView: View {
             }
             .navigationDestination(isPresented: $showFruits) {
                 FruitsExportView(product: product, controller: controller) {
+                    openedFruitsMethods.insert(.dynamicIslandB)
                     history.recordOpenResult(for: .fruitsFamily, accepted: true)
                 }
             }
-            .disabled(isOpeningLink)
+            .navigationDestination(isPresented: $showDetailCopy) {
+                FruitsDetailCopyView(product: product) {
+                    openedFruitsMethods.insert(.detailCopyA)
+                }
+            }
+            .disabled(isOpeningLink || controller.busy)
             .alert("페이지를 열 수 없습니다", isPresented: $isShowingOpenError) {
                 Button("확인", role: .cancel) {}
             } message: { Text("잠시 후 다시 시도해 주세요.") }
+        }
+    }
+
+    private func selectFruits(_ method: FruitsExportMethod) {
+        guard !controller.busy, !isOpeningLink else { return }
+        if method == .dynamicIslandB {
+            showFruits = true
+        } else {
+            isOpeningLink = true
+            Task { @MainActor in
+                await controller.stop()
+                isOpeningLink = false
+                showDetailCopy = true
+            }
         }
     }
 
