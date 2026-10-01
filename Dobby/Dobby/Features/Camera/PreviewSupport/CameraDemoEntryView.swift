@@ -23,7 +23,7 @@ struct CameraDemoEntryView: View {
         VStack(spacing: 20) {
             Text("상세 촬영·사진 선택 목 데모")
                 .font(.title2.bold())
-            Text("실측샷을 전달받은 뒤 시작합니다. 권한은 실제로 확인하며 상세 사진은 목 데이터입니다.")
+            Text("Figma의 샘플 사진으로 화면을 확인합니다. 권한은 실제로 확인하며 촬영은 목 데이터입니다.")
                 .foregroundStyle(.secondary)
             Button("카메라 흐름 살펴보기", action: startDemo)
                 .buttonStyle(.borderedProminent)
@@ -36,13 +36,15 @@ struct CameraDemoEntryView: View {
         .fullScreenCover(isPresented: $isPresented) {
             if let model {
                 NavigationStack {
-                    CameraFlowView(model: model, permission: CameraPermission(authorizer: authorizer)) { output in
+                    CameraFlowView(model: model, permission: CameraPermission(authorizer: authorizer),
+                                   previewSource: (try? CameraPreviewPhotos.source(at: model.detailPhotos.count + 1)) ?? .mockPlaceholder) { output in
                         completed = output
                         isPresented = false
                     }
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("닫기") { isPresented = false }
+                            Button("닫기", systemImage: "chevron.left") { isPresented = false }
+                                .labelStyle(.iconOnly)
                         }
                     }
                 }
@@ -51,21 +53,13 @@ struct CameraDemoEntryView: View {
     }
 
     private func startDemo() {
-        // 데모만 ID와 실측샷을 만든다. 실제 진입에서는 상위 화면의 입력을 사용한다.
-        let measurement = CapturedAsset(
-            id: UUID(), sessionID: UUID(), garmentID: UUID(),
-            purpose: .measurement, capturedAt: Date(), source: .mockPlaceholder
-        )
         do {
-            model = try ProductPhotoModel(input: ProductPhotoInput(
-                sessionID: measurement.sessionID, garmentID: measurement.garmentID,
-                measurement: measurement
-            ), captureProvider: MockCameraService(purpose: .detail))
+            model = try CameraPreviewPhotos.makeModel()
             completed = nil
             inputError = nil
             isPresented = true
         } catch {
-            inputError = "입력 사진을 확인해 주세요."
+            inputError = "샘플 사진을 불러오지 못했어요. 앱에 이미지가 포함되어 있는지 확인해 주세요."
         }
     }
 }
