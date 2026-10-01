@@ -11,6 +11,10 @@ struct FruitsDetailCopyView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                openAppSection
+                Rectangle()
+                    .fill(Color(.secondarySystemBackground))
+                    .frame(height: 8)
                 Text("제품 사진").font(.headline)
                 ExportProductHeader(product: product)
                 field("제품 명", value: product.name)
@@ -32,17 +36,6 @@ struct FruitsDetailCopyView: View {
                 copyControl("실측 전체", value: product.fruits.measurements)
                 Text(message).font(.caption).foregroundStyle(.secondary)
                     .accessibilityIdentifier("copy.detail.feedback")
-                Button("후루츠패밀리 열기") {
-                    opening = true
-                    UIApplication.shared.open(ExportChannel.fruitsFamily.destinationURL,
-                                              options: [.universalLinksOnly: true]) { accepted in
-                        Task { @MainActor in
-                            opening = false
-                            if accepted { onOpened() } else { openFailed = true }
-                        }
-                    }
-                }
-                .buttonStyle(.borderedProminent).tint(.orange).disabled(opening)
                 Text("필요한 항목을 복사한 뒤 후루츠 입력란에 붙여넣어주세요.")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(24)
@@ -52,6 +45,34 @@ struct FruitsDetailCopyView: View {
         .alert("후루츠패밀리를 열 수 없어요", isPresented: $openFailed) {
             Button("확인", role: .cancel) { }
         } message: { Text("앱이 설치되어 있다면 홈 화면에서 직접 열어주세요.") }
+    }
+
+    private var openAppSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("후루츠패밀리 앱을 열어주세요")
+                .font(.title2.bold())
+            Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
+                .font(.subheadline)
+            Button {
+                opening = true
+                UIApplication.shared.open(ExportChannel.fruitsFamily.destinationURL,
+                                          options: [.universalLinksOnly: true]) { accepted in
+                    Task { @MainActor in
+                        opening = false
+                        if accepted { onOpened() } else { openFailed = true }
+                    }
+                }
+            } label: {
+                Text("후루츠패밀리 열기")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .tint(.orange)
+            .disabled(opening)
+        }
     }
 
     private func field(_ title: String, value: String) -> some View {
