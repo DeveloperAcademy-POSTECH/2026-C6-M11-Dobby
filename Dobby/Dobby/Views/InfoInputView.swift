@@ -75,9 +75,9 @@ struct InfoInputView: View {
                 .resizable()
                 .scaledToFill()
                 .frame(width: 92, height: 108)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(Rectangle())
         } else {
-            RoundedRectangle(cornerRadius: 10)
+            Rectangle()
                 .fill(Color(.secondarySystemBackground))
                 .frame(width: 92, height: 108)
                 .overlay { Image(systemName: "photo").foregroundStyle(.tertiary) }
