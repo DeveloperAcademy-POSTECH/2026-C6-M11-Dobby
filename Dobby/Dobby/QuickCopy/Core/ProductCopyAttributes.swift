@@ -8,5 +8,5 @@ nonisolated struct ProductCopyAttributes: ActivityAttributes {
     }
     let sessionID: UUID
     let channelName: String
-    let mode: CopyExperimentMode
+    let values: ProductCopyValues
 }

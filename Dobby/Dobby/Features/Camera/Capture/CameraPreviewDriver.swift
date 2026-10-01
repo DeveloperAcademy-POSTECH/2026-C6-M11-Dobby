@@ -1,0 +1,97 @@
+//
+//  CameraPreviewDriver.swift
+//  Dobby
+//
+//  Created by mason on 10/1/26.
+//
+
+import AVFoundation
+
+/// Capture 폴더 담당: mason. 가변 세션·출력·delegate 보관은 이 직렬 큐에서만 다룬다.
+/// @unchecked Sendable은 큐 소유권에 한정한다. UI는 session을 레이어에 연결만 한다.
+nonisolated final class CameraPreviewDriver: @unchecked Sendable {
+    let session = AVCaptureSession()
+    private let output = AVCapturePhotoOutput()
+    private let queue = DispatchQueue(label: "com.dobby.camera.detail-preview", qos: .userInitiated)
+    private var pending: [UUID: CameraPhotoRequest] = [:]
+
+    func setRunning(_ active: Bool, completion: @escaping @Sendable (CameraPreviewSession.State) -> Void) {
+        queue.async { [self] in
+            if active {
+                completion(start())
+            } else {
+                pending.values.forEach { $0.resolve(.failure(CancellationError())) }
+                // 일시 중단 상태에서도 자동 재개 요청이 남지 않도록 중지한다.
+                session.stopRunning()
+                completion(.stopped)
+            }
+        }
+    }
+
+    func cancelCapture() {
+        queue.async { [self] in pending.values.forEach { $0.resolve(.failure(CancellationError())) } }
+    }
+
+    func capture(rotationAngle: CGFloat) async throws -> Data {
+        let id = UUID()
+        // 화면이 닫혀도 최종 콜백까지 driver/delegate를 유지하고 pending 제거로 순환 참조를 끊는다.
+        let request = CameraPhotoRequest { [self] in
+            queue.async { self.pending[id] = nil }
+        }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                request.install(continuation)
+                queue.async { [self] in
+                    guard !request.isResolved else { return }
+                    guard pending.isEmpty else { request.resolve(.failure(CameraFailure.operationInProgress)); return }
+                    guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized,
+                          session.isRunning, !session.isInterrupted,
+                          let connection = output.connection(with: .video), connection.isActive,
+                          output.availablePhotoCodecTypes.contains(.jpeg) else {
+                        request.resolve(.failure(CameraFailure.cameraUnavailable)); return
+                    }
+                    if connection.isVideoRotationAngleSupported(rotationAngle) { connection.videoRotationAngle = rotationAngle }
+                    let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+                    settings.flashMode = .off
+                    settings.photoQualityPrioritization = .balanced
+                    pending[id] = request
+                    output.capturePhoto(with: settings, delegate: request)
+                }
+            }
+        } onCancel: { request.resolve(.failure(CancellationError())) }
+    }
+
+    private func start() -> CameraPreviewSession.State {
+        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
+            return .unavailable("카메라 권한을 확인해 주세요.")
+        }
+        if session.inputs.isEmpty {
+            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+                return .unavailable("후면 카메라를 사용할 수 없어요. 실기기에서 확인해 주세요.")
+            }
+            do {
+                let input = try AVCaptureDeviceInput(device: device)
+                session.beginConfiguration()
+                defer { session.commitConfiguration() }
+                guard session.canAddInput(input) else {
+                    return .unavailable("카메라를 연결할 수 없어요. 다시 시도해 주세요.")
+                }
+                if session.canSetSessionPreset(.photo) { session.sessionPreset = .photo }
+                session.addInput(input)
+                guard session.canAddOutput(output) else {
+                    session.removeInput(input)
+                    return .unavailable("사진 출력을 연결하지 못했어요. 다시 시도해 주세요.")
+                }
+                session.addOutput(output)
+                output.maxPhotoQualityPrioritization = .balanced
+            } catch {
+                return .unavailable("카메라를 준비하지 못했어요. 다시 시도해 주세요.")
+            }
+        }
+        guard !session.isInterrupted else {
+            return .unavailable("카메라 사용이 잠시 중단됐어요. 다른 카메라 사용이 끝나면 다시 시도해 주세요.")
+        }
+        if !session.isRunning { session.startRunning() }
+        return session.isRunning ? .running : .unavailable("카메라를 시작하지 못했어요. 다시 시도해 주세요.")
+    }
+}

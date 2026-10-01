@@ -6,7 +6,7 @@ import SwiftUI
 struct DobbyApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(product: .demo)
         }
     }
 }

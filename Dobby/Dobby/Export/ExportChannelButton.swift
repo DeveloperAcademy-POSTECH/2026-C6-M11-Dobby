@@ -5,6 +5,7 @@ struct ExportChannelButton: View {
     let channel: ExportChannel
     let hasOpenedLink: Bool
     let action: () -> Void
+    var titleOverride: String? = nil
 
     var body: some View {
         Button(action: action) {
@@ -12,21 +13,27 @@ struct ExportChannelButton: View {
                 Image(channel.imageName)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 64, height: 64)
-                Text(channel.title)
-                    .font(.body.weight(.bold))
+                    .frame(width: 48, height: 48)
+                Text(titleOverride ?? channel.title)
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
                 Image(systemName: "checkmark")
-                    .font(.callout.weight(.regular))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.orange)
                     .frame(width: 18)
                     .opacity(hasOpenedLink ? 1 : 0)
             }
-            .padding(16)
+            .padding(20)
             .background(Color(.backgroundNomalAlternative), in: RoundedRectangle(cornerRadius: 28))
             .contentShape(RoundedRectangle(cornerRadius: 28))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(titleOverride ?? channel.title)
+        .accessibilityValue(hasOpenedLink ? "열어본 채널" : "아직 열지 않은 채널")
     }
 }
 
