@@ -1,43 +1,39 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
-    private enum RootPresentation {
-        case lidar
-        case export
-    }
-
+    let product: ExportProduct
     @State private var showLiDAR = false
     @State private var showExport = false
-    @State private var showCopyRequest = false
-    // Keep this marker until onDismiss, including interactive dismissal.
-    // Presentation bindings become false before the dismissal animation ends.
-    @State private var activePresentation: RootPresentation?
-    @State private var pendingCopyURL: URL?
-    @State private var coordinator = CopyCoordinator()
-    @Environment(\.scenePhase) private var phase
+    @State private var showFruits = false
+    @State private var restoredProduct: ExportProduct?
+    @State private var controller = CopyActivityController()
 
     var body: some View {
         NavigationStack {
-            List {
+            VStack(spacing: 24) {
                 Button {
-                    present(.lidar)
+                    showLiDAR = true
                 } label: {
                     Label("옷 촬영 · 실측", systemImage: "ruler")
                 }
+                .buttonStyle(.bordered)
                 .accessibilityIdentifier("openLiDARLab")
-                NavigationLink("상품 정보 빠른 복사 · 후르츠 우선") { QuickCopyView() }
-                    .accessibilityIdentifier("openQuickCopy")
-                Button("내보내기 채널") { present(.export) }
-                    .accessibilityIdentifier("openExportChannels")
+
+                ExportProductHeader(product: product)
+                Button("내보내기") {
+                    restoredProduct = nil
+                    showFruits = false
+                    showExport = true
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .accessibilityIdentifier("openExportChannels")
             }
-            .navigationTitle("Dobby")
-            .navigationDestination(isPresented: $showCopyRequest) {
-                CopyRequestView(coordinator: coordinator)
-            }
+            .padding()
+            .navigationTitle("상품 정보")
         }
-        .sheet(isPresented: $showExport, onDismiss: finishPresentation) { ExportView() }
-        .fullScreenCover(isPresented: $showLiDAR, onDismiss: finishPresentation) {
-            // LiDARLabView owns its own NavigationStack.
+        .fullScreenCover(isPresented: $showLiDAR) {
             LiDARLabView()
                 .safeAreaInset(edge: .top, spacing: 0) {
                     HStack {
@@ -51,46 +47,48 @@ struct ContentView: View {
                     .background(.bar)
                 }
         }
-        .onOpenURL(perform: receiveCopyURL)
-        .onChange(of: phase) { _, newPhase in coordinator.processIfActive(newPhase) }
-    }
-
-    private func present(_ presentation: RootPresentation) {
-        guard activePresentation == nil else { return }
-        activePresentation = presentation
-        switch presentation {
-        case .lidar: showLiDAR = true
-        case .export: showExport = true
+        .fullScreenCover(isPresented: $showExport) {
+            ExportView(product: restoredProduct ?? product, controller: controller, showFruits: $showFruits)
         }
-    }
-
-    private func receiveCopyURL(_ url: URL) {
-        guard url.scheme == "dobby-copy" else { return }
-        pendingCopyURL = url
-        showLiDAR = false
-        showExport = false
-        openPendingCopyRequest()
-    }
-
-    private func finishPresentation() {
-        activePresentation = nil
-        openPendingCopyRequest()
-    }
-
-    private func openPendingCopyRequest() {
-        guard activePresentation == nil, let url = pendingCopyURL else { return }
-        pendingCopyURL = nil
-        let alreadyShowingRequest = showCopyRequest
-        showCopyRequest = true
-        if url != CopyRoute.home {
-            coordinator.receive(url)
-            // A new destination processes onAppear. An existing one needs an
-            // explicit retry because it will not appear again for this URL.
-            if alreadyShowingRequest { coordinator.processIfActive(phase) }
+        .onOpenURL { url in
+            if ForegroundCopyRelay.canHandle(url) {
+                let result = ForegroundCopyRelay.handle(url)
+                guard result.copied, let destination = result.destination else { return }
+                Task { @MainActor in
+                    if let field = result.field {
+                        controller.refresh()
+                        await controller.markCopied(field)
+                    }
+                    try? await Task.sleep(for: .milliseconds(150))
+                    _ = await UIApplication.shared.open(
+                        destination,
+                        options: [.universalLinksOnly: true]
+                    )
+                }
+                return
+            }
+            guard url.scheme == "dobby-copy", url.host == "home" else { return }
+            controller.refresh()
+            if let session = controller.session {
+                // 같은 상품 ID라도 편집된 본문과 활동의 스냅샷은 다를 수 있다.
+                restoredProduct = ExportProduct(
+                    id: session.productID,
+                    imageData: session.productID == product.id ? product.imageData : nil,
+                    fruits: session.payload,
+                    instagram: session.productID == product.id ? product.instagram : session.payload,
+                    detailMeasurements: session.measurementItems?.map {
+                        ExportMeasurement(id: $0.id, title: $0.title, value: $0.value)
+                    }
+                )
+            } else {
+                restoredProduct = nil
+            }
+            showFruits = true
+            showExport = true
         }
     }
 }
 
 #Preview {
-    ContentView()
+    ContentView(product: .demo)
 }
