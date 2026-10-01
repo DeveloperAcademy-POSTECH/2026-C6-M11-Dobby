@@ -9,14 +9,14 @@ import AVFoundation
 import Combine
 import SwiftUI
 
-/// 권한이 허용된 상세 촬영 화면에서만 삽입한다. 사진 촬영·저장은 아직 연결하지 않는다.
+/// 권한이 허용된 상세 촬영 화면에서만 삽입한다. 셔터와 동일한 세션을 전달받는다.
 struct CameraLivePreviewView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @State private var camera = CameraPreviewSession()
+    let camera: CameraPreviewSession
     @State private var isVisible = false
 
     var body: some View {
-        CameraPreviewSurface(session: camera.session)
+        CameraPreviewSurface(session: camera.session) { camera.rotationAngle = $0 }
             .accessibilityLabel("후면 카메라 실시간 미리보기")
             .overlay {
                 switch camera.state {

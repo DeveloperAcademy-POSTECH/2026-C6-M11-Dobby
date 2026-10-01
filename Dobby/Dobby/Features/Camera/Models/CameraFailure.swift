@@ -7,6 +7,8 @@
 
 enum CameraFailure: Error, Equatable {
     case captureFailed
+    case cameraUnavailable
+    case saveFailed
     case processingFailed
     case mismatchedCapture
     case mismatchedResult

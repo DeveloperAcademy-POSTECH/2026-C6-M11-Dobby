@@ -12,15 +12,18 @@ import UIKit
 /// 영상 표시만 담당한다. 카메라 구성·시작·중지는 CameraPreviewSession의 책임이다.
 struct CameraPreviewSurface: UIViewRepresentable {
     let session: AVCaptureSession
+    var onRotationChange: (CGFloat) -> Void = { _ in }
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.videoGravity = .resizeAspectFill
         view.previewLayer.session = session
+        view.onRotationChange = onRotationChange
         return view
     }
 
     func updateUIView(_ view: PreviewView, context: Context) {
+        view.onRotationChange = onRotationChange
         view.updateRotation()
     }
 
@@ -31,6 +34,7 @@ struct CameraPreviewSurface: UIViewRepresentable {
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+        var onRotationChange: (CGFloat) -> Void = { _ in }
 
         override func layoutSubviews() {
             super.layoutSubviews()
@@ -49,6 +53,7 @@ struct CameraPreviewSurface: UIViewRepresentable {
             default: return
             }
             if connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
+            onRotationChange(angle)
         }
     }
 }

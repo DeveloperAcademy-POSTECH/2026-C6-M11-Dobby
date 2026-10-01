@@ -51,12 +51,18 @@ final class ProductPhotoModel {
             sessionID: input.sessionID, garmentID: input.garmentID
         )
         // 취소를 무시하는 provider의 늦은 응답도 초안에 반영하지 않는다.
-        try Task.checkCancellation()
-        guard asset.sessionID == input.sessionID, asset.garmentID == input.garmentID,
-              asset.purpose == .detail, !photos.contains(where: { $0.id == asset.id }) else {
-            throw CameraFailure.mismatchedCapture
+        do {
+            try Task.checkCancellation()
+            guard asset.sessionID == input.sessionID, asset.garmentID == input.garmentID,
+                  asset.purpose == .detail, !photos.contains(where: { $0.id == asset.id }) else {
+                throw CameraFailure.mismatchedCapture
+            }
+            detailPhotos.append(asset)
+        } catch {
+            // 이미 목록에 있는 ID는 중복 응답이므로 기존 원본을 지우지 않는다.
+            if !photos.contains(where: { $0.id == asset.id }) { try await captureProvider.discardUncommitted(asset) }
+            throw error
         }
-        detailPhotos.append(asset)
     }
 
     func toggleSelection(_ id: UUID) {

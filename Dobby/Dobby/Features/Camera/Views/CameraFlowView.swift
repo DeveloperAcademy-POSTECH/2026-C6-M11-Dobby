@@ -12,6 +12,7 @@ import AVFoundation
 /// 상위 NavigationStack에 삽입하며 화면 이동 중 같은 Model을 유지한다.
 struct CameraFlowView: View {
     let model: ProductPhotoModel
+    let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
     let onComplete: (ProductPhotoOutput) -> Void
     var previewSource: CapturedAsset.Source?
@@ -20,9 +21,11 @@ struct CameraFlowView: View {
     @State private var failureMessage: String?
 
     init(model: ProductPhotoModel, permission: CameraPermission,
+         camera: CameraPreviewSession? = nil,
          previewSource: CapturedAsset.Source? = nil,
          onComplete: @escaping (ProductPhotoOutput) -> Void) {
         self.model = model
+        self.camera = camera
         _permission = State(initialValue: permission)
         self.onComplete = onComplete
         self.previewSource = previewSource
@@ -35,12 +38,14 @@ struct CameraFlowView: View {
                 VStack(spacing: 0) {
                     preview
                         .overlay(alignment: .topTrailing) {
-                            Text(previewSource == nil ? "실시간 미리보기 · 촬영 연결 전" : "샘플 미리보기").font(.caption2)
+                            Text(previewSource == nil ? "실시간 미리보기" : "샘플 미리보기").font(.caption2)
                                 .padding(6).background(.black.opacity(0.6), in: Capsule()).padding(8)
                         }
                         .overlay(alignment: .bottom) {
                             if let failureMessage {
                                 Text(failureMessage).padding().background(.ultraThinMaterial)
+                            } else if model.isCapturing {
+                                ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
                             }
                         }
                     shutter
@@ -72,7 +77,7 @@ struct CameraFlowView: View {
             }
         }
         .task(id: captureRequested) {
-            guard captureRequested, previewSource != nil else { return }
+            guard captureRequested else { return }
             failureMessage = nil
             do {
                 permission.refresh()
@@ -99,8 +104,10 @@ struct CameraFlowView: View {
     private var preview: some View {
         if let previewSource {
             CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
+        } else if let camera {
+            CameraLivePreviewView(camera: camera)
         } else {
-            CameraLivePreviewView()
+            ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
         }
     }
 
@@ -133,11 +140,15 @@ struct CameraFlowView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .disabled(previewSource == nil || captureRequested || model.isCapturing)
-        .opacity(previewSource == nil || model.isCapturing ? 0.5 : 1)
+        .disabled(!canCapture)
+        .opacity(canCapture ? 1 : 0.5)
         .accessibilityLabel("상세 사진 촬영")
-        .accessibilityHint(previewSource == nil ? "이번 단계는 미리보기만 지원합니다." : "표시된 샘플 사진을 목록에 추가합니다.")
+        .accessibilityHint(previewSource == nil ? "사진을 촬영하고 상세 사진 목록에 추가합니다." : "표시된 샘플 사진을 목록에 추가합니다.")
         .accessibilityIdentifier("camera.captureDetail")
+    }
+
+    private var canCapture: Bool {
+        !captureRequested && !model.isCapturing && (previewSource != nil || camera?.canCapture == true)
     }
 }
 

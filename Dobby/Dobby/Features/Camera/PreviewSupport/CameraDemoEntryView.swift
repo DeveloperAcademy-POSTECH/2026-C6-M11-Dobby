@@ -11,6 +11,7 @@ import SwiftUI
 struct CameraDemoEntryView: View {
     @State private var isPresented = false
     @State private var model: ProductPhotoModel?
+    @State private var camera: CameraPreviewSession?
     @State private var completed: ProductPhotoOutput?
     @State private var inputError: String?
     private let authorizer: any CameraAuthorizing
@@ -27,7 +28,7 @@ struct CameraDemoEntryView: View {
                 .font(.title2.bold())
             Text(usesSamplePreview
                  ? "샘플 사진으로 화면을 확인합니다. 촬영은 목 데이터입니다."
-                 : "실기기에서 후면 카메라 영상을 확인합니다. 실측 입력은 빈 자리로 대체하며 촬영·저장은 아직 연결하지 않았습니다.")
+                 : "실제 옷을 촬영하면 앱 내부에 저장하고 썸네일로 표시합니다. 실측 입력만 빈 자리로 대체합니다.")
                 .foregroundStyle(.secondary)
             Button("카메라 흐름 살펴보기", action: startDemo)
                 .buttonStyle(.borderedProminent)
@@ -41,6 +42,7 @@ struct CameraDemoEntryView: View {
             if let model {
                 NavigationStack {
                     CameraFlowView(model: model, permission: CameraPermission(authorizer: authorizer),
+                                   camera: camera,
                                    previewSource: usesSamplePreview ? ((try? CameraPreviewPhotos.source(at: model.detailPhotos.count + 1)) ?? .mockPlaceholder) : nil) { output in
                         completed = output
                         isPresented = false
@@ -59,13 +61,16 @@ struct CameraDemoEntryView: View {
     private func startDemo() {
         do {
             if usesSamplePreview {
+                camera = nil
                 model = try CameraPreviewPhotos.makeModel()
             } else {
                 // 실측 담당 화면을 대신하는 테스트 입력이다. 실측을 실행하거나 사진을 만들지 않는다.
                 let measurement = CapturedAsset(id: UUID(), sessionID: UUID(), garmentID: UUID(),
                     purpose: .measurement, capturedAt: Date(), source: .mockPlaceholder)
+                let session = CameraPreviewSession()
                 model = try ProductPhotoModel(input: ProductPhotoInput(sessionID: measurement.sessionID,
-                    garmentID: measurement.garmentID, measurement: measurement), captureProvider: PreviewOnlyCapture())
+                    garmentID: measurement.garmentID, measurement: measurement), captureProvider: session)
+                camera = session
             }
             completed = nil
             inputError = nil
@@ -73,13 +78,6 @@ struct CameraDemoEntryView: View {
         } catch {
             inputError = "테스트 화면을 준비하지 못했어요. 입력 사진을 확인해 주세요."
         }
-    }
-}
-
-/// 실시간 프리뷰 단계에서 목 사진이 실제 촬영 결과처럼 추가되는 것을 방지한다.
-private struct PreviewOnlyCapture: CaptureProviding {
-    func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset {
-        throw CameraFailure.captureFailed
     }
 }
 

@@ -20,7 +20,11 @@ extension CameraFailure {
     var message: String {
         switch self {
         case .captureFailed:
-            return "목 촬영 데이터를 준비하지 못했습니다."
+            return "사진을 촬영하지 못했어요. 기존 사진은 유지되니 다시 촬영해 주세요."
+        case .cameraUnavailable:
+            return "카메라가 준비되지 않았어요. 미리보기를 확인한 뒤 다시 촬영해 주세요."
+        case .saveFailed:
+            return "사진을 저장하지 못했어요. 기기 저장 공간을 확인한 뒤 다시 촬영해 주세요."
         case .processingFailed:
             return "목 처리 결과를 준비하지 못했습니다."
         case .mismatchedCapture:

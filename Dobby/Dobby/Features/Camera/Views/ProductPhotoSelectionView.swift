@@ -15,7 +15,7 @@ struct ProductPhotoSelectionView: View {
     var body: some View {
         List {
             Section {
-                Text("샘플 사진 목록입니다.")
+                Text("상품 사진 목록입니다.")
                 Text("임시 규칙: 선택한 순서대로 전달하며 첫 번째 사진을 대표로 사용합니다.")
                     .foregroundStyle(.secondary)
             }
