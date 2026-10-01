@@ -1,0 +1,137 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Dobby//LiDAR Roadmap//KO
+CALSCALE:GREGORIAN
+X-WR-CALNAME:LiDAR 개발 마감
+X-WR-TIMEZONE:Asia/Seoul
+BEGIN:VEVENT
+UID:dobby-lidar-20260930-stage-1@local.dobby
+DTSTAMP:20260922T232134Z
+DTSTART;VALUE=DATE:20260923
+DTEND;VALUE=DATE:20260924
+SUMMARY:[마감] LiDAR ① 공통 계약·측정 기준 확정
+DESCRIPTION:공통 입력·출력 타입\, 좌표계·단위\, 측정 항
+ 목별 시작점·끝점\, 실패 상태와 샘플 데이터를 확정한
+ 다. 같은 샘플을 세 모듈이 동일하게 해석하고 프레임 
+ 불일치를 거부하면 완료.\n\n담당: 무구\n협업: 메이슨·
+ 이치\n프로젝트: 2026-C6-Dobby\n브랜치: feat/3-LiDAR-Module\n로
+ 드맵: Docs/LiDAR-Module-Roadmap.md\n최종 마감: 2026-09-30\n일정 
+ 성격: 단계별 완료 마감일(작업 시간 예약 아님)
+TRANSP:TRANSPARENT
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER;VALUE=DATE-TIME:20260923T000000Z
+DESCRIPTION:[마감] LiDAR ① 공통 계약·측정 기준 확정
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:dobby-lidar-20260930-stage-2@local.dobby
+DTSTAMP:20260922T232134Z
+DTSTART;VALUE=DATE:20260924
+DTEND;VALUE=DATE:20260925
+SUMMARY:[마감] LiDAR ② 역투영·거리 계산 코어 완성
+DESCRIPTION:깊이 버퍼 해석\, 이미지→깊이 좌표 변환\, 3D 
+ 역투영과 두 점 거리 계산을 구현한다. 수평·기울어진 
+ 평면의 알려진 정답 및 회전·크롭 테스트를 통과하면 
+ 완료.\n\n담당: 무구\n협업: 메이슨: 깊이·보정 정보 확인
+ \n프로젝트: 2026-C6-Dobby\n브랜치: feat/3-LiDAR-Module\n로드맵: 
+ Docs/LiDAR-Module-Roadmap.md\n최종 마감: 2026-09-30\n일정 성격: 
+ 단계별 완료 마감일(작업 시간 예약 아님)
+TRANSP:TRANSPARENT
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER;VALUE=DATE-TIME:20260923T000000Z
+DESCRIPTION:[마감] LiDAR ② 역투영·거리 계산 코어 완성
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:dobby-lidar-20260930-stage-3@local.dobby
+DTSTAMP:20260922T232134Z
+DTSTART;VALUE=DATE:20260925
+DTEND;VALUE=DATE:20260926
+SUMMARY:[마감] LiDAR ③ 실기기 기준선 확보
+DESCRIPTION:테스트 캡처 어댑터와 디버그 화면\, 촬영 스냅
+ 샷 저장·재생을 마련한다. 사람이 확인한 정답 측정점
+ 으로 센서·좌표 변환 오차를 기록하고 화면 방향·크롭 
+ 정합을 확인하면 완료.\n\n담당: 무구\n협업: 메이슨: 실
+ 기기 캡처·좌표 정합\n프로젝트: 2026-C6-Dobby\n브랜치: feat
+ /3-LiDAR-Module\n로드맵: Docs/LiDAR-Module-Roadmap.md\n최종 마감: 2
+ 026-09-30\n일정 성격: 단계별 완료 마감일(작업 시간 예약 
+ 아님)
+TRANSP:TRANSPARENT
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER;VALUE=DATE-TIME:20260924T000000Z
+DESCRIPTION:[마감] LiDAR ③ 실기기 기준선 확보
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:dobby-lidar-20260930-stage-4@local.dobby
+DTSTAMP:20260922T232134Z
+DTSTART;VALUE=DATE:20260928
+DTEND;VALUE=DATE:20260929
+SUMMARY:[마감] LiDAR ④ 깊이 안정화·오차 비교 완료
+DESCRIPTION:옷 경계의 배경 깊이 혼입과 이상치를 줄이고\, 
+ 조건부 국소 평면 보정·프레임 품질 선택을 검증한다. 
+ 같은 실측 데이터에서 기본 알고리즘과 오차·측정 거부
+ 율을 비교해 개선안 채택 여부를 정하면 완료.\n\n담당: 
+ 무구\n협업: 이치: 의류 마스크 / 메이슨: 깊이 품질·프
+ 레임 선택\n프로젝트: 2026-C6-Dobby\n브랜치: feat/3-LiDAR-Module
+ \n로드맵: Docs/LiDAR-Module-Roadmap.md\n최종 마감: 2026-09-30\n일
+ 정 성격: 단계별 완료 마감일(작업 시간 예약 아님)
+TRANSP:TRANSPARENT
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER;VALUE=DATE-TIME:20260927T000000Z
+DESCRIPTION:[마감] LiDAR ④ 깊이 안정화·오차 비교 완료
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:dobby-lidar-20260930-stage-5@local.dobby
+DTSTAMP:20260922T232134Z
+DTSTART;VALUE=DATE:20260929
+DTEND;VALUE=DATE:20260930
+SUMMARY:[마감] LiDAR ⑤ 카메라·ML 자동 측정 통합
+DESCRIPTION:테스트 대역을 실제 카메라·ML 모듈로 교체하고
+  동일 프레임 매칭\, 비동기 계산\, 부분 실패와 취소 처
+ 리를 연결한다. 촬영 한 번으로 측정점·치수가 자동 표
+ 시되고 이전 촬영 결과가 새 결과를 덮어쓰지 않으면 완
+ 료.\n\n담당: 무구\n협업: 메이슨·이치·앱 통합 담당자\n
+ 프로젝트: 2026-C6-Dobby\n브랜치: feat/3-LiDAR-Module\n로드맵: Do
+ cs/LiDAR-Module-Roadmap.md\n최종 마감: 2026-09-30\n일정 성격: 단
+ 계별 완료 마감일(작업 시간 예약 아님)
+TRANSP:TRANSPARENT
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER;VALUE=DATE-TIME:20260928T000000Z
+DESCRIPTION:[마감] LiDAR ⑤ 카메라·ML 자동 측정 통합
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:dobby-lidar-20260930-stage-6@local.dobby
+DTSTAMP:20260922T232134Z
+DTSTART;VALUE=DATE:20260930
+DTEND;VALUE=DATE:20261001
+SUMMARY:[마감] LiDAR ⑥ 실측 검증·최종 인수
+DESCRIPTION:거리·각도·소재·기기별로 정답점 거리 엔진과
+  전체 자동 측정을 나누어 평가한다. 오차·유효 결과 비
+ 율·재촬영률·처리 시간과 재현 자료를 정리하고 팀이 
+ 지원 조건·출시 기준을 확정하면 완료.\n\n담당: 무구\n
+ 협업: 메이슨·이치·앱 통합 담당자\n프로젝트: 2026-C6-Dob
+ by\n브랜치: feat/3-LiDAR-Module\n로드맵: Docs/LiDAR-Module-Roadmap.m
+ d\n최종 마감: 2026-09-30\n일정 성격: 단계별 완료 마감일(
+ 작업 시간 예약 아님)
+TRANSP:TRANSPARENT
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER;VALUE=DATE-TIME:20260929T000000Z
+DESCRIPTION:[마감] LiDAR ⑥ 실측 검증·최종 인수
+END:VALARM
+END:VEVENT
+END:VCALENDAR

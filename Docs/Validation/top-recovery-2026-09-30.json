@@ -1,0 +1,3383 @@
+{
+  "emptyImages" : [
+    {
+      "accepted" : false,
+      "captureAdapterAccepted" : false,
+      "captureAdapterError" : "noDetection(main.AutomaticGarmentKind.top)",
+      "captureInputDepthIsEmpty" : true,
+      "didComputeCentimetres" : false,
+      "error" : "noDetection(main.AutomaticGarmentKind.top)",
+      "expectedEmptyRejectionPassed" : true,
+      "purpose" : "Empty image must not yield a garment",
+      "source" : "synthetic:800x600:uniformGray=0.0"
+    },
+    {
+      "accepted" : false,
+      "captureAdapterAccepted" : false,
+      "captureAdapterError" : "noDetection(main.AutomaticGarmentKind.top)",
+      "captureInputDepthIsEmpty" : true,
+      "didComputeCentimetres" : false,
+      "error" : "noDetection(main.AutomaticGarmentKind.top)",
+      "expectedEmptyRejectionPassed" : true,
+      "purpose" : "Empty image must not yield a garment",
+      "source" : "synthetic:800x600:uniformGray=0.4470588235294118"
+    },
+    {
+      "accepted" : false,
+      "captureAdapterAccepted" : false,
+      "captureAdapterError" : "noDetection(main.AutomaticGarmentKind.top)",
+      "captureInputDepthIsEmpty" : true,
+      "didComputeCentimetres" : false,
+      "error" : "noDetection(main.AutomaticGarmentKind.top)",
+      "expectedEmptyRejectionPassed" : true,
+      "purpose" : "Empty image must not yield a garment",
+      "source" : "synthetic:800x600:uniformGray=1.0"
+    }
+  ],
+  "foregroundChecksPassed" : true,
+  "kind" : "top",
+  "limitations" : [
+    "Photos have no independently verified landmark labels; this is an inference integration check, not accuracy evaluation.",
+    "No ground-truth lengths, real depth, distance engine, or centimetre calculation are used.",
+    "Rotation checks physically inverse-rotate the same raw RGB, restore its frame orientation, and compare upright predictions.",
+    "Snapshot\/foreground-mask checks are separately reported; requiredChecksPassed refers to photo inference, repeat\/rotation consistency, and empty-image rejection.",
+    "Pose-model confidence does not establish category correctness or landmark\/measurement accuracy; wrong-kind photos only characterize this risk.",
+    "Empty-photo inference and the frozen capture adapter (which additionally requires a matched foreground mask) are reported separately; no depth is supplied to either.",
+    "Timing and Vision results come from this Mac, not the test iPhone; the first photo includes model compilation\/loading."
+  ],
+  "measurementDefinitions" : [
+    {
+      "id" : "top.shoulderWidth",
+      "landmarkIDs" : [
+        "shoulder_left",
+        "shoulder_right"
+      ],
+      "title" : "어깨너비"
+    },
+    {
+      "id" : "top.chestWidth",
+      "landmarkIDs" : [
+        "armpit_left",
+        "armpit_right"
+      ],
+      "title" : "가슴 단면"
+    },
+    {
+      "id" : "top.hemWidth",
+      "landmarkIDs" : [
+        "hem_left",
+        "hem_right"
+      ],
+      "title" : "밑단 단면"
+    },
+    {
+      "id" : "top.sleeveLengthLeft",
+      "landmarkIDs" : [
+        "shoulder_left",
+        "sleeve_end_left"
+      ],
+      "title" : "왼쪽 소매길이(직선)"
+    },
+    {
+      "id" : "top.sleeveLengthRight",
+      "landmarkIDs" : [
+        "shoulder_right",
+        "sleeve_end_right"
+      ],
+      "title" : "오른쪽 소매길이(직선)"
+    },
+    {
+      "id" : "top.totalLength",
+      "landmarkIDs" : [
+        "neck_center",
+        "hem_center"
+      ],
+      "projection" : {
+        "referenceAxisLandmarkIDs" : [
+          "neck_left",
+          "neck_right"
+        ]
+      },
+      "title" : "총장(목선에 수직)"
+    }
+  ],
+  "modelPath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/2026-C6-Dobby\/Dobby\/Dobby\/LiDAR\/Models\/TopLandmarks.mlpackage",
+  "modelVersion" : "top11-ec1e6b054d59",
+  "orientationChecks" : {
+    "baselinePointCount" : 12,
+    "checks" : [
+      {
+        "inverseRawPixelRotationEXIF" : 1,
+        "maximumConfidenceDelta" : 0,
+        "maximumCoordinateDelta" : 0,
+        "orientation" : "up",
+        "passed" : true,
+        "rawImageSize" : {
+          "height" : 384,
+          "width" : 288
+        },
+        "snapshot" : {
+          "didComputeCentimetres" : false,
+          "frameID" : "0562312C-AADF-4DF5-9A65-B15B916245D3",
+          "frameIdentityPreserved" : true,
+          "inputDepthIsEmpty" : true,
+          "maskComparisonPassed" : true,
+          "maskForegroundPixelCount" : 16409,
+          "maskIntersectionOverUnionVsUpright" : 1,
+          "maskSize" : {
+            "height" : 384,
+            "width" : 288
+          },
+          "modelVersion" : "top11-ec1e6b054d59",
+          "orientation" : "up",
+          "passed" : true,
+          "pointCount" : 12,
+          "rawImageSize" : {
+            "height" : 384,
+            "width" : 288
+          },
+          "sessionID" : "202741B7-31CB-4C5D-BFB7-A6030A0A8F1B",
+          "unavailablePointIDs" : [
+            "sleeve_end_left",
+            "sleeve_end_right"
+          ],
+          "uprightMaskSize" : {
+            "height" : 384,
+            "width" : 288
+          }
+        }
+      },
+      {
+        "inverseRawPixelRotationEXIF" : 8,
+        "maximumConfidenceDelta" : 0,
+        "maximumCoordinateDelta" : 5.551115123125783e-17,
+        "orientation" : "right",
+        "passed" : true,
+        "rawImageSize" : {
+          "height" : 288,
+          "width" : 384
+        },
+        "snapshot" : {
+          "didComputeCentimetres" : false,
+          "frameID" : "3574EBC1-8C7C-41D9-873C-8EB86D7B72F1",
+          "frameIdentityPreserved" : true,
+          "inputDepthIsEmpty" : true,
+          "maskComparisonPassed" : true,
+          "maskForegroundPixelCount" : 16409,
+          "maskIntersectionOverUnionVsUpright" : 1,
+          "maskSize" : {
+            "height" : 288,
+            "width" : 384
+          },
+          "modelVersion" : "top11-ec1e6b054d59",
+          "orientation" : "right",
+          "passed" : true,
+          "pointCount" : 12,
+          "rawImageSize" : {
+            "height" : 288,
+            "width" : 384
+          },
+          "sessionID" : "47811F6A-3DED-42AE-8518-C13B258FF89D",
+          "unavailablePointIDs" : [
+            "sleeve_end_left",
+            "sleeve_end_right"
+          ],
+          "uprightMaskSize" : {
+            "height" : 384,
+            "width" : 288
+          }
+        }
+      },
+      {
+        "inverseRawPixelRotationEXIF" : 3,
+        "maximumConfidenceDelta" : 0,
+        "maximumCoordinateDelta" : 5.551115123125783e-17,
+        "orientation" : "down",
+        "passed" : true,
+        "rawImageSize" : {
+          "height" : 384,
+          "width" : 288
+        },
+        "snapshot" : {
+          "didComputeCentimetres" : false,
+          "frameID" : "193466A3-046B-4B75-A2C5-8D2FD68A7BF8",
+          "frameIdentityPreserved" : true,
+          "inputDepthIsEmpty" : true,
+          "maskComparisonPassed" : true,
+          "maskForegroundPixelCount" : 16409,
+          "maskIntersectionOverUnionVsUpright" : 1,
+          "maskSize" : {
+            "height" : 384,
+            "width" : 288
+          },
+          "modelVersion" : "top11-ec1e6b054d59",
+          "orientation" : "down",
+          "passed" : true,
+          "pointCount" : 12,
+          "rawImageSize" : {
+            "height" : 384,
+            "width" : 288
+          },
+          "sessionID" : "D31F5810-1389-4124-9E05-21B8368F96B8",
+          "unavailablePointIDs" : [
+            "sleeve_end_left",
+            "sleeve_end_right"
+          ],
+          "uprightMaskSize" : {
+            "height" : 384,
+            "width" : 288
+          }
+        }
+      },
+      {
+        "inverseRawPixelRotationEXIF" : 6,
+        "maximumConfidenceDelta" : 0,
+        "maximumCoordinateDelta" : 5.551115123125783e-17,
+        "orientation" : "left",
+        "passed" : true,
+        "rawImageSize" : {
+          "height" : 288,
+          "width" : 384
+        },
+        "snapshot" : {
+          "didComputeCentimetres" : false,
+          "frameID" : "76FD6F2E-DC2B-4C41-A5BE-59998E7769B9",
+          "frameIdentityPreserved" : true,
+          "inputDepthIsEmpty" : true,
+          "maskComparisonPassed" : true,
+          "maskForegroundPixelCount" : 16409,
+          "maskIntersectionOverUnionVsUpright" : 1,
+          "maskSize" : {
+            "height" : 288,
+            "width" : 384
+          },
+          "modelVersion" : "top11-ec1e6b054d59",
+          "orientation" : "left",
+          "passed" : true,
+          "pointCount" : 12,
+          "rawImageSize" : {
+            "height" : 288,
+            "width" : 384
+          },
+          "sessionID" : "D6D9849A-D2E8-4D28-AB4E-C25CD3A91AC4",
+          "unavailablePointIDs" : [
+            "sleeve_end_left",
+            "sleeve_end_right"
+          ],
+          "uprightMaskSize" : {
+            "height" : 384,
+            "width" : 288
+          }
+        }
+      }
+    ],
+    "confidenceTolerance" : 0.003125,
+    "coordinateTolerance" : 0.003125,
+    "fixtureDescription" : "Real upright photo without rescaling, with 32px horizontal and 80px vertical neutral borders to make a non-square rotation fixture.",
+    "minimumMaskIntersectionOverUnion" : 0.99,
+    "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T02.jpg",
+    "uprightImageSize" : {
+      "height" : 384,
+      "width" : 288
+    }
+  },
+  "photoForegroundChecks" : [
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T02.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "94311E72-C9AA-4E89-9FDE-54FAE27FA27A",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 16290,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "880EBD5A-84AA-4B48-9BF2-A025BAC49A17",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T03.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "2B5F292D-C231-4C0C-8CD5-63BF0AFEFE6F",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 14769,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "3CDA5C4B-2E4E-45EA-99C1-F9C3ED9CD07C",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T04.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "450EE719-9A73-4E6B-85D3-8F722CE1743E",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 13159,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "EFE747B7-5012-4B1C-805E-7634D0286C6E",
+        "unavailablePointIDs" : [
+          "hem_left"
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T05.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "2EB5CEEC-1F99-4742-81BB-F4BEBFAD79FD",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 16341,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "FBD7AE85-754A-4A66-AB99-BB5A93C6E0DE",
+        "unavailablePointIDs" : [
+          "hem_left"
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T06.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "177166D9-C0BC-49F9-985E-790C81C74C8F",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 15223,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "AAABCE30-BDE9-4B25-A6AC-48246B1F83BF",
+        "unavailablePointIDs" : [
+          "hem_left"
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T07.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "FA0DC0F7-8921-4EF2-912F-CB26558FFE71",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 12997,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "14E66F43-6655-45CD-B817-997D11CF1DE9",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T09.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "76D5421B-D435-4300-A8BF-6B0559450244",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 15443,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "D8FD8772-4BAF-4EB3-8235-895A24155429",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T10.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "BF313D79-3F6B-4275-92E6-7720DF221D29",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 13734,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "E6E127DB-FDB1-4748-9B04-4C4CA7E9A194",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T11.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "2FA9CD53-07C3-4A6E-A6A9-1D08BDF83EFD",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 14364,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "4C8614D2-E5F3-421C-80EF-8792D9329F2C",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T12.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "7C34BFC6-B30A-428C-B692-0DE392DD0FD5",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 14391,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "3B9382EF-EDB4-4865-ACB7-6F7295FBAAA6",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T21.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "868061AF-F1A9-4ADC-A6C5-1BC735A75DCB",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 11417,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "9EC5492F-4D9B-4299-9D24-6FE376940A57",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T22.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "40226473-1E52-428B-B1C5-EAE2A060818C",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 10405,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "7E7FBCC2-1222-4DD3-8FD9-0A251351CC35",
+        "unavailablePointIDs" : [
+          "hem_left"
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T24.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "6312C619-6F03-481A-A7C0-DDF5FC1C7F1C",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 9584,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "E0208137-C447-4C66-B639-91A026B3DF52",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T25.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "5DE36B9C-172A-4353-A51E-B45619096B82",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 9170,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "83A56EA0-3E73-4D83-A64C-A5974B4AD3A7",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T26.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "13298728-BC94-4BB7-B09B-67D0A542B7EA",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 8951,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "778225C8-898B-4BBE-96B3-6086D1A898E1",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T27.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "47D5953D-8055-4B92-994D-EE2E62649263",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 12588,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "59654584-AE7C-42E2-8BF8-633D34CE375C",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T28.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "6C094ACA-05E8-421A-BE86-FB71C3724B34",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 14476,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "D3B2ABD2-7192-483B-94B1-A77B89FDA28B",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T30.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "C4701752-5EBC-4C04-A81E-FBCD1B852C1F",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 37409,
+        "maskSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 224,
+          "width" : 224
+        },
+        "sessionID" : "EEBE35AF-35C4-40CE-AD13-1EB5450227FB",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/alexey_00588f87-cda1-46d7-93be-71f0fa889895.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "913C46BF-B81C-46DC-B9A1-BC3CE64F29C6",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 44465,
+        "maskSize" : {
+          "height" : 533,
+          "width" : 400
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 533,
+          "width" : 400
+        },
+        "sessionID" : "1A75E84E-4FC5-4AEF-8964-E61287D7D36E",
+        "unavailablePointIDs" : [
+          "hem_center"
+        ]
+      },
+      "visibilityPreserved" : true
+    },
+    {
+      "liveAndCaptureConfidenceDelta" : 0,
+      "liveAndCaptureCoordinateDelta" : 0,
+      "liveAndCaptureMaskIntersectionOverUnion" : 1,
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/alexey_0098b1c0-bd39-41c2-a172-17066bc9fd26.jpg",
+      "snapshot" : {
+        "didComputeCentimetres" : false,
+        "frameID" : "1309964D-C626-4F08-ADEF-273642A13AD2",
+        "frameIdentityPreserved" : true,
+        "inputDepthIsEmpty" : true,
+        "maskForegroundPixelCount" : 75870,
+        "maskSize" : {
+          "height" : 533,
+          "width" : 400
+        },
+        "modelVersion" : "top11-ec1e6b054d59",
+        "orientation" : "up",
+        "passed" : true,
+        "pointCount" : 12,
+        "rawImageSize" : {
+          "height" : 533,
+          "width" : 400
+        },
+        "sessionID" : "35A891B6-CD39-441F-9437-C6F170FA53A7",
+        "unavailablePointIDs" : [
+
+        ]
+      },
+      "visibilityPreserved" : true
+    }
+  ],
+  "photos" : [
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.9326171875,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.830204375,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T02.jpg",
+      "points" : [
+        {
+          "confidence" : 0.9970703125,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.41328125,
+            "y" : 0.1955078125
+          }
+        },
+        {
+          "confidence" : 0.99658203125,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.564453125,
+            "y" : 0.184765625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2880859375,
+            "y" : 0.261328125
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.683984375,
+            "y" : 0.24453125
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2802734375,
+            "y" : 0.484765625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.70703125,
+            "y" : 0.469921875
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.178125,
+            "y" : 0.4546875
+          }
+        },
+        {
+          "confidence" : 0.97998046875,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.80234375,
+            "y" : 0.423828125
+          }
+        },
+        {
+          "confidence" : 0.9814453125,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2822265625,
+            "y" : 0.88125
+          }
+        },
+        {
+          "confidence" : 0.98486328125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.501171875,
+            "y" : 0.8625
+          }
+        },
+        {
+          "confidence" : 0.9697265625,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.708203125,
+            "y" : 0.86171875
+          }
+        },
+        {
+          "confidence" : 0.99658203125,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4888671875,
+            "y" : 0.19013671875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.94775390625,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.005327791,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T03.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99853515625,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4359375,
+            "y" : 0.176953125
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.573046875,
+            "y" : 0.17890625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.31171875,
+            "y" : 0.2357421875
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.689453125,
+            "y" : 0.2447265625
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2892578125,
+            "y" : 0.44921875
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.708203125,
+            "y" : 0.459765625
+          }
+        },
+        {
+          "confidence" : 0.99169921875,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1587890625,
+            "y" : 0.421484375
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.834375,
+            "y" : 0.426953125
+          }
+        },
+        {
+          "confidence" : 0.974609375,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2734375,
+            "y" : 0.771875
+          }
+        },
+        {
+          "confidence" : 0.98388671875,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.496875,
+            "y" : 0.765625
+          }
+        },
+        {
+          "confidence" : 0.9814453125,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.70234375,
+            "y" : 0.77578125
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5044921874999999,
+            "y" : 0.1779296875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.9375,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.004975583,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T04.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99853515625,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.431640625,
+            "y" : 0.195703125
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.551953125,
+            "y" : 0.192578125
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.31875,
+            "y" : 0.2537109375
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.66171875,
+            "y" : 0.2439453125
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.305859375,
+            "y" : 0.453515625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6921875,
+            "y" : 0.453125
+          }
+        },
+        {
+          "confidence" : 0.9931640625,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1341796875,
+            "y" : 0.421484375
+          }
+        },
+        {
+          "confidence" : 0.9892578125,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.846875,
+            "y" : 0.413671875
+          }
+        },
+        {
+          "confidence" : 0.95263671875,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3068359375,
+            "y" : 0.760546875
+          }
+        },
+        {
+          "confidence" : 0.95556640625,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.50078125,
+            "y" : 0.74375
+          }
+        },
+        {
+          "confidence" : 0.95361328125,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.672265625,
+            "y" : 0.752734375
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.491796875,
+            "y" : 0.194140625
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.9423828125,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.006499167,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T05.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99609375,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.43125,
+            "y" : 0.11796875
+          }
+        },
+        {
+          "confidence" : 0.9931640625,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.576171875,
+            "y" : 0.115234375
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3046875,
+            "y" : 0.1830078125
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.690234375,
+            "y" : 0.171484375
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2947265625,
+            "y" : 0.398046875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.707421875,
+            "y" : 0.403125
+          }
+        },
+        {
+          "confidence" : 0.99072265625,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1728515625,
+            "y" : 0.3494140625
+          }
+        },
+        {
+          "confidence" : 0.974609375,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8140625,
+            "y" : 0.355859375
+          }
+        },
+        {
+          "confidence" : 0.9697265625,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2935546875,
+            "y" : 0.794140625
+          }
+        },
+        {
+          "confidence" : 0.97265625,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.501953125,
+            "y" : 0.784375
+          }
+        },
+        {
+          "confidence" : 0.943359375,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.686328125,
+            "y" : 0.792578125
+          }
+        },
+        {
+          "confidence" : 0.9931640625,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5037109375,
+            "y" : 0.1166015625
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.943359375,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.004990875,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T06.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99560546875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4203125,
+            "y" : 0.183984375
+          }
+        },
+        {
+          "confidence" : 0.99560546875,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.56875,
+            "y" : 0.18125
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3072265625,
+            "y" : 0.24375
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.683203125,
+            "y" : 0.230078125
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2998046875,
+            "y" : 0.454296875
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.707421875,
+            "y" : 0.444140625
+          }
+        },
+        {
+          "confidence" : 0.98876953125,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1943359375,
+            "y" : 0.41796875
+          }
+        },
+        {
+          "confidence" : 0.98291015625,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.788671875,
+            "y" : 0.3982421875
+          }
+        },
+        {
+          "confidence" : 0.982421875,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2994140625,
+            "y" : 0.8234375
+          }
+        },
+        {
+          "confidence" : 0.98583984375,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5078125,
+            "y" : 0.81328125
+          }
+        },
+        {
+          "confidence" : 0.9775390625,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.702734375,
+            "y" : 0.8203125
+          }
+        },
+        {
+          "confidence" : 0.99560546875,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.49453125,
+            "y" : 0.1826171875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.94189453125,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.004947084,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T07.jpg",
+      "points" : [
+        {
+          "confidence" : 0.97802734375,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.42578125,
+            "y" : 0.171875
+          }
+        },
+        {
+          "confidence" : 0.9765625,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.574609375,
+            "y" : 0.175390625
+          }
+        },
+        {
+          "confidence" : 0.99560546875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.325,
+            "y" : 0.20703125
+          }
+        },
+        {
+          "confidence" : 0.99609375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.680078125,
+            "y" : 0.2134765625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2984375,
+            "y" : 0.386328125
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.716015625,
+            "y" : 0.3982421875
+          }
+        },
+        {
+          "confidence" : 0.9892578125,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.17578125,
+            "y" : 0.3390625
+          }
+        },
+        {
+          "confidence" : 0.97998046875,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8328125,
+            "y" : 0.3421875
+          }
+        },
+        {
+          "confidence" : 0.99169921875,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2875,
+            "y" : 0.72265625
+          }
+        },
+        {
+          "confidence" : 0.994140625,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.49453125,
+            "y" : 0.72109375
+          }
+        },
+        {
+          "confidence" : 0.990234375,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7046875,
+            "y" : 0.725
+          }
+        },
+        {
+          "confidence" : 0.9765625,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5001953125,
+            "y" : 0.1736328125
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.94677734375,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.004568417,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T09.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99169921875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.440234375,
+            "y" : 0.1677734375
+          }
+        },
+        {
+          "confidence" : 0.98876953125,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.583203125,
+            "y" : 0.16796875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.31875,
+            "y" : 0.2162109375
+          }
+        },
+        {
+          "confidence" : 0.99755859375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.71171875,
+            "y" : 0.2189453125
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2818359375,
+            "y" : 0.420703125
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.740625,
+            "y" : 0.419921875
+          }
+        },
+        {
+          "confidence" : 0.9951171875,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2029296875,
+            "y" : 0.3591796875
+          }
+        },
+        {
+          "confidence" : 0.97998046875,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.795703125,
+            "y" : 0.36015625
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.270703125,
+            "y" : 0.799609375
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.515234375,
+            "y" : 0.80390625
+          }
+        },
+        {
+          "confidence" : 0.994140625,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.758984375,
+            "y" : 0.8015625
+          }
+        },
+        {
+          "confidence" : 0.98876953125,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.51171875,
+            "y" : 0.16787109375
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.943359375,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.004669042,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T10.jpg",
+      "points" : [
+        {
+          "confidence" : 0.9951171875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.428515625,
+            "y" : 0.1740234375
+          }
+        },
+        {
+          "confidence" : 0.9951171875,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.56953125,
+            "y" : 0.1787109375
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3158203125,
+            "y" : 0.21875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.67890625,
+            "y" : 0.226171875
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.28125,
+            "y" : 0.410546875
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.703125,
+            "y" : 0.413671875
+          }
+        },
+        {
+          "confidence" : 0.9892578125,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1609375,
+            "y" : 0.3685546875
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.82734375,
+            "y" : 0.3779296875
+          }
+        },
+        {
+          "confidence" : 0.98828125,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2615234375,
+            "y" : 0.7171875
+          }
+        },
+        {
+          "confidence" : 0.9931640625,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.487109375,
+            "y" : 0.715625
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.69765625,
+            "y" : 0.719921875
+          }
+        },
+        {
+          "confidence" : 0.9951171875,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4990234375,
+            "y" : 0.1763671875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.9501953125,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.004819208,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T11.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99072265625,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4234375,
+            "y" : 0.1455078125
+          }
+        },
+        {
+          "confidence" : 0.990234375,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.570703125,
+            "y" : 0.151953125
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3111328125,
+            "y" : 0.1912109375
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.683203125,
+            "y" : 0.2015625
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2865234375,
+            "y" : 0.3921875
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7015625,
+            "y" : 0.4046875
+          }
+        },
+        {
+          "confidence" : 0.99072265625,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.191796875,
+            "y" : 0.3462890625
+          }
+        },
+        {
+          "confidence" : 0.99072265625,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.777734375,
+            "y" : 0.36015625
+          }
+        },
+        {
+          "confidence" : 0.99560546875,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.267578125,
+            "y" : 0.76328125
+          }
+        },
+        {
+          "confidence" : 0.9970703125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.487890625,
+            "y" : 0.766796875
+          }
+        },
+        {
+          "confidence" : 0.99560546875,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.69609375,
+            "y" : 0.77578125
+          }
+        },
+        {
+          "confidence" : 0.990234375,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4970703125,
+            "y" : 0.14873046875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.94775390625,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.005777542,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T12.jpg",
+      "points" : [
+        {
+          "confidence" : 0.9951171875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.444921875,
+            "y" : 0.209765625
+          }
+        },
+        {
+          "confidence" : 0.99462890625,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.582421875,
+            "y" : 0.216796875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.32734375,
+            "y" : 0.2513671875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.701953125,
+            "y" : 0.2720703125
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2896484375,
+            "y" : 0.44765625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.725,
+            "y" : 0.470703125
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1681640625,
+            "y" : 0.405859375
+          }
+        },
+        {
+          "confidence" : 0.99365234375,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8359375,
+            "y" : 0.431640625
+          }
+        },
+        {
+          "confidence" : 0.99365234375,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.26328125,
+            "y" : 0.7671875
+          }
+        },
+        {
+          "confidence" : 0.99658203125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.497265625,
+            "y" : 0.771875
+          }
+        },
+        {
+          "confidence" : 0.9951171875,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7203125,
+            "y" : 0.780859375
+          }
+        },
+        {
+          "confidence" : 0.99462890625,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.513671875,
+            "y" : 0.21328125
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.90087890625,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.005025667,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T21.jpg",
+      "points" : [
+        {
+          "confidence" : 0.9921875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.437890625,
+            "y" : 0.1990234375
+          }
+        },
+        {
+          "confidence" : 0.9912109375,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.57890625,
+            "y" : 0.2001953125
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3552734375,
+            "y" : 0.2451171875
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6578125,
+            "y" : 0.24921875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.34765625,
+            "y" : 0.388671875
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.66640625,
+            "y" : 0.397265625
+          }
+        },
+        {
+          "confidence" : 0.98583984375,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1533203125,
+            "y" : 0.6546875
+          }
+        },
+        {
+          "confidence" : 0.95703125,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8359375,
+            "y" : 0.665625
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.316796875,
+            "y" : 0.68671875
+          }
+        },
+        {
+          "confidence" : 0.9892578125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.490234375,
+            "y" : 0.697265625
+          }
+        },
+        {
+          "confidence" : 0.98876953125,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.665625,
+            "y" : 0.702734375
+          }
+        },
+        {
+          "confidence" : 0.9912109375,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5083984374999999,
+            "y" : 0.199609375
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.94189453125,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.005414333,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T22.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99169921875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.48671875,
+            "y" : 0.1982421875
+          }
+        },
+        {
+          "confidence" : 0.9892578125,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5984375,
+            "y" : 0.2046875
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.402734375,
+            "y" : 0.2443359375
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.680078125,
+            "y" : 0.252734375
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3947265625,
+            "y" : 0.3771484375
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.682421875,
+            "y" : 0.403125
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1462890625,
+            "y" : 0.605859375
+          }
+        },
+        {
+          "confidence" : 0.96630859375,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.86953125,
+            "y" : 0.658984375
+          }
+        },
+        {
+          "confidence" : 0.9970703125,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3451171875,
+            "y" : 0.660546875
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.518359375,
+            "y" : 0.688671875
+          }
+        },
+        {
+          "confidence" : 0.9921875,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.687890625,
+            "y" : 0.699609375
+          }
+        },
+        {
+          "confidence" : 0.9892578125,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5425781249999999,
+            "y" : 0.20146484375
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.92919921875,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.007936125,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T24.jpg",
+      "points" : [
+        {
+          "confidence" : 0.9912109375,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.539453125,
+            "y" : 0.758984375
+          }
+        },
+        {
+          "confidence" : 0.990234375,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.42578125,
+            "y" : 0.7578125
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.62578125,
+            "y" : 0.7173828125
+          }
+        },
+        {
+          "confidence" : 0.99755859375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.35039062499999996,
+            "y" : 0.712109375
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6404296875,
+            "y" : 0.590234375
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3421875,
+            "y" : 0.576171875
+          }
+        },
+        {
+          "confidence" : 0.98779296875,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8400390625,
+            "y" : 0.38984375000000004
+          }
+        },
+        {
+          "confidence" : 0.97509765625,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.15156250000000004,
+            "y" : 0.3609375
+          }
+        },
+        {
+          "confidence" : 0.9931640625,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6755859375,
+            "y" : 0.335546875
+          }
+        },
+        {
+          "confidence" : 0.990234375,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5046875,
+            "y" : 0.322265625
+          }
+        },
+        {
+          "confidence" : 0.990234375,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.336328125,
+            "y" : 0.320703125
+          }
+        },
+        {
+          "confidence" : 0.990234375,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4826171875,
+            "y" : 0.7583984375
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "error" : "Missing schema points, duplicate IDs, invalid confidence, or out-of-bounds coordinates",
+      "passed" : false,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T25.jpg",
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.935546875,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.007899,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T26.jpg",
+      "points" : [
+        {
+          "confidence" : 0.96826171875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.562109375,
+            "y" : 0.7630859375
+          }
+        },
+        {
+          "confidence" : 0.95849609375,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.41953125,
+            "y" : 0.7689453125
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.62890625,
+            "y" : 0.719140625
+          }
+        },
+        {
+          "confidence" : 0.986328125,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.35234374999999996,
+            "y" : 0.73515625
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.633203125,
+            "y" : 0.596484375
+          }
+        },
+        {
+          "confidence" : 0.98828125,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.333984375,
+            "y" : 0.614453125
+          }
+        },
+        {
+          "confidence" : 0.98583984375,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.832421875,
+            "y" : 0.35234374999999996
+          }
+        },
+        {
+          "confidence" : 0.88818359375,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.15390625000000002,
+            "y" : 0.379296875
+          }
+        },
+        {
+          "confidence" : 0.994140625,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.640234375,
+            "y" : 0.34882812500000004
+          }
+        },
+        {
+          "confidence" : 0.98583984375,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.47929687499999996,
+            "y" : 0.353515625
+          }
+        },
+        {
+          "confidence" : 0.9755859375,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.31914062499999996,
+            "y" : 0.359375
+          }
+        },
+        {
+          "confidence" : 0.95849609375,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4908203125,
+            "y" : 0.766015625
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.91845703125,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.008344166,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T27.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99560546875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.584375,
+            "y" : 0.8396484375
+          }
+        },
+        {
+          "confidence" : 0.99560546875,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.42421875,
+            "y" : 0.845703125
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6689453125,
+            "y" : 0.784765625
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3375,
+            "y" : 0.794921875
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.66484375,
+            "y" : 0.6365234375
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.334375,
+            "y" : 0.6478515625
+          }
+        },
+        {
+          "confidence" : 0.97216796875,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8025390625,
+            "y" : 0.26484375000000004
+          }
+        },
+        {
+          "confidence" : 0.9541015625,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.19843750000000004,
+            "y" : 0.28671875
+          }
+        },
+        {
+          "confidence" : 0.99072265625,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6759765625,
+            "y" : 0.29765624999999996
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.500390625,
+            "y" : 0.29960937499999996
+          }
+        },
+        {
+          "confidence" : 0.99365234375,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.33281249999999996,
+            "y" : 0.29804687500000004
+          }
+        },
+        {
+          "confidence" : 0.99560546875,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.504296875,
+            "y" : 0.84267578125
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.92041015625,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.007830584,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T28.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99365234375,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.58046875,
+            "y" : 0.865234375
+          }
+        },
+        {
+          "confidence" : 0.99462890625,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.41874999999999996,
+            "y" : 0.873828125
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6728515625,
+            "y" : 0.8107421875
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.326171875,
+            "y" : 0.8220703125
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6671875,
+            "y" : 0.649609375
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.32578125,
+            "y" : 0.6654296875
+          }
+        },
+        {
+          "confidence" : 0.9638671875,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7865234375,
+            "y" : 0.28632812500000004
+          }
+        },
+        {
+          "confidence" : 0.9072265625,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.22265625,
+            "y" : 0.304296875
+          }
+        },
+        {
+          "confidence" : 0.9814453125,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6642578125,
+            "y" : 0.259765625
+          }
+        },
+        {
+          "confidence" : 0.98046875,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.49335937500000004,
+            "y" : 0.27578125
+          }
+        },
+        {
+          "confidence" : 0.97900390625,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.34062499999999996,
+            "y" : 0.27109375
+          }
+        },
+        {
+          "confidence" : 0.99365234375,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.49960937499999997,
+            "y" : 0.86953125
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.79052734375,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.0056875,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T30.jpg",
+      "points" : [
+        {
+          "confidence" : 0.08892822265625,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3646484375,
+            "y" : 0.021875
+          }
+        },
+        {
+          "confidence" : 0.154052734375,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.60390625,
+            "y" : 0.034375
+          }
+        },
+        {
+          "confidence" : 0.407470703125,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.252734375,
+            "y" : 0.076171875
+          }
+        },
+        {
+          "confidence" : 0.748046875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.73125,
+            "y" : 0.092578125
+          }
+        },
+        {
+          "confidence" : 0.98193359375,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.23671875,
+            "y" : 0.3083984375
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.744921875,
+            "y" : 0.3234375
+          }
+        },
+        {
+          "confidence" : 0.4228515625,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.16875,
+            "y" : 0.60390625
+          }
+        },
+        {
+          "confidence" : 0.8974609375,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8078125,
+            "y" : 0.633203125
+          }
+        },
+        {
+          "confidence" : 0.99609375,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1771484375,
+            "y" : 0.896875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.46875,
+            "y" : 0.92734375
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.779296875,
+            "y" : 0.91015625
+          }
+        },
+        {
+          "confidence" : 0.08892822265625,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.48427734375,
+            "y" : 0.028125
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.9375,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.007675625,
+      "imageSize" : {
+        "height" : 533,
+        "width" : 400
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/alexey_00588f87-cda1-46d7-93be-71f0fa889895.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99267578125,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4578125,
+            "y" : 0.2025390625
+          }
+        },
+        {
+          "confidence" : 0.9921875,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5890625,
+            "y" : 0.2033203125
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3671875,
+            "y" : 0.2447265625
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6921875,
+            "y" : 0.2435546875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.35052083333333334,
+            "y" : 0.356640625
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7067708333333333,
+            "y" : 0.358984375
+          }
+        },
+        {
+          "confidence" : 0.98876953125,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.09817708333333333,
+            "y" : 0.59921875
+          }
+        },
+        {
+          "confidence" : 0.9619140625,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.9083333333333333,
+            "y" : 0.613671875
+          }
+        },
+        {
+          "confidence" : 0.99462890625,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.31692708333333336,
+            "y" : 0.59765625
+          }
+        },
+        {
+          "confidence" : 0.990234375,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5119791666666667,
+            "y" : 0.608984375
+          }
+        },
+        {
+          "confidence" : 0.99072265625,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7151041666666667,
+            "y" : 0.61484375
+          }
+        },
+        {
+          "confidence" : 0.9921875,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5234375,
+            "y" : 0.2029296875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.9267578125,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.005819875,
+      "imageSize" : {
+        "height" : 533,
+        "width" : 400
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/alexey_0098b1c0-bd39-41c2-a172-17066bc9fd26.jpg",
+      "points" : [
+        {
+          "confidence" : 0.9931640625,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.39479166666666665,
+            "y" : 0.190234375
+          }
+        },
+        {
+          "confidence" : 0.99365234375,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5994791666666667,
+            "y" : 0.1810546875
+          }
+        },
+        {
+          "confidence" : 0.99755859375,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2760416666666667,
+            "y" : 0.2294921875
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7171875,
+            "y" : 0.226171875
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.27760416666666665,
+            "y" : 0.377734375
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7322916666666667,
+            "y" : 0.3521484375
+          }
+        },
+        {
+          "confidence" : 0.9638671875,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1375,
+            "y" : 0.741796875
+          }
+        },
+        {
+          "confidence" : 0.927734375,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8708333333333333,
+            "y" : 0.703515625
+          }
+        },
+        {
+          "confidence" : 0.98974609375,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.26145833333333335,
+            "y" : 0.6625
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5161458333333333,
+            "y" : 0.651953125
+          }
+        },
+        {
+          "confidence" : 0.98974609375,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7609375,
+            "y" : 0.6484375
+          }
+        },
+        {
+          "confidence" : 0.9931640625,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.49713541666666666,
+            "y" : 0.18564453125000002
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    }
+  ],
+  "platform" : "Version 27.0 (Build 26A428)",
+  "recordedAt" : "2026-09-30T14:44:33Z",
+  "repeatCheck" : {
+    "maximumConfidenceDelta" : 0,
+    "maximumCoordinateDelta" : 0,
+    "passed" : true,
+    "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T02.jpg",
+    "repeatedElapsedSeconds" : 0.008697792
+  },
+  "requiredChecksPassed" : false,
+  "schemaDerivedPointIDs" : [
+    "neck_center"
+  ],
+  "schemaDirectPointCount" : 11,
+  "schemaPath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/2026-C6-Dobby\/Dobby\/Dobby\/LiDAR\/Models\/schema_top.json",
+  "wrongKindImages" : [
+
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "platform": "macOS host, debug Swift compiler; not an iPhone timing measurement",
+  "inputNotes": "224x224 original top photo; camera-shaped fixtures enlarge that thumbnail to a neutral-padded 1920x1440 raw raster with orientation.right. Association fails for this artificial padded fixture. Vision timings include failed association, not successful ready/capture end-to-end.",
+  "checks": "CoreMLTensorReaderTests + LivePreviewRasterGeometryTests: 7 passed; 3 dtypes × 3 padded/transposed layouts match boxed decoder exactly.",
+  "logs": {
+    "bench-debug.log": {
+      "coldSeconds": {
+        "preprocess": 0.001810908317565918,
+        "load": 0.6786490678787231,
+        "prediction": 0.01046907901763916,
+        "decode": 0.0062340497970581055,
+        "recognizeTotal": 0.697624921798706,
+        "foreground": 0.1092909574508667
+      },
+      "warmMeanSeconds": {
+        "decode": 0.00296480655670166,
+        "foreground": 0.02213160991668701,
+        "load": 8.344650268554688e-07,
+        "prediction": 0.0017437696456909179,
+        "preprocess": 0.0007165908813476562,
+        "recognizeTotal": 0.0055108308792114254
+      }
+    },
+    "bench-camera-debug.log": {
+      "coldSeconds": {
+        "preprocess": 0.007215023040771484,
+        "load": 0.6475650072097778,
+        "prediction": 0.002716064453125,
+        "decode": 0.0033570528030395508,
+        "recognizeTotal": 0.6611369848251343,
+        "jpeg": 0.014066100120544434,
+        "foregroundError": 0.12842893600463867
+      },
+      "warmMeanSeconds": {
+        "decode": 0.0029145956039428713,
+        "foregroundError": 0.052083587646484374,
+        "jpeg": 0.0060782194137573246,
+        "load": 8.106231689453125e-07,
+        "prediction": 0.002089834213256836,
+        "preprocess": 0.002013421058654785,
+        "recognizeTotal": 0.007128405570983887
+      }
+    },
+    "bench-camera-reader-debug.log": {
+      "coldSeconds": {
+        "preprocess": 0.006084918975830078,
+        "load": 0.6452759504318237,
+        "prediction": 0.0030930042266845703,
+        "decode": 0.0008720159530639648,
+        "recognizeTotal": 0.6555910110473633,
+        "jpeg": 0.006717085838317871,
+        "foregroundError": 0.12512803077697754
+      },
+      "warmMeanSeconds": {
+        "decode": 0.0006709814071655274,
+        "foregroundError": 0.05183818340301514,
+        "jpeg": 0.005919194221496582,
+        "load": 5.7220458984375e-07,
+        "prediction": 0.0022158145904541014,
+        "preprocess": 0.002219223976135254,
+        "recognizeTotal": 0.005217409133911133
+      }
+    },
+    "bench-camera-reader-bounded-debug.log": {
+      "coldSeconds": {
+        "preprocess": 0.0018019676208496094,
+        "load": 0.07044792175292969,
+        "prediction": 0.004649996757507324,
+        "decode": 0.0015799999237060547,
+        "recognizeTotal": 0.07875096797943115,
+        "jpeg": 0.010419964790344238,
+        "foregroundError": 0.2368830442428589
+      },
+      "warmMeanSeconds": {
+        "decode": 0.00069122314453125,
+        "foregroundError": 0.0523496150970459,
+        "jpeg": 0.0020746231079101563,
+        "load": 1.430511474609375e-06,
+        "prediction": 0.001884770393371582,
+        "preprocess": 0.001345062255859375,
+        "recognizeTotal": 0.00406804084777832
+      }
+    }
+  },
+  "decoderWarmSpeedup": 4.34377998081228
+}

@@ -1,0 +1,21 @@
+{
+  "allPhotoRoutesAndEvidenceStatusesEqual": true,
+  "blankRoutesEqual": true,
+  "photoCount": 26,
+  "blankCount": 3,
+  "sourceSHAGarmentKindPolicy": "4f094afe214a1bf56b7d74f38143267a505cf10907cc9979e3a0fe7370ad8af3",
+  "timingMacOnone": {
+    "top": {
+      "count": 180,
+      "maxMilliseconds": 9.234625,
+      "meanMilliseconds": 2.936037472222224,
+      "p95Milliseconds": 8.719875
+    },
+    "bottoms": {
+      "count": 20,
+      "maxMilliseconds": 24.129791,
+      "meanMilliseconds": 23.3938708,
+      "p95Milliseconds": 23.914041
+    }
+  }
+}
