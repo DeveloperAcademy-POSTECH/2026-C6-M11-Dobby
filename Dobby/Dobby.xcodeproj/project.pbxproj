@@ -6,8 +6,17 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2F358079306D53D90044081F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2F358076306D53D90044081F /* Assets.xcassets */; };
+		2F35807F306D53D90044081F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F358077306D53D90044081F /* ContentView.swift */; };
+		2F358080306D53D90044081F /* DobbyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F358078306D53D90044081F /* DobbyApp.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
-		96ABF148305C239A009CB38B /* Dobby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dobby.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2F358076306D53D90044081F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		2F358077306D53D90044081F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		2F358078306D53D90044081F /* DobbyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DobbyApp.swift; sourceTree = "<group>"; };
+		2F35809A306DDC9C0044081F /* Dobby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dobby.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -32,17 +41,12 @@
 		96ABF13F305C239A009CB38B = {
 			isa = PBXGroup;
 			children = (
+				2F358078306D53D90044081F /* DobbyApp.swift */,
+				2F358077306D53D90044081F /* ContentView.swift */,
+				2F358076306D53D90044081F /* Assets.xcassets */,
 				96ABF14A305C239A009CB38B /* Dobby */,
-				96ABF149305C239A009CB38B /* Products */,
+				2F35809A306DDC9C0044081F /* Dobby.app */,
 			);
-			sourceTree = "<group>";
-		};
-		96ABF149305C239A009CB38B /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				96ABF148305C239A009CB38B /* Dobby.app */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -67,7 +71,7 @@
 			packageProductDependencies = (
 			);
 			productName = Dobby;
-			productReference = 96ABF148305C239A009CB38B /* Dobby.app */;
+			productReference = 2F35809A306DDC9C0044081F /* Dobby.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -95,7 +99,7 @@
 			mainGroup = 96ABF13F305C239A009CB38B;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 96ABF149305C239A009CB38B /* Products */;
+			productRefGroup = 96ABF13F305C239A009CB38B;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -109,6 +113,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2F358079306D53D90044081F /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +124,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2F35807F306D53D90044081F /* ContentView.swift in Sources */,
+				2F358080306D53D90044081F /* DobbyApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
