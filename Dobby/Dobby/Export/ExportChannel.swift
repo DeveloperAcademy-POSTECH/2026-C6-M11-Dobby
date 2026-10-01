@@ -1,7 +1,7 @@
 import Foundation
 
 /// 내보내기 화면에 표시할 채널입니다. rawValue는 방문 기록 식별자로 유지합니다.
-enum ExportChannel: String, CaseIterable, Identifiable {
+enum ExportChannel: String, CaseIterable, Identifiable, Codable {
     case instagram
     case naverStore
     case cafe24

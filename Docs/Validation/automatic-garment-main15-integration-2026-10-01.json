@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-01",
+  "automaticRecognitionCommit": "ea5d31e7e14692158d5867a213ff3ea0901d3632",
+  "incomingMain": "6030023e4cc9c313db9d696baa993f63a5e16529",
+  "integration": "Latest main merged into the feature branch; no PR merge or main push performed.",
+  "changes": {
+    "sourceLayout": "Preserved main root ContentView, DobbyApp and Assets paths; added explicit native source/resource references and updated generated UI runner.",
+    "channelCompatibility": "One existing ExportChannel with Codable; new SwiftData presentation properties use an extension. Four cases, raw values, ExportRecord API, destination URLs, opened-link keys and brand asset names preserved.",
+    "dataModels": "Retained incoming SwiftData models and store. Existing LiDAR archive flow remains connected; adding SwiftData storage to that flow is outside this integration."
+  },
+  "sourceSHA256": {
+    "Dobby/ContentView.swift": "2f438f76c9d4143219e3bca5996c7a50b09e6d1f854a9f942e131c2f97dcd82e",
+    "Dobby/DobbyApp.swift": "c20b4bca1519908dec942c8bbe4e1f6569b41d16348906a6dbc2408acf5a5b45",
+    "Dobby/Assets.xcassets/Contents.json": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b",
+    "Dobby/Dobby.xcodeproj/project.pbxproj": "05e10e207876e7d82f869e3250d3df45422f483ca368b86452c63d779e454e72",
+    "Dobby/Dobby/Export/ExportChannel.swift": "20df0b6a0b0d123a190e2ea1b5b7005bb514b2f26ed3d2e36330cfb7ac336b87",
+    "Dobby/Dobby/Models/GarmentEnums.swift": "78d29f5be868e8e530fce21332ba3cb81f48c12d7ce581cc1aaee0ac4b3ef271",
+    "Dobby/Dobby/Models/ExportRecord.swift": "17f78726215229f076d8bf3fe317e9edb41a76bdc9e44c0a5bd0f68b05730439",
+    "Tools/run-ui-tests.sh": "8452422282ba6cfdc22fa23b41e61d3eabd24a99bfc2305495514993b858ee1c",
+    "Tests/DobbyPresentationTests/ExportChannelCompatibilityTests.swift": "f02758ae4668c45c342fbfd39ec318dfac4d743043c3855f149ffbe1460a9d1e"
+  },
+  "verification": {
+    "core": {
+      "passed": 360,
+      "failed": 0,
+      "log": "/tmp/dobby-auto-kind-main15-core-20261001.log"
+    },
+    "nativeDeviceBuild": {
+      "Debug": "PASS",
+      "Release": "PASS",
+      "signed": false,
+      "debugLog": "/tmp/dobby-auto-kind-main15-debug-20261001.log",
+      "releaseLog": "/tmp/dobby-auto-kind-main15-release-20261001.log",
+      "classifierCompiled": true,
+      "widgetEmbedded": true,
+      "assetsCompiled": true,
+      "cameraUsageDescription": true,
+      "liveActivities": true,
+      "copyURLScheme": true
+    },
+    "uiAndModelCompatibility": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "routing": 5,
+      "automaticCaptureFlow": 2,
+      "bundledModelRuntime": 2,
+      "exportChannelCompatibility": 1,
+      "simulator": "iPhone 17 Pro / iOS26.4",
+      "log": "/tmp/dobby-auto-kind-main15-ui-20261001.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.JwZ2F2/Results.xcresult",
+      "scope": "Fresh project includes moved app sources and assets, current model resources and SwiftData models."
+    },
+    "automaticRecognitionSourceHashesPreserved": true,
+    "modelWeights": "Original bytes preserved; Git LFS fsck passed."
+  },
+  "scope": "Synthetic UI, actual Core ML classifier/pose warm-up and model API compatibility; no physical iPhone camera, LiDAR, sustained speed or cm accuracy verified. Existing iOS26.4 simulator Apple Vision Code9 diagnostic remains separately recorded."
+}
