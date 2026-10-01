@@ -13,12 +13,11 @@ struct FruitsExportView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("후루츠패밀리 앱을 열어주세요").font(.title2.bold())
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("후루츠패밀리 앱을 열어주세요")
+                        .font(.title2.bold())
                     Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
-                        .font(.subheadline)
-                    Text("B 방식은 다이나믹 아일랜드가 있는 iPhone에서 테스트해주세요. 복사하면 Dobby로 잠시 이동한 뒤 후루츠로 돌아옵니다.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.subheadline.weight(.semibold))
                     Button {
                         opening = true
                         Task {
@@ -37,30 +36,36 @@ struct FruitsExportView: View {
                     } label: {
                         HStack {
                             if opening { ProgressView().tint(.white) }
-                            Text("후루츠패밀리 열기").font(.body.weight(.semibold))
-                        }.frame(maxWidth: .infinity).padding(.vertical, 20)
+                            Text("후루츠패밀리 열기").font(.subheadline.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 62)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)
-                    .background(Color.orange, in: Capsule())
+                    .background(Color("BrandMain"), in: Capsule())
+                    .padding(.top, 12)
                     .disabled(opening || controller.busy)
                     .accessibilityIdentifier("export.fruits.open")
-                }.padding(24).padding(.bottom, 16)
+                }
+                .padding(.horizontal, 21)
+                .padding(.top, 28)
+                .padding(.bottom, 28)
                 Color(.systemGroupedBackground).frame(height: 8)
                 VStack(alignment: .leading, spacing: 20) {
                     Text("어떻게 내보내나요?").font(.title2.bold())
                     step(1, "게시글 작성 화면으로 이동해주세요")
-                    step(2, "다이나믹 아일랜드를 길게 누른 뒤 복사해주세요")
-                    islandIllustration
-                        .padding(.horizontal, 12)
+                    step(2, "다이나믹 아일랜드를 클릭해서 복사해주세요")
+                    Image("FruitsDynamicIslandGuide")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 17)
+                        .accessibilityLabel("다이나믹 아일랜드에서 제품명, 설명과 실측 정보를 복사하는 화면")
                     step(3, "각 입력 항목에 붙여넣기해주세요")
-                    if controller.session != nil {
-                        Button("복사 도우미 종료", role: .destructive) { Task { await controller.stop() } }
-                            .disabled(controller.busy || opening)
-                        Text("이 화면을 닫아도 복사 도우미는 유지됩니다.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }.padding(24)
+                }
+                .padding(.horizontal, 21)
+                .padding(.top, 24)
+                .padding(.bottom, 40)
             }
         }
         .background(Color(.systemBackground))
@@ -95,26 +100,14 @@ struct FruitsExportView: View {
     }
 
     private func step(_ number: Int, _ title: String) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text("\(number)").font(.body.weight(.semibold)).frame(width: 36, height: 36).fixedSize()
-                .background(Color.orange.opacity(0.3), in: Circle())
-            Text(title).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .center, spacing: 8) {
+            Text("\(number)")
+                .font(.subheadline.weight(.semibold))
+                .frame(width: 36, height: 36)
+                .background(Color("BrandMain300"), in: Circle())
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private var islandIllustration: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack {
-                Text("Dobby").foregroundStyle(.white).font(.caption)
-                Spacer()
-                Circle().fill(.mint).frame(width: 5, height: 5)
-            }
-            VStack(spacing: 8) {
-                HStack(spacing: 8) { ProductCopyControlLabel(field: .productName); ProductCopyControlLabel(field: .description) }
-                HStack(spacing: 8) { ProductCopyControlLabel(field: .brand); ProductCopyControlLabel(field: .measurements) }
-            }
-        }.padding(18).background(.black, in: RoundedRectangle(cornerRadius: 34))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("다이나믹 아일랜드 안내 이미지. 제품명, 설명, 브랜드명, 실측 사이즈 복사 버튼")
     }
 }

@@ -38,9 +38,9 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showDetailCopy) {
-                FruitsDetailCopyView(product: product) {
+                FruitsDetailCopyView(product: product, onOpened: {
                     openedFruitsMethods.insert(.detailCopyA)
-                }
+                })
             }
             .disabled(isOpeningLink || controller.busy)
             .alert("페이지를 열 수 없습니다", isPresented: $isShowingOpenError) {
