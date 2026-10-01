@@ -37,7 +37,7 @@ struct GarmentShutterButton: View {
         .buttonStyle(GarmentShutterPressStyle(reduceMotion: usesReducedMotion))
         .disabled(!isEnabled || isCapturing)
         .accessibilityLabel(isCapturing ? "실측 계산 중" : "실측 사진 촬영")
-        .accessibilityHint(isEnabled ? "인식한 옷을 촬영하고 길이를 계산합니다" : "옷 인식과 깊이 준비 후 촬영할 수 있습니다")
+        .accessibilityHint(isEnabled ? "사진을 촬영하고 옷 종류와 길이를 확인합니다" : "카메라와 깊이가 준비되면 촬영할 수 있습니다")
         .accessibilityIdentifier("captureGarment")
     }
 }

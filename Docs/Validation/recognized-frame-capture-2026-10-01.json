@@ -1,0 +1,128 @@
+{
+  "date": "2026-10-01",
+  "branch": "feat/3-LiDAR-Module",
+  "sourceBaseCommit": "7887b9bf0084fb9dc0f689a4635bad46b0b42fe2",
+  "sourceState": "Local uncommitted implementation; prior measurement-point UI edits preserved.",
+  "userReport": {
+    "device": "iPhone 17 Pro",
+    "garment": "long-sleeved top",
+    "recognizedBeforeShutter": true,
+    "originalAlert": "Automatic measurement points unavailable; garment kind not recognized.",
+    "exactFailedModelStageKnown": false,
+    "failedPhotoProvided": false
+  },
+  "changes": [
+    "Validated live frame owns full-resolution sRGB CGImage, matching raw sceneDepth, intrinsics, original orientation, timestamp, points, mask, kind and model version.",
+    "Runtime handoff validates accepted readiness, current session/epoch/orientation, source age, camera liveness, current tracking/depth and movement, then consumes the frame once.",
+    "One-slot policy adds a timestamp high-water mark within the current session/epoch; adapter independently validates current epoch and strictly newer callbacks.",
+    "JPEG encoding runs once for the consumed owned image; no ARFrame or pooled camera buffer crosses the model await.",
+    "Valid prepared frame skips repeated inference while retaining workflow frame/origin/model/definition and engine validation.",
+    "Absent or expired prepared frame falls back to fresh RGB/depth capture and normalized sRGB inference; no other frame points are borrowed.",
+    "Shutter can operate before semantic recognition when camera, models, depth and tracking are ready. Recognition cue still requires existing verified evidence.",
+    "Failure explanations separate classification, missing points, missing foreground, foreground mismatch and unverified garment structure.",
+    "Model weights, pose schemas, selection thresholds and persistent CaptureSnapshot schema unchanged."
+  ],
+  "sourceSHA256": {
+    "Dobby/Dobby/LiDAR/Capture/ARKitCaptureProvider.swift": "3e3d7dbbe1ab84658668c391051115cc15146f59c0130941549673e585572a61",
+    "Dobby/Dobby/LiDAR/Capture/LiveForegroundAnalyzer.swift": "2b4d548c7129e6aa1ac24150f9b71e58a297ee6a8f8847f1036d1ca5c4963e85",
+    "Dobby/Dobby/LiDAR/Capture/AutoGarmentLandmarkProvider.swift": "be834b41649c1c7fefd9b46f820c8b1f30fbe3b0cdad54db51697b09aeed5007",
+    "Dobby/Dobby/LiDAR/Core/PreparedCaptureHandoffPolicy.swift": "93959a10579d01e427c9972d18d0460a24cf39d91881b1631934e3b3a8c1f842",
+    "Dobby/Dobby/LiDAR/Core/PreparedMeasurementCapture.swift": "ccfe7404e198e77b4069edd78457e38d821834e7700144aadfd30a0159ecda95",
+    "Dobby/Dobby/LiDAR/Core/AutomaticMeasurementWorkflow.swift": "d3cf3c181de3d6289d09084d7b30ad9fab0d09abda7ed26fc777425c2cf303b0",
+    "Dobby/Dobby/LiDAR/UI/GarmentCaptureFlowView.swift": "e98136d514744078227d735a98a57212ad2cf62cd5e6c50141e0810687ce4760",
+    "Dobby/Dobby/LiDAR/UI/GarmentCaptureStyle.swift": "f91e8b2d75863a5723a1e944f7a2c60af4f71f0643ec0d72f55ea802e449d5f2",
+    "Tests/DobbyLiDARCoreTests/PreparedCaptureHandoffPolicyTests.swift": "f0797556cacf59e76a8867c19575ecabf8b303b1b3034842a9f85dc3f08a24de",
+    "Tests/DobbyLiDARCoreTests/PreparedMeasurementCaptureTests.swift": "e90700822a3829322c14e7e5f3e3e5dd2670281ae41f2943cfaf2998d849492d",
+    "Tests/DobbyPresentationTests/AutoGarmentFailureDiagnosisTests.swift": "c975563146c19749f2890df92c54f4cb2e1d35287a1c0682cb6e183b9ea1241d",
+    "Tests/DobbyUITests/GarmentCaptureFlowTests.swift": "0c19b5800a6945cc32398db807888f5a09663cce9607b58d96361d1682dcb7c8",
+    "Tools/validate-auto-garment-provider.swift": "388bf5f5f58d172dae845d8558dc9fcebc6a39c95493ae25e15d700cc6f44019"
+  },
+  "verification": {
+    "core": {
+      "passed": 391,
+      "failed": 0,
+      "newPreparedWorkflowTests": 11,
+      "newHandoffPolicyTests": 10,
+      "log": "/tmp/dobby-recognized-capture-core-final-20261001.log",
+      "initialBuildOnlyAttempt": {
+        "testsExecuted": false,
+        "error": "Repository .build product code signing rejected resource fork/Finder information.",
+        "recovery": "Rebuilt and executed all tests using a task-specific /tmp scratch path; no application source changed for this build issue."
+      }
+    },
+    "nativeDeviceBuild": {
+      "Debug": "PASS",
+      "Release": "PASS",
+      "signed": false,
+      "debugLog": "/tmp/dobby-recognized-capture-debug-final-20261001.log",
+      "releaseLog": "/tmp/dobby-recognized-capture-release-final-20261001.log",
+      "includesFinalMonotonicPolicy": true
+    },
+    "ios": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "simulator": "iPhone 17 Pro / iOS 26.4",
+      "simulatorID": "97F66EE8-AB26-46B2-8B94-BBFA36663856",
+      "ownedSimulatorShutDown": true,
+      "uiTests": 5,
+      "failureDiagnosisTests": 6,
+      "bundledClassifierRuntimeTests": 1,
+      "scope": [
+        "Top/bottom capture before recognition and repeated retakes",
+        "Recognized top with six measurements",
+        "Bottom result, retake and confirmed save",
+        "Reduced motion recognition and retake",
+        "Peripheral touch drag without jump",
+        "Distinct failure-stage messages and configuration/support errors",
+        "Actual bundled classifier returns fifteen labels in two orientations and rejects neutral image before pose/foreground"
+      ],
+      "log": "/tmp/dobby-recognized-capture-ui-20261001.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/RecognizedCaptureResults.xcresult",
+      "attachments": "/tmp/dobby-recognized-capture-ui-attachments-20261001",
+      "sourceDifference": "UI run preceded final pure-policy high-water tweak. Capture/UI/provider/workflow sources unchanged after UI build. Final policy verified by 391 Core tests and final native Debug/Release builds.",
+      "photosFixturesEnabled": false,
+      "runtimeWarnings": []
+    },
+    "localRGBRegression": {
+      "photos": 26,
+      "selected": 21,
+      "selectedTops": 19,
+      "topPhotos": 20,
+      "selectedBottoms": 2,
+      "bottomPhotos": 6,
+      "incorrectKind": 0,
+      "blankRejected": 3,
+      "rotationsSelected": 15,
+      "rotations": 15,
+      "skirtsRejected": 6,
+      "rotationRunBlankRejected": 3,
+      "acceptedContractComparisons": 36,
+      "maximumPointDelta": 0,
+      "minimumMaskIoU": 1,
+      "rejectedPhotoStages": {
+        "shapeUnverified": 1,
+        "foregroundMismatch": 3,
+        "poseNotFound": 1
+      },
+      "modelAndSchemaFilesUnchanged": 11,
+      "matchesPreviousSelectionStatuses": true,
+      "photosReport": "recognized-frame-rgb-photos-2026-10-01.json",
+      "rotationReport": "recognized-frame-rgb-rotation-2026-10-01.json",
+      "compileLog": "/tmp/dobby-recognized-frame-rgb-regression-build-20261001.log",
+      "photosLog": "/tmp/dobby-recognized-frame-rgb-photos-20261001.log",
+      "rotationLog": "/tmp/dobby-recognized-frame-rgb-rotation-20261001.log",
+      "scope": "macOS supplied classifier/pose/Vision on same original CGImage and lossless PNG; no physical camera/depth/centimetres."
+    }
+  },
+  "limitations": [
+    "No actual failing long-sleeved iPhone photo was provided; its exact rejection stage remains unknown.",
+    "No physical iPhone test, wall-clock capture latency benchmark or tape-measure centimetre comparison performed.",
+    "UI fixtures use explicitly synthetic geometry and depth; they do not demonstrate ML or LiDAR accuracy.",
+    "Local model photos may overlap training data and are not a held-out generalization dataset.",
+    "Same-CGImage/lossless-PNG model checks do not prove JPEG equivalence or actual ARKit ticket handoff.",
+    "Prepared captures use raw sceneDepth; optional smoothed-depth comparison and fresh-capture selection diagnostics are absent for that path.",
+    "Prepared photo is the last eligible validated frame, up to the existing two-second source-age limit, rather than a newly chosen frame after the shutter.",
+    "Full-raster copies and JPEG encoding are bounded in ownership but peak memory and sustained frame times require physical-device profiling."
+  ]
+}

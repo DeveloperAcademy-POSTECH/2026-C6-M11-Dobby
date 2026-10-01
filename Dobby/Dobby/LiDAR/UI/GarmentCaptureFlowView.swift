@@ -244,7 +244,7 @@ struct GarmentCaptureFlowView: View {
     private var captureControls: some View {
         VStack(spacing: 10) {
             Spacer(minLength: 12)
-            GarmentShutterButton(isEnabled: isReady && (isPreview || service != nil),
+            GarmentShutterButton(isEnabled: canTakePhoto,
                 isCapturing: isCapturing, action: takePhoto, forceReduceMotion: presentationReduceMotion)
             if isPreview, !previewRecognized {
                 Button("인식 상태 보기") { previewRecognized = true }
@@ -272,6 +272,14 @@ struct GarmentCaptureFlowView: View {
         return isPreview ? previewRecognized && previewModel != nil
             : camera.isRunning && camera.liveReadiness.isReady && camera.liveReadiness.garmentRecognized
     }
+    /// Recognition is advisory. A prepared camera can capture first; the frozen
+    /// photo must still pass the model and measurement checks before a result.
+    private var canTakePhoto: Bool {
+        guard !isCapturing else { return false }
+        if isPreview { return previewModel != nil }
+        return service != nil && camera.isRunning && camera.state == .ready
+            && camera.frameStatus?.hasDepth == true && camera.frameStatus?.tracking == .normal
+    }
     private var silhouetteVisible: Bool {
         !isCapturing && (isPreview ? previewRecognized : camera.liveReadiness.garmentRecognized && camera.liveReadiness.silhouette != nil)
     }
@@ -290,6 +298,7 @@ struct GarmentCaptureFlowView: View {
             }
         }
         if isReady, let recognizedKind { return "\(recognizedKind.title) 인식 완료! 촬영 버튼을 눌러주세요" }
+        if canTakePhoto { return "옷 한 벌 전체를 촬영하면 종류와 측정점을 확인해요" }
         if isPreview { return "옷 한 벌 전체가 보이도록 평평하게 펼쳐주세요" }
         switch camera.state {
         case .failed, .interrupted: return "카메라 연결이 중단됐어요. 다시 촬영 화면을 열어주세요"
@@ -326,7 +335,7 @@ struct GarmentCaptureFlowView: View {
     }
 
     private func takePhoto() {
-        guard isReady, !isCapturing else { return }
+        guard canTakePhoto, !isCapturing else { return }
         if isPreview, let previewModel { model = previewModel; return }
         guard let service else { return }
         let token = UUID()

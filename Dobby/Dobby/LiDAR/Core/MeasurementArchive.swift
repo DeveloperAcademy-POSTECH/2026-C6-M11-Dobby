@@ -14,6 +14,11 @@ nonisolated struct SavedMeasurement: Codable, Sendable, Identifiable {
     /// Per-item tape references for multi-item automatic validation. The legacy
     /// scalar remains supported only for records with a single definition.
     var referenceByDefinitionCentimeters: [String: Double]? = nil
+    /// When the complete pose is corrected, `landmarks`/`result` are the current
+    /// replay inputs and output. These retain the untouched automatic evidence.
+    /// Both are absent from legacy records and unedited captures.
+    var originalAutomaticLandmarks: GarmentLandmarkSet? = nil
+    var originalAutomaticResult: GarmentMeasurementResult? = nil
 }
 
 nonisolated struct MeasurementSummary: Codable, Sendable, Identifiable {
@@ -141,6 +146,16 @@ actor MeasurementArchive {
               record.snapshot.frame.imageSize.isValid,
               record.landmarks.points.count <= 200,
               record.definitions.count <= 100 else { throw ArchiveError.invalidFile }
+        if record.originalAutomaticLandmarks != nil || record.originalAutomaticResult != nil {
+            guard let original = record.originalAutomaticLandmarks,
+                  let result = record.originalAutomaticResult,
+                  original.points.count <= 200,
+                  original.sessionID == record.snapshot.frame.sessionID,
+                  original.frameID == record.snapshot.frame.frameID,
+                  result.sessionID == original.sessionID, result.frameID == original.frameID,
+                  result.source == record.snapshot.frame.source,
+                  result.values.map(\.id) == record.definitions.map(\.id) else { throw ArchiveError.invalidFile }
+        }
         return record
     }
 }

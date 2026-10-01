@@ -1,7 +1,8 @@
 import Foundation
 
-/// Reduce only the preview analysis raster. Normalized points keep referring to
-/// the complete camera field of view, and the snapshot uses the original RGB.
+/// Bound recognition rasters without changing the complete camera field of
+/// view. Preview and fresh-photo fallback share this geometry; snapshots retain
+/// the original RGB, and normalized points still map to that sensor image.
 nonisolated enum LivePreviewRasterGeometry {
     static let maximumDimension = 960
 

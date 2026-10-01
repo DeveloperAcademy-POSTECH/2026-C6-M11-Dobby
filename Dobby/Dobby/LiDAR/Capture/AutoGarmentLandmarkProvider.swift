@@ -8,15 +8,24 @@ nonisolated enum AutoGarmentRecognitionError: Error, LocalizedError, Sendable, E
     AutomaticMeasurementFailureClassifying {
     case noDetection, ambiguous, unsupported, invalidProvenance
     case missingClassifier, incompatibleClassifier
+    case poseNotFound(AutomaticGarmentKind), foregroundNotFound
+    case foregroundMismatch(AutomaticGarmentKind), shapeUnverified(AutomaticGarmentKind)
 
     var errorDescription: String? {
         switch self {
-        case .noDetection: "옷 종류를 인식하지 못했습니다. 상의나 바지 한 벌을 평평하게 펼쳐 주세요."
+        case .noDetection: "촬영한 사진에서 옷 종류를 확실히 구분하지 못했어요. 옷과 구분되는 배경에서 한 벌 전체를 촬영하거나, 이 사진에서 점을 확인해 주세요."
         case .ambiguous: "상의와 하의를 구분하기 어렵습니다. 소매와 바짓단이 모두 보이도록 펼쳐 주세요."
         case .unsupported: "이 옷의 자동 실측은 아직 지원하지 않습니다. 상의·바지·반바지를 촬영해 주세요."
         case .invalidProvenance: "인식한 옷 종류와 측정 모델이 일치하지 않습니다. 다시 촬영해 주세요."
         case .missingClassifier: "옷 종류 분류 모델이 앱에 포함되지 않았습니다."
         case .incompatibleClassifier: "옷 종류 분류 모델의 형식이 맞지 않습니다."
+        case .poseNotFound(let kind): "사진에서 \(kind.title)의 측정점을 찾지 못했어요. 소매나 바짓단까지 전체가 보이는지 확인하거나, 이 사진에서 점을 직접 지정해 주세요."
+        case .foregroundNotFound: "사진에서 옷의 윤곽을 분리하지 못했어요. 옷과 구분되는 배경에서 촬영하거나, 이 사진에서 점을 확인해 주세요."
+        case .foregroundMismatch(let kind): "\(kind.title)의 측정점과 사진 속 옷 윤곽이 충분히 일치하지 않아요. 옷과 구분되는 배경에서 촬영하거나, 이 사진에서 점을 확인해 주세요."
+        case .shapeUnverified(let kind):
+            kind == .top
+                ? "상의의 몸통과 소매 구조를 확인하지 못했어요. 소매를 몸통에서 조금 떨어뜨려 펼치거나, 이 사진에서 점을 확인해 주세요."
+                : "하의의 허리와 양쪽 다리 구조를 확인하지 못했어요. 두 바짓단 사이가 보이게 펼치거나, 이 사진에서 점을 확인해 주세요."
         }
     }
 
@@ -26,6 +35,8 @@ nonisolated enum AutoGarmentRecognitionError: Error, LocalizedError, Sendable, E
         default: .providerFailure
         }
     }
+
+    var isRecognitionRejection: Bool { automaticMeasurementFailureCode != .invalidConfiguration }
 }
 
 nonisolated struct AutoGarmentClassificationAttempt: Codable, Sendable {
@@ -51,7 +62,7 @@ nonisolated struct AutoGarmentRecognitionEvaluation: Sendable {
 
 /// The supplied fifteen-category classifier routes this exact RGB frame to one
 /// cached pose model. That model independently associates its points with a
-/// foreground mask. No live result or mutable last kind is reused for capture.
+/// foreground mask. A fresh-photo fallback never borrows another frame's points.
 actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, GarmentImageRecognizing {
     private nonisolated let top: CoreMLGarmentLandmarkProvider
     private nonisolated let bottoms: CoreMLGarmentLandmarkProvider
@@ -149,17 +160,39 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                 throw AutoGarmentRecognitionError.invalidProvenance
             }
             return result
-        case .ambiguous: throw AutoGarmentRecognitionError.ambiguous
-        case .noDetection:
-            throw evaluation.isUnsupported ? AutoGarmentRecognitionError.unsupported : AutoGarmentRecognitionError.noDetection
+        case .ambiguous, .noDetection: throw Self.recognitionFailure(in: evaluation)
         }
+    }
+
+    /// Report the deepest stage that actually ran rather than labelling every
+    /// pose or silhouette rejection as a failure to classify clothing.
+    nonisolated static func recognitionFailure(in evaluation: AutoGarmentRecognitionEvaluation) -> AutoGarmentRecognitionError {
+        if evaluation.isUnsupported { return .unsupported }
+        for attempt in evaluation.classificationAttempts {
+            if let evidence = attempt.evidence, evidence.status != .supported,
+               !evidence.reasons.contains(.unmatchedForeground) {
+                if evidence.reasons.contains(.invalidInput) { return .invalidProvenance }
+                return .shapeUnverified(evidence.kind)
+            }
+        }
+        for attempt in evaluation.classificationAttempts where attempt.poseError == "unmatchedForeground" {
+            if let kind = attempt.route.garmentKind { return .foregroundMismatch(kind) }
+        }
+        if evaluation.classificationAttempts.contains(where: { $0.poseError == "noForeground" }) {
+            return .foregroundNotFound
+        }
+        for attempt in evaluation.classificationAttempts where attempt.poseError == "noDetection" {
+            if let kind = attempt.route.garmentKind { return .poseNotFound(kind) }
+        }
+        return evaluation.decision == .ambiguous ? .ambiguous : .noDetection
     }
 
     /// Each attempt is self-contained: classifier -> selected pose -> independent
     /// foreground -> structural compatibility. Recovery never compares category
     /// scores across rotations or substitutes the other model after an error.
-    func evaluateImage(_ image: CGImage, orientation: ImageOrientation) async throws -> AutoGarmentRecognitionEvaluation {
+    func evaluateImage(_ source: CGImage, orientation: ImageOrientation) async throws -> AutoGarmentRecognitionEvaluation {
         try Task.checkCancellation()
+        let image = try analysisImage(source)
         let size = PixelSize(width: image.width, height: image.height)
         guard size.isValid else { throw BottomModelError.invalidImage }
         var attempts: [AutoGarmentClassificationAttempt] = []
@@ -235,6 +268,23 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                      top: topEvidence, bottoms: bottomEvidence, recognition: nil,
                      classificationAttempts: attempts, isUnsupported: unsupported,
                      poseRequests: poseRequests, foregroundRequests: foregroundRequests)
+    }
+
+    /// The fresh-photo fallback uses the same bounded, complete-field sRGB
+    /// raster as the preview. Resize without rotating, cropping or stretching;
+    /// normalized points and masks still refer to the original sensor image.
+    private func analysisImage(_ source: CGImage) throws -> CGImage {
+        let original = PixelSize(width: source.width, height: source.height)
+        guard original.isValid else { throw BottomModelError.invalidImage }
+        let size = LivePreviewRasterGeometry.analysisSize(for: original) ?? original
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+        if size == original, source.colorSpace?.name == sRGB.name, source.bitsPerPixel == 32 { return source }
+        let scale = Double(size.width) / Double(original.width)
+        let resized = CIImage(cgImage: source).transformed(by: .init(scaleX: scale, y: scale))
+        guard let image = context.createCGImage(resized,
+            from: CGRect(x: 0, y: 0, width: size.width, height: size.height),
+            format: .RGBA8, colorSpace: sRGB, deferred: false) else { throw BottomModelError.bufferCreation }
+        return image
     }
 
     private func classify(_ image: CGImage, orientation: ImageOrientation) throws -> [GarmentClassificationScore] {

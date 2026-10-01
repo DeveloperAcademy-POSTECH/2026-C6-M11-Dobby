@@ -1,0 +1,4493 @@
+{
+  "blanks": [
+    {
+      "classificationAttempts": [
+        {
+          "orientation": "up",
+          "route": {
+            "uncertain": {
+              "reason": "lowConfidence"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.07220458984375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.07110595703125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.070068359375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.06976318359375,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.0684814453125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.06646728515625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.06585693359375,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0657958984375,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.06549072265625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.06549072265625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.06500244140625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.06500244140625,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.06414794921875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.06390380859375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0609130859375,
+              "label": "Shirt"
+            }
+          ]
+        },
+        {
+          "orientation": "down",
+          "route": {
+            "uncertain": {
+              "reason": "lowConfidence"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.07220458984375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.07110595703125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.070068359375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.06976318359375,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.0684814453125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.06646728515625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.06585693359375,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0657958984375,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.06549072265625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.06549072265625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.06500244140625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.06500244140625,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.06414794921875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.06390380859375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0609130859375,
+              "label": "Shirt"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "noDetection": {}
+      },
+      "elapsedSeconds": 0.023444417,
+      "error": "noDetection",
+      "evaluationSeconds": 0.011879292,
+      "foregroundRequests": 0,
+      "orientation": "up",
+      "passed": true,
+      "poseRequests": 0,
+      "safelyRejected": true,
+      "source": "synthetic:800x600:gray=0.0"
+    },
+    {
+      "classificationAttempts": [
+        {
+          "orientation": "up",
+          "route": {
+            "uncertain": {
+              "reason": "lowConfidence"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.07550048828125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.0738525390625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.07098388671875,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.07061767578125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.06976318359375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.06695556640625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.06597900390625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0653076171875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.06512451171875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.06500244140625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.06353759765625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.06353759765625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.06298828125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.06170654296875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.05926513671875,
+              "label": "Sweater"
+            }
+          ]
+        },
+        {
+          "orientation": "down",
+          "route": {
+            "uncertain": {
+              "reason": "lowConfidence"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.07550048828125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.0738525390625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.07098388671875,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.07061767578125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.06976318359375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.06695556640625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.06597900390625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0653076171875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.06512451171875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.06500244140625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.06353759765625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.06353759765625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.06298828125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.06170654296875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.05926513671875,
+              "label": "Sweater"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "noDetection": {}
+      },
+      "elapsedSeconds": 0.022315167,
+      "error": "noDetection",
+      "evaluationSeconds": 0.010860875,
+      "foregroundRequests": 0,
+      "orientation": "up",
+      "passed": true,
+      "poseRequests": 0,
+      "safelyRejected": true,
+      "source": "synthetic:800x600:gray=0.4470588235294118"
+    },
+    {
+      "classificationAttempts": [
+        {
+          "orientation": "up",
+          "route": {
+            "uncertain": {
+              "reason": "lowConfidence"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.07269287109375,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.07073974609375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.06988525390625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.06982421875,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.06884765625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.06793212890625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.06695556640625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.06683349609375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.06585693359375,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.0654296875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.06488037109375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.06341552734375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.062744140625,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.062164306640625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.061431884765625,
+              "label": "Sweater"
+            }
+          ]
+        },
+        {
+          "orientation": "down",
+          "route": {
+            "uncertain": {
+              "reason": "lowConfidence"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.07269287109375,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.07073974609375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.06988525390625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.06982421875,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.06884765625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.06793212890625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.06695556640625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.06683349609375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.06585693359375,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.0654296875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.06488037109375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.06341552734375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.062744140625,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.062164306640625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.061431884765625,
+              "label": "Sweater"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "noDetection": {}
+      },
+      "elapsedSeconds": 0.023069375,
+      "error": "noDetection",
+      "evaluationSeconds": 0.012243042,
+      "foregroundRequests": 0,
+      "orientation": "up",
+      "passed": true,
+      "poseRequests": 0,
+      "safelyRejected": true,
+      "source": "synthetic:800x600:gray=1.0"
+    }
+  ],
+  "incorrectKindCount": 0,
+  "limitations": [
+    "Local supplied photos can overlap training data; this does not establish generalization accuracy.",
+    "Conservative association or kind ambiguity rejects some genuine garments instead of assigning an unsupported model.",
+    "Timing is measured on this Mac, not the iPhone camera pipeline.",
+    "Snapshot depth is deliberately empty; no physical centimetres were calculated."
+  ],
+  "photos": [
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 7,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 5,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Polo",
+              "confidence": 0.26025390625,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.26025390625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.1641845703125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.10638427734375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.052734375,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.0489501953125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.04827880859375,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.045257568359375,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.044189453125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.039337158203125,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.038360595703125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.036224365234375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.03240966796875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0321044921875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.0255279541015625,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.025054931640625,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.1412075,
+      "evaluationSeconds": 0.05634525,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T02.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 7,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 5,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 8,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 9,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Polo",
+              "confidence": 0.26708984375,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.26708984375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.1910400390625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.085693359375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.07318115234375,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.04754638671875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.046142578125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.039031982421875,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.037384033203125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.037017822265625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.031707763671875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.031280517578125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.0305328369140625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.029632568359375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.027587890625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.023895263671875,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.110867875,
+      "evaluationSeconds": 0.033759833,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T03.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 8,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 9,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 10,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 10,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 10,
+              "strongDirectPoints": 10,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Polo",
+              "confidence": 0.2509765625,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.2509765625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.126953125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.10595703125,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.08380126953125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.064697265625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.06329345703125,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.042724609375,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.041839599609375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.039886474609375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.037017822265625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.0335693359375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.032928466796875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0310821533203125,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.0241546630859375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.021148681640625,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.110254125,
+      "evaluationSeconds": 0.033234708,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T04.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 10,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 10,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 10,
+          "strongDirectPoints": 10,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 10,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 9,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 8,
+              "strongDirectPoints": 10,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Polo",
+              "confidence": 0.1925048828125,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.1925048828125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.165283203125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.09588623046875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.08837890625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.08367919921875,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.07122802734375,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.05780029296875,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.040252685546875,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.035675048828125,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.033935546875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.0305938720703125,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.02935791015625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.029327392578125,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.025970458984375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.0196685791015625,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.111211375,
+      "evaluationSeconds": 0.033865583,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T05.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 10,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 9,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 8,
+          "strongDirectPoints": 10,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 10,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 8,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 8,
+              "strongDirectPoints": 10,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Polo",
+              "confidence": 0.263671875,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.263671875,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.1519775390625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.10321044921875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.0823974609375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.04547119140625,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.04339599609375,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.0419921875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.039459228515625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.037261962890625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.03680419921875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0362548828125,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.033447265625,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.0289764404296875,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.0281829833984375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0271148681640625,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.110390208,
+      "evaluationSeconds": 0.033262583,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T06.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 10,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 8,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 8,
+          "strongDirectPoints": 10,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 6,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 5,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "T-shirt",
+              "confidence": 0.276611328125,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.276611328125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.2142333984375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.07049560546875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.05621337890625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.055389404296875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.045806884765625,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.03863525390625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.03411865234375,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.033203125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.033050537109375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.032623291015625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.03179931640625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.028839111328125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.0242156982421875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.024200439453125,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.1102,
+      "evaluationSeconds": 0.033508459,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T07.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 6,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 5,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 3,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 2,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "T-shirt",
+              "confidence": 0.286865234375,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.286865234375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.185546875,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.06707763671875,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.056976318359375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.0517578125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.049957275390625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.0379638671875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.03753662109375,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.036773681640625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.03509521484375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.0341796875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.032684326171875,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.031707763671875,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.0279083251953125,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.02716064453125,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.110167291,
+      "evaluationSeconds": 0.033484083,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T09.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 3,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 2,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 7,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 6,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "T-shirt",
+              "confidence": 0.287109375,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.287109375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.201904296875,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.062286376953125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.052490234375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.048736572265625,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.044219970703125,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.041046142578125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.039764404296875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.037750244140625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.036224365234375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.032012939453125,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.03131103515625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.03131103515625,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.029052734375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.02459716796875,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.11014375,
+      "evaluationSeconds": 0.033361083,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T10.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 7,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 6,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 5,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 5,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "T-shirt",
+              "confidence": 0.278076171875,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.278076171875,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.2095947265625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.059967041015625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.054046630859375,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.052947998046875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.044769287109375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.041778564453125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.03668212890625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.036376953125,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0352783203125,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.034576416015625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.034576416015625,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.031585693359375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.025665283203125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.0241241455078125,
+              "label": "Shorts"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.110835083,
+      "evaluationSeconds": 0.033733375,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T11.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 5,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 5,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 6,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 5,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Polo",
+              "confidence": 0.2384033203125,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.2384033203125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.2301025390625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.07806396484375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.05206298828125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.0458984375,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.044189453125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.0438232421875,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.036956787109375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.035736083984375,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.035400390625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.0343017578125,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0343017578125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.03326416015625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0303192138671875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.02703857421875,
+              "label": "Long Pants"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.110182,
+      "evaluationSeconds": 0.033272792,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/반팔_상의/tops_T12.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 6,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 5,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 4,
+              "leftSleeveBranchSamples": 13,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 15,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Sweater",
+              "confidence": 0.2188720703125,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.2188720703125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.140625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.08685302734375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.0716552734375,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.06402587890625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.0587158203125,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.055206298828125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.047210693359375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.04632568359375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.04632568359375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.03851318359375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.0361328125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.035736083984375,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.0275726318359375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.02655029296875,
+              "label": "Skirt"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.110025083,
+      "evaluationSeconds": 0.033104417,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/tops_T21.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 4,
+          "leftSleeveBranchSamples": 13,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 15,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 10,
+              "bodySideGapSamples": 5,
+              "leftSleeveBranchSamples": 13,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 13,
+              "strongDirectPoints": 10,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Shirt",
+              "confidence": 0.17529296875,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.17529296875,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.1671142578125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.1053466796875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.073486328125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.06561279296875,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.055084228515625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.04852294921875,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.04730224609375,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.046234130859375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.041778564453125,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.04107666015625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.040191650390625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.03338623046875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.032928466796875,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.026763916015625,
+              "label": "Shorts"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.111937,
+      "evaluationSeconds": 0.033065458,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/tops_T22.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 10,
+          "bodySideGapSamples": 5,
+          "leftSleeveBranchSamples": 13,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 13,
+          "strongDirectPoints": 10,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 12,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 14,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Sports Jacket",
+              "confidence": 0.11865234375,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.11865234375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.111083984375,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.10357666015625,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.08880615234375,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.07794189453125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.07696533203125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.07208251953125,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.05938720703125,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.056121826171875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.046630859375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.0450439453125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.041259765625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.034820556640625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.034515380859375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.032684326171875,
+              "label": "T-shirt"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.142950709,
+      "evaluationSeconds": 0.044130292,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 2,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/tops_T24.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 12,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 14,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 5,
+              "leftSleeveBranchSamples": 14,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 11,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Sweater",
+              "confidence": 0.1724853515625,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.1724853515625,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.08306884765625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.08221435546875,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.0721435546875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.0703125,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.066162109375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.060089111328125,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.055389404296875,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.05511474609375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.05474853515625,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.0478515625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.047637939453125,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.046478271484375,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.04559326171875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.039764404296875,
+              "label": "Denim Jacket"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.215245083,
+      "evaluationSeconds": 0.068722333,
+      "expectedKind": "top",
+      "foregroundRequests": 2,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 2,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/tops_T25.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 5,
+          "leftSleeveBranchSamples": 14,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 11,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "orientation": "up",
+          "route": {
+            "unsupported": {
+              "category": "Dresses",
+              "confidence": 0.134033203125
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.134033203125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.11163330078125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.1041259765625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.07305908203125,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.06390380859375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.062225341796875,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.0616455078125,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.05914306640625,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.057159423828125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.056488037109375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.053314208984375,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.04962158203125,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.042877197265625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.041778564453125,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.028289794921875,
+              "label": "Denim Jacket"
+            }
+          ]
+        },
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 5,
+              "leftSleeveBranchSamples": 15,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 13,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "down",
+          "route": {
+            "selected": {
+              "category": "Sweater",
+              "confidence": 0.287109375,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.287109375,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.09552001953125,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.0770263671875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.07110595703125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.0640869140625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.061004638671875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.059356689453125,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.048736572265625,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.042694091796875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.03985595703125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.034210205078125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.032135009765625,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.0306854248046875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.0294647216796875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.026702880859375,
+              "label": "Shorts"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.145218083,
+      "evaluationSeconds": 0.045432583,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/tops_T26.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 5,
+          "leftSleeveBranchSamples": 15,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 13,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 5,
+              "leftSleeveBranchSamples": 12,
+              "lowerPairedSleeveRows": 4,
+              "rightSleeveBranchSamples": 10,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Sweater",
+              "confidence": 0.147705078125,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.147705078125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.11370849609375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.11187744140625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0802001953125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.07122802734375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.05987548828125,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.058837890625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.054931640625,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.050018310546875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.047210693359375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.04583740234375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.04144287109375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.040435791015625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.039703369140625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.03643798828125,
+              "label": "Denim Jacket"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.140245042,
+      "evaluationSeconds": 0.043668459,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 2,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/tops_T27.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 5,
+          "leftSleeveBranchSamples": 12,
+          "lowerPairedSleeveRows": 4,
+          "rightSleeveBranchSamples": 10,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "orientation": "up",
+          "route": {
+            "unsupported": {
+              "category": "Skirt",
+              "confidence": 0.1597900390625
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.1597900390625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.12103271484375,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.10595703125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.08294677734375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.07891845703125,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.06072998046875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.052001953125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.048828125,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.047088623046875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.044158935546875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.043853759765625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.041656494140625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.041534423828125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.040924072265625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.0303955078125,
+              "label": "T-shirt"
+            }
+          ]
+        },
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 14,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 13,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "down",
+          "route": {
+            "selected": {
+              "category": "Sweater",
+              "confidence": 0.335205078125,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.335205078125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.07220458984375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.06402587890625,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.06048583984375,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.0567626953125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.049957275390625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.04595947265625,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.044586181640625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.044586181640625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.04443359375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.04266357421875,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.04083251953125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.035186767578125,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.0347900390625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0275421142578125,
+              "label": "T-shirt"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.14337775,
+      "evaluationSeconds": 0.043931792,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/tops_T28.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 14,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 13,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 7,
+              "bodySideGapSamples": 0,
+              "leftSleeveBranchSamples": 10,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 13,
+              "strongDirectPoints": 7,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "unsupportedSilhouette"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Sports Jacket",
+              "confidence": 0.11810302734375,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.11810302734375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.11773681640625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.11187744140625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.10028076171875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.09967041015625,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.0787353515625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.072509765625,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.056304931640625,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.05242919921875,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.048065185546875,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.03570556640625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.028778076171875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.0284271240234375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.027740478515625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.023712158203125,
+              "label": "Long Pants"
+            }
+          ]
+        },
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 7,
+              "bodySideGapSamples": 0,
+              "leftSleeveBranchSamples": 10,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 13,
+              "strongDirectPoints": 7,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "unsupportedSilhouette"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "down",
+          "route": {
+            "selected": {
+              "category": "Shirt",
+              "confidence": 0.1392822265625,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.1392822265625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.1173095703125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.0858154296875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.0858154296875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.084716796875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.08099365234375,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.07684326171875,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.0765380859375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0653076171875,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.042205810546875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0369873046875,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.03472900390625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.0252685546875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.02398681640625,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.02374267578125,
+              "label": "Jeans"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "noDetection": {}
+      },
+      "elapsedSeconds": 0.14634875,
+      "error": "shapeUnverified(main.AutomaticGarmentKind.top)",
+      "evaluationSeconds": 0.075087666,
+      "expectedKind": "top",
+      "foregroundRequests": 2,
+      "orientation": "up",
+      "passed": true,
+      "poseRequests": 3,
+      "safelyRejected": true,
+      "source": "ClothesML/상의/긴팔_상의/tops_T30.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 7,
+          "bodySideGapSamples": 0,
+          "leftSleeveBranchSamples": 10,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 13,
+          "strongDirectPoints": 7,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "unsupportedSilhouette"
+        ],
+        "status": "rejected"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 10,
+              "bodySideGapSamples": 6,
+              "leftSleeveBranchSamples": 13,
+              "lowerPairedSleeveRows": 0,
+              "rightSleeveBranchSamples": 13,
+              "strongDirectPoints": 10,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Sweater",
+              "confidence": 0.29248046875,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.29248046875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.0853271484375,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.08135986328125,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.0740966796875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.054962158203125,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.05218505859375,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.05126953125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.046417236328125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.044342041015625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.042724609375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.04144287109375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.0396728515625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.036712646484375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.0290374755859375,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0272064208984375,
+              "label": "T-shirt"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.253344458,
+      "evaluationSeconds": 0.071792291,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/alexey_00588f87-cda1-46d7-93be-71f0fa889895.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 10,
+          "bodySideGapSamples": 6,
+          "leftSleeveBranchSamples": 13,
+          "lowerPairedSleeveRows": 0,
+          "rightSleeveBranchSamples": 13,
+          "strongDirectPoints": 10,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "top",
+            "metrics": {
+              "associatedDirectPoints": 11,
+              "bodySideGapSamples": 0,
+              "leftSleeveBranchSamples": 14,
+              "lowerPairedSleeveRows": 24,
+              "rightSleeveBranchSamples": 14,
+              "strongDirectPoints": 11,
+              "torsoForegroundFraction": 1
+            },
+            "reasons": [
+              "solidTorso",
+              "pairedSleeveBranches"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Sweater",
+              "confidence": 0.239501953125,
+              "kind": "top"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.239501953125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.1116943359375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.1005859375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.1002197265625,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.060699462890625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.053741455078125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.045501708984375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.041412353515625,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.03857421875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.037139892578125,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.03619384765625,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.03582763671875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.03466796875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.03350830078125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.0303497314453125,
+              "label": "Coat"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "top"
+        }
+      },
+      "definitionIDs": [
+        "top.shoulderWidth",
+        "top.chestWidth",
+        "top.hemWidth",
+        "top.sleeveLengthLeft",
+        "top.sleeveLengthRight",
+        "top.totalLength"
+      ],
+      "elapsedSeconds": 0.253055917,
+      "evaluationSeconds": 0.069830583,
+      "expectedKind": "top",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "top11-ec1e6b054d59",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "top",
+      "source": "ClothesML/상의/긴팔_상의/alexey_0098b1c0-bd39-41c2-a172-17066bc9fd26.jpg",
+      "top": {
+        "kind": "top",
+        "metrics": {
+          "associatedDirectPoints": 11,
+          "bodySideGapSamples": 0,
+          "leftSleeveBranchSamples": 14,
+          "lowerPairedSleeveRows": 24,
+          "rightSleeveBranchSamples": 14,
+          "strongDirectPoints": 11,
+          "torsoForegroundFraction": 1
+        },
+        "reasons": [
+          "solidTorso",
+          "pairedSleeveBranches"
+        ],
+        "status": "supported"
+      }
+    },
+    {
+      "bottoms": {
+        "kind": "bottoms",
+        "metrics": {},
+        "reasons": [
+          "unmatchedForeground"
+        ],
+        "status": "rejected"
+      },
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {},
+            "reasons": [
+              "unmatchedForeground"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "up",
+          "poseError": "unmatchedForeground",
+          "route": {
+            "selected": {
+              "category": "Long Pants",
+              "confidence": 0.2587890625,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.2587890625,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.1136474609375,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.1092529296875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.07659912109375,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.05230712890625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.047119140625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.045989990234375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.044281005859375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.04327392578125,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.04229736328125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.037506103515625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.034881591796875,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.0343017578125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.032257080078125,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.0269775390625,
+              "label": "Hoodie"
+            }
+          ]
+        },
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {},
+            "reasons": [
+              "unmatchedForeground"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "down",
+          "poseError": "noDetection",
+          "route": {
+            "selected": {
+              "category": "Long Pants",
+              "confidence": 0.1680908203125,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.1680908203125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.11663818359375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.0889892578125,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.08624267578125,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.06329345703125,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.06317138671875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.0577392578125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.0535888671875,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.050811767578125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.048004150390625,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.046051025390625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.044647216796875,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.038543701171875,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.036865234375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.036651611328125,
+              "label": "Hoodie"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "noDetection": {}
+      },
+      "elapsedSeconds": 0.120875959,
+      "error": "foregroundMismatch(main.AutomaticGarmentKind.bottoms)",
+      "evaluationSeconds": 0.0620115,
+      "expectedKind": "bottoms",
+      "orientation": "up",
+      "passed": true,
+      "safelyRejected": true,
+      "source": "ClothesML/하의/데님_바지/shf_000009_back.jpg"
+    },
+    {
+      "bottoms": {
+        "kind": "bottoms",
+        "metrics": {},
+        "reasons": [
+          "unmatchedForeground"
+        ],
+        "status": "rejected"
+      },
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {},
+            "reasons": [
+              "unmatchedForeground"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "up",
+          "poseError": "unmatchedForeground",
+          "route": {
+            "selected": {
+              "category": "Long Pants",
+              "confidence": 0.269287109375,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.269287109375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.11529541015625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.10302734375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.05841064453125,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.05450439453125,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.050445556640625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.048980712890625,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.0455322265625,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.04473876953125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.04083251953125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.0400390625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.03424072265625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.033935546875,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.03338623046875,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.0269927978515625,
+              "label": "Hoodie"
+            }
+          ]
+        },
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {},
+            "reasons": [
+              "unmatchedForeground"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "down",
+          "poseError": "unmatchedForeground",
+          "route": {
+            "selected": {
+              "category": "Long Pants",
+              "confidence": 0.273193359375,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.273193359375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.11102294921875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.0921630859375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.062225341796875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.05657958984375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.05279541015625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.046875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.046173095703125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.044189453125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.040191650390625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.038604736328125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.036407470703125,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.035919189453125,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.03314208984375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.0298309326171875,
+              "label": "Hoodie"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "noDetection": {}
+      },
+      "elapsedSeconds": 0.2337585,
+      "error": "foregroundMismatch(main.AutomaticGarmentKind.bottoms)",
+      "evaluationSeconds": 0.116842166,
+      "expectedKind": "bottoms",
+      "orientation": "up",
+      "passed": true,
+      "safelyRejected": true,
+      "source": "ClothesML/하의/데님_바지/shf_000009_front.jpg"
+    },
+    {
+      "bottoms": {
+        "kind": "bottoms",
+        "metrics": {},
+        "reasons": [
+          "unmatchedForeground"
+        ],
+        "status": "rejected"
+      },
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {},
+            "reasons": [
+              "unmatchedForeground"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "up",
+          "poseError": "unmatchedForeground",
+          "route": {
+            "selected": {
+              "category": "Long Pants",
+              "confidence": 0.357666015625,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.357666015625,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.1583251953125,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.05816650390625,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.057586669921875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.0479736328125,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.039764404296875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.038299560546875,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.038116455078125,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.033721923828125,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.030975341796875,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.029541015625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.028778076171875,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.0286407470703125,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.02655029296875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.0263671875,
+              "label": "Polo"
+            }
+          ]
+        },
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {},
+            "reasons": [
+              "unmatchedForeground"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "down",
+          "poseError": "unmatchedForeground",
+          "route": {
+            "selected": {
+              "category": "Long Pants",
+              "confidence": 0.3251953125,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.3251953125,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.138671875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.05780029296875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.04931640625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.048797607421875,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.048675537109375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.045928955078125,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.045135498046875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.0438232421875,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.038177490234375,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.0362548828125,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.032318115234375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.0322265625,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.0289764404296875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.0287017822265625,
+              "label": "Polo"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "noDetection": {}
+      },
+      "elapsedSeconds": 0.278840625,
+      "error": "foregroundMismatch(main.AutomaticGarmentKind.bottoms)",
+      "evaluationSeconds": 0.134078916,
+      "expectedKind": "bottoms",
+      "orientation": "up",
+      "passed": true,
+      "safelyRejected": true,
+      "source": "ClothesML/하의/바지/alexey_0098b991-e36e-4ef1-b5ee-4154b21e2a92.jpg"
+    },
+    {
+      "bottoms": {
+        "kind": "bottoms",
+        "metrics": {},
+        "reasons": [
+          "unmatchedForeground"
+        ],
+        "status": "rejected"
+      },
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {},
+            "reasons": [
+              "unmatchedForeground"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "up",
+          "poseError": "noDetection",
+          "route": {
+            "selected": {
+              "category": "Jeans",
+              "confidence": 0.219970703125,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.219970703125,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.20458984375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.07867431640625,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.060516357421875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.053009033203125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.045989990234375,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.045135498046875,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.03985595703125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.038787841796875,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.037933349609375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.03607177734375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.035797119140625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.035614013671875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.035614013671875,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.032012939453125,
+              "label": "Shirt"
+            }
+          ]
+        },
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {},
+            "reasons": [
+              "unmatchedForeground"
+            ],
+            "status": "rejected"
+          },
+          "orientation": "down",
+          "poseError": "noDetection",
+          "route": {
+            "selected": {
+              "category": "Long Pants",
+              "confidence": 0.14794921875,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.14794921875,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.133544921875,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.0972900390625,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.0853271484375,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.05682373046875,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.055999755859375,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.053955078125,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.05267333984375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.0517578125,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0509033203125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.048980712890625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.046356201171875,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.04058837890625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.03912353515625,
+              "label": "Hoodie"
+            },
+            {
+              "confidence": 0.038238525390625,
+              "label": "Jacket"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "noDetection": {}
+      },
+      "elapsedSeconds": 0.037955959,
+      "error": "poseNotFound(main.AutomaticGarmentKind.bottoms)",
+      "evaluationSeconds": 0.019605,
+      "expectedKind": "bottoms",
+      "orientation": "up",
+      "passed": true,
+      "safelyRejected": true,
+      "source": "ClothesML/하의/바지/alexey_0237ad41-08b8-474e-9ba2-7fc342e6b8db.jpg"
+    },
+    {
+      "bottoms": {
+        "kind": "bottoms",
+        "metrics": {
+          "associatedDirectPoints": 6,
+          "exteriorLegGapRows": 2,
+          "resolvedLegGapRows": 15,
+          "separatedLegRows": 15,
+          "strongDirectPoints": 6,
+          "widestLegGapPixels": 32.93755788331292
+        },
+        "reasons": [
+          "separatedLegs"
+        ],
+        "status": "supported"
+      },
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {
+              "associatedDirectPoints": 6,
+              "exteriorLegGapRows": 2,
+              "resolvedLegGapRows": 15,
+              "separatedLegRows": 15,
+              "strongDirectPoints": 6,
+              "widestLegGapPixels": 32.93755788331292
+            },
+            "reasons": [
+              "separatedLegs"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Shorts",
+              "confidence": 0.32373046875,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.32373046875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.115966796875,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0650634765625,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.05706787109375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.05328369140625,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.051361083984375,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.044464111328125,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.043304443359375,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.04248046875,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.036407470703125,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.036224365234375,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.03533935546875,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.034820556640625,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.0325927734375,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.027740478515625,
+              "label": "Hoodie"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "bottoms"
+        }
+      },
+      "definitionIDs": [
+        "bottom.waist_left.waist_right",
+        "bottom.crotch.waist_center",
+        "bottom.hem_left_outer.waist_left",
+        "bottom.hem_left_inner.hem_left_outer",
+        "bottom.crotch.hem_left_inner",
+        "bottom.hem_right_outer.waist_right",
+        "bottom.hem_right_inner.hem_right_outer",
+        "bottom.crotch.hem_right_inner"
+      ],
+      "elapsedSeconds": 0.336862042,
+      "evaluationSeconds": 0.091219917,
+      "expectedKind": "bottoms",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "bottom7-976144d4d652",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "bottoms",
+      "source": "ClothesML/하의/반바지/alexey_00f4bb77-5cbd-4c81-98b5-42647b8d0c64.jpg"
+    },
+    {
+      "bottoms": {
+        "kind": "bottoms",
+        "metrics": {
+          "associatedDirectPoints": 6,
+          "exteriorLegGapRows": 2,
+          "resolvedLegGapRows": 13,
+          "separatedLegRows": 13,
+          "strongDirectPoints": 6,
+          "widestLegGapPixels": 16.98442608447669
+        },
+        "reasons": [
+          "separatedLegs"
+        ],
+        "status": "supported"
+      },
+      "classificationAttempts": [
+        {
+          "evidence": {
+            "kind": "bottoms",
+            "metrics": {
+              "associatedDirectPoints": 6,
+              "exteriorLegGapRows": 2,
+              "resolvedLegGapRows": 13,
+              "separatedLegRows": 13,
+              "strongDirectPoints": 6,
+              "widestLegGapPixels": 16.98442608447669
+            },
+            "reasons": [
+              "separatedLegs"
+            ],
+            "status": "supported"
+          },
+          "orientation": "up",
+          "route": {
+            "selected": {
+              "category": "Shorts",
+              "confidence": 0.336669921875,
+              "kind": "bottoms"
+            }
+          },
+          "scores": [
+            {
+              "confidence": 0.336669921875,
+              "label": "Shorts"
+            },
+            {
+              "confidence": 0.1109619140625,
+              "label": "Skirt"
+            },
+            {
+              "confidence": 0.0833740234375,
+              "label": "Long Pants"
+            },
+            {
+              "confidence": 0.07037353515625,
+              "label": "Jeans"
+            },
+            {
+              "confidence": 0.045257568359375,
+              "label": "Polo"
+            },
+            {
+              "confidence": 0.04241943359375,
+              "label": "T-shirt"
+            },
+            {
+              "confidence": 0.042236328125,
+              "label": "Dresses"
+            },
+            {
+              "confidence": 0.038238525390625,
+              "label": "Sports Jacket"
+            },
+            {
+              "confidence": 0.037567138671875,
+              "label": "Jacket"
+            },
+            {
+              "confidence": 0.037353515625,
+              "label": "Denim Jacket"
+            },
+            {
+              "confidence": 0.035736083984375,
+              "label": "Sweater"
+            },
+            {
+              "confidence": 0.03216552734375,
+              "label": "Coat"
+            },
+            {
+              "confidence": 0.029876708984375,
+              "label": "Blazer"
+            },
+            {
+              "confidence": 0.0290374755859375,
+              "label": "Shirt"
+            },
+            {
+              "confidence": 0.0283203125,
+              "label": "Hoodie"
+            }
+          ]
+        }
+      ],
+      "decision": {
+        "selected": {
+          "_0": "bottoms"
+        }
+      },
+      "definitionIDs": [
+        "bottom.waist_left.waist_right",
+        "bottom.crotch.waist_center",
+        "bottom.hem_left_outer.waist_left",
+        "bottom.hem_left_inner.hem_left_outer",
+        "bottom.crotch.hem_left_inner",
+        "bottom.hem_right_outer.waist_right",
+        "bottom.hem_right_inner.hem_right_outer",
+        "bottom.crotch.hem_right_inner"
+      ],
+      "elapsedSeconds": 0.313353833,
+      "evaluationSeconds": 0.094406416,
+      "expectedKind": "bottoms",
+      "foregroundRequests": 1,
+      "invalidKindAndVersionRejected": true,
+      "liveAndFrozenIdentityPassed": true,
+      "liveAndFrozenMaskIoU": 1,
+      "liveAndFrozenPointDelta": 0,
+      "modelVersion": "bottom7-976144d4d652",
+      "orientation": "up",
+      "partialDefinitionsPreserved": true,
+      "passed": true,
+      "poseRequests": 1,
+      "safelyRejected": false,
+      "selectedKind": "bottoms",
+      "source": "ClothesML/하의/반바지/alexey_028223d5-e408-4b02-b1a1-2cc641fb9500.jpg"
+    }
+  ],
+  "platform": "macOS real-model RGB validation; no physical depth or centimetres",
+  "preparationSeconds": 4.832069333,
+  "recordedAt": "2026-10-01T07:13:37Z",
+  "requiredSafetyChecksPassed": true,
+  "selectedPhotoCount": 21,
+  "sourceIdentifierFormat": "Relative to Challenge 6; local user/home prefix removed for repository publication. Results unchanged."
+}

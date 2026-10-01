@@ -177,9 +177,10 @@ private struct Report: Codable {
                 do {
                     _ = try await provider.recognizeForeground(image, orientation: orientation)
                     throw ValidationError.invalid("Unsupported kind still published recognition")
-                } catch AutoGarmentRecognitionError.noDetection { check.safelyRejected = true }
-                  catch AutoGarmentRecognitionError.ambiguous { check.safelyRejected = true }
-                  catch AutoGarmentRecognitionError.unsupported { check.safelyRejected = true }
+                } catch let error as AutoGarmentRecognitionError where error.isRecognitionRejection {
+                    check.safelyRejected = true
+                    check.error = String(describing: error)
+                }
                 check.passed = check.safelyRejected
             }
         } catch {

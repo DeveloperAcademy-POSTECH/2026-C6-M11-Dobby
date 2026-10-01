@@ -180,9 +180,11 @@ private struct SizeColumn: View {
     }
 }
 
+#if DEBUG
 #Preview {
     NavigationStack {
         InfoInputView(garment: SampleData.first(in: SampleData.previewContainer.mainContext))
     }
     .modelContainer(SampleData.previewContainer)
 }
+#endif
