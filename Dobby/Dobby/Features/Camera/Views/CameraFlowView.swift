@@ -72,6 +72,7 @@ struct CameraFlowView: View {
                     Text("완료").font(.body.weight(.semibold)).foregroundStyle(.white)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.blue)
                 .disabled(captureRequested || model.isCapturing)
                 .accessibilityIdentifier("camera.selectPhotos")
             }

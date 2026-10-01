@@ -22,7 +22,7 @@ struct ProductPhotoSelectionView: View {
                 Text("사용할 사진을 선택해 주세요.").font(.headline)
                 Text("\(model.selectedPhotoIDs.count)장 선택 · 최소 1장")
                     .accessibilityIdentifier("camera.selectedPhotoCount")
-                Text("먼저 선택한 사진이 대표 사진입니다. 선택을 해제해도 원본은 삭제되지 않아요.")
+                Text("먼저 선택한 사진이 대표 사진입니다. 실측 원본은 보관되고, 상세 사진은 선택한 사진만 제품에 저장돼요.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 if completionRequested {
@@ -154,7 +154,7 @@ private struct ProductPhotoChoice: View {
             .accessibilityIdentifier("camera.photo.\(index)")
             .accessibilityValue(order.map { "\($0)번째 선택" } ?? "선택 안 됨")
             .accessibilityAddTraits(order == nil ? [] : .isSelected)
-            .accessibilityHint("선택하거나 선택을 해제합니다. 원본은 삭제되지 않습니다.")
+            .accessibilityHint("선택하거나 선택을 해제합니다. 상세 사진은 선택한 사진만 제품에 저장됩니다.")
             Button(action: inspect) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
             }

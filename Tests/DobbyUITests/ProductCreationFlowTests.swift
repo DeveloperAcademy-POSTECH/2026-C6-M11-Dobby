@@ -30,6 +30,7 @@ final class ProductCreationFlowTests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: photo.frame.width * 0.05, dy: photo.frame.height * 0.025)))
         wait(for: NSPredicate(format: "value != %@", originalPoint), on: point)
         waitEnabled(confirm)
+        attachScreenshot(app, name: "flow-top-measurement-result-corrected-point")
         confirm.tap()
 
         let captureDetail = app.buttons["camera.captureDetail"]
@@ -38,6 +39,7 @@ final class ProductCreationFlowTests: XCTestCase {
         captureDetail.tap()
         let choose = app.buttons["camera.selectPhotos"]
         waitEnabled(choose)
+        attachScreenshot(app, name: "flow-top-detail-captured-original")
         choose.tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
         let detail = app.buttons["camera.photo.1"]
@@ -47,13 +49,44 @@ final class ProductCreationFlowTests: XCTestCase {
         detail.tap()
         XCTAssertEqual(detail.value as? String, "2번째 선택")
         XCTAssertTrue(app.staticTexts["camera.selectedPhotoCount"].label.contains("2장 선택"))
+        attachScreenshot(app, name: "flow-top-photo-selection-two-photos")
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
+        attachScreenshot(app, name: "flow-top-info-before-editing")
         replaceText(in: field("name", app: app), with: name, app: app)
         replaceText(in: field("detail", app: app), with: description, app: app)
         replaceText(in: field("brand", app: app), with: brand, app: app)
         let shoulder = app.textFields["product-info.measurement.shoulderWidth"]
         reveal(shoulder, in: app)
+
+        // Native Back must keep an unfinished measurement edit in this same
+        // draft while the selected photo originals remain available.
+        replaceText(in: shoulder, with: "68.39", app: app)
+        returnToInformationThroughPhotoSelection(in: app)
+        reveal(shoulder, in: app)
+        XCTAssertEqual(shoulder.value as? String, "68.39")
+        attachScreenshot(app, name: "flow-top-pending-draft-restored-68.39")
+
+        // Invalid input also survives navigation so the user can correct it;
+        // returning to Info must never silently replace it with an old value.
+        replaceText(in: shoulder, with: "0", app: app)
+        returnToInformationThroughPhotoSelection(in: app)
+        reveal(shoulder, in: app)
+        XCTAssertEqual(shoulder.value as? String, "0")
+        attachScreenshot(app, name: "flow-top-invalid-pending-draft-restored-zero")
+        app.buttons["product-info.done"].tap()
+        let invalidValue = app.alerts["제품 정보를 저장하지 못했어요"]
+        XCTAssertTrue(invalidValue.waitForExistence(timeout: 5))
+        let validationMessage = invalidValue.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
+            "어깨너비", "0보다 큰 숫자", "입력한 정보는 화면에 남아 있어요")).firstMatch
+        XCTAssertTrue(validationMessage.exists)
+        attachScreenshot(app, name: "flow-top-invalid-measurement-save-guidance")
+        invalidValue.buttons["확인"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
+        reveal(shoulder, in: app)
+        XCTAssertEqual(shoulder.value as? String, "0")
+
         replaceText(in: shoulder, with: "67.25", app: app)
         XCTAssertTrue(app.keyboards.firstMatch.exists)
         assertFocusedMeasurementVisible(shoulder, in: app)
@@ -62,6 +95,7 @@ final class ProductCreationFlowTests: XCTestCase {
         // must persist all digits instead of reusing the rounded display value.
         app.buttons["product-info.done"].tap()
         XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 15))
+        attachScreenshot(app, name: "flow-top-completion-real-product")
         app.buttons["product-complete.export"].tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))
@@ -139,6 +173,26 @@ final class ProductCreationFlowTests: XCTestCase {
         openLibraryProduct(named: name, app: app)
         assertSavedValue(key: "shoulderWidth", contains: "67.25", app: app)
         attachScreenshot(app, name: "flow-top-library-after-unchanged-edit-67.25")
+
+        // A saved product keeps pending edits when returning to its detail
+        // page, and commits them only after completing Info again.
+        app.buttons["library.edit"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        replaceText(in: shoulder, with: "72.19", app: app)
+        tapBack(in: app)
+        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
+        assertSavedValue(key: "shoulderWidth", contains: "67.25", app: app)
+        app.buttons["library.edit"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        reveal(shoulder, in: app)
+        XCTAssertEqual(shoulder.value as? String, "72.19")
+        attachScreenshot(app, name: "flow-top-library-pending-draft-restored-72.19")
+        app.buttons["product-info.done"].tap()
+        XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
+        app.buttons["product-complete.library"].tap()
+        openLibraryProduct(named: name, app: app)
+        assertSavedValue(key: "shoulderWidth", contains: "72.19", app: app)
+        attachScreenshot(app, name: "flow-top-library-saved-restored-draft-72.19")
     }
 
     @MainActor
@@ -227,6 +281,17 @@ final class ProductCreationFlowTests: XCTestCase {
     @MainActor
     private func field(_ key: String, app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["product-info.\(key)"].firstMatch
+    }
+
+    @MainActor
+    private func returnToInformationThroughPhotoSelection(in app: XCUIApplication) {
+        tapBack(in: app)
+        let selectPhotos = app.buttons["camera.selectPhotos"]
+        if selectPhotos.isHittable { selectPhotos.tap() }
+        XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["camera.selectedPhotoCount"].label.contains("2장 선택"))
+        app.buttons["camera.completePhotos"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
     }
 
     @MainActor

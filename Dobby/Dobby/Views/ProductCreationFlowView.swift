@@ -14,6 +14,7 @@ struct ProductCreationFlowView: View {
     private let isFixture: Bool
     @State private var path: [Step] = []
     @State private var garment: Garment?
+    @State private var measurementInput = GarmentMeasurementInputState()
     @State private var photoModel: ProductPhotoModel?
     @State private var camera: CameraPreviewSession?
     @State private var permission: CameraPermission?
@@ -59,7 +60,9 @@ struct ProductCreationFlowView: View {
                                         }
                                     }
                             case .information:
-                                InfoInputView(garment: garment) { _ in path.append(.completed) }
+                                InfoInputView(garment: garment, measurementInput: $measurementInput) {
+                                    _ in path.append(.completed)
+                                }
                             case .completed:
                                 ProductInputCompletionView(garment: garment,
                                     onExport: { showFruits = false; exportProduct = ExportProduct(garment: garment) },

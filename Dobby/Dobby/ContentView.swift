@@ -182,6 +182,7 @@ struct ProductSavedDetailView: View {
     var initiallyEditing = false
     @State private var showCompletion = false
     @State private var showInformation = false
+    @State private var measurementInput = GarmentMeasurementInputState()
     @State private var didOpenInitialEdit = false
     @State private var pendingExportEdit = false
     @State private var exportProduct: ExportProduct?
@@ -226,7 +227,7 @@ struct ProductSavedDetailView: View {
             }
         }
         .navigationDestination(isPresented: $showInformation) {
-            InfoInputView(garment: garment) { _ in showCompletion = true }
+            InfoInputView(garment: garment, measurementInput: $measurementInput) { _ in showCompletion = true }
         }
         .navigationDestination(isPresented: $showCompletion) {
             ProductInputCompletionView(garment: garment, onExport: openExport, onLibrary: onLibrary)

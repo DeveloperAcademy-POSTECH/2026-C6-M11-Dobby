@@ -18,10 +18,22 @@ struct InfoInputView: View {
     @State private var exportProduct: ExportProduct?
     @State private var copyController = CopyActivityController()
     @State private var showFruits = false
-    @State private var measurementInput = GarmentMeasurementInputState()
+    @State private var localMeasurementInput = GarmentMeasurementInputState()
+    private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
     @State private var saveError: String?
     @FocusState private var focusedMeasurementID: UUID?
     private static let measurementTableID = "product-info.measurement-table"
+
+    init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
+         onComplete: ((Garment) -> Void)? = nil) {
+        self.garment = garment
+        self.retainedMeasurementInput = measurementInput
+        self.onComplete = onComplete
+    }
+
+    private var measurementInput: Binding<GarmentMeasurementInputState> {
+        retainedMeasurementInput ?? $localMeasurementInput
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -78,7 +90,7 @@ struct InfoInputView: View {
 
     private func complete() {
         do {
-            try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.drafts) {
+            try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts) {
                 try modelContext.save()
             }
             // End editing before navigation so returning from export doesn't
@@ -167,8 +179,8 @@ struct InfoInputView: View {
                             Divider().frame(height: 76)
                         }
                         SizeColumn(value: value, text: Binding(
-                            get: { measurementInput.text(for: value) },
-                            set: { measurementInput.setText($0, for: value) }
+                            get: { measurementInput.wrappedValue.text(for: value) },
+                            set: { measurementInput.wrappedValue.setText($0, for: value) }
                         ), focus: $focusedMeasurementID)
                     }
                 }
