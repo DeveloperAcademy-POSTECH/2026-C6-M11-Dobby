@@ -6,7 +6,36 @@ struct ExportProduct: Identifiable {
     let imageData: Data?
     let fruits: ProductCopyPayload
     let instagram: ProductCopyPayload
+    var detailMeasurements: [ExportMeasurement]? = nil
     var name: String { fruits.productName }
+
+    var copyMeasurements: [ExportMeasurement] {
+        detailMeasurements ?? [
+            ExportMeasurement(id: "length", title: "총장", value: fruits.length),
+            ExportMeasurement(id: "waist", title: "허리 단면", value: fruits.waist),
+            ExportMeasurement(id: "thigh", title: "허벅지 단면", value: fruits.thigh)
+        ]
+    }
+}
+
+struct ExportMeasurement: Identifiable {
+    let id: String
+    let title: String
+    /// 단위 없이 입력란에 붙여넣을 숫자 문자열.
+    let value: String
+
+    init(id: String, title: String, value: String) {
+        self.id = id
+        self.title = title
+        self.value = value
+    }
+
+    init(measuredValue: MeasuredValue) {
+        id = measuredValue.key
+        title = measuredValue.label
+        value = measuredValue.valueCm.formatted(.number.locale(Locale(identifier: "en_US_POSIX"))
+            .grouping(.never).precision(.fractionLength(0...2)))
+    }
 }
 
 extension ExportProduct {
