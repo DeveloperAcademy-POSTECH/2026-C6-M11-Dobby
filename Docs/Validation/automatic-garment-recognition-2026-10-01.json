@@ -1,0 +1,192 @@
+{
+  "date": "2026-10-01",
+  "branch": "feat/3-LiDAR-Module",
+  "sourceBaseCommit": "5672e71c441412e60698510ece7bcf5c924f68df",
+  "sourceState": "Implementation after sourceBaseCommit, captured before its commit; sourceSHA256 identifies the tested implementation.",
+  "sourceSHA256": {
+    "Dobby/Dobby/LiDAR/Capture/AutoGarmentLandmarkProvider.swift": "c74025ab3e600c3441a62dd12a162469e9d3f33344ead3acb7bc971970877fa2",
+    "Dobby/Dobby/LiDAR/Core/AutomaticGarmentKind.swift": "01b1a019d2b97126f28e0ed07653c86a3fcb30b7f697df0646d8a630112f6f3b",
+    "Dobby/Dobby/LiDAR/Core/GarmentClassifierRoutingPolicy.swift": "ec4c5d5735d88dba974e48c36b6d29354f39d6ae38e0ba0e9651181b85ade1a0",
+    "Dobby/Dobby/LiDAR/Core/GarmentKindSelectionPolicy.swift": "4f094afe214a1bf56b7d74f38143267a505cf10907cc9979e3a0fe7370ad8af3",
+    "Dobby/Dobby/LiDAR/Core/AutomaticMeasurementWorkflow.swift": "cd1b5811a88b9ef22c7584ae4f5516179c623d94db3ab06827c5c187edea2c30",
+    "Dobby/Dobby/LiDAR/Core/LiveCaptureReadiness.swift": "49f8a20d848c09cb8e13c2e6b7f20e71bd43f0b264a9160c3e957ce765f89ded",
+    "Dobby/Dobby/LiDAR/Core/MeasurementContracts.swift": "e3b64dc52aed306fa162db24db62272d03cf0408bd6d178eec29e198ea559042",
+    "Dobby/Dobby/LiDAR/UI/GarmentCaptureFlowView.swift": "bddedd991aca1320dff72cf92ebf9ecc88011305867e26a76baae3aeda3fb2b5",
+    "Dobby/Dobby/LiDAR/UI/LiDARLabView.swift": "91a8886008e4fc2a914665afe70507ef21e406936ff11a8dfaaa36882b60ac28",
+    "Tests/DobbyPresentationTests/AutoGarmentProviderTests.swift": "e9e4418ece069999a67827e445250fdf787d978d956c2892f7efcb9a4e62cfcc"
+  },
+  "model": {
+    "origin": "ClothesML/상의_ML/GarmentPipelineHandoff/Resources/clothes_image_detection.mlpackage",
+    "packageBytes": 171764006,
+    "weightsSHA256": "fc8d621ce7f570f7671cd7dc6338e89ece8e37c75a0e1884ab92ac084e01f0d3",
+    "originalBytesPreserved": true,
+    "largeWeightsStorage": "Git LFS",
+    "existingPoseWeightsAndSchemasUnchanged": true
+  },
+  "verification": {
+    "core": {
+      "passed": 360,
+      "failed": 0,
+      "log": "/tmp/dobby-auto-kind-core-final-20261001.log"
+    },
+    "ui": {
+      "distinctPassed": 23,
+      "finalFailed": 0,
+      "simulator": "iPhone 17 Pro / iOS 26.4",
+      "scope": "Synthetic capture/result/save/retake/partial, routing and native silhouette presentation. No physical sensor inference.",
+      "initialRun": {
+        "passed": 19,
+        "failed": 4,
+        "log": "/tmp/dobby-auto-garment-ui-20261001.log",
+        "resultBundle": "/tmp/dobby-lidar-ui.3nSuFc/Results.xcresult"
+      },
+      "retry": {
+        "passed": 4,
+        "failed": 0,
+        "log": "/tmp/dobby-auto-garment-ui-retry-20261001.log",
+        "resultBundle": "/tmp/dobby-lidar-ui.3nSuFc/DiagnosticRetryResults.xcresult"
+      },
+      "retryChanges": "Atomic photo diagnostic sheet data fixed; detail scrolling and close selector scoped to visible target without removing assertions."
+    },
+    "iosClassifierRuntime": {
+      "passed": 1,
+      "failed": 0,
+      "log": "/tmp/dobby-auto-classifier-ios-probe-20261001.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.ZHRT2b/ClassifierProbeResults.xcresult",
+      "scope": "Actual bundled VNCoreML classifier, up/down exact15labels, neutral image rejected before pose/foreground calls. Does not exercise garments or centimetres."
+    },
+    "iosFullPreparationAttempt": {
+      "passed": 0,
+      "failed": 1,
+      "error": "Vision error Code9: Could not create inference context",
+      "log": "/tmp/dobby-auto-classifier-ios-runtime-20261001.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.ZHRT2b/Results.xcresult",
+      "diagnosis": "Isolated stages confirmed: both supplied pose models prepared and classifier executed; Apple VNGenerateForegroundInstanceMaskRequest alone fails Code9 on the iOS26.4 simulator. No production errors ignored and no CPU-only classifier workaround."
+    },
+    "nativeDeviceBuild": {
+      "Debug": "PASS",
+      "Release": "PASS",
+      "signed": false,
+      "debugLog": "/tmp/dobby-auto-kind-debug-verified-20261001.log",
+      "releaseLog": "/tmp/dobby-auto-kind-release-verified-20261001.log",
+      "classifierCompiledInApp": true,
+      "QuickCopyWidgetEmbedded": true
+    },
+    "localRGBRegression": {
+      "platform": "macOS actual supplied classifier/pose/Vision; no physical LiDAR or cm",
+      "photos": 26,
+      "selected": 21,
+      "selectedTops": 19,
+      "topPhotos": 20,
+      "selectedBottoms": 2,
+      "bottomPhotos": 6,
+      "incorrectKind": 0,
+      "blankRejected": 3,
+      "liveFrozenContractPass": 21,
+      "rejectedPhotos": [
+        {
+          "photo": "tops_T30.jpg",
+          "expectedKind": "top",
+          "decision": {
+            "noDetection": {}
+          }
+        },
+        {
+          "photo": "shf_000009_back.jpg",
+          "expectedKind": "bottoms",
+          "decision": {
+            "noDetection": {}
+          }
+        },
+        {
+          "photo": "shf_000009_front.jpg",
+          "expectedKind": "bottoms",
+          "decision": {
+            "noDetection": {}
+          }
+        },
+        {
+          "photo": "alexey_0098b991-e36e-4ef1-b5ee-4154b21e2a92.jpg",
+          "expectedKind": "bottoms",
+          "decision": {
+            "noDetection": {}
+          }
+        },
+        {
+          "photo": "alexey_0237ad41-08b8-474e-9ba2-7fc342e6b8db.jpg",
+          "expectedKind": "bottoms",
+          "decision": {
+            "noDetection": {}
+          }
+        }
+      ],
+      "report": "automatic-garment-photos-2026-10-01.json"
+    },
+    "rotationAndUnsupported": {
+      "correctlySelectedRotations": 15,
+      "rotationCount": 15,
+      "skirtPhotosRejected": 6,
+      "blankRejected": 3,
+      "incorrectKind": 0,
+      "report": "automatic-garment-rotation-2026-10-01.json"
+    },
+    "closedMaskHoleRegression": {
+      "focusedPolicyTestsPassed": 27,
+      "log": "/tmp/dobby-auto-kind-policy-core-20261001.log",
+      "closedInteriorGap": "Rejected; selected legs require crotch gap connected to exterior below hems",
+      "photoAndBlankStatusesUnchanged": true,
+      "report": "automatic-garment-gap-parity-2026-10-01.json"
+    },
+    "iosPreparationStages": {
+      "posePreparation": {
+        "passed": 1,
+        "failed": 0,
+        "models": [
+          "top11",
+          "bottom7"
+        ],
+        "elapsedSeconds": 0.577
+      },
+      "foregroundDiagnostic": {
+        "passed": 0,
+        "failed": 1,
+        "elapsedSeconds": 0.287,
+        "error": "Vision Code9: Could not create inference context",
+        "request": "VNGenerateForegroundInstanceMaskRequest",
+        "productionBehavior": "Error propagates instead of producing an unmasked measurement"
+      },
+      "log": "/tmp/dobby-auto-garment-ios-preparation-stages-20261001.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.ZHRT2b/PreparationStageResults.xcresult",
+      "attachments": "/tmp/dobby-auto-garment-ios-preparation-attachments-20261001",
+      "scope": "Diagnostic separation of simulator backend failure; not physical-device validation",
+      "diagnosticSource": {
+        "path": "/tmp/dobby-auto-garment-ios-preparation-attachments-20261001/AutoGarmentProviderTests-stage-probe.swift",
+        "SHA256": "7c33d69b5ba306a335666145bfff2fd2fa295c9d79e5c28bc08740f20b585661",
+        "status": "One-off failing Apple foreground probe removed from regression test source after diagnostic preservation; classifier and pose regression assertions unchanged."
+      }
+    },
+    "iosPermanentModelSuite": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "elapsedSeconds": 1.395,
+      "log": "/tmp/dobby-auto-garment-ios-runtime-final-20261001.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.ZHRT2b/FinalAutoGarmentProviderResults.xcresult",
+      "attachments": "/tmp/dobby-auto-garment-ios-runtime-final-attachments-20261001",
+      "scope": "Bundled classifier inference + both pose model preparation. No foreground request, physical camera or depth inference."
+    }
+  },
+  "preserved": [
+    "Existing top/bottom model bytes and schemas",
+    "ContentView/Export/QuickCopy/platform assets",
+    "Project signing and widget target"
+  ],
+  "limitations": [
+    "Local supplied photos were inspected during implementation and may overlap training data; counts are regression outcomes, not general accuracy.",
+    "The classifier thresholds 0.10 and cross-kind 0.01 are initial uncalibrated gates.",
+    "Four bottoms and one top remain rejected by point or foreground/structure requirements.",
+    "No physical iPhone camera/LiDAR, sustained frame time or ruler-based cm accuracy measured.",
+    "Apple Vision foreground preparation fails in the iOS26.4 simulator; independent bundled classifier and top/bottom pose preparation pass. Full live pipeline still needs physical-device verification.",
+    "Mac timings and empty snapshot depth do not establish iPhone performance or measurement accuracy."
+  ]
+}

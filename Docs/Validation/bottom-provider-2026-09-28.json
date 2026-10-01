@@ -1,0 +1,345 @@
+{
+  "adapterCheck" : {
+    "didComputeCentimetres" : false,
+    "frameID" : "6E17DD2F-CCF0-4242-B321-317A307D9E20",
+    "frameOrientation" : "up",
+    "framePreserved" : true,
+    "imagePath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/하의\/데님_바지\/shf_000009_front.jpg",
+    "imageSize" : {
+      "height" : 720,
+      "width" : 1280
+    },
+    "inputDepthIsEmpty" : true,
+    "modelVersion" : "bottom7-976144d4d652",
+    "origin" : "model",
+    "pointCount" : 8,
+    "sessionID" : "C26B21E0-89D2-4A09-ACEF-AF092A6B4047",
+    "sessionPreserved" : true
+  },
+  "images" : [
+    {
+      "detectionConfidence" : 0.49462890625,
+      "elapsedSeconds" : 1.099149417,
+      "imagePath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/하의\/데님_바지\/shf_000009_front.jpg",
+      "imageSize" : {
+        "height" : 720,
+        "width" : 1280
+      },
+      "modelVersion" : "bottom7-976144d4d652",
+      "outputOrientation" : "EXIF-normalized up",
+      "points" : [
+        {
+          "confidence" : 0.79345703125,
+          "id" : "waist_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.27109375,
+            "y" : 0.12430555555555556
+          }
+        },
+        {
+          "confidence" : 0.75537109375,
+          "id" : "waist_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.71875,
+            "y" : 0.20034722222222223
+          }
+        },
+        {
+          "confidence" : 0.498779296875,
+          "id" : "crotch",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.48984375,
+            "y" : 0.60625
+          }
+        },
+        {
+          "confidence" : 0.06951904296875,
+          "id" : "hem_left_outer",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.233203125,
+            "y" : 0.4909722222222222
+          }
+        },
+        {
+          "confidence" : 0.115478515625,
+          "id" : "hem_left_inner",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4890625,
+            "y" : 0.5034722222222222
+          }
+        },
+        {
+          "confidence" : 0.07086181640625,
+          "id" : "hem_right_inner",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.509375,
+            "y" : 0.5138888888888888
+          }
+        },
+        {
+          "confidence" : 0.0714111328125,
+          "id" : "hem_right_outer",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7390625,
+            "y" : 0.45
+          }
+        },
+        {
+          "confidence" : 0.75537109375,
+          "id" : "waist_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.494921875,
+            "y" : 0.1623263888888889
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1,
+      "status" : "passed"
+    },
+    {
+      "detectionConfidence" : 0.92333984375,
+      "elapsedSeconds" : 0.010984791,
+      "imagePath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/하의\/바지\/alexey_0098b991-e36e-4ef1-b5ee-4154b21e2a92.jpg",
+      "imageSize" : {
+        "height" : 413,
+        "width" : 400
+      },
+      "modelVersion" : "bottom7-976144d4d652",
+      "outputOrientation" : "EXIF-normalized up",
+      "points" : [
+        {
+          "confidence" : 0.43310546875,
+          "id" : "waist_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2643145161290323,
+            "y" : 0.14375
+          }
+        },
+        {
+          "confidence" : 0.5048828125,
+          "id" : "waist_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.535483870967742,
+            "y" : 0.090234375
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "crotch",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4189516129032258,
+            "y" : 0.259375
+          }
+        },
+        {
+          "confidence" : 0.76953125,
+          "id" : "hem_left_outer",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.23125,
+            "y" : 0.92890625
+          }
+        },
+        {
+          "confidence" : 0.96337890625,
+          "id" : "hem_left_inner",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.38225806451612904,
+            "y" : 0.896875
+          }
+        },
+        {
+          "confidence" : 0.95703125,
+          "id" : "hem_right_inner",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7875,
+            "y" : 0.82734375
+          }
+        },
+        {
+          "confidence" : 0.732421875,
+          "id" : "hem_right_outer",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.9467741935483871,
+            "y" : 0.758984375
+          }
+        },
+        {
+          "confidence" : 0.43310546875,
+          "id" : "waist_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3998991935483871,
+            "y" : 0.1169921875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1,
+      "status" : "passed"
+    },
+    {
+      "detectionConfidence" : 0.9365234375,
+      "elapsedSeconds" : 0.008822291,
+      "imagePath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/하의\/반바지\/alexey_00f4bb77-5cbd-4c81-98b5-42647b8d0c64.jpg",
+      "imageSize" : {
+        "height" : 533,
+        "width" : 400
+      },
+      "modelVersion" : "bottom7-976144d4d652",
+      "outputOrientation" : "EXIF-normalized up",
+      "points" : [
+        {
+          "confidence" : 0.96826171875,
+          "id" : "waist_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.27395833333333336,
+            "y" : 0.2724609375
+          }
+        },
+        {
+          "confidence" : 0.98388671875,
+          "id" : "waist_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.7427083333333333,
+            "y" : 0.256640625
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "crotch",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5192708333333333,
+            "y" : 0.641796875
+          }
+        },
+        {
+          "confidence" : 0.953125,
+          "id" : "hem_left_outer",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.13098958333333333,
+            "y" : 0.7046875
+          }
+        },
+        {
+          "confidence" : 0.98291015625,
+          "id" : "hem_left_inner",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4947916666666667,
+            "y" : 0.76015625
+          }
+        },
+        {
+          "confidence" : 0.98388671875,
+          "id" : "hem_right_inner",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5223958333333333,
+            "y" : 0.75546875
+          }
+        },
+        {
+          "confidence" : 0.9482421875,
+          "id" : "hem_right_outer",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8807291666666667,
+            "y" : 0.72421875
+          }
+        },
+        {
+          "confidence" : 0.96826171875,
+          "id" : "waist_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5083333333333333,
+            "y" : 0.26455078125
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1,
+      "status" : "passed"
+    }
+  ],
+  "limitations" : [
+    "Real-photo inference integration check, without ground-truth landmark labels.",
+    "Confidence is model output, not measured landmark or centimetre accuracy.",
+    "Frame\/session\/origin check uses empty synthetic depth; no distance engine runs.",
+    "Timing is this Mac, not an iPhone; the first photo includes model compilation\/loading."
+  ],
+  "modelPath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/하의_ML\/BottomLandmarks.mlpackage",
+  "orientationReport" : {
+    "baselineOrientation" : "up",
+    "baselinePointCount" : 8,
+    "checks" : [
+      {
+        "frameIdentityPreserved" : true,
+        "frameOrientation" : "right",
+        "inverseRawPixelRotationEXIF" : 8,
+        "maximumConfidenceDelta" : 0.00048828125,
+        "maximumNormalizedCoordinateDelta" : 0.0003906249999999778,
+        "passed" : true,
+        "pointCount" : 8,
+        "rawImageSize" : {
+          "height" : 400,
+          "width" : 533
+        }
+      },
+      {
+        "frameIdentityPreserved" : true,
+        "frameOrientation" : "down",
+        "inverseRawPixelRotationEXIF" : 3,
+        "maximumConfidenceDelta" : 0,
+        "maximumNormalizedCoordinateDelta" : 0.00026041666666659635,
+        "passed" : true,
+        "pointCount" : 8,
+        "rawImageSize" : {
+          "height" : 533,
+          "width" : 400
+        }
+      },
+      {
+        "frameIdentityPreserved" : true,
+        "frameOrientation" : "left",
+        "inverseRawPixelRotationEXIF" : 6,
+        "maximumConfidenceDelta" : 0,
+        "maximumNormalizedCoordinateDelta" : 0.00026041666666665186,
+        "passed" : true,
+        "pointCount" : 8,
+        "rawImageSize" : {
+          "height" : 400,
+          "width" : 533
+        }
+      }
+    ],
+    "confidenceTolerance" : 0.003125,
+    "coordinateTolerance" : 0.003125,
+    "explanation" : "Lossless PNG fixtures physically rotate one real photo's raw pixels opposite to each frame orientation. The actual provider runs preprocessing, Core ML, and decoding; output coordinates transform back to the same upright reference. This is an adapter consistency regression, not ground-truth accuracy or a centimetre test.",
+    "imagePath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/하의\/반바지\/alexey_00f4bb77-5cbd-4c81-98b5-42647b8d0c64.jpg",
+    "uprightSize" : {
+      "height" : 533,
+      "width" : 400
+    }
+  },
+  "platform" : "Version 27.0 (Build 26A428)",
+  "recordedAt" : "2026-09-28T13:41:34Z",
+  "schemaPath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/하의_ML\/schema_bottom7.json"
+}

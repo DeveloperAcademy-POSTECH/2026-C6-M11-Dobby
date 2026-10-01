@@ -1,0 +1,58 @@
+{
+  "capacityLoops": 16,
+  "capacityRejectedMorph": true,
+  "capacityVertices": 2048,
+  "cores": 10,
+  "platform": "Version 27.0 (Build 26A428)",
+  "timings": [
+    {
+      "iterations": 40,
+      "maximumMilliseconds": 42.854625,
+      "meanMilliseconds": 38.179235475,
+      "name": "exact512x384Garment",
+      "p95Milliseconds": 40.006875
+    },
+    {
+      "iterations": 40,
+      "maximumMilliseconds": 43.4255,
+      "meanMilliseconds": 38.778743850000005,
+      "name": "presentation512x384GarmentIncludingExactTrace",
+      "p95Milliseconds": 40.466292
+    },
+    {
+      "iterations": 80,
+      "maximumMilliseconds": 4.953125,
+      "meanMilliseconds": 4.87471195,
+      "name": "aligned128PointSmallMotion",
+      "p95Milliseconds": 4.936708
+    },
+    {
+      "iterations": 20,
+      "maximumMilliseconds": 90.971375,
+      "meanMilliseconds": 89.63224589999999,
+      "name": "presentation512x384With15Holes16Loops",
+      "p95Milliseconds": 90.892167
+    }
+  ],
+  "tinyHoleLoops": 2,
+  "typicalArmpitStayedOpen": true,
+  "typicalExactVertices": 936,
+  "typicalLoops": 1,
+  "typicalNeckStayedOpen": true,
+  "typicalPresentationVertices": 128,
+  "scope": "Synthetic mask presentation geometry; Mac Swift debug build, not iPhone sensor or end-to-end performance",
+  "date": "2026-10-01",
+  "displaySimplificationPixels": [
+    1.25,
+    1.5,
+    1.7
+  ],
+  "displayRoundingPixels": 0.3,
+  "maximumDisplayDeviationPixels": 2.0,
+  "disjointLoopBoundsOptimization": true,
+  "geometryParityBeforeAndAfterBoundsOptimization": {
+    "capacity16LoopPathsEqual": true,
+    "garmentPathsEqual": true,
+    "onePixelHolePathsEqual": true
+  }
+}

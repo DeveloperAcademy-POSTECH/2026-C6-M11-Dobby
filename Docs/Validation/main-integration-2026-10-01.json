@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-01",
+  "featureBeforeIntegration": "3de6dec95edb620080ada49e9272b0f6ae223082",
+  "baseMain": "2c01b909ea8bc37d046b42261fa3eefac6d2eb9a",
+  "changes": {
+    "home": [
+      "LiDAR measurement",
+      "quick copy",
+      "export channels"
+    ],
+    "deepLinks": "Retain root presentation marker until onDismiss; route queued URL after modal and nested capture screens close",
+    "project": "Keep camera usage keys plus main QuickCopy plist, URL scheme, Live Activity and embedded widget target"
+  },
+  "verification": {
+    "core": {
+      "passed": 325,
+      "failed": 0,
+      "log": "/tmp/dobby-main-integration-core-20261001.log"
+    },
+    "quickCopyLogic": {
+      "result": "PASS",
+      "log": "/tmp/dobby-main-integration-quick-copy-logic-20261001.log"
+    },
+    "ui": {
+      "simulator": "iPhone 17 Pro / iOS 26.4",
+      "distinctPassed": 17,
+      "failed": 0,
+      "routing": 5,
+      "existingCapture": 3,
+      "presentation": 9,
+      "runs": [
+        {
+          "passed": 16,
+          "log": "/tmp/dobby-main-integration-ui-20261001.log",
+          "resultBundle": "/tmp/dobby-lidar-ui.sYURlD/Results.xcresult"
+        },
+        {
+          "passed": 1,
+          "log": "/tmp/dobby-main-integration-copy-request-ui-20261001.log",
+          "resultBundle": "/tmp/dobby-lidar-ui.sYURlD/CopyRequestResults.xcresult"
+        }
+      ]
+    },
+    "deviceBuild": {
+      "Debug": "PASS",
+      "Release": "PASS",
+      "signed": false,
+      "debugLog": "/tmp/dobby-main-integration-debug-20261001.log",
+      "releaseLog": "/tmp/dobby-main-integration-release-20261001.log",
+      "cameraUsageDescriptionPresent": true,
+      "liveActivitiesEnabled": true,
+      "dobbyCopyURLSchemePresent": true,
+      "widgetEmbedded": true
+    }
+  },
+  "preserved": {
+    "lidarModuleMatchesFeatureBeforeIntegration": true,
+    "mainExportAndQuickCopySourcesUnchanged": true,
+    "personalXcodeSigningSettingsRetained": true
+  },
+  "scope": "Synthetic UI and generic iOS builds; no physical sensor accuracy, real clipboard transfer or external marketplace execution claimed."
+}
