@@ -3,15 +3,26 @@ import SwiftUI
 struct ExportChannelListView: View {
     let openedChannels: Set<ExportChannel>
     let onSelectChannel: (ExportChannel) -> Void
+    var openedFruitsMethods: Set<FruitsExportMethod> = []
+    var onSelectFruits: ((FruitsExportMethod) -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 36) {
+        VStack(spacing: 16) {
             ForEach(ExportChannel.allCases) { channel in
+                if channel == .fruitsFamily, let onSelectFruits {
+                    ForEach(FruitsExportMethod.allCases) { method in
+                        ExportChannelButton(channel: channel,
+                                            hasOpenedLink: openedFruitsMethods.contains(method),
+                                            action: { onSelectFruits(method) },
+                                            titleOverride: method.title)
+                    }
+                } else {
                 ExportChannelButton(
                     channel: channel,
                     hasOpenedLink: openedChannels.contains(channel)
                 ) {
                     onSelectChannel(channel)
+                }
                 }
             }
         }
