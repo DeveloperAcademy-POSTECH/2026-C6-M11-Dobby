@@ -40,7 +40,7 @@ final class CopyActivityController {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            errorMessage = "실시간 현황을 사용할 수 없습니다. 아래 상품 정보에서 필요한 항목을 복사할 수 있어요."
+            errorMessage = "실시간 현황을 사용할 수 없습니다. 설정에서 실시간 현황 허용 여부를 확인해주세요."
             return false
         }
         let next = ProductCopySession(
@@ -68,7 +68,7 @@ final class CopyActivityController {
             return true
         } catch {
             ProductCopyStore.invalidate()
-            errorMessage = "복사 도우미를 시작하지 못했어요. 다시 시도하거나 아래에서 상품 정보를 복사해주세요."
+            errorMessage = "복사 도우미를 시작하지 못했어요. 잠시 후 다시 시도해주세요."
             return false
         }
     }

@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 
 struct FruitsExportView: View {
     let product: ExportProduct
@@ -10,8 +9,6 @@ struct FruitsExportView: View {
     @Environment(\.scenePhase) private var phase
     @State private var opening = false
     @State private var alertMessage: String?
-    @State private var copiedMessage = ""
-    @State private var showCopyFields = false
 
     var body: some View {
         ScrollView {
@@ -20,6 +17,8 @@ struct FruitsExportView: View {
                     Text("후루츠패밀리 앱을 열어주세요").font(.title2.bold())
                     Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
                         .font(.subheadline)
+                    Text("B 방식은 다이나믹 아일랜드가 있는 iPhone에서 테스트해주세요. 복사하면 Dobby로 잠시 이동한 뒤 후루츠로 돌아옵니다.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Button {
                         opening = true
                         Task {
@@ -32,7 +31,6 @@ struct FruitsExportView: View {
                             }
                             else {
                                 opening = false
-                                showCopyFields = true
                                 alertMessage = controller.errorMessage
                             }
                         }
@@ -50,27 +48,12 @@ struct FruitsExportView: View {
                 }.padding(24).padding(.bottom, 16)
                 Color(.systemGroupedBackground).frame(height: 8)
                 VStack(alignment: .leading, spacing: 20) {
-                    ShortcutCopySetupSection()
                     Text("어떻게 내보내나요?").font(.title2.bold())
                     step(1, "게시글 작성 화면으로 이동해주세요")
                     step(2, "다이나믹 아일랜드를 길게 누른 뒤 복사해주세요")
                     islandIllustration
                         .padding(.horizontal, 12)
                     step(3, "각 입력 항목에 붙여넣기해주세요")
-                    DisclosureGroup("상품 정보 직접 복사", isExpanded: $showCopyFields) {
-                        ForEach(ProductCopyField.allCases) { field in
-                            copyButton(field.title, value: product.fruits.value(for: field))
-                        }
-                        copyButton("가격 · \(product.fruits.price)원", value: product.fruits.price)
-                        copyButton("총장 · \(product.fruits.length) cm", value: product.fruits.length)
-                        copyButton("허리 단면 · \(product.fruits.waist) cm", value: product.fruits.waist)
-                        copyButton("허벅지 단면 · \(product.fruits.thigh) cm", value: product.fruits.thigh)
-                        Text("실측 전체 복사는 하나의 문장입니다. 개별 입력란에는 위 숫자를 각각 복사해주세요.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Button("후루츠패밀리 앱 열기") { opening = true; openFruits() }
-                            .disabled(opening || controller.busy)
-                    }.padding(.top, 16)
-                    if !copiedMessage.isEmpty { Text(copiedMessage).font(.caption).foregroundStyle(.secondary) }
                     if controller.session != nil {
                         Button("복사 도우미 종료", role: .destructive) { Task { await controller.stop() } }
                             .disabled(controller.busy || opening)
@@ -104,22 +87,11 @@ struct FruitsExportView: View {
                 opening = false
                 if accepted { onOpened() }
                 else {
-                    let helper = controller.session != nil ? " 복사 도우미는 유지됩니다." : " 아래에서 상품 정보를 직접 복사할 수 있어요."
+                    let helper = controller.session != nil ? " 복사 도우미는 유지됩니다." : ""
                     alertMessage = "후루츠패밀리 앱으로 연결하지 못했어요. 앱이 설치되어 있다면 홈 화면에서 직접 열어주세요." + helper
                 }
             }
         }
-    }
-
-    private func copyButton(_ title: String, value: String) -> some View {
-        Button {
-            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                copiedMessage = "복사할 정보가 없어요"; return
-            }
-            UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: value]], options: [.localOnly: true])
-            copiedMessage = "\(title) · 입력란에 붙여넣어주세요"
-        } label: { Label(title, systemImage: "doc.on.doc") }
-            .padding(.vertical, 6)
     }
 
     private func step(_ number: Int, _ title: String) -> some View {
