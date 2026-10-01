@@ -1,13 +1,15 @@
 import XCTest
 
-/// Verifies the merged home and actual URL delivery. These checks do not copy
-/// product data, start Live Activities or open external marketplace links.
+/// Checks the actual capture/library home and URL delivery. Every test has an
+/// isolated, empty product store; none copies data, starts a Live Activity,
+/// captures a real photo, or opens an external marketplace.
 final class AppRoutingTests: XCTestCase {
     @MainActor
-    func testHomeFeaturesRemainReachableAndReturnToHome() {
+    func testCaptureEntryLabAndEmptyLibraryRemainReachable() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = fixtureApp()
         app.launch()
+        defer { app.terminate() }
         expectHome(in: app)
 
         openLiDARLab(in: app)
@@ -15,108 +17,90 @@ final class AppRoutingTests: XCTestCase {
         expectHome(in: app)
         XCTAssertFalse(app.buttons["closeLiDARLab"].exists)
 
-        app.buttons["openExportChannels"].tap()
-        XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.navigationBars["내보내기"].exists)
-        app.buttons["export.close"].tap()
+        // This launches the explicitly labelled synthetic creation flow. Exit
+        // before shutter/confirmation, so no product or measurement is stored.
+        app.buttons["product-flow.start"].tap()
+        XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["product-flow.fixture"].exists)
+        app.buttons["closeGarmentCapture"].tap()
         expectHome(in: app)
 
-        app.buttons["openQuickCopy"].tap()
-        XCTAssertTrue(app.navigationBars["상품 정보 빠른 복사"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.staticTexts["quickCopy.feedback"].label, "복사할 항목을 선택하세요")
-        app.navigationBars["상품 정보 빠른 복사"].buttons.firstMatch.tap()
+        app.tabBars.buttons["보관함"].tap()
+        expectEmptyLibrary(in: app)
+        app.tabBars.buttons["홈"].tap()
         expectHome(in: app)
+        attachScreenshot(app, name: "routing-home-capture-lab-library")
     }
 
     @MainActor
-    func testCopyHomeDeepLinkDismissesLiDARAndShowsCopyRequest() {
+    func testColdCopyHomeWithoutSessionShowsGuidanceAndKeepsLibraryEmpty() {
         continueAfterFailure = false
-        let app = XCUIApplication()
-        launchLiDARLab(app)
-
-        app.open(URL(string: "dobby-copy://home")!)
-        expectCopyRequest(in: app)
-        XCTAssertTrue(app.buttons["closeLiDARLab"].waitForNonExistence(timeout: 5))
-        XCTAssertFalse(app.navigationBars["측정 실험실"].exists)
-    }
-
-    @MainActor
-    func testCopyHomeDeepLinkDismissesNestedLiDARPreviewAndShowsCopyRequest() {
-        continueAfterFailure = false
-        let app = XCUIApplication()
-        launchLiDARLab(app)
-        let preview = app.buttons["openGarmentPreview"]
-        XCTAssertTrue(preview.waitForExistence(timeout: 10))
-        for _ in 0..<8 where !preview.isHittable { app.swipeUp() }
-        XCTAssertTrue(preview.isHittable)
-        preview.tap()
-        XCTAssertTrue(app.buttons["closeGarmentCapture"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["garmentPreviewProvenance"].exists)
-
-        app.open(URL(string: "dobby-copy://home")!)
-        expectCopyRequest(in: app)
-        XCTAssertTrue(app.buttons["closeGarmentCapture"].waitForNonExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["closeLiDARLab"].exists)
-        XCTAssertFalse(app.navigationBars["측정 실험실"].exists)
-    }
-
-    @MainActor
-    func testCopyHomeDeepLinkDismissesExportAndShowsCopyRequest() {
-        continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = fixtureApp()
         app.launch()
-        expectHome(in: app)
-        app.buttons["openExportChannels"].tap()
-        XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
+        defer { app.terminate() }
+        app.tabBars.buttons["보관함"].tap()
+        expectEmptyLibrary(in: app)
+        app.terminate()
 
+        // The route requests the current helper, with no copy field or foreign
+        // destination. An absent/expired helper must not construct a demo item.
+        // XCUIApplication.open launches/relaunches the app in this runner. Use
+        // an explicit cold launch; this does not verify warm tab preservation.
+        // The production nil-session guard only sets its alert and returns.
         app.open(URL(string: "dobby-copy://home")!)
-        expectCopyRequest(in: app)
-        XCTAssertTrue(app.buttons["export.close"].waitForNonExistence(timeout: 5))
+        let alert = app.alerts["내보내기를 열 수 없어요"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        XCTAssertTrue(alert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@",
+            "진행 중인 복사 도우미가 없어요")).firstMatch.exists)
+        XCTAssertFalse(app.buttons["export.close"].exists)
         XCTAssertFalse(app.navigationBars["내보내기"].exists)
+        XCTAssertFalse(app.navigationBars["상품 정보 복사"].exists)
+        attachScreenshot(app, name: "routing-cold-url-empty-helper-guidance")
+        alert.buttons["확인"].tap()
+
+        expectHome(in: app)
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
+        app.tabBars.buttons["보관함"].tap()
+        expectEmptyLibrary(in: app)
+        XCTAssertTrue(app.tabBars.buttons["보관함"].isSelected)
+        XCTAssertFalse(app.buttons["export.close"].exists)
+        XCTAssertFalse(app.buttons["closeLiDARLab"].exists)
+        app.tabBars.buttons["홈"].tap()
+        expectHome(in: app)
     }
 
     @MainActor
-    func testExpiredCopyRequestDismissesLiDARAndProcessesAfterNavigation() {
-        continueAfterFailure = false
+    private func fixtureApp() -> XCUIApplication {
         let app = XCUIApplication()
-        launchLiDARLab(app)
-
-        // Valid route syntax with a fresh, nonexistent session. The coordinator
-        // must reject it before copying or starting/opening anything external.
-        let url = URL(string: "dobby-copy://copy?session=\(UUID().uuidString)&field=brand")!
-        app.open(url)
-        XCTAssertTrue(app.navigationBars["상품 정보 복사"].waitForExistence(timeout: 10))
-        let status = app.staticTexts["quickCopy.routeStatus"]
-        XCTAssertTrue(status.waitForExistence(timeout: 5))
-        let rejected = expectation(for: NSPredicate(format: "label == %@", "종료되었거나 만료된 도우미입니다. 새로 시작하세요."),
-                                   evaluatedWith: status)
-        wait(for: [rejected], timeout: 10)
-        XCTAssertTrue(app.buttons["closeLiDARLab"].waitForNonExistence(timeout: 5))
-        XCTAssertFalse(app.navigationBars["측정 실험실"].exists)
-        XCTAssertFalse(app.buttons["서비스 링크 다시 열기"].exists)
-        XCTAssertFalse(app.buttons["이번에 복사한 값"].exists)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "expired-copy-request-after-lidar-dismissal"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
+        return app
     }
 
     @MainActor
     private func expectHome(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.navigationBars["Dobby"].waitForExistence(timeout: 10), file: file, line: line)
-        for identifier in ["openLiDARLab", "openQuickCopy", "openExportChannels"] {
+        for identifier in ["product-flow.start", "openLiDARLab"] {
             let entry = app.buttons[identifier]
             XCTAssertTrue(entry.waitForExistence(timeout: 5), identifier, file: file, line: line)
             XCTAssertTrue(entry.isHittable, identifier, file: file, line: line)
         }
+        XCTAssertFalse(app.buttons["openQuickCopy"].exists, file: file, line: line)
+        XCTAssertFalse(app.buttons["openExportChannels"].exists, file: file, line: line)
     }
 
     @MainActor
-    private func expectCopyRequest(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(app.navigationBars["상품 정보 복사"].waitForExistence(timeout: 10), file: file, line: line)
-        let status = app.staticTexts["quickCopy.routeStatus"]
-        XCTAssertTrue(status.waitForExistence(timeout: 5), file: file, line: line)
-        XCTAssertEqual(status.label, "복사 요청을 기다리고 있습니다", "Home links must not execute a copy request", file: file, line: line)
-        XCTAssertFalse(app.staticTexts["quickCopy.feedback"].exists, file: file, line: line)
+    private func expectEmptyLibrary(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10), file: file, line: line)
+        XCTAssertTrue(app.staticTexts["보관된 제품이 없어요"].waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "library.product.")).firstMatch.exists, file: file, line: line)
+    }
+
+    @MainActor
+    private func attachScreenshot(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

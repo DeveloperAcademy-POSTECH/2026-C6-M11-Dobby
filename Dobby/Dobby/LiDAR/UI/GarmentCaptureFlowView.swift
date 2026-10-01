@@ -10,6 +10,9 @@ struct GarmentCaptureFlowView: View {
     private let previewKind: AutomaticGarmentKind
     private let isPreview: Bool
     private let previewIsPartial: Bool
+    private let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
+    private let onCancel: (() -> Void)?
+    private let embedsNavigation: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -29,9 +32,14 @@ struct GarmentCaptureFlowView: View {
     @State private var errorTitle = "촬영을 완료하지 못했어요"
     @State private var manualRecovery: ManualMeasurement?
 
-    init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false) {
+    init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false,
+         onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
+         onCancel: (() -> Void)? = nil, embedsNavigation: Bool = true) {
         self.archive = archive
         self.isPreview = preview
+        self.onConfirmedRecord = onConfirmedRecord
+        self.onCancel = onCancel
+        self.embedsNavigation = embedsNavigation
         // Fixture selection affects only the labelled synthetic preview.
         // The physical camera always classifies its own current image.
         self.previewKind = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-top") ? .top : .bottoms
@@ -59,18 +67,23 @@ struct GarmentCaptureFlowView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        captureNavigation {
             Group {
                 if let model {
                     GarmentMeasurementResultView(model: model, archive: archive, recordingError: recordingError,
-                        initialImage: processingImage, onRetake: retake, onConfirm: { dismiss() })
+                        initialImage: processingImage, onRetake: retake,
+                        onConfirm: { if onConfirmedRecord == nil { dismiss() } },
+                        onConfirmedRecord: onConfirmedRecord)
                 } else {
                     cameraScreen
                         .navigationTitle("실측 촬영")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .topBarLeading) {
-                                Button { cancel(); dismiss() } label: { Image(systemName: "chevron.left") }
+                                Button {
+                                    cancel()
+                                    if let onCancel { onCancel() } else { dismiss() }
+                                } label: { Image(systemName: "chevron.left") }
                                     .accessibilityLabel("촬영 닫기")
                                     .accessibilityIdentifier("closeGarmentCapture")
                             }
@@ -121,6 +134,15 @@ struct GarmentCaptureFlowView: View {
             }
             Button("확인", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
+    }
+
+    @ViewBuilder
+    private func captureNavigation<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if embedsNavigation {
+            NavigationStack { content() }
+        } else {
+            content()
+        }
     }
 
     private var cameraScreen: some View {

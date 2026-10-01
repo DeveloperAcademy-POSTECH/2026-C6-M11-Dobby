@@ -7,8 +7,8 @@
 
 import Foundation
 
-/// Provisional Mason-side handoff. Image requirements must be agreed with Ichi and Mugu.
-/// A mock placeholder deliberately has no file URL or fabricated image metadata.
+/// 사진 원본과 촬영 식별자를 전달한다. 실측 입력은 영구 저장소, 상세 사진은 카메라 임시 저장소에 있다.
+/// 데모의 mock placeholder에는 파일 URL이나 이미지 정보를 만들지 않는다.
 struct CapturedAsset: Identifiable, Equatable, Sendable {
     let id: UUID
     let sessionID: UUID

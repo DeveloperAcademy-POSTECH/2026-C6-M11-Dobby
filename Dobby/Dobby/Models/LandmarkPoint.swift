@@ -32,6 +32,15 @@ final class LandmarkPoint {
     var autoX: Double
     var autoY: Double
     var isMoved: Bool
+    /// 사진 좌표와 함께 모델/수동 출처 및 파생점의 입력을 보존한다.
+    var originRaw: String? = nil
+    var autoOriginRaw: String? = nil
+    var confidence: Double? = nil
+    var autoConfidence: Double? = nil
+    var isVisible: Bool? = nil
+    var autoIsVisible: Bool? = nil
+    var derivedFrom: [String]? = nil
+    var autoDerivedFrom: [String]? = nil
 
     var photo: GarmentPhoto?
 
@@ -58,6 +67,9 @@ final class LandmarkPoint {
         x = min(1, max(0, newX))
         y = min(1, max(0, newY))
         isMoved = true
+        originRaw = LandmarkOrigin.manual.rawValue
+        confidence = nil
+        isVisible = true
         photo?.garment?.updatedAt = .now
     }
 
@@ -65,6 +77,10 @@ final class LandmarkPoint {
         x = autoX
         y = autoY
         isMoved = false
+        originRaw = autoOriginRaw
+        confidence = autoConfidence
+        isVisible = autoIsVisible
+        derivedFrom = autoDerivedFrom
         photo?.garment?.updatedAt = .now
     }
 }

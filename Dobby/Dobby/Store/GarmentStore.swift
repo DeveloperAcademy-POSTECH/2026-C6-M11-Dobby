@@ -13,7 +13,8 @@ import UIKit
 
 enum GarmentStore {
     static let photosDirectory: URL = {
-        let url = URL.documentsDirectory.appending(path: "photos", directoryHint: .isDirectory)
+        let url = (ProductAppStorage.fixtureDirectory ?? URL.documentsDirectory)
+            .appending(path: "photos", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }()
@@ -123,4 +124,3 @@ extension GarmentStore {
         return garment
     }
 }
-

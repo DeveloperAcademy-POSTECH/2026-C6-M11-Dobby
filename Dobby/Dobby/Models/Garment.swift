@@ -15,6 +15,10 @@ final class Garment {
     @Attribute(.unique) var id: UUID
     var createdAt: Date
     var updatedAt: Date
+    /// 확인한 LiDAR 보관 기록. 같은 기록을 다시 전달해도 상품을 중복 생성하지 않는다.
+    var sourceMeasurementID: UUID? = nil
+    /// 사진·치수와 제품 정보 입력을 저장한 시점. nil이면 새 연결 흐름의 초안이다.
+    var informationCompletedAt: Date? = nil
 
     // MARK: 분류 — 모델이 채운다
 
@@ -83,6 +87,12 @@ extension Garment {
     /// 아니라 반드시 이쪽을 쓴다.
     var orderedPhotos: [GarmentPhoto] {
         photos.sorted { $0.order < $1.order }
+    }
+
+    /// 원본 실측 사진은 보존하되, 사용자가 제품 사진에서 제외할 수 있다.
+    /// 기존 상품의 nil 값은 선택된 사진으로 취급한다.
+    var productPhotos: [GarmentPhoto] {
+        orderedPhotos.filter { $0.isSelectedForProduct != false }
     }
 
     var orderedMeasurements: [MeasuredValue] {

@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// 임시 화면 입력. 실측 담당자의 공통 Model이 정해지면 진입점에서 변환한다.
+/// 실측의 영구 원본에서 변환한 상세 촬영 입력.
 /// 제품/세션 ID는 이전 단계가 생성하며, 이 기능에서는 새로 만들지 않는다.
 struct ProductPhotoInput: Equatable, Sendable {
     let sessionID: UUID
@@ -15,7 +15,7 @@ struct ProductPhotoInput: Equatable, Sendable {
     let measurement: CapturedAsset
 }
 
-/// 임시 완료 결과. 파일 소유권을 옮기거나 원본을 삭제하지 않는다.
+/// 사진 선택의 완료 결과. ProductPhotoHandoff가 선택 사진을 같은 상품의 저장소로 복사한다.
 struct ProductPhotoOutput: Equatable, Sendable {
     let sessionID: UUID
     let garmentID: UUID

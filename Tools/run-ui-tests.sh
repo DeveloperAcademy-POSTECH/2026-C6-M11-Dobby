@@ -37,7 +37,7 @@ PYDEVICE
   xcrun simctl bootstatus "$photo_simulator" -b
 fi
 python3 - "$repo_dir" "$test_dir" "$photo_fixtures" <<'PY'
-import json, pathlib, struct, sys, zlib
+import json, pathlib, struct, sys, uuid, zlib
 repo, output = map(pathlib.Path, sys.argv[1:3])
 photo_fixtures = sys.argv[3] == '1'
 if photo_fixtures:
@@ -58,7 +58,7 @@ spec = {"name":"DobbyValidation", "options":{"deploymentTarget":{"iOS":"26.4"}},
 "Dobby":{"type":"application", "platform":"iOS", "sources":app_sources, "settings":{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"com.dobby.Dobby", "GENERATE_INFOPLIST_FILE":"YES", "INFOPLIST_FILE":str(repo/'Dobby/Dobby/QuickCopyInfo.plist'), "INFOPLIST_KEY_NSCameraUsageDescription":"옷 사진과 깊이로 길이를 측정합니다.", "INFOPLIST_KEY_UILaunchScreen_Generation":"YES", "INFOPLIST_KEY_UIApplicationSceneManifest_Generation":"YES", "INFOPLIST_KEY_UISupportedInterfaceOrientations":"UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight", "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad":"UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight", "TARGETED_DEVICE_FAMILY":"1,2"}}},
 "DobbyUITests":{"type":"bundle.ui-testing", "platform":"iOS", "sources":[str(repo/'Tests/DobbyUITests')], "dependencies":[{"target":"Dobby"}], "settings":{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"com.dobby.Dobby.UITests", "GENERATE_INFOPLIST_FILE":"YES", "TEST_TARGET_NAME":"Dobby"}}},
 "DobbyPresentationTests":{"type":"bundle.unit-test", "platform":"iOS", "sources":[str(repo/'Tests/DobbyPresentationTests')], "dependencies":[{"target":"Dobby"}], "settings":{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"com.dobby.Dobby.PresentationTests", "GENERATE_INFOPLIST_FILE":"YES"}}}},
-"schemes":{"Dobby":{"build":{"targets":{"Dobby":"all"}}, "test":{"targets":["DobbyUITests", "DobbyPresentationTests"], "environmentVariables":{"DOBBY_UI_PHOTO_FIXTURES":"1" if photo_fixtures else "0"}}}}}
+"schemes":{"Dobby":{"build":{"targets":{"Dobby":"all"}}, "test":{"targets":["DobbyUITests", "DobbyPresentationTests"], "environmentVariables":{"DOBBY_UI_PHOTO_FIXTURES":"1" if photo_fixtures else "0", "DOBBY_FLOW_TEST_STORE_TOKEN":str(uuid.uuid4())}}}}}
 (output/'project.json').write_text(json.dumps(spec))
 PY
 if [[ -n "$photo_simulator" ]]; then
