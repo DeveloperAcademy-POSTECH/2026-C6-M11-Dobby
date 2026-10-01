@@ -4,6 +4,18 @@ import Foundation
 import ImageIO
 import Vision
 
+/// Owns a value copy of one RGB/depth frame. The CGImage is immutable and is
+/// independent of ARKit's pixel-buffer pool before model work starts.
+nonisolated struct LiveRecognitionCaptureTicket: @unchecked Sendable {
+    let identity: PreparedCaptureHandoffIdentity
+    let frame: MeasurementFrame
+    let image: CGImage
+    let landmarks: GarmentLandmarkSet
+    let cameraTransform: simd_float4x4
+    let tracking: CaptureTrackingStatus
+    let trackingStable: Bool
+}
+
 /// Bounded semantic garment recognition and foreground segmentation of one RGB frame.
 /// A foreground mask alone never publishes garment recognition or readiness.
 nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
@@ -99,7 +111,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     func submit(
         frame: ARFrame,
         sessionID: UUID,
-        completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void
+        completion: @escaping @Sendable (UUID, LiveCaptureReadiness, LiveRecognitionCaptureTicket?) -> Void
     ) {
         lock.lock()
         guard identifier == sessionID, !isSuspended, !busy,
@@ -145,9 +157,15 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
             sessionID: sessionID,
             readinessEpoch: epoch,
             timestamp: frame.timestamp,
+            frameID: UUID(),
+            capturedAt: Date(),
             image: buffer,
+            ownedImage: nil,
             imageSize: PixelSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer)),
             depth: frame.sceneDepth.flatMap(Self.copyDepth),
+            intrinsics: Self.copyIntrinsics(frame),
+            cameraTransform: pose,
+            tracking: Self.trackingStatus(for: frame.camera.trackingState),
             trackingStable: trackingStable,
             orientation: imageOrientation
         )
@@ -159,26 +177,30 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
             // A bounded raw RGB copy retains the complete field of view and
             // exact aspect ratio. Normalized points/masks still match this
             // frame's full-size RGB and copied depth; capture keeps original RGB.
-            let image: CGImage?
-            image = autoreleasepool {
+            let rendered: (original: CGImage, analysis: CGImage)? = autoreleasepool {
                 guard let buffer = job.image else { return nil }
                 let raw = CIImage(cvPixelBuffer: buffer)
+                let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+                guard let original = context.createCGImage(raw,
+                    from: CGRect(x: 0, y: 0, width: job.imageSize.width, height: job.imageSize.height),
+                    format: .RGBA8, colorSpace: colorSpace, deferred: false) else { return nil }
                 guard let size = LivePreviewRasterGeometry.analysisSize(for: job.imageSize) else { return nil }
                 let scale = Double(size.width) / Double(job.imageSize.width)
-                let resized = raw.transformed(by: .init(scaleX: scale, y: scale))
-                return context.createCGImage(resized,
+                let resized = CIImage(cgImage: original).transformed(by: .init(scaleX: scale, y: scale))
+                guard let analysis = context.createCGImage(resized,
                     from: CGRect(x: 0, y: 0, width: size.width, height: size.height),
-                    format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB), deferred: false)
+                    format: .RGBA8, colorSpace: colorSpace, deferred: false) else { return nil }
+                return (original, analysis)
             }
-            guard let image, let recognizer else {
+            guard let rendered, let recognizer else {
                 var evidence = self.emptyEvidence(for: job)
-                evidence.analysisFailed = image == nil
+                evidence.analysisFailed = rendered == nil
                 self.finish(evidence, job: job, completion: completion)
                 return
             }
-            let task = Task { [job = job.withoutCameraBuffer] in
+            let task = Task { [job = job.owning(rendered.original)] in
                 let recognition: Result<GarmentForegroundRecognition, Error>
-                do { recognition = .success(try await recognizer.recognizeForeground(image, orientation: job.orientation)) }
+                do { recognition = .success(try await recognizer.recognizeForeground(rendered.analysis, orientation: job.orientation)) }
                 catch { recognition = .failure(error) }
                 self.queue.async {
                     guard self.isCurrent(job) else {
@@ -186,7 +208,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
                         return
                     }
                     let evidence = autoreleasepool { self.analyze(job, recognition: recognition) }
-                    self.finish(evidence, job: job, completion: completion)
+                    self.finish(evidence, job: job, recognition: try? recognition.get(), completion: completion)
                 }
             }
             self.lock.lock()
@@ -206,7 +228,8 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     /// Called only on the serial analysis queue. The epoch protects camera
     /// restart, motion invalidation and orientation changes while ML was running.
     private func finish(_ evidence: LiveCaptureEvidence, job: AnalysisJob,
-                        completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
+                        recognition: GarmentForegroundRecognition? = nil,
+                        completion: @escaping @Sendable (UUID, LiveCaptureReadiness, LiveRecognitionCaptureTicket?) -> Void) {
         lock.lock()
         let canEvaluate = identifier == job.sessionID && !isSuspended && readinessEpoch == job.readinessEpoch
         if activeJobID == job.id {
@@ -222,12 +245,58 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         var result = evaluator.evaluate(evidence)
         result.imageOrientation = job.orientation
         result.analysisEpoch = job.readinessEpoch
+        let ticket = result.isReady ? captureTicket(job: job, recognition: recognition) : nil
         lock.lock()
         busy = false
         activeJobID = nil
         let canPublish = identifier == job.sessionID && !isSuspended && readinessEpoch == job.readinessEpoch
         lock.unlock()
-        if canPublish { completion(job.sessionID, result) }
+        if canPublish { completion(job.sessionID, result, ticket) }
+    }
+
+    private func captureTicket(job: AnalysisJob, recognition: GarmentForegroundRecognition?) -> LiveRecognitionCaptureTicket? {
+        guard let recognition, let image = job.ownedImage, let depth = job.depth,
+              let intrinsics = job.intrinsics, let kind = recognition.recognition.garmentKind,
+              recognition.recognition.modelVersion == kind.modelVersion,
+              intrinsics.referenceSize == job.imageSize,
+              image.width == job.imageSize.width, image.height == job.imageSize.height,
+              depth.size.isValid, depth.values.count == depth.size.width * depth.size.height,
+              depth.size.width * job.imageSize.height == depth.size.height * job.imageSize.width,
+              job.trackingStable, job.tracking == .normal else { return nil }
+        let frame = MeasurementFrame(sessionID: job.sessionID, frameID: job.frameID,
+            timestamp: job.timestamp, capturedAt: job.capturedAt, imageSize: job.imageSize,
+            intrinsics: intrinsics, depth: depth, source: .sceneDepth, orientation: job.orientation)
+        let landmarks = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID,
+            origin: .model, modelVersion: recognition.recognition.modelVersion,
+            points: recognition.selection.validatedPoints(recognition.recognition.points),
+            mask: recognition.selection.mask, garmentKind: kind)
+        let identity = PreparedCaptureHandoffIdentity(sessionID: job.sessionID, frameID: job.frameID,
+            analysisEpoch: job.readinessEpoch, timestamp: job.timestamp, orientation: job.orientation,
+            garmentKind: kind, modelVersion: recognition.recognition.modelVersion)
+        return .init(identity: identity, frame: frame, image: image, landmarks: landmarks,
+                     cameraTransform: job.cameraTransform, tracking: job.tracking, trackingStable: job.trackingStable)
+    }
+
+    private static func copyIntrinsics(_ frame: ARFrame) -> CameraIntrinsics? {
+        let matrix = frame.camera.intrinsics
+        let size = frame.camera.imageResolution
+        let result = CameraIntrinsics(fx: Double(matrix.columns.0.x), fy: Double(matrix.columns.1.y),
+            cx: Double(matrix.columns.2.x), cy: Double(matrix.columns.2.y),
+            referenceSize: .init(width: Int(size.width), height: Int(size.height)))
+        guard result.referenceSize.isValid,
+              [result.fx, result.fy, result.cx, result.cy].allSatisfy(\.isFinite),
+              result.fx > 0, result.fy > 0 else { return nil }
+        return result
+    }
+
+    private static func trackingStatus(for state: ARCamera.TrackingState) -> CaptureTrackingStatus {
+        switch state {
+        case .normal: .normal
+        case .limited(.excessiveMotion): .excessiveMotion
+        case .limited(.insufficientFeatures): .insufficientFeatures
+        case .limited: .limited
+        case .notAvailable: .unavailable
+        }
     }
 
     private static func rotationMatrix(_ pose: simd_float4x4) -> simd_float3x3 {
@@ -268,10 +337,9 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         } catch GarmentModelError.noDetection {
         } catch GarmentModelError.multipleGarments {
             evidence.candidateCount = 2
-        } catch AutoGarmentRecognitionError.noDetection {
-        } catch AutoGarmentRecognitionError.ambiguous {
-        } catch AutoGarmentRecognitionError.unsupported {
-            evidence.unsupportedGarment = true
+        } catch let error as AutoGarmentRecognitionError {
+            evidence.unsupportedGarment = error == .unsupported
+            evidence.analysisFailed = !error.isRecognitionRejection
         } catch GarmentMaskAssociationError.multipleForegrounds {
             evidence.candidateCount = 2
         } catch GarmentMaskAssociationError.noForeground {
@@ -282,7 +350,9 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         return evidence
     }
 
-    private static func copyDepth(_ source: ARDepthData) -> DepthMap? {
+    /// Also used for a bounded shutter-time eligibility check. These copied
+    /// samples never replace the depth owned by the accepted live ticket.
+    static func copyDepth(_ source: ARDepthData) -> DepthMap? {
         let buffer = source.depthMap
         let width = CVPixelBufferGetWidth(buffer)
         let height = CVPixelBufferGetHeight(buffer)
@@ -330,16 +400,23 @@ private nonisolated struct AnalysisJob: @unchecked Sendable {
     var sessionID: UUID
     var readinessEpoch: UUID
     var timestamp: TimeInterval
+    var frameID: UUID
+    var capturedAt: Date
     /// Release the ARKit pool buffer after rendering the owned preview raster.
     var image: CVPixelBuffer?
+    var ownedImage: CGImage?
     var imageSize: PixelSize
     var depth: DepthMap?
+    var intrinsics: CameraIntrinsics?
+    var cameraTransform: simd_float4x4
+    var tracking: CaptureTrackingStatus
     var trackingStable: Bool
     var orientation: ImageOrientation
 
-    var withoutCameraBuffer: Self {
+    func owning(_ image: CGImage) -> Self {
         var copy = self
         copy.image = nil
+        copy.ownedImage = image
         return copy
     }
 }

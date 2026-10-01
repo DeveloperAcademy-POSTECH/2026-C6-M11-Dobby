@@ -316,6 +316,10 @@ nonisolated struct MeasurementValidationReportBuilder {
         recordsSeen += 1
         guard record.snapshot.frame.source != .synthetic, record.landmarks.origin != .synthetic else { synthetic += 1; return }
         let version = Self.nonempty(record.landmarks.modelVersion)
+        // Corrected geometry is human-assisted evidence. It must not improve the
+        // model-only accuracy track, even when untouched points remain model-backed.
+        let reportedOrigin: LandmarkOrigin = record.landmarks.points.contains { $0.origin == .manual }
+            ? .manual : record.landmarks.origin
         let frame = record.snapshot.frame
         guard !record.definitions.isEmpty, record.definitions.count <= 100,
               record.definitions.allSatisfy({ !$0.id.isEmpty }),
@@ -351,12 +355,12 @@ nonisolated struct MeasurementValidationReportBuilder {
                 deviceModel: Self.nonempty(record.testContext?.deviceModel), categoryID: record.testContext?.category.rawValue,
                 specimenName: Self.nonempty(record.testContext?.specimenName), conditions: Self.nonempty(record.testContext?.conditions),
                 definitionID: definition.id, definitionLandmarkIDs: definition.landmarkIDs,
-                track: record.landmarks.origin == .manual ? .manual : .automated,
-                depthSource: frame.source.rawValue, modelVersion: record.landmarks.origin == .model ? version : nil,
+                track: reportedOrigin == .manual ? .manual : .automated,
+                depthSource: frame.source.rawValue, modelVersion: reportedOrigin == .model ? version : nil,
                 optionsFingerprint: options)
             let sample = MeasurementValidationSample(recordID: record.id, sessionID: frame.sessionID, frameID: frame.frameID,
                 savedAt: record.savedAt, capturedAt: frame.capturedAt, definitionID: definition.id, title: definition.title,
-                origin: record.landmarks.origin, modelVersion: key.modelVersion, context: record.testContext, source: frame.source,
+                origin: reportedOrigin, modelVersion: key.modelVersion, context: record.testContext, source: frame.source,
                 referenceCentimeters: reference.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }, value: value,
                 groupKey: key, frameIdentity: identity, landmarkIDs: definition.landmarkIDs)
             rows[sample.id] = sample
@@ -365,7 +369,8 @@ nonisolated struct MeasurementValidationReportBuilder {
 
     private mutating func keepLatest(_ record: SavedMeasurement, definitionID: String) -> String? {
         let frame = record.snapshot.frame
-        let key = "\(frame.sessionID)/\(frame.frameID)/\(definitionID)/\(record.landmarks.origin.rawValue)"
+        let origin: LandmarkOrigin = record.landmarks.points.contains { $0.origin == .manual } ? .manual : record.landmarks.origin
+        let key = "\(frame.sessionID)/\(frame.frameID)/\(definitionID)/\(origin.rawValue)"
         if let previous = latestEdits[key] {
             duplicates += 1
             if previous.savedAt > record.savedAt || (previous.savedAt == record.savedAt && previous.recordID.uuidString > record.id.uuidString) { return nil }

@@ -16,7 +16,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let recognize = app.buttons["previewRecognizeGarment"]
         XCTAssertTrue(recognize.waitForExistence(timeout: 10))
         let shutter = app.buttons["captureGarment"]
-        XCTAssertFalse(shutter.isEnabled)
+        XCTAssertTrue(shutter.isEnabled)
         recognize.tap()
         XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
         XCTAssertTrue(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
@@ -24,9 +24,60 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         app.buttons["retakeGarmentMeasurement"].tap()
         XCTAssertTrue(recognize.waitForExistence(timeout: 5))
-        XCTAssertFalse(shutter.isEnabled)
+        XCTAssertTrue(shutter.isEnabled)
         XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
         attachScreenshot(app, name: "garment-reduced-motion-retake")
+    }
+
+    @MainActor
+    func testSyntheticPreviewCanCaptureBeforeRecognitionAndRetakeForBothKinds() throws {
+        continueAfterFailure = false
+        let fixtures: [(arguments: [String], prefix: String, count: Int)] = [
+            (["--garment-preview-top"], "top.", 6),
+            ([], "bottom.", 8)
+        ]
+        for fixture in fixtures {
+            let app = XCUIApplication()
+            app.launchArguments = fixture.arguments
+            launchLiDARLab(app)
+            let preview = app.buttons["openGarmentPreview"]
+            XCTAssertTrue(preview.waitForExistence(timeout: 10))
+            reveal(preview, in: app)
+            preview.tap()
+            let recognize = app.buttons["previewRecognizeGarment"]
+            XCTAssertTrue(recognize.waitForExistence(timeout: 10))
+            let shutter = app.buttons["captureGarment"]
+            let silhouette = app.descendants(matching: .any)["garmentSilhouette"].firstMatch
+            let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
+            XCTAssertTrue(app.staticTexts["garmentPreviewProvenance"].exists)
+            XCTAssertFalse(silhouette.exists)
+            XCTAssertTrue(guidance.label.contains("촬영하면 종류와 측정점을 확인"))
+            XCTAssertFalse(guidance.label.contains("인식 완료"))
+            XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+            shutter.tap()
+            let confirm = app.buttons["confirmGarmentMeasurement"]
+            XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists,
+                          "This fixture verifies UI flow, never real camera recognition")
+            let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+                "garmentMeasurementLabel_" + fixture.prefix))
+            XCTAssertEqual(labels.count, fixture.count)
+            let otherPrefix = fixture.prefix == "top." ? "bottom." : "top."
+            XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+                "garmentMeasurementLabel_" + otherPrefix)).firstMatch.exists)
+            attachScreenshot(app, name: "garment-\(fixture.prefix)-captured-before-recognition")
+
+            app.buttons["retakeGarmentMeasurement"].tap()
+            XCTAssertTrue(recognize.waitForExistence(timeout: 5))
+            XCTAssertFalse(silhouette.exists)
+            XCTAssertFalse(guidance.label.contains("인식 완료"))
+            XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+            shutter.tap()
+            XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
+            XCTAssertEqual(labels.count, fixture.count)
+            app.terminate()
+        }
     }
 
     @MainActor
@@ -207,6 +258,8 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let review = app.buttons["reviewGarmentMeasurement_bottom.crotch.hem_right_inner"]
         reveal(review, in: app)
         XCTAssertTrue(review.exists)
+        XCTAssertTrue(review.isEnabled, "Review must be enabled after the captured result finishes calculating")
+        XCTAssertTrue(review.isHittable, "The clipped photo or loupe must not obstruct the review button")
         review.tap()
         XCTAssertTrue(app.navigationBars["측정 테스트"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["B 위치 지정"].exists)
@@ -292,6 +345,300 @@ final class GarmentCaptureFlowTests: XCTestCase {
     }
 
     @MainActor
+    func testDraggingTopPointShowsMagnifierRecalculatesAndPersistsAfterRelaunch() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--garment-preview-top"]
+        openPointEditingPreview(in: app)
+
+        let shoulder = app.buttons["garmentMeasurementLabel_top.shoulderWidth"]
+        let hem = app.buttons["garmentMeasurementLabel_top.hemWidth"]
+        let originalShoulder = try XCTUnwrap(Self.centimeters(in: shoulder.label))
+        let originalHem = try XCTUnwrap(Self.centimeters(in: hem.label))
+        let point = app.buttons["garmentMeasurementPoint_shoulder_left"]
+        let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
+        XCTAssertTrue(point.waitForExistence(timeout: 5))
+        XCTAssertTrue(photo.waitForExistence(timeout: 5))
+        assertPhotoAccessibilityBounds(photo, in: app)
+        XCTAssertTrue(point.isHittable)
+        // Allow only the floating-point representation error of the hit frame.
+        XCTAssertGreaterThanOrEqual(point.frame.width, 56 - 0.001)
+        XCTAssertGreaterThanOrEqual(point.frame.height, 56 - 0.001)
+        let originalPoint = try XCTUnwrap(point.value as? String)
+        let magnifier = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
+        XCTAssertTrue(magnifier.waitForExistence(timeout: 5))
+        let rightShoulder = app.buttons["garmentMeasurementPoint_shoulder_right"]
+        rightShoulder.tap()
+        expectation(for: NSPredicate(format: "value == %@", try XCTUnwrap(rightShoulder.value as? String)),
+                    evaluatedWith: magnifier)
+        waitForExpectations(timeout: 5)
+        point.tap()
+        expectation(for: NSPredicate(format: "value == %@", originalPoint), evaluatedWith: magnifier)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: shoulder.label)), originalShoulder,
+                       "Selecting a point must not change the measurement")
+        let start = point.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(
+            CGVector(dx: photo.frame.width * 0.05, dy: photo.frame.height * 0.025)))
+        waitForChangedCentimeters(shoulder, from: originalShoulder)
+        XCTAssertNotEqual(point.value as? String, originalPoint)
+        XCTAssertTrue(magnifier.exists, "The selected point must remain available for inspection after dragging")
+        XCTAssertEqual(magnifier.value as? String, point.value as? String)
+        XCTAssertTrue(magnifier.label.contains("어깨"))
+        XCTAssertLessThanOrEqual(magnifier.frame.minX, photo.frame.minX + 20)
+        XCTAssertLessThanOrEqual(magnifier.frame.minY, photo.frame.minY + 20)
+        XCTAssertTrue(photo.frame.contains(magnifier.frame), "The loupe must fit inside the photo's upper-left corner")
+
+        let correctedShoulder = try XCTUnwrap(Self.centimeters(in: shoulder.label))
+        XCTAssertLessThan(correctedShoulder, originalShoulder)
+        XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: hem.label)), originalHem,
+                       "Moving a shoulder must preserve an unrelated hem measurement")
+        let adjustment = app.descendants(matching: .any)["garmentMeasurementAdjustmentStatus"].firstMatch
+        XCTAssertTrue(adjustment.waitForExistence(timeout: 5))
+        XCTAssertTrue(adjustment.label.contains("수동"))
+        XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
+        attachScreenshot(app, name: "garment-top-drag-selected-magnifier-and-correction")
+
+        let confirm = app.buttons["confirmGarmentMeasurement"]
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: confirm)
+        waitForExpectations(timeout: 10)
+        confirm.tap()
+        XCTAssertTrue(app.buttons["openGarmentPreview"].waitForExistence(timeout: 10))
+        // Recreate the app and replay its on-disk record, rather than retaining
+        // a result-view model in memory. No previous archives are removed.
+        app.terminate()
+        launchLiDARLab(app)
+        let record = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "어깨너비 · 데모")).firstMatch
+        reveal(record, in: app)
+        XCTAssertTrue(record.exists)
+        record.tap()
+        let replayed = app.staticTexts["automaticValue_top.shoulderWidth"]
+        XCTAssertTrue(replayed.waitForExistence(timeout: 10))
+        XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: replayed.label)), correctedShoulder, accuracy: 0.06,
+                       "The result label uses one decimal place and the archive uses two")
+        XCTAssertTrue(app.staticTexts["automaticProvenance"].label.contains("합성"))
+        let correctionProvenance = app.descendants(matching: .any)["automaticPointAdjustmentProvenance"].firstMatch
+        XCTAssertTrue(correctionProvenance.exists)
+        XCTAssertTrue(correctionProvenance.label.contains("수동"))
+        attachScreenshot(app, name: "garment-top-drag-replayed-after-app-relaunch")
+    }
+
+    @MainActor
+    func testGrabbingBesideSmallTopPointDragsThatPointWithoutJumping() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--garment-preview-top"]
+        openPointEditingPreview(in: app)
+
+        let point = app.buttons["garmentMeasurementPoint_shoulder_left"]
+        let otherPoint = app.buttons["garmentMeasurementPoint_shoulder_right"]
+        let shoulder = app.buttons["garmentMeasurementLabel_top.shoulderWidth"]
+        let hem = app.buttons["garmentMeasurementLabel_top.hemWidth"]
+        let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
+        XCTAssertTrue(point.waitForExistence(timeout: 5))
+        XCTAssertTrue(point.isHittable)
+        XCTAssertGreaterThanOrEqual(point.frame.width, 56 - 0.001)
+        XCTAssertGreaterThanOrEqual(point.frame.height, 56 - 0.001)
+        assertPhotoAccessibilityBounds(photo, in: app)
+        let originalPoint = try XCTUnwrap(Self.coordinates(in: try XCTUnwrap(point.value as? String)))
+        let originalOtherPoint = try XCTUnwrap(otherPoint.value as? String)
+        let originalShoulder = try XCTUnwrap(Self.centimeters(in: shoulder.label))
+        let originalHem = try XCTUnwrap(Self.centimeters(in: hem.label))
+        let magnifier = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
+
+        // Select the opposite point first, so the peripheral drag must also
+        // select the intended left shoulder rather than retaining the loupe.
+        otherPoint.tap()
+        expectation(for: NSPredicate(format: "value == %@", originalOtherPoint), evaluatedWith: magnifier)
+        waitForExpectations(timeout: 5)
+        // Seventeen points is outside the small visible ring and inside the
+        // 28-point radius. There is no neighbouring handle at this grab site.
+        let start = point.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .withOffset(CGVector(dx: -17, dy: 0))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(
+            CGVector(dx: photo.frame.width * 0.05, dy: photo.frame.height * 0.025)))
+        waitForChangedCentimeters(shoulder, from: originalShoulder)
+        let moved = try XCTUnwrap(Self.coordinates(in: try XCTUnwrap(point.value as? String)))
+        // A peripheral grab must preserve the original point-to-finger offset.
+        // The tolerance covers input pixel rounding, while a 17-point jump does not.
+        XCTAssertEqual(moved.x - originalPoint.x, 0.05, accuracy: 0.003)
+        XCTAssertEqual(moved.y - originalPoint.y, 0.025, accuracy: 0.003)
+        XCTAssertEqual(otherPoint.value as? String, originalOtherPoint)
+        XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: hem.label)), originalHem)
+        XCTAssertEqual(magnifier.value as? String, point.value as? String)
+        XCTAssertTrue(magnifier.label.contains("왼쪽 어깨"))
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].isEnabled)
+        XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
+        attachScreenshot(app, name: "garment-top-small-point-peripheral-drag-without-jump")
+    }
+
+    @MainActor
+    func testNearbyArmpitPointsKeepTheirOwnTouchTargetsAfterMovingCloser() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--garment-preview-top"]
+        openPointEditingPreview(in: app)
+        let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
+        assertPhotoAccessibilityBounds(photo, in: app)
+        let left = app.buttons["garmentMeasurementPoint_armpit_left"]
+        let right = app.buttons["garmentMeasurementPoint_armpit_right"]
+        let chest = app.buttons["garmentMeasurementLabel_top.chestWidth"]
+        let chestBeforeFirst = try XCTUnwrap(Self.centimeters(in: chest.label))
+        let leftOriginal = try XCTUnwrap(Self.coordinates(in: try XCTUnwrap(left.value as? String)))
+        let rightOriginal = try XCTUnwrap(Self.coordinates(in: try XCTUnwrap(right.value as? String)))
+        let rightValue = try XCTUnwrap(right.value as? String)
+        let confirm = app.buttons["confirmGarmentMeasurement"]
+        // First bring the later-drawn right armpit point within the 28-point
+        // hit radius of the left point. Coordinates come from image space;
+        // a clipped touch polygon's AX frame need not centre on the marker.
+        // Both the setup and subsequent move remain inside the garment mask.
+        let firstStart = photo.coordinate(withNormalizedOffset: CGVector(dx: rightOriginal.x, dy: rightOriginal.y))
+        firstStart.press(forDuration: 0.05, thenDragTo: firstStart.withOffset(
+            CGVector(dx: (leftOriginal.x - rightOriginal.x) * photo.frame.width + 24, dy: 0)))
+        expectation(for: NSPredicate(format: "value != %@", rightValue), evaluatedWith: right)
+        waitForExpectations(timeout: 5)
+        waitForChangedCentimeters(chest, from: chestBeforeFirst)
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: confirm)
+        waitForExpectations(timeout: 10)
+        let leftBeforeSecond = try XCTUnwrap(Self.coordinates(in: try XCTUnwrap(left.value as? String)))
+        let rightBeforeSecond = try XCTUnwrap(Self.coordinates(in: try XCTUnwrap(right.value as? String)))
+        XCTAssertEqual((rightBeforeSecond.x - leftBeforeSecond.x) * photo.frame.width, 24, accuracy: 0.75)
+        XCTAssertEqual((rightBeforeSecond.y - leftBeforeSecond.y) * photo.frame.height, 0, accuracy: 0.75)
+        let otherPoints = Dictionary(uniqueKeysWithValues: try app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementPoint_")
+        ).allElementsBoundByIndex.filter { $0.identifier != left.identifier }.map {
+            ($0.identifier, try XCTUnwrap($0.value as? String))
+        })
+        let chestBeforeSecond = try XCTUnwrap(Self.centimeters(in: chest.label))
+        // This site is four points to the right of the left marker: it is
+        // nearer the left point, but also inside the neighbour's old circle.
+        let secondStart = photo.coordinate(withNormalizedOffset: CGVector(dx: leftBeforeSecond.x, dy: leftBeforeSecond.y))
+            .withOffset(CGVector(dx: 4, dy: 0))
+        secondStart.press(forDuration: 0.05, thenDragTo: secondStart.withOffset(CGVector(dx: 8, dy: 15)))
+        waitForChangedCentimeters(chest, from: chestBeforeSecond)
+        let moved = try XCTUnwrap(Self.coordinates(in: try XCTUnwrap(left.value as? String)))
+        XCTAssertEqual(moved.x - leftBeforeSecond.x, 8 / photo.frame.width, accuracy: 0.003)
+        XCTAssertEqual(moved.y - leftBeforeSecond.y, 15 / photo.frame.height, accuracy: 0.003)
+        for (identifier, value) in otherPoints {
+            XCTAssertEqual(app.buttons[identifier].value as? String, value,
+                           "The nearer left point must own the touch, preserving \(identifier)")
+        }
+        let magnifier = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
+        XCTAssertEqual(magnifier.value as? String, left.value as? String)
+        XCTAssertTrue(magnifier.label.contains("왼쪽 겨드랑이"))
+        XCTAssertTrue(confirm.isEnabled)
+        attachScreenshot(app, name: "garment-close-armpit-points-select-and-drag-nearest-marker")
+    }
+
+    @MainActor
+    func testResettingDraggedBottomPointRestoresOriginalAndRetakeClearsSelection() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        openPointEditingPreview(in: app)
+        let waist = app.buttons["garmentMeasurementLabel_bottom.waist_left.waist_right"]
+        let originalWaist = try XCTUnwrap(Self.centimeters(in: waist.label))
+        let point = app.buttons["garmentMeasurementPoint_waist_left"]
+        XCTAssertTrue(point.waitForExistence(timeout: 5))
+        XCTAssertTrue(point.isHittable)
+        let originalPoint = try XCTUnwrap(point.value as? String)
+        let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
+        XCTAssertTrue(photo.waitForExistence(timeout: 5))
+        assertPhotoAccessibilityBounds(photo, in: app)
+        let start = point.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(
+            CGVector(dx: photo.frame.width * 0.05, dy: photo.frame.height * 0.025)))
+        waitForChangedCentimeters(waist, from: originalWaist)
+        XCTAssertNotEqual(point.value as? String, originalPoint)
+        XCTAssertTrue(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
+        let reset = app.buttons["resetGarmentMeasurementPoints"]
+        reveal(reset, in: app)
+        XCTAssertTrue(reset.isHittable)
+        reset.tap()
+        expectation(for: NSPredicate(format: "value == %@", originalPoint), evaluatedWith: point)
+        waitForExpectations(timeout: 5)
+        waitForCentimeters(waist, equalTo: originalWaist)
+        XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: waist.label)), originalWaist)
+        attachScreenshot(app, name: "garment-bottom-drag-reset-original-measurement")
+
+        app.buttons["retakeGarmentMeasurement"].tap()
+        let recognize = app.buttons["previewRecognizeGarment"]
+        XCTAssertTrue(recognize.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
+        recognize.tap()
+        app.buttons["captureGarment"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
+        XCTAssertEqual(point.value as? String, originalPoint)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementAdjustmentStatus"].firstMatch.exists)
+        XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: waist.label)), originalWaist,
+                       "A fresh capture must not carry forward the prior point adjustment")
+    }
+
+    @MainActor
+    private func openPointEditingPreview(in app: XCUIApplication) {
+        launchLiDARLab(app)
+        let preview = app.buttons["openGarmentPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        reveal(preview, in: app)
+        preview.tap()
+        let recognize = app.buttons["previewRecognizeGarment"]
+        XCTAssertTrue(recognize.waitForExistence(timeout: 10))
+        recognize.tap()
+        app.buttons["captureGarment"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
+    }
+
+    @MainActor
+    private func assertPhotoAccessibilityBounds(_ photo: XCUIElement, in app: XCUIApplication) {
+        let image = app.images["촬영한 옷과 측정점"].firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 5))
+        let loupe = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
+        let frames = "Photo \(photo.frame), image \(image.frame), loupe \(loupe.frame)"
+        attachScreenshot(app, name: "garment-point-editor-initial-photo-and-loupe")
+        XCTAssertEqual(photo.frame.minX, image.frame.minX, accuracy: 0.01)
+        XCTAssertEqual(photo.frame.minY, image.frame.minY, accuracy: 0.01, frames)
+        XCTAssertEqual(photo.frame.width, image.frame.width, accuracy: 0.01,
+                       "The three-times magnifier image must not inflate the photo's accessible bounds")
+        XCTAssertEqual(photo.frame.height, image.frame.height, accuracy: 0.01)
+        XCTAssertLessThanOrEqual(photo.frame.width, app.windows.firstMatch.frame.width + 0.01)
+    }
+
+    @MainActor
+    private func waitForChangedCentimeters(_ element: XCUIElement, from original: Double) {
+        let changed = NSPredicate { _, _ in
+            guard let value = Self.centimeters(in: element.label) else { return false }
+            return abs(value - original) > 0.1
+        }
+        expectation(for: changed, evaluatedWith: element)
+        waitForExpectations(timeout: 10)
+    }
+
+    @MainActor
+    private func waitForCentimeters(_ element: XCUIElement, equalTo expected: Double) {
+        let restored = NSPredicate { _, _ in
+            guard let value = Self.centimeters(in: element.label) else { return false }
+            return abs(value - expected) < 0.01
+        }
+        expectation(for: restored, evaluatedWith: element)
+        waitForExpectations(timeout: 10)
+    }
+
+    nonisolated private static func centimeters(in text: String) -> Double? {
+        guard let expression = try? NSRegularExpression(pattern: #"([0-9]+(?:\.[0-9]+)?)\s*cm"#),
+              let match = expression.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text) else { return nil }
+        return Double(text[range])
+    }
+
+    nonisolated private static func coordinates(in text: String) -> CGPoint? {
+        let pieces = text.split { $0 == " " || $0 == "," }
+        guard pieces.count == 4, pieces[0] == "x", pieces[2] == "y",
+              let x = Double(pieces[1]), let y = Double(pieces[3]) else { return nil }
+        return CGPoint(x: x, y: y)
+    }
+
+    @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<12 {
             let scrollViews = app.scrollViews
@@ -307,8 +654,10 @@ final class GarmentCaptureFlowTests: XCTestCase {
             // Returning from a lower photo diagnostic must also reach the
             // normal capture entry above it without resetting the lab state.
             let goingDown = element.frame.minY < top
-            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: goingDown ? 0.45 : 0.72))
-            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: goingDown ? 0.65 : 0.52))
+            // Scroll in the outer margin. A gesture through a garment point
+            // intentionally edits that point instead of scrolling the photo.
+            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: goingDown ? 0.45 : 0.72))
+            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: goingDown ? 0.65 : 0.52))
             start.press(forDuration: 0.05, thenDragTo: end)
         }
     }

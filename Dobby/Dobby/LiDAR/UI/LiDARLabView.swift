@@ -366,7 +366,7 @@ private struct LiDARLabContent: View {
         }
         if record.definitions.count > 1 || record.landmarks.origin == .model {
             var value = AutomaticMeasurement(record: record)
-            let replayed = await MeasurementPipeline().measure(snapshot: value.snapshot, landmarks: value.landmarks,
+            let replayed = await MeasurementPipeline().measure(snapshot: value.snapshot, landmarks: value.calculationLandmarks,
                 definitions: value.definitions, options: value.options)
             guard value.apply(replayed), !Task.isCancelled else { throw ArchiveError.invalidFile }
             automaticRecordingError = nil

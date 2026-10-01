@@ -48,7 +48,7 @@ nonisolated struct LiDARMeasurementEngine {
             let landmark = candidates[0]
             let resolution: Result<PointResolution, PointResolutionError>
             if let sourceIDs = landmarks.effectiveDerivedSourceIDs(for: id) {
-                if let failure = validateLandmark(landmark, origin: landmarks.origin) {
+                if let failure = validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
                     resolution = .failure(.init(reason: failure))
                 } else if sourceIDs.count < 2 || sourceIDs.count > 64
                     || sourceIDs.contains(where: { $0.isEmpty }) || Set(sourceIDs).count != sourceIDs.count {
@@ -69,7 +69,7 @@ nonisolated struct LiDARMeasurementEngine {
                         resolution = .failure(failure)
                     } else {
                         resolution = spatialAverage(landmark, sourceIDs: sourceIDs, sources: sources,
-                                                    frame: frame, origin: landmarks.origin)
+                                                    frame: frame, origin: landmark.origin ?? landmarks.origin)
                             .mapError { .init(reason: $0) }
                     }
                 }
@@ -240,7 +240,8 @@ nonisolated struct LiDARMeasurementEngine {
         frame: MeasurementFrame,
         set: GarmentLandmarkSet
     ) -> Result<PointResolution, MeasurementFailure> {
-        if let failure = validateLandmark(landmark, origin: set.origin) { return .failure(failure) }
+        let origin = landmark.origin ?? set.origin
+        if let failure = validateLandmark(landmark, origin: origin) { return .failure(failure) }
         let target = landmark.point
         let map = frame.depth
         let targetX = target.x * Double(map.size.width)
@@ -314,7 +315,7 @@ nonisolated struct LiDARMeasurementEngine {
         let z = plane?.depth ?? median(chosen.map(\.z))
         let lowSensorConfidence = chosen.contains { ($0.confidence ?? 0) < 2 }
         let uncertain = map.confidence == nil || lowSensorConfidence || plane == nil || clusters.count > 1
-            || (set.origin == .model && landmark.confidence == nil)
+            || (origin == .model && landmark.confidence == nil)
             // A mask hole may still be inside the sample convex hull. Interpolation can
             // supply an estimate, but cannot prove the landmark belongs to the garment.
             || !targetInsideMask

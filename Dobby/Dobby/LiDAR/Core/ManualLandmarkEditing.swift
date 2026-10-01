@@ -17,6 +17,7 @@ extension GarmentLandmarkSet {
                 points[other].isVisible = false
                 points[other].confidence = nil
                 points[other].derivedFrom = nil
+                points[other].origin = nil
             }
         }
 
@@ -24,6 +25,7 @@ extension GarmentLandmarkSet {
         points[index].isVisible = true
         points[index].confidence = nil
         points[index].derivedFrom = nil
+        points[index].origin = .manual
         origin = .manual
         modelVersion = nil
         return true

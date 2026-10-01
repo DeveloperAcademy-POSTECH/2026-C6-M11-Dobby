@@ -31,6 +31,11 @@ struct AutomaticMeasurementResultView: View {
                         : "동일 프레임의 측정점과 LiDAR 결과", systemImage: "point.3.connected.trianglepath.dotted")
                         .font(.subheadline.bold()).foregroundStyle(model.snapshot.frame.source == .synthetic ? .orange : .teal)
                         .accessibilityIdentifier("automaticProvenance")
+                    if model.hasPointAdjustments {
+                        Label("측정점 \(model.editedPointIDs.count)개 수동 보정 · 원래 인식 위치 보존", systemImage: "hand.draw")
+                            .font(.caption).foregroundStyle(.orange)
+                            .accessibilityIdentifier("automaticPointAdjustmentProvenance")
+                    }
                     if let recordingError {
                         Text("계산은 완료했지만 시도 기록을 마무리하지 못했습니다. 이 시도는 통계에서 미완료로 남습니다: \(recordingError)")
                             .font(.caption).foregroundStyle(.orange)

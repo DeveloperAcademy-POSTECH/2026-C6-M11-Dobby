@@ -1,0 +1,119 @@
+{
+  "date": "2026-10-01",
+  "branch": "feat/3-LiDAR-Module",
+  "baseCommit": "7887b9bf0084fb9dc0f689a4635bad46b0b42fe2",
+  "scope": "Compact Liquid Glass measurement labels, draggable original garment points, selected-point magnifier and frozen-depth recalculation",
+  "core": {
+    "passed": 370,
+    "failed": 0,
+    "newAdjustmentTests": 10,
+    "log": "/tmp/dobby-full-pose-edit-full-20261001.log"
+  },
+  "nativeBuilds": {
+    "project": "Dobby/Dobby.xcodeproj",
+    "scheme": "Dobby",
+    "destination": "generic/platform=iOS",
+    "codeSigningAllowed": false,
+    "Debug": "BUILD SUCCEEDED",
+    "Release": "BUILD SUCCEEDED",
+    "debugLog": "/tmp/dobby-result-editor-debug-20261001.log",
+    "releaseLog": "/tmp/dobby-result-editor-release-20261001.log",
+    "physicalDeviceInstalled": false
+  },
+  "presentationAndUI": {
+    "device": "iPhone 17 Pro simulator",
+    "os": "iOS 26.4",
+    "distinctPassed": 18,
+    "uiPassed": 9,
+    "geometryPassed": 9,
+    "skipped": 0,
+    "fullRun": "/tmp/dobby-lidar-ui.dIL4YS/FinalPointEditingResults.xcresult",
+    "fullRunLog": "/tmp/dobby-result-editor-points-final-ui-20261001.log",
+    "fullRunPassed": 15,
+    "fullRunFailed": 3,
+    "fixedIssue": "An oversized SwiftUI Image inside the clipped magnifier leaked layout/accessibility bounds and obstructed controls. The magnifier now draws into a bounded Canvas.",
+    "finalRerun": "/tmp/dobby-lidar-ui.dIL4YS/CanvasPointEditingResults.xcresult",
+    "finalRerunLog": "/tmp/dobby-result-editor-canvas-ui-20261001.log",
+    "finalRerunPassed": 3,
+    "finalRerunFailed": 0,
+    "finalRerunAssertions": "Unchanged photo/loupe bounds, drag, recalculation, save/relaunch, reset and manual-review assertions",
+    "screenshots": [
+      "Docs/Images/measurement-point-editor-top.png",
+      "Docs/Images/measurement-point-editor-bottom.png"
+    ],
+    "pixelInspection": "All measurement values include cm without truncation; point rings remain visible beside the top-left inset."
+  },
+  "contracts": [
+    "Source RGB, depth, intrinsics, orientation and mask remain fixed for the capture.",
+    "Only raw direct landmarks are editable; derived centers and projected endpoints are not drag targets.",
+    "Edited points carry manual provenance while untouched model confidence and visibility checks remain active.",
+    "Original automatic landmarks/result and corrected geometry/result persist together and reopen correctly.",
+    "Revision checks reject stale calculations; confirmation is disabled during dragging and recalculation.",
+    "Human-corrected records are excluded from the model-only accuracy track.",
+    "Drag annotation placement is cached, preserving label positions during touch updates."
+  ],
+  "limitations": [
+    "UI tests use explicitly labelled synthetic photographs and depth.",
+    "These tests do not establish physical centimetre accuracy or live model recognition performance.",
+    "Physical iPhone camera, sensor accuracy and on-device visual feel require device testing."
+  ],
+  "pointAndCaptionRefinement": {
+    "visibleDotDiameterPoints": 9,
+    "ringDiameterPoints": {
+      "normal": 15,
+      "selected": 21
+    },
+    "maximumPointTouchDiameterPoints": 56,
+    "overlappingTouchPolicy": "Clip each circular hit region at neighbour bisectors so the nearest physical point owns the touch.",
+    "nominalVisibleCaptionHeightPoints": 28,
+    "minimumCaptionTouchHeightPoints": 44,
+    "captionPlacement": "Prefer a 4-point gap above each horizontal or diagonal segment, between its endpoints. Vertical segments prefer their outer side. The other side or a nearby connected callout is used when space is short or obstructed.",
+    "collisionPolicy": "Caption touch rectangles avoid other captions, the magnifier and controls. Only the visible capsule avoids visible point markers; the point has touch priority over transparent caption padding.",
+    "nativeBuilds": {
+      "Debug": "BUILD SUCCEEDED",
+      "Release": "BUILD SUCCEEDED",
+      "codeSigningAllowed": false,
+      "debugLog": "/tmp/dobby-small-points-debug-20261001.log",
+      "releaseLog": "/tmp/dobby-small-points-release-20261001.log"
+    },
+    "finalPresentationAndUIRun": {
+      "device": "iPhone 17 Pro simulator",
+      "os": "iOS 26.4",
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0,
+      "uiPassed": 4,
+      "geometryPassed": 22,
+      "result": "/tmp/dobby-lidar-ui.GhJ1cc/MarkerLayoutResults.xcresult",
+      "log": "/tmp/dobby-small-points-marker-layout-ui-20261001.log",
+      "checks": [
+        "Top six and bottom eight measurement labels remain accessible and mutually non-overlapping.",
+        "A grab 17 points from the small shoulder marker applies drag translation without a jump.",
+        "At 24-point point separation, a grab 4 points from the nearer armpit marker moves only that point and preserves every other physical landmark.",
+        "Long, short, reversed, vertical, diagonal and edge segments keep valid caption geometry.",
+        "Transparent caption touch padding does not unnecessarily displace captions from markers."
+      ],
+      "editorSourceSHA256": "934c5ddd834e1eff150e5f3d41c234c7a2366027b62de3b180010e855797645a",
+      "geometryTestSourceSHA256": "9c213760f82757ee5c2e4577501bccfba6c923e028958ecf6c7669978740f449",
+      "uiTestSourceSHA256": "d5d6dfb10aa9807a0725170059b60f0acfed72c10b3859605705db613680bc54"
+    },
+    "earlierRuns": {
+      "result": "/tmp/dobby-lidar-ui.GhJ1cc/Results.xcresult",
+      "log": "/tmp/dobby-small-points-ui-20261001.log",
+      "passed": 25,
+      "failed": 1,
+      "failureCause": "The close-neck test moved a point into the synthetic collar void. The garment mask correctly rejected it and total length was unavailable. The fixture was corrected to use two armpit points inside the garment, without relaxing measurement or UI assertions.",
+      "correctedCaseResult": "/tmp/dobby-lidar-ui.GhJ1cc/ArmpitHitResults.xcresult",
+      "correctedCaseLog": "/tmp/dobby-small-points-armpit-ui-20261001.log",
+      "correctedCasePassed": 1,
+      "correctedCaseFailed": 0,
+      "persistenceAndReset": "Centred top drag, recalculation, save/relaunch, bottom reset and retake passed before the final caption-placement refinement."
+    },
+    "screenshots": [
+      "Docs/Images/measurement-point-editor-top.png",
+      "Docs/Images/measurement-point-editor-bottom.png"
+    ],
+    "pixelInspection": "Smaller point rings and complete cm units remain clear. Chest and hem captions now sit directly above their own dashed lines. Short or obstructed segments use connected callouts.",
+    "physicalDeviceTested": false
+  }
+}

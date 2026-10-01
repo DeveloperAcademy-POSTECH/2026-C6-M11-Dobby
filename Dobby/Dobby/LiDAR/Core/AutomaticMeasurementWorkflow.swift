@@ -195,14 +195,28 @@ final class AutomaticMeasurementWorkflow {
             defer { self?.workers.removeValue(forKey: run.id) }
             guard !Task.isCancelled, self?.canContinue(run) == true else { return }
             do {
-                let snapshot = try await camera.capture(orientation: orientation)
+                let prepared: PreparedMeasurementCapture
+                if provider is any GarmentMeasurementDefinitionProviding,
+                   let preparedCamera = camera as? any PreparedCaptureSnapshotProviding {
+                    prepared = try await preparedCamera.capturePrepared(orientation: orientation)
+                } else {
+                    prepared = .init(snapshot: try await camera.capture(orientation: orientation))
+                }
+                let snapshot = prepared.snapshot
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 run.snapshot = snapshot
                 self?.onSnapshot?(snapshot)
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 self?.begin(.landmarks, run: run, phase: .detectingLandmarks)
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
-                let points = try await pipeline.detectLandmarks(snapshot: snapshot, provider: provider)
+                let points: GarmentLandmarkSet
+                if let preparedPoints = prepared.landmarks {
+                    // A supplied result must pass the same checks below. Do not
+                    // hide stale/invalid evidence by retrying another inference.
+                    points = preparedPoints
+                } else {
+                    points = try await pipeline.detectLandmarks(snapshot: snapshot, provider: provider)
+                }
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 guard points.sessionID == snapshot.frame.sessionID, points.frameID == snapshot.frame.frameID else {
                     self?.finish(run, failure: .init(stage: .landmarks, code: .frameMismatch,

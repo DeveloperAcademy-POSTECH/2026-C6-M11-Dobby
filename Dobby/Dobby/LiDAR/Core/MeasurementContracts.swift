@@ -79,6 +79,10 @@ nonisolated struct GarmentLandmark: Codable, Sendable, Identifiable {
     /// Nil means a direct point, except for the documented legacy model migration.
     /// Empty or invalid derivations must fail.
     var derivedFrom: [String]? = nil
+    /// Nil inherits the set's provenance. A manually adjusted direct point, or
+    /// a derivation affected by it, must not claim model confidence at its new
+    /// coordinate. Unchanged points retain the original model checks.
+    var origin: LandmarkOrigin? = nil
 }
 
 nonisolated struct GarmentMask: Codable, Sendable, Equatable {
