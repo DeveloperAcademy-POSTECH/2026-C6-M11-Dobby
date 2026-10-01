@@ -10,10 +10,28 @@ nonisolated struct GarmentImageRecognition: Sendable {
     var modelVersion: String
 }
 
-/// A future top model can implement this contract without changing camera or
-/// silhouette presentation. Points always refer to the complete raw RGB raster.
+nonisolated struct GarmentForegroundRecognition: Sendable {
+    var recognition: GarmentImageRecognition
+    var selection: GarmentMaskSelection
+}
+
+/// Shared by the top and bottom models. Points always refer to the complete raw RGB raster.
 nonisolated protocol GarmentImageRecognizing: Sendable {
+    func prepare() async throws
     func recognizeImage(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentImageRecognition
+    func recognizeForeground(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentForegroundRecognition
+}
+
+extension GarmentImageRecognizing {
+    nonisolated func prepare() async throws {}
+
+    nonisolated func recognizeForeground(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentForegroundRecognition {
+        let recognition = try await recognizeImage(image, orientation: orientation)
+        try Task.checkCancellation()
+        let selection = try GarmentForegroundMaskAnalyzer().analyze(image, points: recognition.points,
+                                                                    orientation: orientation)
+        return .init(recognition: recognition, selection: selection)
+    }
 }
 
 /// Vision supplies the silhouette; the garment model supplies semantic evidence.
@@ -21,7 +39,38 @@ nonisolated protocol GarmentImageRecognizing: Sendable {
 nonisolated final class GarmentForegroundMaskAnalyzer: @unchecked Sendable {
     private let context = CIContext(options: [.cacheIntermediates: false])
 
-    func analyze(_ image: CGImage, points: [GarmentLandmark]) throws -> GarmentMaskSelection {
+    func analyze(_ image: CGImage, points: [GarmentLandmark],
+                 orientation: ImageOrientation = .up,
+                 policy: GarmentMaskAssociationPolicy = .strict) throws -> GarmentMaskSelection {
+        try GarmentMaskAssociation.select(masks: masks(for: image, orientation: orientation),
+            points: points, imageSize: .init(width: image.width, height: image.height), policy: policy)
+    }
+
+    /// Keep the independently generated masks available if strict association
+    /// fails. Rechecking semantic support must not run another Vision request.
+    func masks(for image: CGImage, orientation: ImageOrientation = .up) throws -> [GarmentMask] {
+        if orientation == .up { return try uprightMasks(image) }
+        let exif: Int32
+        switch orientation {
+        case .up: exif = 1
+        case .right: exif = 6
+        case .down: exif = 3
+        case .left: exif = 8
+        }
+        // Vision's foreground result can change substantially when the same top
+        // is sideways. Segment the same upright raster used by the pose model,
+        // then restore the binary mask to raw RGB/depth coordinates exactly.
+        let rotated = CIImage(cgImage: image).oriented(forExifOrientation: exif)
+        guard let uprightImage = context.createCGImage(rotated, from: rotated.extent,
+            format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)) else {
+            throw GarmentMaskAssociationError.invalidMask
+        }
+        return try uprightMasks(uprightImage).map {
+            try GarmentMaskOrientation.originalMask(fromUpright: $0, orientation: orientation)
+        }
+    }
+
+    private func uprightMasks(_ image: CGImage) throws -> [GarmentMask] {
         let original = PixelSize(width: image.width, height: image.height)
         let size = try Self.analysisSize(for: original)
         let scale = Double(size.width) / Double(original.width)
@@ -47,7 +96,7 @@ nonisolated final class GarmentForegroundMaskAnalyzer: @unchecked Sendable {
                 forInstances: IndexSet(integer: instance), from: handler)
             masks.append(try Self.copyMask(buffer, expectedSize: size))
         }
-        return try GarmentMaskAssociation.select(masks: masks, points: points, imageSize: original)
+        return masks
     }
 
     private static func analysisSize(for original: PixelSize) throws -> PixelSize {

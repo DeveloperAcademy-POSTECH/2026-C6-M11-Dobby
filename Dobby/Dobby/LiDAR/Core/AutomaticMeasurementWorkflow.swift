@@ -84,6 +84,9 @@ final class AutomaticMeasurementWorkflow {
     private(set) var lastFailure: AutomaticMeasurementWorkflowFailure?
     var onPhaseChange: ((AutomaticMeasurementPhase) -> Void)?
     var onTerminal: ((AutomaticMeasurementTerminalEvent) -> Void)?
+    /// Presentation may freeze this exact captured RGB while inference runs.
+    /// This is not a landmark or measurement result.
+    var onSnapshot: ((CaptureSnapshot) -> Void)?
     var inFlightWorkerCount: Int { workers.count }
 
     private let camera: any CaptureSnapshotProviding
@@ -101,7 +104,8 @@ final class AutomaticMeasurementWorkflow {
          timeoutSeconds: TimeInterval = 15,
          expectedLandmarkOrigin: LandmarkOrigin? = nil,
          onPhaseChange: ((AutomaticMeasurementPhase) -> Void)? = nil,
-         onTerminal: ((AutomaticMeasurementTerminalEvent) -> Void)? = nil) {
+         onTerminal: ((AutomaticMeasurementTerminalEvent) -> Void)? = nil,
+         onSnapshot: ((CaptureSnapshot) -> Void)? = nil) {
         self.camera = camera
         self.landmarks = landmarks
         self.definitions = definitions
@@ -110,6 +114,7 @@ final class AutomaticMeasurementWorkflow {
         self.expectedLandmarkOrigin = expectedLandmarkOrigin
         self.onPhaseChange = onPhaseChange
         self.onTerminal = onTerminal
+        self.onSnapshot = onSnapshot
     }
 
     func run(orientation: ImageOrientation) async throws -> AutomaticMeasurementOutput {
@@ -194,6 +199,8 @@ final class AutomaticMeasurementWorkflow {
                 let snapshot = try await camera.capture(orientation: orientation)
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 run.snapshot = snapshot
+                self?.onSnapshot?(snapshot)
+                guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 self?.begin(.landmarks, run: run, phase: .detectingLandmarks)
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 let points = try await pipeline.detectLandmarks(snapshot: snapshot, provider: provider)

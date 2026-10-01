@@ -1,19 +1,42 @@
 import UIKit
+import ImageIO
 
 /// Image decoding, display geometry and device labels belong to presentation,
 /// not to the saved measurement or the geometry model.
 @MainActor
 enum SnapshotPresentation {
+    /// Decode a bounded presentation image off the UI actor. The saved JPEG and
+    /// normalized landmark/depth coordinates retain their original resolution.
+    static func thumbnail(for snapshot: CaptureSnapshot, maximumDimension: Int = 2048) async -> UIImage? {
+        let data = snapshot.imageJPEG
+        let limit = min(4096, max(256, maximumDimension))
+        let decoded = await Task.detached(priority: .userInitiated) { () -> SnapshotDecodedImage? in
+            guard !Task.isCancelled,
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: false,
+                    kCGImageSourceThumbnailMaxPixelSize: limit,
+                    kCGImageSourceShouldCacheImmediately: true
+                  ] as CFDictionary) else { return nil }
+            return SnapshotDecodedImage(image: image)
+        }.value
+        guard !Task.isCancelled, let decoded else { return nil }
+        return UIImage(cgImage: decoded.image, scale: 1, orientation: uiOrientation(snapshot.frame.orientation))
+    }
+
     static func image(for snapshot: CaptureSnapshot) -> UIImage? {
         guard let cg = UIImage(data: snapshot.imageJPEG)?.cgImage else { return nil }
-        let orientation: UIImage.Orientation
-        switch snapshot.frame.orientation {
-        case .up: orientation = .up
-        case .right: orientation = .right
-        case .down: orientation = .down
-        case .left: orientation = .left
+        return UIImage(cgImage: cg, scale: 1, orientation: uiOrientation(snapshot.frame.orientation))
+    }
+
+    private static func uiOrientation(_ value: ImageOrientation) -> UIImage.Orientation {
+        switch value {
+        case .up: .up
+        case .right: .right
+        case .down: .down
+        case .left: .left
         }
-        return UIImage(cgImage: cg, scale: 1, orientation: orientation)
     }
 
     static func aspectRatio(for snapshot: CaptureSnapshot) -> CGFloat {
@@ -31,4 +54,10 @@ enum SnapshotPresentation {
             String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
         }
     }
+}
+
+/// CGImage is immutable and this privately owned decoded image only crosses
+/// from the decoding task to the presentation actor.
+private nonisolated struct SnapshotDecodedImage: @unchecked Sendable {
+    let image: CGImage
 }

@@ -35,7 +35,8 @@ struct AutomaticMeasurementResultView: View {
                         Text("계산은 완료했지만 시도 기록을 마무리하지 못했습니다. 이 시도는 통계에서 미완료로 남습니다: \(recordingError)")
                             .font(.caption).foregroundStyle(.orange)
                     }
-                    AutomaticSnapshotView(snapshot: model.snapshot, image: image, landmarks: model.displayLandmarks, definitions: model.definitions)
+                    AutomaticSnapshotView(snapshot: model.snapshot, image: image, landmarks: model.displayLandmarks,
+                                          definitions: model.definitions, result: model.result)
                     Text("성공한 항목은 유지하고, 미검출·깊이 부족 항목은 사유를 따로 표시합니다.")
                         .font(.caption).foregroundStyle(.secondary)
                     ForEach(model.result.values) { value in
@@ -146,6 +147,7 @@ private struct AutomaticSnapshotView: View {
     let image: UIImage?
     let landmarks: GarmentLandmarkSet
     let definitions: [MeasurementDefinition]
+    let result: GarmentMeasurementResult
     private var aspect: CGFloat {
         let size = snapshot.frame.imageSize
         guard size.isValid else { return 1 }
@@ -162,12 +164,20 @@ private struct AutomaticSnapshotView: View {
                 }
                 let visible = landmarks.points.filter { $0.isVisible && $0.point.isValid }
                 for definition in definitions {
-                    let endpoints = definition.landmarkIDs.compactMap { id in visible.first { $0.id == id } }
+                    let endpoints: [ImagePoint]
+                    if definition.projection != nil {
+                        guard result.sessionID == snapshot.frame.sessionID, result.frameID == snapshot.frame.frameID,
+                              let value = result.values.first(where: { $0.id == definition.id }),
+                              value.meters != nil, value.points.count == definition.landmarkIDs.count else { continue }
+                        endpoints = value.points.map(\.imagePoint)
+                    } else {
+                        endpoints = definition.landmarkIDs.compactMap { id in visible.first { $0.id == id }?.point }
+                    }
                     guard endpoints.count == definition.landmarkIDs.count else { continue }
                     var path = Path()
                     for (index, endpoint) in endpoints.enumerated() {
-                        if index == 0 { path.move(to: point(endpoint.point)) }
-                        else { path.addLine(to: point(endpoint.point)) }
+                        if index == 0 { path.move(to: point(endpoint)) }
+                        else { path.addLine(to: point(endpoint)) }
                     }
                     context.stroke(path, with: .color(.yellow), lineWidth: 2)
                 }

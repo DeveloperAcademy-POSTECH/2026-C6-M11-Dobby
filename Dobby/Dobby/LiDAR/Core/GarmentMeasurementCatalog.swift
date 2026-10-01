@@ -67,13 +67,17 @@ nonisolated enum GarmentMeasurementCatalog {
     static func guide(for definitionID: String) -> String {
         let placement: String
         switch definitionID {
-        case "chest":
+        case "chest", "top.chestWidth":
             placement = "양쪽 겨드랑이 아래의 같은 높이에 두 점을 놓으세요. 단면 너비이며 가슴둘레가 아닙니다."
-        case "shoulder":
+        case "shoulder", "top.shoulderWidth":
             placement = "양쪽 어깨 봉제선 끝에 두 점을 놓으세요. 어깨선이 없는 래글런 등은 측정 기준을 따로 기록하세요."
         case "length":
             placement = "목 옆 어깨 시작점과 그 바로 아래 밑단에 두 점을 놓으세요. 앞면·뒷면 중 어느 면인지 기록하세요."
-        case "sleeve":
+        case "top.totalLength":
+            placement = "목 양끝과 밑단 중앙의 인식점을 확인하세요. 목 양끝의 3D 중점에서 밑단까지, 목 양끝을 잇는 가로축 성분을 제외한 길이입니다. 목이 비대칭이거나 가로축이 잘못 인식되면 값도 달라집니다."
+        case "top.totalLength.manualStraight":
+            placement = "목 중앙과 그 아래 밑단에 두 점을 놓으세요. 자동 총장의 가로축 보정 없이 계산하는 별도의 수동 직선거리입니다."
+        case "sleeve", "top.sleeveLengthLeft", "top.sleeveLengthRight":
             placement = "소매를 곧게 펼쳐 어깨 봉제선 끝과 소맷단에 두 점을 놓으세요. 봉제선을 따라 굽은 길이가 아닌 직선거리입니다."
         case "waist":
             placement = "허리 양 끝의 같은 높이에 두 점을 놓으세요. 밴딩은 당기지 않은 상태로 재며 단면 너비이지 허리둘레가 아닙니다."
@@ -91,7 +95,7 @@ nonisolated enum GarmentMeasurementCatalog {
             placement = "한쪽 바짓단의 안쪽과 바깥쪽 끝에 두 점을 놓으세요. 바짓단 단면 너비이며 둘레가 아닙니다."
         case "skirtLength":
             placement = "앞 허리선 중앙과 그 아래 밑단 중앙에 두 점을 놓으세요. 직선거리이며 비대칭 밑단은 선택한 위치를 기록하세요."
-        case "skirtHem", "dressHem":
+        case "skirtHem", "dressHem", "top.hemWidth":
             placement = "펼친 밑단의 왼쪽 끝과 오른쪽 끝에 두 점을 놓으세요. 주름이나 곡선을 따라 잰 밑단 길이·둘레가 아닌 직선 폭입니다."
         case "dressLength":
             placement = "목 옆 어깨 시작점과 그 바로 아래 원피스 밑단에 두 점을 놓으세요. 직선거리이며 비대칭 밑단은 선택한 위치를 기록하세요."

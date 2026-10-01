@@ -4,6 +4,101 @@ import XCTest
 /// navigation, display and persistence, never camera or model accuracy.
 final class GarmentCaptureFlowTests: XCTestCase {
     @MainActor
+    func testReducedMotionPreviewKeepsRecognitionCaptureAndRetakeUsable() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--garment-preview-reduce-motion"]
+        app.launch()
+        let preview = app.buttons["openGarmentPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        reveal(preview, in: app)
+        preview.tap()
+        let recognize = app.buttons["previewRecognizeGarment"]
+        XCTAssertTrue(recognize.waitForExistence(timeout: 10))
+        let shutter = app.buttons["captureGarment"]
+        XCTAssertFalse(shutter.isEnabled)
+        recognize.tap()
+        XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+        XCTAssertTrue(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
+        shutter.tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        app.buttons["retakeGarmentMeasurement"].tap()
+        XCTAssertTrue(recognize.waitForExistence(timeout: 5))
+        XCTAssertFalse(shutter.isEnabled)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
+        attachScreenshot(app, name: "garment-reduced-motion-retake")
+    }
+
+    @MainActor
+    func testTopSelectionUsesTopPhotoCheckAndSixMeasurementPreview() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        let picker = app.segmentedControls["automaticGarmentKind"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        reveal(picker, in: app)
+        picker.buttons["상의"].tap()
+
+        let photoCheck = app.buttons["openTopRecognition"]
+        reveal(photoCheck, in: app)
+        XCTAssertTrue(photoCheck.exists)
+        XCTAssertFalse(app.buttons["openBottomRecognition"].exists)
+        photoCheck.tap()
+        XCTAssertTrue(app.navigationBars["상의 사진 인식"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["pickTopPhoto"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "cm 치수는 계산하지 않습니다")).firstMatch.exists)
+        app.buttons["완료"].tap()
+
+        let preview = app.buttons["openGarmentPreview"]
+        reveal(preview, in: app)
+        preview.tap()
+        let recognize = app.buttons["previewRecognizeGarment"]
+        XCTAssertTrue(recognize.waitForExistence(timeout: 10))
+        recognize.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
+        attachScreenshot(app, name: "garment-top-preview-recognized-outline")
+        app.buttons["captureGarment"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
+        let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).allElementsBoundByIndex
+        XCTAssertEqual(labels.count, 6)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).firstMatch.exists)
+        XCTAssertTrue(app.buttons["garmentMeasurementLabel_top.totalLength"].label.contains("cm"))
+        for (index, label) in labels.enumerated() {
+            for other in labels.dropFirst(index + 1) {
+                XCTAssertFalse(label.frame.intersects(other.frame), "Top measurement labels must not cover each other")
+            }
+        }
+        attachScreenshot(app, name: "garment-top-preview-measurement-result")
+        let shoulderValue = app.buttons["garmentMeasurementLabel_top.shoulderWidth"].label
+        let reviewMenu = app.buttons["reviewAllGarmentMeasurementPoints"]
+        reveal(reviewMenu, in: app)
+        XCTAssertTrue(reviewMenu.exists)
+        reviewMenu.tap()
+        app.buttons["reviewGarmentItem_top.shoulderWidth"].tap()
+        XCTAssertTrue(app.navigationBars["측정 테스트"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["A 지정됨"].exists)
+        XCTAssertTrue(app.buttons["B 지정됨"].exists)
+        app.buttons["완료"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons["garmentMeasurementLabel_top.shoulderWidth"].label, shoulderValue,
+                       "Reviewing valid model points must preserve the automatic result")
+        app.buttons["retakeGarmentMeasurement"].tap()
+        XCTAssertTrue(recognize.waitForExistence(timeout: 5))
+        recognize.tap()
+        app.buttons["captureGarment"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        app.buttons["confirmGarmentMeasurement"].tap()
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        let record = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "어깨너비 · 데모")).firstMatch
+        reveal(record, in: app)
+        XCTAssertTrue(record.exists)
+        record.tap()
+        XCTAssertTrue(app.staticTexts["automaticValue_top.totalLength"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["automaticProvenance"].label.contains("합성"))
+    }
+
+    @MainActor
     func testUnsupportedSimulatorDoesNotProduceMeasurements() throws {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Unsupported-camera behavior is specific to the simulator")
@@ -87,6 +182,38 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["오른쪽 인심(직선)"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["측정 불가"].exists)
         attachScreenshot(app, name: "garment-preview-missing-measurement-detail")
+    }
+
+    @MainActor
+    func testMissingMeasurementCanBeReviewedDirectlyWithoutOpeningDetails() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--garment-preview-partial"]
+        app.launch()
+        let preview = app.buttons["openGarmentPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        reveal(preview, in: app)
+        preview.tap()
+        let recognize = app.buttons["previewRecognizeGarment"]
+        XCTAssertTrue(recognize.waitForExistence(timeout: 10))
+        recognize.tap()
+        app.buttons["captureGarment"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        let review = app.buttons["reviewGarmentMeasurement_bottom.crotch.hem_right_inner"]
+        reveal(review, in: app)
+        XCTAssertTrue(review.exists)
+        review.tap()
+        XCTAssertTrue(app.navigationBars["측정 테스트"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["B 위치 지정"].exists)
+        let save = app.buttons["saveMeasurement"]
+        reveal(save, in: app)
+        XCTAssertTrue(save.exists)
+        XCTAssertFalse(app.staticTexts["measurementSaved"].exists)
+        attachScreenshot(app, name: "garment-missing-measurement-direct-review")
+        app.buttons["완료"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["garmentMeasurementLabel_bottom.crotch.hem_right_inner"].exists,
+                       "Opening manual review must not replace an unavailable automatic value")
     }
 
     @MainActor

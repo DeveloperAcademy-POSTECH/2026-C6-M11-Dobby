@@ -85,6 +85,31 @@ final class RecordedMeasurementServiceTests: XCTestCase {
         XCTAssertEqual(report.synthetic.failureCount, 1)
     }
 
+    func testServicePublishesFrozenSnapshotWhileModelIsPendingAndClearsCallbackAfterRun() async throws {
+        let value = fixture(), model = RecordedControlledModel()
+        let journal = MeasurementAttemptJournal(folder: try folder())
+        let workflow = AutomaticMeasurementWorkflow(camera: RecordedTestCamera(value.snapshot),
+            landmarks: model, definitions: [.testDistance])
+        let service = RecordedMeasurementService(workflow: workflow, journal: journal)
+        var snapshots: [CaptureSnapshot] = []
+        var output: RecordedMeasurementOutput?
+        let task = Task {
+            output = try await service.run(orientation: .up, purpose: .fixture, isSynthetic: true,
+                onSnapshot: { snapshots.append($0) })
+        }
+        await eventually { await model.pendingCount == 1 }
+        XCTAssertNil(output)
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertEqual(snapshots.first?.frame.frameID, value.snapshot.frame.frameID)
+        XCTAssertEqual(snapshots.first?.imageJPEG, value.snapshot.imageJPEG)
+        await model.resume(value.points)
+        try await task.value
+        XCTAssertEqual(output?.workflowOutput.snapshot.frame.frameID, snapshots.first?.frame.frameID)
+        XCTAssertNil(workflow.onSnapshot, "The completed service must not retain a presentation callback")
+        let record = try await onlyRecord(journal)
+        XCTAssertEqual(record.frameID, value.snapshot.frame.frameID)
+    }
+
     func testProviderFailuresRetainTypedCodeStageAndFailedStageStatistics() async throws {
         for stage in [AutomaticMeasurementStage.capture, .landmarks] {
             for code in [AutomaticMeasurementFailureCode.providerFailure, .timedOut, .interrupted, .cancelled] {

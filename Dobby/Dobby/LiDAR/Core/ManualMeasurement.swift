@@ -54,6 +54,20 @@ nonisolated struct ManualMeasurement: Identifiable, Sendable {
     var displayLandmarks: GarmentLandmarkSet {
         var displayed = landmarks.replacingDerivedImagePoints(with: result)
         displayed.points = definition.landmarkIDs.compactMap { id in displayed.points.first { $0.id == id } }
+        // A projected endpoint belongs to this measurement, not to the pose
+        // model's original hem landmark. Keep the archived prediction intact.
+        if definition.projection != nil,
+           let result, result.sessionID == snapshot.frame.sessionID,
+           result.frameID == snapshot.frame.frameID,
+           let value = result.values.first(where: { $0.id == definition.id }) {
+            for index in displayed.points.indices {
+                if let resolved = value.points.first(where: {
+                    $0.id == displayed.points[index].id && $0.quality.method == .axisProjection
+                }), resolved.imagePoint.isValid {
+                    displayed.points[index].point = resolved.imagePoint
+                }
+            }
+        }
         return displayed
     }
 
@@ -84,6 +98,15 @@ nonisolated struct ManualMeasurement: Identifiable, Sendable {
         // derived helper points must not survive as hidden sampling dependencies.
         var updated = editable
         guard updated.placeManualLandmark(at: index, point: point) else { return false }
+        if definition.projection != nil {
+            // This editor confirms two endpoints, not the model's horizontal
+            // reference axis. Record a different measurement instead of silently
+            // preserving a rule whose supporting points were discarded.
+            definition.projection = nil
+            definition.id += ".manualStraight"
+            definition.title += " · 수동 직선"
+            referenceCentimeters = nil
+        }
         landmarks = updated
         invalidateCalculation()
         return true

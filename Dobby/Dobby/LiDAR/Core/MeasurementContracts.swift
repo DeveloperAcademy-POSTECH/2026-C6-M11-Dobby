@@ -101,6 +101,9 @@ nonisolated struct MeasurementDefinition: Codable, Sendable, Identifiable {
     var title: String
     /// Explicit straight segments, in order. No inferred surface length.
     var landmarkIDs: [String]
+    /// Nil retains the existing straight-segment contract, including older archives.
+    /// A projection removes the component parallel to an independently resolved 3D axis.
+    var projection: MeasurementProjection? = nil
     static let testDistance = MeasurementDefinition(id: "test", title: "두 점 사이", landmarkIDs: ["A", "B"])
     static let longSleeve: [MeasurementDefinition] = [
         .init(id: "chest", title: "가슴 단면", landmarkIDs: ["armpitLeft", "armpitRight"]),
@@ -108,6 +111,11 @@ nonisolated struct MeasurementDefinition: Codable, Sendable, Identifiable {
         .init(id: "length", title: "총장", landmarkIDs: ["neckSide", "hemBelowNeck"]),
         .init(id: "sleeve", title: "소매길이", landmarkIDs: ["shoulderLeft", "cuffLeft"])
     ]
+}
+
+nonisolated struct MeasurementProjection: Codable, Sendable, Equatable {
+    /// Exactly two distinct physical landmark IDs; camera axes are not garment axes.
+    var referenceAxisLandmarkIDs: [String]
 }
 
 nonisolated enum MeasurementStatus: String, Codable, Sendable {
@@ -121,7 +129,7 @@ nonisolated enum MeasurementFailure: String, Error, Codable, Sendable {
 }
 
 nonisolated enum DepthSamplingMethod: String, Codable, Sendable {
-    case localPlane, robustMedian, spatialAverage
+    case localPlane, robustMedian, spatialAverage, axisProjection
 }
 
 nonisolated struct PointQuality: Codable, Sendable {

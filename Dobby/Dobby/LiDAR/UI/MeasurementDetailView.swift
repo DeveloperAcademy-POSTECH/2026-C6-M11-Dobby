@@ -54,6 +54,10 @@ struct MeasurementDetailView: View {
                     }.pickerStyle(.menu).accessibilityIdentifier("measurementDefinition")
                     Text(GarmentMeasurementCatalog.guide(for: model.definition.id))
                         .font(.caption).foregroundStyle(.secondary)
+                    if model.definition.projection != nil {
+                        Text("이 총장은 목 양끝의 3D 가로축을 기준으로 계산합니다. 아래에서 두 점을 직접 바꾸면 별도의 수동 직선 측정으로 전환됩니다.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
 
                     resultCard
                     if let selection = model.snapshot.selectionSummary {
@@ -129,7 +133,8 @@ struct MeasurementDetailView: View {
                 .navigationTitle("측정 테스트").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("완료") { dismiss() } } }
                 .task {
-                    if image == nil { image = SnapshotPresentation.image(for: model.snapshot) }
+                    if let decoded = await SnapshotPresentation.thumbnail(for: model.snapshot, maximumDimension: 4096),
+                       !Task.isCancelled { image = decoded }
                 }
                 .task(id: model.calculationRevision) { await recalculate() }
                 .onDisappear { saveTask?.cancel() }
@@ -164,7 +169,9 @@ struct MeasurementDetailView: View {
     }
 
     private func placePoint(displayPoint: ImagePoint, index: Int) {
+        let previousDefinition = model.definition.id
         guard model.placePoint(displayPoint: displayPoint, index: index) else { return }
+        if previousDefinition != model.definition.id { referenceText = "" }
         if let next = model.displayLandmarks.points.firstIndex(where: { !$0.isVisible }) { activePointIndex = next }
         exportedURL = nil
     }
@@ -215,6 +222,7 @@ struct MeasurementDetailView: View {
         case .localPlane: "국소 평면"
         case .robustMedian: "주변 중앙값"
         case .spatialAverage: "원본 측정점의 3D 평균"
+        case .axisProjection: "의류 가로축의 직교 방향"
         }
     }
 

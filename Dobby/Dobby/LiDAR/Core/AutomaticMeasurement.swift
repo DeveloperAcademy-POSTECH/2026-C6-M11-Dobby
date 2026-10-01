@@ -97,8 +97,9 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         }
         // Keep source points while the A/B editor still represents model output.
         // Dropping waist endpoints would make its derived midpoint unresolvable.
-        var required = Set(definition.landmarkIDs)
-        var pending = definition.landmarkIDs
+        let supportIDs = definition.projection?.referenceAxisLandmarkIDs ?? []
+        var required = Set(definition.landmarkIDs + supportIDs)
+        var pending = definition.landmarkIDs + supportIDs
         var cursor = 0
         while cursor < pending.count && required.count <= 128 {
             let id = pending[cursor]

@@ -3,10 +3,28 @@ import UniformTypeIdentifiers
 import UIKit
 
 struct LiDARLabView: View {
-    private let bottomProvider: CoreMLBottomLandmarkProvider?
-    private let bottomModelLoadError: String?
-    private let usesBottomModel: Bool
-    @State private var showBottomRecognition = false
+    private let landmarkProvider: (any GarmentLandmarkProviding)?
+    @State private var kind: AutomaticGarmentKind = .bottoms
+
+    init(landmarkProvider: (any GarmentLandmarkProviding)? = nil) {
+        self.landmarkProvider = landmarkProvider
+    }
+
+    var body: some View {
+        // A new identity replaces the camera and inference service together.
+        // No evidence from the previous garment model can enter the next run.
+        LiDARLabContent(kind: kind, selectedKind: $kind, landmarkProvider: landmarkProvider)
+            .id(kind)
+    }
+}
+
+private struct LiDARLabContent: View {
+    private let kind: AutomaticGarmentKind
+    @Binding private var selectedKind: AutomaticGarmentKind
+    private let garmentProvider: CoreMLGarmentLandmarkProvider?
+    private let modelLoadError: String?
+    private let usesBundledModel: Bool
+    @State private var showGarmentRecognition = false
     @State private var garmentFlow: GarmentFlowDestination?
     @StateObject private var capture: ARKitCaptureProvider
     @State private var automaticService: RecordedMeasurementService?
@@ -32,22 +50,27 @@ struct LiDARLabView: View {
     @State private var errorMessage: String?
     @State private var archive = MeasurementArchive()
 
-    init(landmarkProvider: (any GarmentLandmarkProviding)? = nil) {
-        let bundled: CoreMLBottomLandmarkProvider?
+    init(kind: AutomaticGarmentKind, selectedKind: Binding<AutomaticGarmentKind>,
+         landmarkProvider: (any GarmentLandmarkProviding)?) {
+        self.kind = kind
+        _selectedKind = selectedKind
+        let bundled: CoreMLGarmentLandmarkProvider?
         let loadingError: String?
         do {
-            bundled = try CoreMLBottomLandmarkProvider.bundled()
+            bundled = try CoreMLGarmentLandmarkProvider.bundled(kind: kind)
             loadingError = nil
         } catch {
             bundled = nil
             loadingError = error.localizedDescription
         }
-        self.bottomProvider = bundled
-        self.bottomModelLoadError = loadingError
-        self.usesBottomModel = landmarkProvider == nil && bundled != nil
+        self.garmentProvider = bundled
+        self.modelLoadError = loadingError
+        self.usesBundledModel = landmarkProvider == nil
         let provider: (any GarmentLandmarkProviding)? = landmarkProvider ?? bundled
-        let definitions = landmarkProvider == nil ? (bundled?.schema.measurementDefinitions ?? []) : MeasurementDefinition.longSleeve
-        let camera = ARKitCaptureProvider(garmentRecognizer: bundled)
+        let definitions = landmarkProvider == nil ? (bundled?.measurementDefinitions ?? []) : MeasurementDefinition.longSleeve
+        let recognizer: (any GarmentImageRecognizing)? = landmarkProvider == nil
+            ? bundled : landmarkProvider as? any GarmentImageRecognizing
+        let camera = ARKitCaptureProvider(garmentRecognizer: recognizer)
         _capture = StateObject(wrappedValue: camera)
         let journal = LiDARAppServices.attemptJournal
         _automaticService = State(initialValue: provider.map { provider in
@@ -72,8 +95,20 @@ struct LiDARLabView: View {
                     }
                     VStack(alignment: .leading, spacing: 12) {
                         Text("옷을 찍고, 실측을 확인하세요").font(.title3.bold())
-                        Text("옷 모양의 윤곽을 확인한 뒤 촬영하면 사진 위에 실측값이 표시됩니다. 현재 바지·반바지를 지원합니다.")
+                        Text("옷 모양의 윤곽을 확인한 뒤 촬영하면 사진 위에 실측값이 표시됩니다. 긴팔·반팔 상의와 바지·반바지를 지원합니다.")
                             .font(.subheadline).foregroundStyle(.secondary)
+                        if usesBundledModel {
+                            Picker("자동 인식할 옷 종류", selection: $selectedKind) {
+                                ForEach(AutomaticGarmentKind.allCases) { kind in
+                                    Text(kind.title).tag(kind)
+                                }
+                            }.pickerStyle(.segmented)
+                                .accessibilityIdentifier("automaticGarmentKind")
+                            Text(kind == .top
+                                 ? "상의와 소매를 바닥에 평평하게 펼쳐 주세요. 옷걸이 사진은 지원하지 않으며, 민소매의 소매길이는 사용할 수 없습니다."
+                                 : "바지·반바지 한 벌을 허리는 위, 밑단은 아래로 펼쳐 주세요. 치마는 지원하지 않습니다.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         Button { garmentFlow = .live } label: {
                             Label("실측 촬영", systemImage: "camera.fill").frame(maxWidth: .infinity).padding(.vertical, 6)
                         }.buttonStyle(.borderedProminent).tint(GarmentCaptureStyle.accent)
@@ -94,28 +129,28 @@ struct LiDARLabView: View {
                         Button { showReadinessDemo = true } label: {
                             Label("실시간 안내 미리보기", systemImage: "viewfinder.circle").frame(maxWidth: .infinity)
                         }.buttonStyle(.bordered).accessibilityIdentifier("openReadinessDemo")
-                        Text("수동 촬영은 두 점을 직접 지정합니다. 아래 하의 자동 측정에서는 모델이 바지·반바지의 측정점을 찾습니다.")
+                        Text("수동 촬영은 두 점을 직접 지정합니다. 자동 측정에서는 선택한 모델이 옷의 측정점을 찾습니다.")
                             .font(.caption).foregroundStyle(.secondary)
                     }.labCard()
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Label(usesBottomModel ? "하의 자동 인식 · LiDAR 측정" : "자동 측정 연결", systemImage: "point.3.connected.trianglepath.dotted").font(.headline)
-                        Text((automaticService != nil) ? (usesBottomModel ? "바지·반바지 한 벌을 허리는 위, 밑단은 아래로 펼쳐 촬영하세요. 허리·가랑이·양쪽 밑단을 찾아 같은 프레임의 LiDAR 깊이로 직선 치수를 계산합니다." : "촬영한 한 프레임에서 측정점과 모든 항목의 치수를 계산합니다.")
+                        Label(usesBundledModel ? "\(kind.title) 자동 인식 · LiDAR 측정" : "자동 측정 연결", systemImage: "point.3.connected.trianglepath.dotted").font(.headline)
+                        Text((automaticService != nil) ? (usesBundledModel ? automaticModelDescription : "촬영한 한 프레임에서 측정점과 모든 항목의 치수를 계산합니다.")
                              : "의류 ML 모델 연결 대기 중입니다. 아래 합성 테스트로 촬영→측정점 수신→치수 계산·부분 실패·저장을 확인할 수 있습니다.")
                             .font(.subheadline).foregroundStyle(.secondary)
                         Button { automaticMode = true; showCamera = true } label: {
-                            Label(usesBottomModel ? "하의 자동 측정 촬영" : "ML 자동 측정 촬영", systemImage: "camera.badge.ellipsis").frame(maxWidth: .infinity)
+                            Label(usesBundledModel ? "\(kind.title) 자동 측정 촬영" : "ML 자동 측정 촬영", systemImage: "camera.badge.ellipsis").frame(maxWidth: .infinity)
                         }.buttonStyle(.borderedProminent).disabled(!(automaticService != nil) || !capture.isSupported || isAutomaticRunning)
-                            .accessibilityIdentifier("startBottomAutomaticCapture")
-                        if bottomProvider != nil {
-                            Button { showBottomRecognition = true } label: {
-                                Label("하의 사진으로 인식 테스트", systemImage: "photo.badge.magnifyingglass").frame(maxWidth: .infinity)
-                            }.buttonStyle(.bordered).accessibilityIdentifier("openBottomRecognition")
-                            Text("사진 테스트는 점의 위치만 보여줍니다. cm 측정은 LiDAR 촬영에서 가능합니다. 치마·상의는 이 모델의 대상이 아닙니다.")
+                            .accessibilityIdentifier(kind == .bottoms ? "startBottomAutomaticCapture" : "startTopAutomaticCapture")
+                        if garmentProvider != nil {
+                            Button { showGarmentRecognition = true } label: {
+                                Label("\(kind.title) 사진으로 인식 테스트", systemImage: "photo.badge.magnifyingglass").frame(maxWidth: .infinity)
+                            }.buttonStyle(.bordered).accessibilityIdentifier(kind == .bottoms ? "openBottomRecognition" : "openTopRecognition")
+                            Text("사진 테스트는 점의 위치만 보여줍니다. cm 측정은 LiDAR 촬영에서 가능합니다. 인식 신뢰도는 실제 위치나 치수의 정확도를 보증하지 않습니다.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
-                        if let bottomModelLoadError {
-                            Text(bottomModelLoadError).font(.caption).foregroundStyle(.orange)
+                        if let modelLoadError {
+                            Text(modelLoadError).font(.caption).foregroundStyle(.orange)
                         }
                         Button {
                             automaticTask = Task {
@@ -201,12 +236,12 @@ struct LiDARLabView: View {
                 .navigationTitle("측정 실험실").navigationBarTitleDisplayMode(.inline)
                 .task { await refreshRecords() }
                 .onChange(of: scenePhase) { _, phase in if phase != .active { cancelAutomatic() } }
-                .onDisappear { if !showCamera { cancelAutomatic() } }
-                .sheet(isPresented: $showBottomRecognition) {
-                    if let bottomProvider { BottomRecognitionView(provider: bottomProvider) }
+                .onDisappear { if !showCamera { cancelAutomatic(); capture.stop() } }
+                .sheet(isPresented: $showGarmentRecognition) {
+                    if let garmentProvider { GarmentRecognitionView(provider: garmentProvider) }
                 }
                 .fullScreenCover(item: $garmentFlow, onDismiss: { Task { await refreshRecords() } }) { destination in
-                    GarmentCaptureFlowView(archive: archive, preview: destination == .preview)
+                    GarmentCaptureFlowView(archive: archive, preview: destination == .preview, kind: kind)
                 }
                 .sheet(isPresented: $showBaseline) { BaselineReportView(archive: archive) }
                 .sheet(isPresented: $showValidation) { MeasurementValidationReportView(archive: archive) }
@@ -224,7 +259,7 @@ struct LiDARLabView: View {
                             pendingAutomaticOutput = nil
                             automaticRecordingError = completed.recordingError
                             automaticSession = AutomaticMeasurement(output: completed.workflowOutput,
-                                context: .init(category: usesBottomModel ? .bottoms : .top, deviceModel: SnapshotPresentation.deviceIdentifier))
+                                context: .init(category: usesBundledModel ? kind.category : .top, deviceModel: SnapshotPresentation.deviceIdentifier))
                         } else if !automaticMode {
                             session = ManualMeasurement(snapshot: snapshot,
                                 testContext: .init(deviceModel: SnapshotPresentation.deviceIdentifier))
@@ -258,6 +293,12 @@ struct LiDARLabView: View {
 
     // These are presentation tasks and transient UI states. Domain execution and
     // durable attempt logging remain in the injected, non-observable service.
+    private var automaticModelDescription: String {
+        kind == .top
+            ? "펼친 긴팔·반팔 상의에서 목·어깨·겨드랑이·소매·밑단의 점을 찾습니다. 같은 사진의 LiDAR 깊이로 어깨, 가슴, 밑단, 양쪽 소매와 총장을 계산합니다. 결과의 점을 눈으로 확인하고 줄자와 비교해 주세요."
+            : "바지·반바지 한 벌을 허리는 위, 밑단은 아래로 펼쳐 촬영하세요. 허리·가랑이·양쪽 밑단을 찾아 같은 프레임의 LiDAR 깊이로 직선 치수를 계산합니다."
+    }
+
     private var automaticPhaseLabel: String {
         switch automaticPhase {
         case .idle: "촬영 준비"

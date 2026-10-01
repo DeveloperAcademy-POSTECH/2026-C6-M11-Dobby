@@ -101,7 +101,7 @@ final class DerivedLandmarkGeometryTests: XCTestCase {
         for angle in [-45.0, -30, 0, 30, 45] {
             let scene = try scene(yawDegrees: angle)
             let result = measure(scene)
-            XCTAssertEqual(result.algorithmVersion, "lidar-unprojection-1.0.2")
+            XCTAssertEqual(result.algorithmVersion, LiDARMeasurementEngine.algorithmVersion)
             XCTAssertEqual(try XCTUnwrap(result.values[0].meters), 0.6, accuracy: 0.00001, "yaw \(angle)")
             XCTAssertEqual(try XCTUnwrap(try rise(result).meters), 0.3, accuracy: 0.00001, "yaw \(angle)")
             XCTAssertEqual(try rise(result).status, .valid)

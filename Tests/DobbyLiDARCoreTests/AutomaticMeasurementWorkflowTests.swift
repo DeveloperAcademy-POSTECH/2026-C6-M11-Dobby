@@ -109,6 +109,46 @@ final class AutomaticMeasurementWorkflowTests: XCTestCase {
         XCTAssertNil(terminal.first?.timings.landmarksSeconds)
     }
 
+    func testSnapshotIsPublishedBeforeSlowLandmarksWithTheExactFrozenFrame() async throws {
+        let value = fixture(), model = ControlledWorkflowModel()
+        var snapshots: [CaptureSnapshot] = []
+        var phaseAtSnapshot: AutomaticMeasurementPhase?
+        let workflow = AutomaticMeasurementWorkflow(camera: ImmediateWorkflowCamera([value.snapshot]),
+            landmarks: model, definitions: [.testDistance])
+        workflow.onSnapshot = { snapshot in
+            snapshots.append(snapshot)
+            phaseAtSnapshot = workflow.phase
+        }
+        var output: AutomaticMeasurementOutput?
+        let task = Task { output = try? await workflow.run(orientation: .right) }
+        await eventually { await model.pendingCount == 1 }
+        XCTAssertNil(output, "A processing photo must be available before model inference finishes")
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertEqual(snapshots.first?.frame.frameID, value.snapshot.frame.frameID)
+        XCTAssertEqual(snapshots.first?.frame.sessionID, value.snapshot.frame.sessionID)
+        XCTAssertEqual(snapshots.first?.imageJPEG, value.snapshot.imageJPEG)
+        XCTAssertEqual(phaseAtSnapshot, .capturing)
+        await model.resume(frameID: value.snapshot.frame.frameID, points: value.points)
+        await task.value
+        XCTAssertEqual(output?.snapshot.frame.frameID, snapshots.first?.frame.frameID)
+        XCTAssertEqual(snapshots.count, 1)
+    }
+
+    func testCancellationFromSnapshotCallbackStopsBeforeLandmarkInference() async {
+        let value = fixture(), model = RecordingWorkflowModel(answers: [:])
+        let workflow = AutomaticMeasurementWorkflow(camera: ImmediateWorkflowCamera([value.snapshot]),
+            landmarks: model, definitions: [.testDistance])
+        var snapshotCount = 0
+        workflow.onSnapshot = { _ in snapshotCount += 1; workflow.cancel() }
+        let error = await failure { try await workflow.run(orientation: .up) }
+        XCTAssertEqual(error?.code, .cancelled)
+        XCTAssertEqual(error?.stage, .capture)
+        XCTAssertEqual(snapshotCount, 1)
+        let observed = await model.observedSnapshots
+        XCTAssertTrue(observed.isEmpty)
+        XCTAssertNil(workflow.lastResult)
+    }
+
     func testModelFailurePreservesCapturedSnapshotAndIdentifiesItsStage() async {
         let value = fixture()
         let model = RecordingWorkflowModel(answers: [:], error: WorkflowTestError.landmarks)
@@ -217,8 +257,9 @@ final class AutomaticMeasurementWorkflowTests: XCTestCase {
         let camera = ControlledWorkflowCamera()
         let model = RecordingWorkflowModel(answers: [value.snapshot.frame.frameID: value.points])
         var events: [AutomaticMeasurementTerminalEvent] = []
+        var snapshotCount = 0
         let workflow = AutomaticMeasurementWorkflow(camera: camera, landmarks: model, definitions: [.testDistance],
-            timeoutSeconds: 0.03, onTerminal: { events.append($0) })
+            timeoutSeconds: 0.03, onTerminal: { events.append($0) }, onSnapshot: { _ in snapshotCount += 1 })
         let error = await failure { try await workflow.run(orientation: .up) }
         XCTAssertEqual(error?.code, .timedOut)
         XCTAssertEqual(error?.stage, .capture)
@@ -230,6 +271,7 @@ final class AutomaticMeasurementWorkflowTests: XCTestCase {
         XCTAssertEqual(events.count, 1)
         XCTAssertNil(workflow.lastResult)
         XCTAssertEqual(workflow.phase, .failed)
+        XCTAssertEqual(snapshotCount, 0, "A late frame after timeout must not become a processing photo")
     }
 
     func testModelTimeoutHasPartialStageTimingAndRejectsLatePoints() async {

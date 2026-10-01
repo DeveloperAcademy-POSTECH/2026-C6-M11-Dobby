@@ -1,0 +1,680 @@
+{
+  "emptyImages" : [
+    {
+      "accepted" : false,
+      "captureAdapterAccepted" : false,
+      "captureAdapterError" : "noDetection(main.AutomaticGarmentKind.top)",
+      "captureInputDepthIsEmpty" : true,
+      "didComputeCentimetres" : false,
+      "error" : "noDetection(main.AutomaticGarmentKind.top)",
+      "expectedEmptyRejectionPassed" : true,
+      "purpose" : "Empty image must not yield a garment",
+      "source" : "synthetic:800x600:uniformGray=0.0"
+    },
+    {
+      "accepted" : false,
+      "captureAdapterAccepted" : false,
+      "captureAdapterError" : "noDetection(main.AutomaticGarmentKind.top)",
+      "captureInputDepthIsEmpty" : true,
+      "didComputeCentimetres" : false,
+      "error" : "noDetection(main.AutomaticGarmentKind.top)",
+      "expectedEmptyRejectionPassed" : true,
+      "purpose" : "Empty image must not yield a garment",
+      "source" : "synthetic:800x600:uniformGray=0.4470588235294118"
+    },
+    {
+      "accepted" : false,
+      "captureAdapterAccepted" : false,
+      "captureAdapterError" : "noDetection(main.AutomaticGarmentKind.top)",
+      "captureInputDepthIsEmpty" : true,
+      "didComputeCentimetres" : false,
+      "error" : "noDetection(main.AutomaticGarmentKind.top)",
+      "expectedEmptyRejectionPassed" : true,
+      "purpose" : "Empty image must not yield a garment",
+      "source" : "synthetic:800x600:uniformGray=1.0"
+    }
+  ],
+  "foregroundChecksPassed" : true,
+  "kind" : "top",
+  "limitations" : [
+    "Photos have no independently verified landmark labels; this is an inference integration check, not accuracy evaluation.",
+    "No ground-truth lengths, real depth, distance engine, or centimetre calculation are used.",
+    "Rotation checks physically inverse-rotate the same raw RGB, restore its frame orientation, and compare upright predictions.",
+    "Snapshot\/foreground-mask checks are separately reported; requiredChecksPassed refers to photo inference, repeat\/rotation consistency, and empty-image rejection.",
+    "Pose-model confidence does not establish category correctness or landmark\/measurement accuracy; wrong-kind photos only characterize this risk.",
+    "Empty-photo inference and the frozen capture adapter (which additionally requires a matched foreground mask) are reported separately; no depth is supplied to either.",
+    "Timing and Vision results come from this Mac, not the test iPhone; the first photo includes model compilation\/loading."
+  ],
+  "measurementDefinitions" : [
+    {
+      "id" : "top.shoulderWidth",
+      "landmarkIDs" : [
+        "shoulder_left",
+        "shoulder_right"
+      ],
+      "title" : "어깨너비"
+    },
+    {
+      "id" : "top.chestWidth",
+      "landmarkIDs" : [
+        "armpit_left",
+        "armpit_right"
+      ],
+      "title" : "가슴 단면"
+    },
+    {
+      "id" : "top.hemWidth",
+      "landmarkIDs" : [
+        "hem_left",
+        "hem_right"
+      ],
+      "title" : "밑단 단면"
+    },
+    {
+      "id" : "top.sleeveLengthLeft",
+      "landmarkIDs" : [
+        "shoulder_left",
+        "sleeve_end_left"
+      ],
+      "title" : "왼쪽 소매길이(직선)"
+    },
+    {
+      "id" : "top.sleeveLengthRight",
+      "landmarkIDs" : [
+        "shoulder_right",
+        "sleeve_end_right"
+      ],
+      "title" : "오른쪽 소매길이(직선)"
+    },
+    {
+      "id" : "top.totalLength",
+      "landmarkIDs" : [
+        "neck_center",
+        "hem_center"
+      ],
+      "projection" : {
+        "referenceAxisLandmarkIDs" : [
+          "neck_left",
+          "neck_right"
+        ]
+      },
+      "title" : "총장(목선에 수직)"
+    }
+  ],
+  "modelPath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/2026-C6-Dobby\/Dobby\/Dobby\/LiDAR\/Models\/TopLandmarks.mlpackage",
+  "modelVersion" : "top11-ec1e6b054d59",
+  "orientationChecks" : {
+    "baselinePointCount" : 12,
+    "checks" : [
+      {
+        "inverseRawPixelRotationEXIF" : 1,
+        "maximumConfidenceDelta" : 0,
+        "maximumCoordinateDelta" : 0,
+        "orientation" : "up",
+        "passed" : true,
+        "rawImageSize" : {
+          "height" : 384,
+          "width" : 288
+        },
+        "snapshot" : {
+          "didComputeCentimetres" : false,
+          "frameID" : "CE644B05-1055-4F4C-B79C-C9DB80CF8F03",
+          "frameIdentityPreserved" : true,
+          "inputDepthIsEmpty" : true,
+          "maskComparisonPassed" : true,
+          "maskForegroundPixelCount" : 16409,
+          "maskIntersectionOverUnionVsUpright" : 1,
+          "maskSize" : {
+            "height" : 384,
+            "width" : 288
+          },
+          "modelVersion" : "top11-ec1e6b054d59",
+          "orientation" : "up",
+          "passed" : true,
+          "pointCount" : 12,
+          "rawImageSize" : {
+            "height" : 384,
+            "width" : 288
+          },
+          "sessionID" : "9106037D-0426-49F2-A214-2D78525A6D8F",
+          "uprightMaskSize" : {
+            "height" : 384,
+            "width" : 288
+          }
+        }
+      },
+      {
+        "inverseRawPixelRotationEXIF" : 8,
+        "maximumConfidenceDelta" : 0,
+        "maximumCoordinateDelta" : 5.551115123125783e-17,
+        "orientation" : "right",
+        "passed" : true,
+        "rawImageSize" : {
+          "height" : 288,
+          "width" : 384
+        },
+        "snapshot" : {
+          "didComputeCentimetres" : false,
+          "frameID" : "F5A61C43-FBEE-43FB-9CA4-83F38271069E",
+          "frameIdentityPreserved" : true,
+          "inputDepthIsEmpty" : true,
+          "maskComparisonPassed" : true,
+          "maskForegroundPixelCount" : 16409,
+          "maskIntersectionOverUnionVsUpright" : 1,
+          "maskSize" : {
+            "height" : 288,
+            "width" : 384
+          },
+          "modelVersion" : "top11-ec1e6b054d59",
+          "orientation" : "right",
+          "passed" : true,
+          "pointCount" : 12,
+          "rawImageSize" : {
+            "height" : 288,
+            "width" : 384
+          },
+          "sessionID" : "855BE220-AD44-4F8A-8F74-6F85A4433653",
+          "uprightMaskSize" : {
+            "height" : 384,
+            "width" : 288
+          }
+        }
+      },
+      {
+        "inverseRawPixelRotationEXIF" : 3,
+        "maximumConfidenceDelta" : 0,
+        "maximumCoordinateDelta" : 5.551115123125783e-17,
+        "orientation" : "down",
+        "passed" : true,
+        "rawImageSize" : {
+          "height" : 384,
+          "width" : 288
+        },
+        "snapshot" : {
+          "didComputeCentimetres" : false,
+          "frameID" : "D9260F90-7D75-4A31-B3B0-B85BC17D4610",
+          "frameIdentityPreserved" : true,
+          "inputDepthIsEmpty" : true,
+          "maskComparisonPassed" : true,
+          "maskForegroundPixelCount" : 16409,
+          "maskIntersectionOverUnionVsUpright" : 1,
+          "maskSize" : {
+            "height" : 384,
+            "width" : 288
+          },
+          "modelVersion" : "top11-ec1e6b054d59",
+          "orientation" : "down",
+          "passed" : true,
+          "pointCount" : 12,
+          "rawImageSize" : {
+            "height" : 384,
+            "width" : 288
+          },
+          "sessionID" : "0E460388-80B4-477B-8780-0B88B8475FA4",
+          "uprightMaskSize" : {
+            "height" : 384,
+            "width" : 288
+          }
+        }
+      },
+      {
+        "inverseRawPixelRotationEXIF" : 6,
+        "maximumConfidenceDelta" : 0,
+        "maximumCoordinateDelta" : 5.551115123125783e-17,
+        "orientation" : "left",
+        "passed" : true,
+        "rawImageSize" : {
+          "height" : 288,
+          "width" : 384
+        },
+        "snapshot" : {
+          "didComputeCentimetres" : false,
+          "frameID" : "8D95F380-C444-4EF5-A525-649F1A605F02",
+          "frameIdentityPreserved" : true,
+          "inputDepthIsEmpty" : true,
+          "maskComparisonPassed" : true,
+          "maskForegroundPixelCount" : 16409,
+          "maskIntersectionOverUnionVsUpright" : 1,
+          "maskSize" : {
+            "height" : 288,
+            "width" : 384
+          },
+          "modelVersion" : "top11-ec1e6b054d59",
+          "orientation" : "left",
+          "passed" : true,
+          "pointCount" : 12,
+          "rawImageSize" : {
+            "height" : 288,
+            "width" : 384
+          },
+          "sessionID" : "F738366C-41FE-4BE0-9978-E83BBD35BC69",
+          "uprightMaskSize" : {
+            "height" : 384,
+            "width" : 288
+          }
+        }
+      }
+    ],
+    "confidenceTolerance" : 0.003125,
+    "coordinateTolerance" : 0.003125,
+    "fixtureDescription" : "Real upright photo without rescaling, with 32px horizontal and 80px vertical neutral borders to make a non-square rotation fixture.",
+    "minimumMaskIntersectionOverUnion" : 0.99,
+    "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T02.jpg",
+    "uprightImageSize" : {
+      "height" : 384,
+      "width" : 288
+    }
+  },
+  "photos" : [
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.9326171875,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.868373833,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T02.jpg",
+      "points" : [
+        {
+          "confidence" : 0.9970703125,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.41328125,
+            "y" : 0.1955078125
+          }
+        },
+        {
+          "confidence" : 0.99658203125,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.564453125,
+            "y" : 0.184765625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2880859375,
+            "y" : 0.261328125
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.683984375,
+            "y" : 0.24453125
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2802734375,
+            "y" : 0.484765625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.70703125,
+            "y" : 0.469921875
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.178125,
+            "y" : 0.4546875
+          }
+        },
+        {
+          "confidence" : 0.97998046875,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.80234375,
+            "y" : 0.423828125
+          }
+        },
+        {
+          "confidence" : 0.9814453125,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2822265625,
+            "y" : 0.88125
+          }
+        },
+        {
+          "confidence" : 0.98486328125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.501171875,
+            "y" : 0.8625
+          }
+        },
+        {
+          "confidence" : 0.9697265625,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.708203125,
+            "y" : 0.86171875
+          }
+        },
+        {
+          "confidence" : 0.99658203125,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4888671875,
+            "y" : 0.19013671875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.94775390625,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.007482667,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T03.jpg",
+      "points" : [
+        {
+          "confidence" : 0.99853515625,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.4359375,
+            "y" : 0.176953125
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.573046875,
+            "y" : 0.17890625
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.31171875,
+            "y" : 0.2357421875
+          }
+        },
+        {
+          "confidence" : 0.99951171875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.689453125,
+            "y" : 0.2447265625
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2892578125,
+            "y" : 0.44921875
+          }
+        },
+        {
+          "confidence" : 1,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.708203125,
+            "y" : 0.459765625
+          }
+        },
+        {
+          "confidence" : 0.99169921875,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1587890625,
+            "y" : 0.421484375
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.834375,
+            "y" : 0.426953125
+          }
+        },
+        {
+          "confidence" : 0.974609375,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.2734375,
+            "y" : 0.771875
+          }
+        },
+        {
+          "confidence" : 0.98388671875,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.496875,
+            "y" : 0.765625
+          }
+        },
+        {
+          "confidence" : 0.9814453125,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.70234375,
+            "y" : 0.77578125
+          }
+        },
+        {
+          "confidence" : 0.99853515625,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5044921874999999,
+            "y" : 0.1779296875
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    },
+    {
+      "derivedPointCount" : 1,
+      "detectionConfidence" : 0.90087890625,
+      "directPointCount" : 11,
+      "elapsedSeconds" : 0.007591042,
+      "imageSize" : {
+        "height" : 224,
+        "width" : 224
+      },
+      "modelVersion" : "top11-ec1e6b054d59",
+      "outputOrientation" : "EXIF-normalized up",
+      "passed" : true,
+      "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/긴팔_상의\/tops_T21.jpg",
+      "points" : [
+        {
+          "confidence" : 0.9921875,
+          "id" : "neck_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.437890625,
+            "y" : 0.1990234375
+          }
+        },
+        {
+          "confidence" : 0.9912109375,
+          "id" : "neck_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.57890625,
+            "y" : 0.2001953125
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.3552734375,
+            "y" : 0.2451171875
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "shoulder_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.6578125,
+            "y" : 0.24921875
+          }
+        },
+        {
+          "confidence" : 0.9990234375,
+          "id" : "armpit_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.34765625,
+            "y" : 0.388671875
+          }
+        },
+        {
+          "confidence" : 0.998046875,
+          "id" : "armpit_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.66640625,
+            "y" : 0.397265625
+          }
+        },
+        {
+          "confidence" : 0.98583984375,
+          "id" : "sleeve_end_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.1533203125,
+            "y" : 0.6546875
+          }
+        },
+        {
+          "confidence" : 0.95703125,
+          "id" : "sleeve_end_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.8359375,
+            "y" : 0.665625
+          }
+        },
+        {
+          "confidence" : 0.99267578125,
+          "id" : "hem_left",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.316796875,
+            "y" : 0.68671875
+          }
+        },
+        {
+          "confidence" : 0.9892578125,
+          "id" : "hem_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.490234375,
+            "y" : 0.697265625
+          }
+        },
+        {
+          "confidence" : 0.98876953125,
+          "id" : "hem_right",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.665625,
+            "y" : 0.702734375
+          }
+        },
+        {
+          "confidence" : 0.9912109375,
+          "derivedFrom" : [
+            "neck_left",
+            "neck_right"
+          ],
+          "id" : "neck_center",
+          "isVisible" : true,
+          "point" : {
+            "x" : 0.5083984374999999,
+            "y" : 0.199609375
+          }
+        }
+      ],
+      "rawEXIFOrientation" : 1
+    }
+  ],
+  "platform" : "Version 27.0 (Build 26A428)",
+  "recordedAt" : "2026-09-30T11:02:02Z",
+  "repeatCheck" : {
+    "maximumConfidenceDelta" : 0,
+    "maximumCoordinateDelta" : 0,
+    "passed" : true,
+    "path" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/상의\/반팔_상의\/tops_T02.jpg",
+    "repeatedElapsedSeconds" : 0.007557
+  },
+  "requiredChecksPassed" : true,
+  "schemaDerivedPointIDs" : [
+    "neck_center"
+  ],
+  "schemaDirectPointCount" : 11,
+  "schemaPath" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/2026-C6-Dobby\/Dobby\/Dobby\/LiDAR\/Models\/schema_top.json",
+  "wrongKindImages" : [
+    {
+      "accepted" : false,
+      "error" : "noDetection(main.AutomaticGarmentKind.top)",
+      "purpose" : "Observe wrong selected model; pose scores are not category probabilities",
+      "source" : "\/Users\/moogoochung\/Desktop\/Apple Developer Academy\/Challenge 6\/ClothesML\/하의\/데님_바지\/shf_000009_front.jpg"
+    }
+  ]
+}

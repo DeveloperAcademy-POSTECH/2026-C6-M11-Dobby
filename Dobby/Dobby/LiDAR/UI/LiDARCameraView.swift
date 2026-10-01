@@ -85,6 +85,8 @@ struct LiDARCameraView: View {
             return "카메라를 시작하거나 샘플을 불러와 주세요."
         case .requestingPermission:
             return "카메라 권한을 확인하고 있습니다."
+        case .preparingModel:
+            return "옷 인식 모델을 준비하고 있습니다."
         case .unavailable(.unsupportedDevice):
             return ARKitCaptureError.unsupportedDevice.localizedDescription
         case .unavailable(.cameraPermissionDenied):
@@ -155,7 +157,7 @@ struct CameraPreview: UIViewRepresentable {
         view.session = session
         view.scene = SCNScene()
         view.automaticallyUpdatesLighting = false
-        view.preferredFramesPerSecond = 30
+        view.preferredFramesPerSecond = 60
         view.onOrientation = { orientation = $0 }
         return view
     }
@@ -165,22 +167,28 @@ struct CameraPreview: UIViewRepresentable {
         view.updateOutline()
     }
 
+    static func dismantleUIView(_ view: PreviewView, coordinator: ()) {
+        view.onOrientation = nil
+        view.tearDownOutline()
+    }
+
     final class PreviewView: ARSCNView {
         var onOrientation: ((ImageOrientation) -> Void)?
         private var lastOrientation: UIInterfaceOrientation?
         var readiness = LiveCaptureReadiness.waiting
-        private let outline = CAShapeLayer()
-        private var outlineTimestamp: TimeInterval?
-        private var contours: [[ImagePoint]] = []
+        private let fallbackOutlineEpoch = UUID()
+        private lazy var outlineRenderer = GarmentSilhouetteLayerRenderer(containerLayer: layer)
+        private var reduceMotionObserver: NSObjectProtocol?
 
         override init(frame: CGRect, options: [String: Any]? = nil) {
             super.init(frame: frame, options: options)
-            outline.fillColor = UIColor(named: "CaptureRecognition")?.withAlphaComponent(0.24).cgColor
-            outline.fillRule = .evenOdd
-            outline.lineWidth = 2
-            outline.lineJoin = .round
-            layer.addSublayer(outline)
             clipsToBounds = true
+            reduceMotionObserver = NotificationCenter.default.addObserver(
+                forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.updateOutline() }
+            }
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
@@ -188,53 +196,64 @@ struct CameraPreview: UIViewRepresentable {
             guard readiness.garmentRecognized, let mask = readiness.silhouette,
                   readiness.state != .unstable, readiness.state != .analyzing,
                   let frame = session.currentFrame,
+                  frame.timestamp - readiness.timestamp >= 0,
                   frame.timestamp - readiness.timestamp <= 2,
                   let orientation = window?.windowScene?.effectiveGeometry.interfaceOrientation,
+                  readiness.imageOrientation == Self.imageOrientation(for: orientation),
                   bounds.width > 0, bounds.height > 0 else {
-                outline.path = nil
-                outlineTimestamp = nil
-                contours = []
+                outlineRenderer.clear()
                 return
-            }
-            if outlineTimestamp != readiness.timestamp {
-                contours = GarmentSilhouetteGeometry.contours(from: mask) ?? []
-                outlineTimestamp = readiness.timestamp
             }
             // ARKit accounts for sensor orientation and the preview's aspect-fill
             // crop; a simple width/height scale would put the box on the wrong pixels.
             let transform = frame.displayTransform(for: orientation, viewportSize: bounds.size)
-            let path = UIBezierPath()
-            for contour in contours {
-                for (index, point) in contour.enumerated() {
-                    let p = CGPoint(x: point.x, y: point.y).applying(transform)
-                    let mapped = CGPoint(x: p.x * bounds.width, y: p.y * bounds.height)
-                    if index == 0 { path.move(to: mapped) }
-                    else { path.addLine(to: mapped) }
-                }
-                path.close()
+                .concatenating(.init(scaleX: bounds.width, y: bounds.height))
+                .concatenating(.init(translationX: bounds.minX, y: bounds.minY))
+            let color = UIColor(named: "CaptureRecognition") ?? .systemMint
+            outlineRenderer.update(mask: mask,
+                identity: .init(epoch: readiness.analysisEpoch ?? fallbackOutlineEpoch,
+                    timestamp: readiness.timestamp, orientation: Self.imageOrientation(for: orientation)),
+                transform: transform, viewport: bounds,
+                fillColor: color.withAlphaComponent(0.20).cgColor, strokeColor: color.cgColor,
+                reduceMotion: UIAccessibility.isReduceMotionEnabled)
+        }
+
+        func tearDownOutline() {
+            outlineRenderer.tearDown()
+            if let reduceMotionObserver {
+                NotificationCenter.default.removeObserver(reduceMotionObserver)
+                self.reduceMotionObserver = nil
             }
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            outline.frame = bounds
-            outline.path = path.cgPath
-            outline.strokeColor = UIColor(named: "CaptureRecognition")?.cgColor
-            outline.lineDashPattern = nil
-            CATransaction.commit()
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil { outlineRenderer.clear() }
+            else { updateOutline() }
         }
 
         override func layoutSubviews() {
             super.layoutSubviews()
-            updateOutline()
-            guard let value = window?.windowScene?.effectiveGeometry.interfaceOrientation, value != lastOrientation else { return }
-            lastOrientation = value
-            let mapped: ImageOrientation
-            switch value {
-            case .portrait: mapped = .right
-            case .portraitUpsideDown: mapped = .left
-            case .landscapeLeft: mapped = .down
-            default: mapped = .up
+            guard let value = window?.windowScene?.effectiveGeometry.interfaceOrientation else {
+                outlineRenderer.clear()
+                return
             }
+            guard value != lastOrientation else { updateOutline(); return }
+            lastOrientation = value
+            // A viewport/rotation change must not morph a previous outline into
+            // the new coordinate system while fresh recognition is pending.
+            outlineRenderer.clear()
+            let mapped = Self.imageOrientation(for: value)
             DispatchQueue.main.async { [weak self] in self?.onOrientation?(mapped) }
+        }
+
+        private static func imageOrientation(for value: UIInterfaceOrientation) -> ImageOrientation {
+            switch value {
+            case .portrait: .right
+            case .portraitUpsideDown: .left
+            case .landscapeLeft: .down
+            default: .up
+            }
         }
     }
 }

@@ -38,7 +38,8 @@ final class RecordedMeasurementService {
 
     func run(orientation: ImageOrientation, purpose: MeasurementAttemptPurpose,
              isSynthetic: Bool, deviceContext: String? = nil,
-             onPhaseChange: @escaping (AutomaticMeasurementPhase) -> Void = { _ in }) async throws
+             onPhaseChange: @escaping (AutomaticMeasurementPhase) -> Void = { _ in },
+             onSnapshot: ((CaptureSnapshot) -> Void)? = nil) async throws
         -> RecordedMeasurementOutput {
         guard activeRun == nil else { throw RecordedMeasurementServiceError.alreadyRunning }
         let run = RecordedMeasurementRun()
@@ -47,6 +48,7 @@ final class RecordedMeasurementService {
             if activeRun === run {
                 workflow.onPhaseChange = nil
                 workflow.onTerminal = nil
+                workflow.onSnapshot = nil
                 activeRun = nil
             }
         }
@@ -68,6 +70,11 @@ final class RecordedMeasurementService {
                 workflow.onTerminal = { [weak run] event in
                     guard let run, run.terminal == nil else { return }
                     run.terminal = event
+                }
+                workflow.onSnapshot = { [weak self, weak run] snapshot in
+                    guard let self, let run, self.activeRun === run,
+                          !run.cancellation.isRequested else { return }
+                    onSnapshot?(snapshot)
                 }
                 output = try await workflow.run(orientation: orientation)
             } catch { runError = error }

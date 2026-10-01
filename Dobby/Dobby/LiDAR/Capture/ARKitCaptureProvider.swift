@@ -8,6 +8,7 @@ import ImageIO
 nonisolated enum CaptureState: Equatable, Sendable {
     case idle
     case requestingPermission
+    case preparingModel
     case starting
     case ready
     case capturing
@@ -91,6 +92,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
 
     private nonisolated let worker = CaptureWorker()
     private nonisolated let liveAnalyzer: LiveForegroundAnalyzer
+    private let garmentRecognizer: (any GarmentImageRecognizing)?
+    private var hasPreparedRecognizer = false
+    private var resumeTrackingOnNextStart = false
     private var freshnessTask: Task<Void, Never>?
     private var freshnessGate = LiveReadinessFreshnessGate()
     private var generation: UUID?
@@ -98,6 +102,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     private var imageOrientation: ImageOrientation = .right
 
     init(garmentRecognizer: (any GarmentImageRecognizing)? = nil) {
+        self.garmentRecognizer = garmentRecognizer
         liveAnalyzer = LiveForegroundAnalyzer(recognizer: garmentRecognizer)
         super.init()
         session.delegate = self
@@ -114,7 +119,13 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     }
 
     func start() async {
-        guard !isRunning, !permissionRequestInProgress else { return }
+        if isRunning {
+            if state != .capturing, let generation {
+                liveAnalyzer.resume(sessionID: generation)
+            }
+            return
+        }
+        guard !permissionRequestInProgress else { return }
         guard isSupported else {
             state = .unavailable(.unsupportedDevice)
             return
@@ -144,6 +155,19 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             return
         }
 
+        if !hasPreparedRecognizer, let garmentRecognizer {
+            state = .preparingModel
+            do { try await garmentRecognizer.prepare() }
+            catch {
+                guard generation == identifier else { return }
+                state = .failed(error.localizedDescription)
+                return
+            }
+            guard generation == identifier else { return }
+            guard !Task.isCancelled else { stop(); return }
+            hasPreparedRecognizer = true
+        }
+
         let configuration = ARWorldTrackingConfiguration()
         configuration.frameSemantics = [.sceneDepth]
         if ARWorldTrackingConfiguration.supportsFrameSemantics([.sceneDepth, .smoothedSceneDepth]) {
@@ -157,10 +181,24 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         state = .starting
         frameStatus = nil
         isRunning = true
-        session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        let runOptions: ARSession.RunOptions = resumeTrackingOnNextStart ? [] : [.resetTracking, .removeExistingAnchors]
+        resumeTrackingOnNextStart = false
+        session.run(configuration, options: runOptions)
     }
 
     func stop() {
+        resumeTrackingOnNextStart = false
+        pauseCamera()
+    }
+
+    /// Freeze the preview after its RGB/depth snapshot has been copied. Retakes
+    /// in the same foreground session can keep ARKit's established tracking.
+    func pauseForMeasurement() {
+        resumeTrackingOnNextStart = resumeTrackingOnNextStart || isRunning
+        pauseCamera()
+    }
+
+    private func pauseCamera() {
         generation = nil
         permissionRequestInProgress = false
         worker.stop(error: .stopped)
@@ -180,6 +218,18 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             throw ARKitCaptureError.sessionNotRunning
         }
         guard state != .capturing else { throw ARKitCaptureError.captureInProgress }
+        liveAnalyzer.suspend(sessionID: identifier)
+        resetReadiness()
+        var snapshotCompleted = false
+        defer {
+            // Successful callers now own a frozen snapshot and immediately
+            // pause/close the camera. Keep preview ML out of their inference
+            // queue; start() can explicitly resume this still-running preview.
+            if !snapshotCompleted, generation == identifier, isRunning {
+                liveAnalyzer.resume(sessionID: identifier)
+                resetReadiness()
+            }
+        }
         let request = SnapshotRequest(sessionID: identifier, orientation: orientation,
                                       minimumFrameTimestamp: session.currentFrame?.timestamp)
         state = .capturing
@@ -200,6 +250,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
                 throw ARKitCaptureError.stopped
             }
             state = .ready
+            snapshotCompleted = true
             return snapshot
         } catch {
             if generation == identifier, isRunning { state = .ready }

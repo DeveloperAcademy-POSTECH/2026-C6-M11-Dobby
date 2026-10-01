@@ -1,10 +1,11 @@
 import Foundation
 
-/// Resolves a frozen RGB/depth frame and its matching landmarks into straight 3D lengths.
+/// Resolves a frozen RGB/depth frame and its matching landmarks into 3D lengths.
+/// Optional garment-axis projection removes sideways endpoint drift in that same space.
 /// Positions use optical coordinates: x right, y down, z forward, all in metres.
 /// `valid` describes input support, not a guaranteed physical error in centimetres.
 nonisolated struct LiDARMeasurementEngine {
-    static let algorithmVersion = "lidar-unprojection-1.0.2"
+    static let algorithmVersion = "lidar-unprojection-1.1.0"
     private let options: MeasurementOptions
 
     init(options: MeasurementOptions = .init()) {
@@ -109,6 +110,29 @@ nonisolated struct LiDARMeasurementEngine {
                 }
             }
             if let firstFailure { return unavailable(firstFailure, points: points) }
+            if let projection = definition.projection {
+                let axisIDs = projection.referenceAxisLandmarkIDs
+                guard points.count == 2, axisIDs.count == 2,
+                      axisIDs.allSatisfy({ !$0.isEmpty }), axisIDs[0] != axisIDs[1]
+                else { return unavailable(.invalidDefinition, points: points) }
+                var axis: [PointResolution] = []
+                for id in axisIDs {
+                    var visiting: Set<String> = []
+                    switch resolveID(id, visiting: &visiting) {
+                    case .failure(let error):
+                        if firstFailure == nil { firstFailure = error.reason }
+                    case .success(let value): axis.append(value)
+                    }
+                }
+                if let firstFailure { return unavailable(firstFailure, points: points) }
+                switch projectedEndpoint(start: points[0], end: points[1], axis: axis,
+                                         axisIDs: axisIDs, frame: frame) {
+                case .failure(let failure): return unavailable(failure, points: points)
+                case .success(let end):
+                    points[1] = end
+                    uncertain = uncertain || axis.contains(where: \.uncertain)
+                }
+            }
             let meters = zip(points, points.dropFirst()).reduce(0.0) { sum, pair in
                 let a = pair.0.position, b = pair.1.position
                 // hypot scales its operands before squaring, preserving representable
@@ -121,6 +145,47 @@ nonisolated struct LiDARMeasurementEngine {
         }
         return .init(sessionID: frame.sessionID, frameID: frame.frameID,
                      algorithmVersion: Self.algorithmVersion, source: frame.source, values: values)
+    }
+
+    private func projectedEndpoint(
+        start: ResolvedLandmark, end: ResolvedLandmark, axis: [PointResolution],
+        axisIDs: [String], frame: MeasurementFrame
+    ) -> Result<ResolvedLandmark, MeasurementFailure> {
+        let a = axis[0].landmark.position, b = axis[1].landmark.position
+        let direction = Point3D(x: b.x - a.x, y: b.y - a.y, z: b.z - a.z)
+        let length = hypot(hypot(direction.x, direction.y), direction.z)
+        // A degenerate axis cannot define a direction. Never fall back to a straight total length.
+        guard length.isFinite, length > 0.000_001 else { return .failure(.invalidDefinition) }
+        let unit = Point3D(x: direction.x / length, y: direction.y / length, z: direction.z / length)
+        let delta = Point3D(x: end.position.x - start.position.x,
+                            y: end.position.y - start.position.y,
+                            z: end.position.z - start.position.z)
+        let alongAxis = delta.x * unit.x + delta.y * unit.y + delta.z * unit.z
+        let position = Point3D(x: end.position.x - alongAxis * unit.x,
+                               y: end.position.y - alongAxis * unit.y,
+                               z: end.position.z - alongAxis * unit.z)
+        guard position.x.isFinite, position.y.isFinite, position.z.isFinite, position.z > 0
+        else { return .failure(.invalidCalibration) }
+        let k = frame.intrinsics
+        let imagePoint = ImagePoint(
+            x: (k.fx * position.x / position.z + k.cx) / Double(frame.imageSize.width),
+            y: (k.fy * position.y / position.z + k.cy) / Double(frame.imageSize.height)
+        )
+        guard imagePoint.isValid else { return .failure(.outOfBounds) }
+        let qualities = [start.quality, end.quality] + axis.map { $0.landmark.quality }
+        let residuals = qualities.compactMap(\.planeResidualMeters)
+        let quality = PointQuality(
+            validSamples: qualities.map(\.validSamples).min() ?? 0,
+            candidateSamples: qualities.map(\.candidateSamples).max() ?? 0,
+            confidenceAvailable: qualities.allSatisfy(\.confidenceAvailable),
+            depthSpreadMeters: qualities.map(\.depthSpreadMeters).max() ?? 0,
+            planeResidualMeters: residuals.count == qualities.count ? residuals.max() : nil,
+            method: .axisProjection
+        )
+        var sourceIDs: [String] = []
+        for id in [start.id, end.id] + axisIDs where !sourceIDs.contains(id) { sourceIDs.append(id) }
+        return .success(.init(id: end.id, imagePoint: imagePoint, position: position,
+                              quality: quality, sourceLandmarkIDs: sourceIDs))
     }
 
     private func validate(frame: MeasurementFrame, landmarks: GarmentLandmarkSet) -> MeasurementFailure? {
