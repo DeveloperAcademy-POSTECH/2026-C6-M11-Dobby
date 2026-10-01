@@ -27,7 +27,8 @@ final class CameraPreviewSession: CaptureProviding {
 
     // View에는 프리뷰 레이어 연결만 허용한다. 구성·시작·중지는 driver가 직렬 처리한다.
     var session: AVCaptureSession { driver.session }
-    var canCapture: Bool { wantsRunning && state == .running && !isCapturing }
+    // 최초 진입에도 관찰 가능한 state를 읽어 셔터가 세션 준비 완료를 감지하게 한다.
+    var canCapture: Bool { state == .running && wantsRunning && !isCapturing }
 
     func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset {
         try Task.checkCancellation()
