@@ -14,16 +14,20 @@ struct CameraDemoEntryView: View {
     @State private var completed: ProductPhotoOutput?
     @State private var inputError: String?
     private let authorizer: any CameraAuthorizing
+    private let usesSamplePreview: Bool
 
-    init(authorizer: (any CameraAuthorizing)? = nil) {
+    init(authorizer: (any CameraAuthorizing)? = nil, usesSamplePreview: Bool = false) {
         self.authorizer = authorizer ?? SystemCameraAuthorization()
+        self.usesSamplePreview = usesSamplePreview
     }
 
     var body: some View {
         VStack(spacing: 20) {
-            Text("상세 촬영·사진 선택 목 데모")
+            Text(usesSamplePreview ? "상세 촬영·사진 선택 목 데모" : "상세 촬영 카메라 확인")
                 .font(.title2.bold())
-            Text("Figma의 샘플 사진으로 화면을 확인합니다. 권한은 실제로 확인하며 촬영은 목 데이터입니다.")
+            Text(usesSamplePreview
+                 ? "샘플 사진으로 화면을 확인합니다. 촬영은 목 데이터입니다."
+                 : "실기기에서 후면 카메라 영상을 확인합니다. 실측 입력은 빈 자리로 대체하며 촬영·저장은 아직 연결하지 않았습니다.")
                 .foregroundStyle(.secondary)
             Button("카메라 흐름 살펴보기", action: startDemo)
                 .buttonStyle(.borderedProminent)
@@ -37,7 +41,7 @@ struct CameraDemoEntryView: View {
             if let model {
                 NavigationStack {
                     CameraFlowView(model: model, permission: CameraPermission(authorizer: authorizer),
-                                   previewSource: (try? CameraPreviewPhotos.source(at: model.detailPhotos.count + 1)) ?? .mockPlaceholder) { output in
+                                   previewSource: usesSamplePreview ? ((try? CameraPreviewPhotos.source(at: model.detailPhotos.count + 1)) ?? .mockPlaceholder) : nil) { output in
                         completed = output
                         isPresented = false
                     }
@@ -54,16 +58,31 @@ struct CameraDemoEntryView: View {
 
     private func startDemo() {
         do {
-            model = try CameraPreviewPhotos.makeModel()
+            if usesSamplePreview {
+                model = try CameraPreviewPhotos.makeModel()
+            } else {
+                // 실측 담당 화면을 대신하는 테스트 입력이다. 실측을 실행하거나 사진을 만들지 않는다.
+                let measurement = CapturedAsset(id: UUID(), sessionID: UUID(), garmentID: UUID(),
+                    purpose: .measurement, capturedAt: Date(), source: .mockPlaceholder)
+                model = try ProductPhotoModel(input: ProductPhotoInput(sessionID: measurement.sessionID,
+                    garmentID: measurement.garmentID, measurement: measurement), captureProvider: PreviewOnlyCapture())
+            }
             completed = nil
             inputError = nil
             isPresented = true
         } catch {
-            inputError = "샘플 사진을 불러오지 못했어요. 앱에 이미지가 포함되어 있는지 확인해 주세요."
+            inputError = "테스트 화면을 준비하지 못했어요. 입력 사진을 확인해 주세요."
         }
     }
 }
 
+/// 실시간 프리뷰 단계에서 목 사진이 실제 촬영 결과처럼 추가되는 것을 방지한다.
+private struct PreviewOnlyCapture: CaptureProviding {
+    func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset {
+        throw CameraFailure.captureFailed
+    }
+}
+
 #Preview("카메라 독립 진입") {
-    CameraDemoEntryView(authorizer: MockCameraAuthorization())
+    CameraDemoEntryView(authorizer: MockCameraAuthorization(), usesSamplePreview: true)
 }

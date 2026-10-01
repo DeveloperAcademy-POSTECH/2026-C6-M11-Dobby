@@ -8,19 +8,19 @@
 import SwiftUI
 import AVFoundation
 
-/// 상세 촬영 Hi-Fi 화면. 프리뷰 영상 대신 호출자가 제공하는 목 이미지를 표시한다.
+/// 상세 촬영 Hi-Fi 화면. 기본은 실제 영상이며 Canvas에서만 샘플 이미지를 주입한다.
 /// 상위 NavigationStack에 삽입하며 화면 이동 중 같은 Model을 유지한다.
 struct CameraFlowView: View {
     let model: ProductPhotoModel
     @State private var permission: CameraPermission
     let onComplete: (ProductPhotoOutput) -> Void
-    var previewSource: CapturedAsset.Source = .mockPlaceholder
+    var previewSource: CapturedAsset.Source?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
     @State private var failureMessage: String?
 
     init(model: ProductPhotoModel, permission: CameraPermission,
-         previewSource: CapturedAsset.Source = .mockPlaceholder,
+         previewSource: CapturedAsset.Source? = nil,
          onComplete: @escaping (ProductPhotoOutput) -> Void) {
         self.model = model
         _permission = State(initialValue: permission)
@@ -33,10 +33,9 @@ struct CameraFlowView: View {
             photoStrip
             CameraPermissionGate(permission: permission) {
                 VStack(spacing: 0) {
-                    CameraPhotoView(source: previewSource)
-                        .accessibilityLabel("샘플 카메라 미리보기")
+                    preview
                         .overlay(alignment: .topTrailing) {
-                            Text("샘플 미리보기").font(.caption2)
+                            Text(previewSource == nil ? "실시간 미리보기 · 촬영 연결 전" : "샘플 미리보기").font(.caption2)
                                 .padding(6).background(.black.opacity(0.6), in: Capsule()).padding(8)
                         }
                         .overlay(alignment: .bottom) {
@@ -73,7 +72,7 @@ struct CameraFlowView: View {
             }
         }
         .task(id: captureRequested) {
-            guard captureRequested else { return }
+            guard captureRequested, previewSource != nil else { return }
             failureMessage = nil
             do {
                 permission.refresh()
@@ -94,6 +93,15 @@ struct CameraFlowView: View {
         }
         // 화면 이탈은 요청만 취소한다. 사진과 선택 결과는 초기화하지 않는다.
         .onDisappear { captureRequested = false }
+    }
+
+    @ViewBuilder
+    private var preview: some View {
+        if let previewSource {
+            CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
+        } else {
+            CameraLivePreviewView()
+        }
     }
 
     private var photoStrip: some View {
@@ -125,14 +133,14 @@ struct CameraFlowView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .disabled(captureRequested || model.isCapturing)
-        .opacity(model.isCapturing ? 0.5 : 1)
+        .disabled(previewSource == nil || captureRequested || model.isCapturing)
+        .opacity(previewSource == nil || model.isCapturing ? 0.5 : 1)
         .accessibilityLabel("상세 사진 촬영")
-        .accessibilityHint("표시된 샘플 사진을 목록에 추가합니다.")
+        .accessibilityHint(previewSource == nil ? "이번 단계는 미리보기만 지원합니다." : "표시된 샘플 사진을 목록에 추가합니다.")
         .accessibilityIdentifier("camera.captureDetail")
     }
 }
 
 #Preview {
-    CameraDemoEntryView(authorizer: MockCameraAuthorization())
+    CameraDemoEntryView(authorizer: MockCameraAuthorization(), usesSamplePreview: true)
 }
