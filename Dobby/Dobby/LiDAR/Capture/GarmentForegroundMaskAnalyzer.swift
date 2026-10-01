@@ -8,11 +8,14 @@ nonisolated struct GarmentImageRecognition: Sendable {
     var points: [GarmentLandmark]
     var detectionConfidence: Double
     var modelVersion: String
+    var garmentKind: AutomaticGarmentKind? = nil
 }
 
 nonisolated struct GarmentForegroundRecognition: Sendable {
     var recognition: GarmentImageRecognition
     var selection: GarmentMaskSelection
+    var poseRequests: Int = 1
+    var foregroundRequests: Int = 1
 }
 
 /// Shared by the top and bottom models. Points always refer to the complete raw RGB raster.

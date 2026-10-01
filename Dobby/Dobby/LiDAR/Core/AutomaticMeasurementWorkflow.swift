@@ -139,9 +139,8 @@ final class AutomaticMeasurementWorkflow {
                 } else if !timeoutSeconds.isFinite || timeoutSeconds <= 0 || timeoutSeconds > 300 {
                     finish(run, failure: .init(stage: .capture, code: .invalidConfiguration,
                         message: "자동 측정 제한 시간은 0초 초과 300초 이하여야 합니다."))
-                } else if definitions.isEmpty || definitions.count > 100
-                    || definitions.contains(where: { $0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
-                    || Set(definitions.map(\.id)).count != definitions.count {
+                } else if !(landmarks is any GarmentMeasurementDefinitionProviding)
+                    && !Self.validDefinitions(definitions) {
                     finish(run, failure: .init(stage: .capture, code: .invalidConfiguration,
                         message: "측정 항목은 1~100개이며 각 항목에 비어 있지 않은 고유 ID가 있어야 합니다."))
                 } else if workers.count >= Self.maximumInFlightWorkers {
@@ -226,14 +225,25 @@ final class AutomaticMeasurementWorkflow {
                         return
                     }
                 }
+                let resolvedDefinitions: [MeasurementDefinition]
+                if let resolver = provider as? any GarmentMeasurementDefinitionProviding {
+                    resolvedDefinitions = try resolver.measurementDefinitions(for: points)
+                } else {
+                    resolvedDefinitions = definitions
+                }
+                guard Self.validDefinitions(resolvedDefinitions) else {
+                    self?.finish(run, failure: .init(stage: .landmarks, code: .invalidConfiguration,
+                        message: "인식한 옷의 측정 항목을 확인하지 못했습니다. 다시 촬영해 주세요."))
+                    return
+                }
                 self?.begin(.measurement, run: run, phase: .measuring)
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 let result = await pipeline.measure(snapshot: snapshot, landmarks: points,
-                    definitions: definitions, options: options)
+                    definitions: resolvedDefinitions, options: options)
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 let now = ProcessInfo.processInfo.systemUptime
                 let output = AutomaticMeasurementOutput(runID: run.id, snapshot: snapshot,
-                    landmarks: points, result: result, definitions: definitions, options: options,
+                    landmarks: points, result: result, definitions: resolvedDefinitions, options: options,
                     timings: run.timings(at: now), startedAt: run.startedAt, finishedAt: .now)
                 self?.finish(run, output: output)
             } catch {
@@ -297,6 +307,12 @@ final class AutomaticMeasurementWorkflow {
     private func publish(_ phase: AutomaticMeasurementPhase) {
         self.phase = phase
         onPhaseChange?(phase)
+    }
+
+    private static func validDefinitions(_ definitions: [MeasurementDefinition]) -> Bool {
+        !definitions.isEmpty && definitions.count <= 100
+            && definitions.allSatisfy { !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            && Set(definitions.map(\.id)).count == definitions.count
     }
 }
 

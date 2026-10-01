@@ -30,19 +30,18 @@ final class GarmentCaptureFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testTopSelectionUsesTopPhotoCheckAndSixMeasurementPreview() throws {
+    func testAutomaticTopPreviewUsesDetectedKindAndSixMeasurements() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchArguments = ["--garment-preview-top"]
         launchLiDARLab(app)
-        let picker = app.segmentedControls["automaticGarmentKind"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 10))
-        reveal(picker, in: app)
-        picker.buttons["상의"].tap()
+        XCTAssertFalse(app.segmentedControls["automaticGarmentKind"].exists)
+        XCTAssertTrue(app.staticTexts["automaticGarmentRecognitionHelp"].exists)
 
         let photoCheck = app.buttons["openTopRecognition"]
         reveal(photoCheck, in: app)
         XCTAssertTrue(photoCheck.exists)
-        XCTAssertFalse(app.buttons["openBottomRecognition"].exists)
+        XCTAssertTrue(app.buttons["openBottomRecognition"].exists, "Both manual models remain available only as photo diagnostics")
         photoCheck.tap()
         XCTAssertTrue(app.navigationBars["상의 사진 인식"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["pickTopPhoto"].exists)
@@ -55,6 +54,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let recognize = app.buttons["previewRecognizeGarment"]
         XCTAssertTrue(recognize.waitForExistence(timeout: 10))
         recognize.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["captureGuidance"].firstMatch.label.hasPrefix("상의 인식 완료"))
         XCTAssertTrue(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
         attachScreenshot(app, name: "garment-top-preview-recognized-outline")
         app.buttons["captureGarment"].tap()
@@ -106,6 +106,8 @@ final class GarmentCaptureFlowTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         launchLiDARLab(app)
+        XCTAssertFalse(app.segmentedControls["automaticGarmentKind"].exists,
+                       "Normal capture must not require a model selection")
         let capture = app.buttons["openGarmentCapture"]
         XCTAssertTrue(capture.waitForExistence(timeout: 10))
         reveal(capture, in: app)
@@ -113,6 +115,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let shutter = app.buttons["captureGarment"]
         XCTAssertTrue(shutter.waitForExistence(timeout: 10))
         XCTAssertFalse(shutter.isEnabled)
+        XCTAssertFalse(app.segmentedControls["automaticGarmentKind"].exists)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "LiDAR가 있는 iPhone")).firstMatch.exists)
         XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
         XCTAssertFalse(app.buttons["confirmGarmentMeasurement"].exists)
@@ -178,8 +181,10 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(missing.exists)
         XCTAssertTrue(missing.label.contains("측정 불가"))
         XCTAssertFalse(missing.label.contains("cm"))
+        attachScreenshot(app, name: "garment-preview-missing-row-before-detail")
         missing.tap()
-        XCTAssertTrue(app.navigationBars["오른쪽 인심(직선)"].waitForExistence(timeout: 5))
+        attachScreenshot(app, name: "garment-preview-missing-row-after-tap")
+        XCTAssertTrue(app.navigationBars["오른쪽 인심(직선)"].waitForExistence(timeout: 5), app.debugDescription)
         XCTAssertTrue(app.staticTexts["측정 불가"].exists)
         attachScreenshot(app, name: "garment-preview-missing-measurement-detail")
     }
@@ -232,6 +237,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         recognize.tap()
         let silhouette = app.descendants(matching: .any)["garmentSilhouette"].firstMatch
         XCTAssertTrue(silhouette.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["captureGuidance"].firstMatch.label.hasPrefix("하의 인식 완료"))
         attachScreenshot(app, name: "garment-preview-recognized-outline")
 
         let shutter = app.buttons["captureGarment"]
@@ -256,12 +262,12 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["촬영 사진"].waitForExistence(timeout: 5))
         app.buttons["확대"].tap()
         XCTAssertTrue(app.buttons["축소"].exists)
-        app.buttons["닫기"].tap()
+        app.navigationBars["촬영 사진"].buttons["닫기"].tap()
         XCTAssertTrue(waist.waitForExistence(timeout: 5))
         waist.tap()
         XCTAssertTrue(app.navigationBars["허리 단면"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "별도 기록")).firstMatch.exists)
-        app.buttons["닫기"].tap()
+        app.navigationBars["허리 단면"].buttons["닫기"].tap()
 
         let retake = app.buttons["retakeGarmentMeasurement"]
         XCTAssertTrue(retake.waitForExistence(timeout: 5))
@@ -287,9 +293,23 @@ final class GarmentCaptureFlowTests: XCTestCase {
 
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<10 {
-            if element.exists && element.isHittable { return }
-            app.swipeUp()
+        for _ in 0..<12 {
+            let scrollViews = app.scrollViews
+            let scroll = scrollViews.element(boundBy: max(0, scrollViews.count - 1))
+            guard scroll.exists else { return }
+            let bars = app.navigationBars
+            let bar = bars.element(boundBy: max(0, bars.count - 1))
+            let top = max(scroll.frame.minY, bar.exists ? bar.frame.maxY : scroll.frame.minY) + 16
+            let confirm = app.buttons["confirmGarmentMeasurement"]
+            let bottom = min(scroll.frame.maxY - 20,
+                             confirm.exists && confirm.isHittable ? confirm.frame.minY - 12 : scroll.frame.maxY - 20)
+            if element.isHittable, element.frame.minY >= top, element.frame.maxY <= bottom { return }
+            // Returning from a lower photo diagnostic must also reach the
+            // normal capture entry above it without resetting the lab state.
+            let goingDown = element.frame.minY < top
+            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: goingDown ? 0.45 : 0.72))
+            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: goingDown ? 0.65 : 0.52))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
     }
 

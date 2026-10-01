@@ -7,8 +7,7 @@ struct GarmentCaptureFlowView: View {
     @State private var service: RecordedMeasurementService?
     private let loadingError: String?
     private let archive: MeasurementArchive
-    private let kind: AutomaticGarmentKind
-    private let measurementDefinitions: [MeasurementDefinition]
+    private let previewKind: AutomaticGarmentKind
     private let isPreview: Bool
     private let previewIsPartial: Bool
     @Environment(\.dismiss) private var dismiss
@@ -30,26 +29,31 @@ struct GarmentCaptureFlowView: View {
     @State private var errorTitle = "촬영을 완료하지 못했어요"
     @State private var manualRecovery: ManualMeasurement?
 
-    init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false,
-         kind: AutomaticGarmentKind = .bottoms) {
+    init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false) {
         self.archive = archive
-        self.kind = kind
         self.isPreview = preview
+        // Fixture selection affects only the labelled synthetic preview.
+        // The physical camera always classifies its own current image.
+        self.previewKind = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-top") ? .top : .bottoms
         self.previewIsPartial = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-partial")
-        let recognizer: CoreMLGarmentLandmarkProvider?
-        do {
-            recognizer = try CoreMLGarmentLandmarkProvider.bundled(kind: kind)
-            loadingError = nil
-        } catch {
+        let recognizer: AutoGarmentLandmarkProvider?
+        if preview {
             recognizer = nil
-            loadingError = error.localizedDescription
+            loadingError = nil
+        } else {
+            do {
+                recognizer = try AutoGarmentLandmarkProvider.bundled()
+                loadingError = nil
+            } catch {
+                recognizer = nil
+                loadingError = error.localizedDescription
+            }
         }
-        measurementDefinitions = recognizer?.measurementDefinitions ?? kind.category.definitions
         let camera = ARKitCaptureProvider(garmentRecognizer: recognizer)
         _camera = StateObject(wrappedValue: camera)
         _service = State(initialValue: recognizer.map {
             RecordedMeasurementService(workflow: AutomaticMeasurementWorkflow(camera: camera,
-                landmarks: $0, definitions: $0.measurementDefinitions, expectedLandmarkOrigin: .model),
+                landmarks: $0, definitions: [], expectedLandmarkOrigin: .model),
                 journal: LiDARAppServices.attemptJournal)
         })
     }
@@ -80,7 +84,7 @@ struct GarmentCaptureFlowView: View {
         .tint(.white)
         .preferredColorScheme(.dark)
         .task {
-            if isPreview { previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial, kind: kind) }
+            if isPreview { previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial, kind: previewKind) }
             else { await camera.start() }
         }
         .onChange(of: orientation) { _, value in
@@ -246,22 +250,34 @@ struct GarmentCaptureFlowView: View {
                 Button("인식 상태 보기") { previewRecognized = true }
                     .font(.caption).accessibilityIdentifier("previewRecognizeGarment")
             } else {
-                Text(kind == .top ? "긴팔·반팔 상의 · 소매를 곧게 펼쳐주세요" : kind.supportDescription)
+                Text(captureInstructions)
                     .font(.caption2).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.center)
             }
             Spacer(minLength: 10)
         }.padding(.horizontal, 12)
     }
 
+    private var recognizedKind: AutomaticGarmentKind? {
+        isPreview ? (previewRecognized ? previewModel?.landmarks.garmentKind : nil) : camera.liveReadiness.garmentKind
+    }
+    private var captureInstructions: String {
+        switch recognizedKind {
+        case .top?: "긴팔·반팔 상의 · 소매를 곧게 펼쳐주세요"
+        case .bottoms?: "바지·반바지 · 허리를 위로, 밑단을 아래로 펼쳐주세요"
+        case nil: "상의나 하의 한 벌을 평평하게 펼쳐주세요"
+        }
+    }
     private var isReady: Bool {
-        isPreview ? previewRecognized && previewModel != nil : camera.isRunning && camera.liveReadiness.isReady && camera.liveReadiness.garmentRecognized
+        guard recognizedKind != nil else { return false }
+        return isPreview ? previewRecognized && previewModel != nil
+            : camera.isRunning && camera.liveReadiness.isReady && camera.liveReadiness.garmentRecognized
     }
     private var silhouetteVisible: Bool {
         !isCapturing && (isPreview ? previewRecognized : camera.liveReadiness.garmentRecognized && camera.liveReadiness.silhouette != nil)
     }
     private var permissionDenied: Bool { camera.state == .unavailable(.cameraPermissionDenied) }
     private var unavailableMessage: String {
-        if let loadingError { return "\(kind.title) 인식 모델을 불러오지 못했어요.\n" + loadingError }
+        if let loadingError { return "옷 인식 모델을 불러오지 못했어요.\n" + loadingError }
         if permissionDenied { return "실측하려면 카메라 접근을 허용해 주세요." }
         return "이 기기에서는 LiDAR 실측 촬영을 사용할 수 없어요.\nLiDAR가 있는 iPhone에서 실행해 주세요."
     }
@@ -273,8 +289,8 @@ struct GarmentCaptureFlowView: View {
             default: return "사진과 깊이를 확보하고 있어요. 잠시만 멈춰주세요"
             }
         }
-        if isReady { return "옷 인식 완료! 촬영 버튼을 눌러주세요" }
-        if isPreview { return "옷이 잘리지 않게 카메라 안에 넣어주세요" }
+        if isReady, let recognizedKind { return "\(recognizedKind.title) 인식 완료! 촬영 버튼을 눌러주세요" }
+        if isPreview { return "옷 한 벌 전체가 보이도록 평평하게 펼쳐주세요" }
         switch camera.state {
         case .failed, .interrupted: return "카메라 연결이 중단됐어요. 다시 촬영 화면을 열어주세요"
         case .requestingPermission: return "카메라 접근을 허용해 주세요"
@@ -283,7 +299,7 @@ struct GarmentCaptureFlowView: View {
         }
         switch camera.liveReadiness.state {
         case .analyzing: return "옷 모양을 확인하고 있어요. 잠시만 멈춰주세요"
-        case .searching: return "옷 전체와 소매가 보이도록 펼쳐주세요"
+        case .searching: return "상의나 하의 한 벌 전체가 보이도록 펼쳐주세요"
         case .ready: return "옷을 확인하고 있어요"
         default: return camera.liveReadiness.state.hint
         }
@@ -333,9 +349,13 @@ struct GarmentCaptureFlowView: View {
                         processingSnapshot = snapshot
                     })
                 guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
+                guard let measuredKind = output.workflowOutput.landmarks.garmentKind else {
+                    throw AutomaticMeasurementWorkflowFailure(stage: .landmarks, code: .invalidProvenance,
+                        message: "촬영한 옷의 종류를 확인하지 못했습니다. 옷 한 벌 전체가 보이도록 다시 촬영해 주세요.")
+                }
                 recordingError = output.recordingError
                 model = AutomaticMeasurement(output: output.workflowOutput,
-                    context: .init(category: kind.category, deviceModel: SnapshotPresentation.deviceIdentifier))
+                    context: .init(category: measuredKind.category, deviceModel: SnapshotPresentation.deviceIdentifier))
             } catch {
                 guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
                 presentFailure(error)
@@ -367,14 +387,15 @@ struct GarmentCaptureFlowView: View {
     }
 
     private func reviewCapturedPhoto() {
-        guard let snapshot = processingSnapshot,
-              let definition = measurementDefinitions.first else { return }
+        guard let snapshot = processingSnapshot else { return }
         errorMessage = nil
         cameraRestartTask?.cancel()
         cameraRestartTask = nil
         camera.pauseForMeasurement()
-        manualRecovery = ManualMeasurement(snapshot: snapshot, definition: definition,
-            testContext: .init(category: kind.category, deviceModel: SnapshotPresentation.deviceIdentifier))
+        // Failed inference has not supplied a validated kind for this frozen
+        // photo. Live preview evidence must not label a separate manual record.
+        manualRecovery = ManualMeasurement(snapshot: snapshot, definition: .testDistance,
+            testContext: .init(category: .other, deviceModel: SnapshotPresentation.deviceIdentifier))
     }
 
     private func cancel() {
@@ -405,7 +426,7 @@ struct GarmentCaptureFlowView: View {
         recordingError = nil
         previewRecognized = false
         phase = .idle
-        if isPreview { previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial, kind: kind) }
+        if isPreview { previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial, kind: previewKind) }
         else { restartCamera() }
     }
 }

@@ -91,7 +91,8 @@ enum GarmentCapturePreview {
         }
         let definitions = kind == .top ? TopLandmarkSchema.canonicalMeasurementDefinitions : bottomDefinitions
         let landmarks = GarmentLandmarkSet(sessionID: sessionID, frameID: frameID, origin: .synthetic,
-            modelVersion: kind == .top ? "garment-ui-top-preview-v1" : "garment-ui-preview-v1", points: points, mask: mask)
+            modelVersion: kind == .top ? "garment-ui-top-preview-v1" : "garment-ui-preview-v1", points: points, mask: mask,
+            garmentKind: kind)
         let result = LiDARMeasurementEngine().measure(frame: frame, landmarks: landmarks, definitions: definitions)
         let output = AutomaticMeasurementOutput(runID: UUID(),
             snapshot: .init(frame: frame, imageJPEG: image.jpegData(compressionQuality: 0.95)!),

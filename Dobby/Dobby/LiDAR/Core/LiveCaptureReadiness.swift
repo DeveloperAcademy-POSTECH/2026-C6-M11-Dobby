@@ -37,11 +37,13 @@ nonisolated struct LiveCaptureEvidence: Sendable {
     var trackingStable: Bool
     var analysisFailed: Bool = false
     var recognitionModelVersion: String? = nil
+    var garmentKind: AutomaticGarmentKind? = nil
+    var unsupportedGarment = false
 }
 
 nonisolated enum LiveReadinessState: String, Codable, Sendable {
     case searching, analyzing, multipleObjects, clipped, tooSmall
-    case noDepth, lowDepth, unstable, steadying, ready, analysisFailed
+    case noDepth, lowDepth, unstable, steadying, ready, analysisFailed, unsupportedGarment
 }
 
 /// A matched garment silhouette plus advisory capture quality, not a guarantee
@@ -59,6 +61,7 @@ nonisolated struct LiveCaptureReadiness: Codable, Sendable, Equatable {
     /// Binary silhouette in full, unrotated RGB coordinates. Never a bounding box.
     var silhouette: GarmentMask? = nil
     var recognitionModelVersion: String? = nil
+    var garmentKind: AutomaticGarmentKind? = nil
     var imageOrientation: ImageOrientation? = nil
     /// Runtime identity rejects completions queued before an analysis reset.
     var analysisEpoch: UUID? = nil
@@ -109,6 +112,8 @@ nonisolated struct LiveReadinessEvaluator: Sendable {
     private var lastTimestamp: TimeInterval?
     private var previousBounds: NormalizedRect?
     private var previousMedianDepth: Double?
+    private var previousModelVersion: String?
+    private var previousKind: AutomaticGarmentKind?
     private var streakStart: TimeInterval?
     private var streakCount = 0
 
@@ -137,6 +142,7 @@ nonisolated struct LiveReadinessEvaluator: Sendable {
         lastTimestamp = evidence.timestamp
         guard !evidence.analysisFailed else { return reject(.analysisFailed, result) }
         guard evidence.trackingStable else { return reject(.unstable, result) }
+        guard !evidence.unsupportedGarment else { return reject(.unsupportedGarment, result) }
         guard evidence.candidateCount > 0 else { return reject(.searching, result) }
         guard evidence.candidateCount == 1 else { return reject(.multipleObjects, result) }
         guard let modelVersion = evidence.recognitionModelVersion,
@@ -168,6 +174,7 @@ nonisolated struct LiveReadinessEvaluator: Sendable {
         }
         result.silhouette = mask
         result.recognitionModelVersion = modelVersion
+        result.garmentKind = evidence.garmentKind
         let margin = configuration.minimumImageEdgeMargin
         guard min(bounds.x, maskBounds.x) >= margin,
               min(bounds.y, maskBounds.y) >= margin,
@@ -236,6 +243,7 @@ nonisolated struct LiveReadinessEvaluator: Sendable {
         let consistent: Bool
         if let previousBounds, let previousMedianDepth {
             consistent = bounds.intersectionOverUnion(with: previousBounds) >= configuration.minimumBoundsIntersectionOverUnion
+                && previousModelVersion == modelVersion && previousKind == evidence.garmentKind
                 && hypot(bounds.centerX - previousBounds.centerX, bounds.centerY - previousBounds.centerY) <= configuration.maximumCenterMovement
                 && abs(medianDepth - previousMedianDepth) <= configuration.maximumMedianDepthChangeMeters
         } else { consistent = false }
@@ -247,6 +255,8 @@ nonisolated struct LiveReadinessEvaluator: Sendable {
         }
         previousBounds = bounds
         previousMedianDepth = medianDepth
+        previousModelVersion = modelVersion
+        previousKind = evidence.garmentKind
         result.state = streakCount >= configuration.minimumConsecutiveObservations
             && evidence.timestamp - (streakStart ?? evidence.timestamp) >= configuration.minimumStableDuration
             ? .ready : .steadying
@@ -263,6 +273,8 @@ nonisolated struct LiveReadinessEvaluator: Sendable {
     private mutating func resetStreak() {
         previousBounds = nil
         previousMedianDepth = nil
+        previousModelVersion = nil
+        previousKind = nil
         streakStart = nil
         streakCount = 0
     }

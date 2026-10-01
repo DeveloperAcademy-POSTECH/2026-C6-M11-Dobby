@@ -44,6 +44,7 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
     private let allowsHalfTurnRecovery: Bool
     private var model: MLModel?
     private var hasPrepared = false
+    private var hasPreparedForeground = false
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let foreground = GarmentForegroundMaskAnalyzer()
 
@@ -58,26 +59,43 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
     /// Load and exercise the model before live recognition starts. The actor
     /// serializes warm-up with inference and retains only one prepared model.
     func prepare() async throws {
+        try preparePoseModel()
+        guard !hasPreparedForeground else { return }
+        let image = try neutralImage()
+        do { _ = try foreground.masks(for: image) }
+        catch GarmentMaskAssociationError.noForeground {}
+        try Task.checkCancellation()
+        hasPreparedForeground = true
+    }
+
+    /// The automatic adapter prepares Vision separately. Warm only the pose
+    /// here so foreground preparation is not repeated for both cached models.
+    func preparePoseModel() throws {
         guard !hasPrepared else { return }
         try Task.checkCancellation()
         _ = try loadedModel()
-        let neutral = CIImage(color: CIColor(red: 114.0 / 255, green: 114.0 / 255, blue: 114.0 / 255))
-            .cropped(to: CGRect(x: 0, y: 0, width: 640, height: 640))
-        guard let image = context.createCGImage(neutral, from: neutral.extent) else {
-            throw BottomModelError.bufferCreation
-        }
+        let image = try neutralImage()
         let geometry = try BottomLetterboxGeometry(originalSize: .init(width: 640, height: 640), orientation: .up)
         let tensor = try predictionTensor(for: letterboxedBuffer(image, geometry: geometry))
         let shape = tensor.shape.map(\.intValue)
         guard shape.count == 3, shape[0] == 1, shape[1] == 5 + 3 * schema.keypoints.count,
               shape[2] > 0, shape[2] <= 100_000 else { throw BottomModelError.incompatibleModel }
         try Task.checkCancellation()
-        // Vision also has a first-request cost. Warm the same analyzer without
-        // publishing a neutral-image mask as garment evidence.
-        do { _ = try foreground.masks(for: image) }
-        catch GarmentMaskAssociationError.noForeground {}
-        try Task.checkCancellation()
         hasPrepared = true
+    }
+
+    private func neutralImage() throws -> CGImage {
+        let neutral = CIImage(color: CIColor(red: 114.0 / 255, green: 114.0 / 255, blue: 114.0 / 255))
+            .cropped(to: CGRect(x: 0, y: 0, width: 640, height: 640))
+        guard let image = context.createCGImage(neutral, from: neutral.extent) else {
+            throw BottomModelError.bufferCreation
+        }
+        return image
+    }
+
+    /// One exact orientation for model diagnostics, without Vision or recovery.
+    func posePrediction(_ image: CGImage, orientation: ImageOrientation) throws -> BottomLandmarkPrediction {
+        try infer(image, orientation: orientation)
     }
 
     nonisolated static func bundled(in bundle: Bundle = .main) throws -> CoreMLBottomLandmarkProvider {
@@ -150,11 +168,14 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
 
     private func recognizedForeground(_ image: CGImage, orientation: ImageOrientation) throws -> GarmentForegroundRecognition {
         var attempts: [(prediction: BottomLandmarkPrediction, masks: [GarmentMask])] = []
+        var poseRequests = 0, foregroundRequests = 0
         let size = PixelSize(width: image.width, height: image.height)
-        return try GarmentPoseOrientationRecovery.perform(orientation: orientation,
+        var result = try GarmentPoseOrientationRecovery.perform(orientation: orientation,
             allowsHalfTurn: allowsHalfTurnRecovery, strictAttempt: { direction in
+                poseRequests += 1
                 let prediction = try infer(image, orientation: direction)
                 try Task.checkCancellation()
+                foregroundRequests += 1
                 let masks = try foreground.masks(for: image, orientation: direction)
                 try Task.checkCancellation()
                 attempts.append((prediction, masks))
@@ -174,6 +195,9 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
                 }
                 return nil
             })
+        result.poseRequests = poseRequests
+        result.foregroundRequests = foregroundRequests
+        return result
     }
 
     private func foregroundResult(prediction: BottomLandmarkPrediction,

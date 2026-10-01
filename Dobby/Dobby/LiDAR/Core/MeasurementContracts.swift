@@ -94,6 +94,9 @@ nonisolated struct GarmentLandmarkSet: Codable, Sendable {
     var modelVersion: String?
     var points: [GarmentLandmark]
     var mask: GarmentMask?
+    /// Selected from this exact RGB frame, never copied from a live preview.
+    /// Optional preserves older archives and non-classifying adapters.
+    var garmentKind: AutomaticGarmentKind? = nil
 }
 
 nonisolated struct MeasurementDefinition: Codable, Sendable, Identifiable {
@@ -182,4 +185,11 @@ nonisolated struct MeasurementOptions: Codable, Sendable {
 /// Implemented by Ichi's model adapter. Return original-image coordinates and preserve IDs.
 nonisolated protocol GarmentLandmarkProviding: Sendable {
     func landmarks(for snapshot: CaptureSnapshot) async throws -> GarmentLandmarkSet
+}
+
+/// Resolve the measurement schema from the frozen inference result. A provider
+/// must verify the result's kind and model version; mutable "last detected kind"
+/// state would mix a later preview or cancelled run into this measurement.
+nonisolated protocol GarmentMeasurementDefinitionProviding: GarmentLandmarkProviding {
+    func measurementDefinitions(for landmarks: GarmentLandmarkSet) throws -> [MeasurementDefinition]
 }

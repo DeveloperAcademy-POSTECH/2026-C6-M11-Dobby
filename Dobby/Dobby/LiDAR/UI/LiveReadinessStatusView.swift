@@ -14,6 +14,7 @@ extension LiveReadinessState {
         switch self {
         case .searching: "옷 후보를 찾는 중"
         case .analyzing: "실시간 상태 확인 중"
+        case .unsupportedGarment: "이 옷은 자동 실측을 지원하지 않아요"
         case .multipleObjects: "여러 대상이 보여요"
         case .clipped: "옷 끝부분을 확인해 주세요"
         case .tooSmall: "옷이 너무 작게 보여요"
@@ -30,6 +31,7 @@ extension LiveReadinessState {
         switch self {
         case .searching: "옷을 펼치고 배경과 구분되도록 비춰 주세요."
         case .analyzing: "최신 영상에서 대상 영역과 깊이를 확인합니다."
+        case .unsupportedGarment: "현재 긴팔·반팔 상의와 바지·반바지를 지원해요"
         case .multipleObjects: "주변 물건을 치우고 옷 한 벌만 펼쳐 주세요."
         case .clipped: "소매와 밑단까지 보이도록 조금 멀리 이동하세요."
         case .tooSmall: "옷 전체를 유지하며 조금 가까이 이동하세요."
@@ -46,6 +48,7 @@ extension LiveReadinessState {
         switch self {
         case .ready: .mint
         case .searching, .analyzing: .white
+        case .unsupportedGarment: .orange
         default: .orange
         }
     }
@@ -54,6 +57,7 @@ extension LiveReadinessState {
         switch self {
         case .ready: "checkmark.circle.fill"
         case .searching, .analyzing: "viewfinder"
+        case .unsupportedGarment: "minus.circle.fill"
         case .steadying: "hourglass"
         case .unstable: "hand.raised.fill"
         default: "exclamationmark.circle.fill"
@@ -79,7 +83,9 @@ struct LiveReadinessStatusView: View {
                     }
                 }.font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.85))
             }
-            Text(readiness.garmentRecognized ? "하의 인식 확인 · 영역과 깊이 상태 안내" : "옷 인식과 깊이 상태를 확인하고 있습니다")
+            Text(readiness.garmentRecognized
+                 ? "\(readiness.garmentKind?.title ?? "옷") 인식 확인 · 영역과 깊이 상태 안내"
+                 : "옷 인식과 깊이 상태를 확인하고 있습니다")
                 .font(.caption2).foregroundStyle(.white.opacity(0.7))
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
             .foregroundStyle(.white)

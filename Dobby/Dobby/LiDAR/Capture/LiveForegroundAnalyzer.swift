@@ -259,6 +259,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
             evidence.mask = selection.mask
             evidence.bounds = selection.bounds
             evidence.recognitionModelVersion = prediction.modelVersion
+            evidence.garmentKind = prediction.garmentKind
         } catch BottomLandmarkError.noDetection {
             // The generic foreground may be a hand, bag or furniture. Do not
             // draw a garment silhouette when the model found no garment.
@@ -267,6 +268,10 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         } catch GarmentModelError.noDetection {
         } catch GarmentModelError.multipleGarments {
             evidence.candidateCount = 2
+        } catch AutoGarmentRecognitionError.noDetection {
+        } catch AutoGarmentRecognitionError.ambiguous {
+        } catch AutoGarmentRecognitionError.unsupported {
+            evidence.unsupportedGarment = true
         } catch GarmentMaskAssociationError.multipleForegrounds {
             evidence.candidateCount = 2
         } catch GarmentMaskAssociationError.noForeground {

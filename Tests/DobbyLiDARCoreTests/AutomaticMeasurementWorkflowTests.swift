@@ -485,6 +485,86 @@ final class AutomaticMeasurementWorkflowTests: XCTestCase {
             XCTAssertEqual(workflow.inFlightWorkerCount, 0)
         }
     }
+    func testFrozenKindSelectsItsOwnDefinitionsAcrossRetakes() async throws {
+        var top = fixture(), bottom = fixture()
+        top.points.garmentKind = .top
+        top.points.modelVersion = "top-test"
+        bottom.points.garmentKind = .bottoms
+        bottom.points.modelVersion = "bottom-test"
+        let provider = DynamicWorkflowModel(answers: [
+            top.snapshot.frame.frameID: top.points, bottom.snapshot.frame.frameID: bottom.points
+        ])
+        let workflow = AutomaticMeasurementWorkflow(
+            camera: ImmediateWorkflowCamera([top.snapshot, bottom.snapshot]), landmarks: provider,
+            definitions: [.init(id: "stale-preview", title: "Stale", landmarkIDs: ["missing", "point"])])
+        for (fixture, id) in [(top, "top-distance"), (bottom, "bottom-distance")] {
+            let output = try await workflow.run(orientation: .up)
+            XCTAssertEqual(output.landmarks.garmentKind, fixture.points.garmentKind)
+            XCTAssertEqual(output.definitions.map(\.id), [id])
+            XCTAssertEqual(output.result.values.map(\.id), [id])
+            XCTAssertEqual(output.result.values.first?.status, .valid)
+            XCTAssertEqual(output.result.frameID, fixture.snapshot.frame.frameID)
+            let decoded = try JSONDecoder().decode(AutomaticMeasurementOutput.self,
+                from: JSONEncoder().encode(output))
+            XCTAssertEqual(decoded.landmarks.garmentKind, fixture.points.garmentKind)
+        }
+    }
+
+    func testDynamicDefinitionsAreValidatedBeforeMeasurement() async {
+        let invalid: [[MeasurementDefinition]] = [[], [.testDistance, .testDistance],
+            [.init(id: " ", title: "Blank", landmarkIDs: ["A", "B"])],
+            (0..<101).map { .init(id: "item-\($0)", title: "Item", landmarkIDs: ["A", "B"]) }]
+        for definitions in invalid {
+            var value = fixture()
+            value.points.garmentKind = .top
+            let camera = ImmediateWorkflowCamera([value.snapshot])
+            var phases: [AutomaticMeasurementPhase] = []
+            let workflow = AutomaticMeasurementWorkflow(camera: camera,
+                landmarks: DynamicWorkflowModel(answers: [value.snapshot.frame.frameID: value.points],
+                    overrideDefinitions: definitions), definitions: [],
+                onPhaseChange: { phases.append($0) })
+            let error = await failure { try await workflow.run(orientation: .up) }
+            XCTAssertEqual(camera.calls, 1)
+            XCTAssertEqual(error?.stage, .landmarks)
+            XCTAssertEqual(error?.code, .invalidConfiguration)
+            XCTAssertFalse(phases.contains(.measuring))
+            XCTAssertNil(workflow.lastResult)
+        }
+    }
+
+    func testUnknownDynamicKindFailsInsteadOfUsingStaticFallback() async {
+        let value = fixture()
+        let workflow = AutomaticMeasurementWorkflow(camera: ImmediateWorkflowCamera([value.snapshot]),
+            landmarks: DynamicWorkflowModel(answers: [value.snapshot.frame.frameID: value.points]),
+            definitions: [.testDistance])
+        let error = await failure { try await workflow.run(orientation: .up) }
+        XCTAssertEqual(error?.stage, .landmarks)
+        XCTAssertEqual(error?.code, .invalidProvenance)
+        XCTAssertNil(workflow.lastResult)
+    }
+
+    func testDynamicSchemaCannotBypassFrozenFrameIdentityCheck() async {
+        var value = fixture()
+        value.points.frameID = UUID()
+        // No kind also makes the resolver throw. Identity must fail first.
+        let workflow = AutomaticMeasurementWorkflow(camera: ImmediateWorkflowCamera([value.snapshot]),
+            landmarks: DynamicWorkflowModel(answers: [value.snapshot.frame.frameID: value.points]),
+            definitions: [])
+        let error = await failure { try await workflow.run(orientation: .up) }
+        XCTAssertEqual(error?.stage, .landmarks)
+        XCTAssertEqual(error?.code, .frameMismatch)
+    }
+
+    func testOlderLandmarkArchiveWithoutKindStillDecodes() throws {
+        let value = fixture().points
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(value)) as? [String: Any])
+        json.removeValue(forKey: "garmentKind")
+        let decoded = try JSONDecoder().decode(GarmentLandmarkSet.self,
+            from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(decoded.garmentKind)
+        XCTAssertEqual(decoded.points.map(\.id), value.points.map(\.id))
+    }
+
 }
 
 private enum WorkflowTestError: Error { case capture, landmarks, missingFixture }
@@ -560,5 +640,27 @@ private actor CooperativeWorkflowModel: GarmentLandmarkProviding {
         calls += 1
         try await Task.sleep(for: .seconds(60))
         throw WorkflowTestError.missingFixture
+    }
+}
+
+/// A frozen-result resolver has no mutable last-kind state to leak across runs.
+private actor DynamicWorkflowModel: GarmentMeasurementDefinitionProviding {
+    let answers: [UUID: GarmentLandmarkSet]
+    nonisolated let overrideDefinitions: [MeasurementDefinition]?
+    init(answers: [UUID: GarmentLandmarkSet], overrideDefinitions: [MeasurementDefinition]? = nil) {
+        self.answers = answers
+        self.overrideDefinitions = overrideDefinitions
+    }
+    func landmarks(for snapshot: CaptureSnapshot) async throws -> GarmentLandmarkSet {
+        guard let answer = answers[snapshot.frame.frameID] else { throw WorkflowTestError.missingFixture }
+        return answer
+    }
+    nonisolated func measurementDefinitions(for landmarks: GarmentLandmarkSet) throws -> [MeasurementDefinition] {
+        guard let kind = landmarks.garmentKind else {
+            throw AutomaticMeasurementWorkflowFailure(stage: .landmarks, code: .invalidProvenance,
+                message: "Frozen kind is missing")
+        }
+        return overrideDefinitions ?? [.init(id: kind == .top ? "top-distance" : "bottom-distance",
+            title: "Distance", landmarkIDs: ["A", "B"])]
     }
 }

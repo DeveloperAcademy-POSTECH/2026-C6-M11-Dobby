@@ -18,6 +18,47 @@ final class LiveCaptureReadinessTests: XCTestCase {
         )
     }
 
+
+    func testGarmentKindChangeNeedsNewStableObservations() {
+        var evaluator = LiveReadinessEvaluator()
+        var observation = evidence()
+        observation.garmentKind = .top
+        XCTAssertEqual(evaluator.evaluate(observation).state, .steadying)
+        observation.timestamp = 1.5
+        XCTAssertEqual(evaluator.evaluate(observation).state, .ready)
+        // Even identical silhouette and depth must not carry readiness to pants.
+        observation.timestamp = 2
+        observation.garmentKind = .bottoms
+        let switched = evaluator.evaluate(observation)
+        XCTAssertEqual(switched.state, .steadying)
+        XCTAssertEqual(switched.garmentKind, .bottoms)
+        observation.timestamp = 2.5
+        XCTAssertEqual(evaluator.evaluate(observation).state, .ready)
+    }
+
+    func testModelVersionChangeAndClassificationLossResetReadiness() {
+        var evaluator = LiveReadinessEvaluator()
+        var observation = evidence()
+        observation.garmentKind = .top
+        _ = evaluator.evaluate(observation)
+        observation.timestamp = 1.5
+        XCTAssertEqual(evaluator.evaluate(observation).state, .ready)
+        observation.timestamp = 2
+        observation.recognitionModelVersion = "different-model"
+        XCTAssertEqual(evaluator.evaluate(observation).state, .steadying)
+        observation.timestamp = 2.5
+        observation.recognitionModelVersion = nil
+        observation.garmentKind = nil
+        let missing = evaluator.evaluate(observation)
+        XCTAssertEqual(missing.state, .searching)
+        XCTAssertNil(missing.garmentKind)
+        XCTAssertFalse(missing.garmentRecognized)
+        observation.timestamp = 3
+        observation.recognitionModelVersion = "different-model"
+        observation.garmentKind = .top
+        XCTAssertEqual(evaluator.evaluate(observation).state, .steadying)
+    }
+
     func testReadyNeedsConsecutiveFreshObservationsAndStableDuration() {
         var evaluator = LiveReadinessEvaluator()
         XCTAssertEqual(evaluator.evaluate(evidence()).state, .steadying)
@@ -43,6 +84,27 @@ final class LiveCaptureReadinessTests: XCTestCase {
         XCTAssertFalse(result.isReady)
         XCTAssertFalse(result.garmentRecognized)
         XCTAssertNil(result.silhouette)
+    }
+
+    func testUnsupportedClassificationRemovesPreviousReadyKindAndSilhouette() {
+        var evaluator = LiveReadinessEvaluator()
+        var observation = evidence()
+        observation.garmentKind = .top
+        _ = evaluator.evaluate(observation)
+        observation.timestamp = 1.5
+        XCTAssertEqual(evaluator.evaluate(observation).state, .ready)
+        observation.timestamp = 2
+        observation.unsupportedGarment = true
+        // Even stale semantic fields must not revive a supported garment.
+        let result = evaluator.evaluate(observation)
+        XCTAssertEqual(result.state, .unsupportedGarment)
+        XCTAssertFalse(result.isReady)
+        XCTAssertNil(result.garmentKind)
+        XCTAssertNil(result.silhouette)
+        XCTAssertFalse(result.garmentRecognized)
+        observation.timestamp = 2.5
+        observation.unsupportedGarment = false
+        XCTAssertEqual(evaluator.evaluate(observation).state, .steadying)
     }
 
     func testNewNoDetectionDropsPreviouslyRecognizedSilhouette() {

@@ -1,20 +1,6 @@
 import Foundation
 import CoreImage
 
-/// The user selects the model before capture. These pose models are not a
-/// classifier; running both and comparing their scores would mix unrelated scores.
-nonisolated enum AutomaticGarmentKind: String, CaseIterable, Identifiable, Sendable {
-    case top, bottoms
-
-    var id: String { rawValue }
-    var title: String { self == .top ? "상의" : "하의" }
-    var category: GarmentCategory { self == .top ? .top : .bottoms }
-    var supportDescription: String { self == .top ? "긴팔·반팔 상의" : "바지·반바지" }
-    var modelResourceName: String { self == .top ? "TopLandmarks" : "BottomLandmarks" }
-    var schemaResourceName: String { self == .top ? "schema_top" : "schema_bottom7" }
-    var modelVersion: String { self == .top ? "top11-ec1e6b054d59" : "bottom7-976144d4d652" }
-}
-
 typealias GarmentPhotoRecognition = BottomPhotoRecognition
 
 nonisolated enum GarmentModelError: Error, LocalizedError, AutomaticMeasurementFailureClassifying {
@@ -93,6 +79,16 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
         catch { throw translated(error) }
     }
 
+    func preparePoseModel() async throws {
+        do { try await adapter.preparePoseModel() }
+        catch { throw translated(error) }
+    }
+
+    func posePrediction(_ image: CGImage, orientation: ImageOrientation) async throws -> BottomLandmarkPrediction {
+        do { return try await adapter.posePrediction(image, orientation: orientation) }
+        catch { throw translated(error) }
+    }
+
     nonisolated static func bundled(kind: AutomaticGarmentKind, in bundle: Bundle = .main) throws -> CoreMLGarmentLandmarkProvider {
         guard let modelURL = bundle.url(forResource: kind.modelResourceName, withExtension: "mlmodelc")
                 ?? bundle.url(forResource: kind.modelResourceName, withExtension: "mlpackage"),
@@ -103,17 +99,29 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
     }
 
     func landmarks(for snapshot: CaptureSnapshot) async throws -> GarmentLandmarkSet {
-        do { return try await adapter.landmarks(for: snapshot) }
+        do {
+            var result = try await adapter.landmarks(for: snapshot)
+            result.garmentKind = kind
+            return result
+        }
         catch { throw translated(error) }
     }
 
     func recognizeImage(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentImageRecognition {
-        do { return try await adapter.recognizeImage(image, orientation: orientation) }
+        do {
+            var result = try await adapter.recognizeImage(image, orientation: orientation)
+            result.garmentKind = kind
+            return result
+        }
         catch { throw translated(error) }
     }
 
     func recognizeForeground(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentForegroundRecognition {
-        do { return try await adapter.recognizeForeground(image, orientation: orientation) }
+        do {
+            var result = try await adapter.recognizeForeground(image, orientation: orientation)
+            result.recognition.garmentKind = kind
+            return result
+        }
         catch { throw translated(error) }
     }
 
