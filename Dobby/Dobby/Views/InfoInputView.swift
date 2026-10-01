@@ -11,7 +11,9 @@ import SwiftUI
 struct InfoInputView: View {
     @Bindable var garment: Garment
 
-    @State private var showingExport = false
+    @State private var exportProduct: ExportProduct?
+    @State private var copyController = CopyActivityController()
+    @State private var showFruits = false
 
     var body: some View {
         ScrollView {
@@ -35,7 +37,8 @@ struct InfoInputView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("완료") {
                     garment.updatedAt = .now
-                    showingExport = true
+                    showFruits = false
+                    exportProduct = ExportProduct(garment: garment)
                 }
                 .fontWeight(.semibold)
                 .buttonStyle(.borderedProminent)
@@ -44,8 +47,8 @@ struct InfoInputView: View {
             }
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
-        .sheet(isPresented: $showingExport) {
-            ExportView()
+        .sheet(item: $exportProduct) { product in
+            ExportView(product: product, controller: copyController, showFruits: $showFruits)
         }
     }
 
