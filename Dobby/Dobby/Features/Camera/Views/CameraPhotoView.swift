@@ -12,6 +12,8 @@ import ImageIO
 struct CameraPhotoView: View {
     let source: CapturedAsset.Source
     var maximumPixelSize = 1600
+    var contentMode: ContentMode = .fill
+    var onLoad: ((Bool) -> Void)?
     @State private var image: CGImage?
 
     var body: some View {
@@ -20,7 +22,7 @@ struct CameraPhotoView: View {
                 if let image {
                     Image(decorative: image, scale: 1)
                         .resizable()
-                        .scaledToFill()
+                        .aspectRatio(contentMode: contentMode)
                 } else {
                     Color(.secondarySystemBackground)
                         .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
@@ -31,6 +33,7 @@ struct CameraPhotoView: View {
         }
         .task(id: source) {
             image = nil
+            defer { onLoad?(image != nil) }
             guard case let .localFile(url, _) = source,
                   let file = CGImageSourceCreateWithURL(url as CFURL, nil) else { return }
             image = CGImageSourceCreateThumbnailAtIndex(file, 0, [
