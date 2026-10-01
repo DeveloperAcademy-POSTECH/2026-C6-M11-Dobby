@@ -53,18 +53,18 @@ private struct ProductMeasurementTable: View {
                     ForEach(row) { item in
                         VStack(spacing: 0) {
                             Text(item.title)
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.caption.weight(.semibold))
                                 .foregroundStyle(.white.opacity(0.9))
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.55)
-                                .frame(maxWidth: .infinity, minHeight: 26)
+                                .minimumScaleFactor(0.7)
+                                .frame(maxWidth: .infinity, minHeight: 30)
                                 .background(Color(white: 0.12))
                             Text("\(item.value)cm")
-                                .font(.system(size: 10))
+                                .font(.caption)
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.65)
-                                .frame(maxWidth: .infinity, minHeight: 28)
+                                .minimumScaleFactor(0.75)
+                                .frame(maxWidth: .infinity, minHeight: 30)
                                 .background(.black)
                         }
                     }
@@ -74,6 +74,7 @@ private struct ProductMeasurementTable: View {
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(.white.opacity(0.12))
                 }
+                .layoutPriority(1)
             }
         }
         .accessibilityElement(children: .contain)

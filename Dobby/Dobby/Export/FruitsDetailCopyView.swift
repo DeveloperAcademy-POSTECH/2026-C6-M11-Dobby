@@ -12,6 +12,7 @@ struct FruitsDetailCopyView: View {
     private let surface = Color("BrandNeutral100")
     private let labelColor = Color("BrandNeutral800")
     private let accent = Color("BrandOrange")
+    private let openButtonColor = Color("BrandMain")
 
     var body: some View {
         ScrollView {
@@ -110,7 +111,7 @@ struct FruitsDetailCopyView: View {
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
-            .tint(accent)
+            .tint(openButtonColor)
             .disabled(opening)
         }
     }
