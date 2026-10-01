@@ -1,0 +1,73 @@
+{
+  "date": "2026-10-01",
+  "branch": "feat/3-LiDAR-Module",
+  "mainCommit": "360e02b3ea3fc21979b497c97f153e07c5a4e538",
+  "localIntegrationCommit": "82e3e8002e2fa4eed1083287100cf809d89f5876",
+  "scope": "Build and test verification of main 360e02b integrated into the existing measurement feature branch before PR publication.",
+  "localRepair": "InfoInputView SampleData preview now uses the same DEBUG conditional as SampleData; main adapter retained unchanged.",
+  "sourceSha256": {
+    "Dobby/Dobby/Views/InfoInputView.swift": "eaa2638d6d3010738c6ac51646c5eaf7bb89839d13012544877130bf7c218326",
+    "Dobby/Dobby/Export/ExportProduct+Garment.swift": "60c6481ec4b12958fc209c3ccd1d2ae9407fb1372517096a37e47f9044765c30",
+    "Tests/DobbyPresentationTests/ExportProductHandoffTests.swift": "03a3765823f54dcf8526d3645bf4a8edab66a69edd736265d0535e1dca12cc48"
+  },
+  "builds": [
+    {
+      "configuration": "Debug",
+      "destination": "generic/platform=iOS",
+      "codeSigningAllowed": false,
+      "status": "passed",
+      "log": "/tmp/dobby-new-main-sync-debug-20261001.log"
+    },
+    {
+      "configuration": "Release",
+      "destination": "generic/platform=iOS",
+      "codeSigningAllowed": false,
+      "status": "passed",
+      "log": "/tmp/dobby-new-main-sync-release-20261001.log"
+    }
+  ],
+  "presentationAndUITests": {
+    "status": "passed",
+    "passed": 15,
+    "failed": 0,
+    "skipped": 0,
+    "groups": {
+      "mainSwiftTestingExportProductHandoff": 3,
+      "captureAndMeasurementUI": 5,
+      "failureDiagnosis": 6,
+      "bundledClassifierNeutralImage": 1
+    },
+    "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/LatestMainSyncResults.xcresult",
+    "log": "/tmp/dobby-new-main-sync-ui-20261001.log",
+    "runtimeWarnings": [],
+    "ownedSimulator": "97F66EE8-AB26-46B2-8B94-BBFA36663856",
+    "ownedSimulatorFinalState": "Shutdown",
+    "sourceErrors": 0,
+    "sourceWarnings": 0
+  },
+  "coreTests": {
+    "status": "prior verification reused; core sources, core tests and Package.swift identical",
+    "passed": 391,
+    "sourceCommit": "6b3d7d1",
+    "log": "/tmp/dobby-recognized-capture-core-final-20261001.log"
+  },
+  "deferred": {
+    "task": "Replace mock clothing measurements in Tobae-owned views with the corresponding SwiftData product measurements",
+    "phase": "After team approval and user-performed merge, begin flowConnection on a new issue-numbered branch when the user asks to continue.",
+    "implementedNow": false,
+    "userRequestedDate": "2026-10-01",
+    "sequence": [
+      "Measurement capture and result correction",
+      "Product detail capture",
+      "Product photo selection",
+      "Product information input",
+      "Input completion",
+      "Export"
+    ]
+  },
+  "limitations": [
+    "Unsigned device builds; not installed or measured on a physical iPhone",
+    "No new View-to-View or measurement archive-to-SwiftData wiring added",
+    "AppIntents metadata extraction warning from absence of AppIntents.framework dependency"
+  ]
+}
