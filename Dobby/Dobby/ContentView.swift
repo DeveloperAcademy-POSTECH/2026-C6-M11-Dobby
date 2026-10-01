@@ -25,7 +25,6 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showExport) {
             ExportView(product: restoredProduct ?? product, controller: controller, showFruits: $showFruits)
         }
-        .onAppear { saveForKeyboard(product) }
         .onOpenURL { url in
             if ForegroundCopyRelay.canHandle(url) {
                 let result = ForegroundCopyRelay.handle(url)
@@ -55,19 +54,5 @@ struct ContentView: View {
             showFruits = true
             showExport = true
         }
-    }
-
-    private func saveForKeyboard(_ product: ExportProduct) {
-        let payload = product.fruits
-        try? KeyboardProductStore.save(.init(
-            productName: payload.productName,
-            description: payload.description,
-            brand: payload.brand,
-            measurements: payload.measurements,
-            price: payload.price,
-            length: payload.length,
-            waist: payload.waist,
-            thigh: payload.thigh
-        ))
     }
 }
