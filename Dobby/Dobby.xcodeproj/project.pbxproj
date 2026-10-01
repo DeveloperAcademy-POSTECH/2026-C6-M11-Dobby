@@ -7,22 +7,75 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		2F358079306D53D90044081F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2F358076306D53D90044081F /* Assets.xcassets */; };
-		2F35807F306D53D90044081F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F358077306D53D90044081F /* ContentView.swift */; };
-		2F358080306D53D90044081F /* DobbyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F358078306D53D90044081F /* DobbyApp.swift */; };
+		BB0000000000000000000005 /* QuickCopyWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000004 /* QuickCopyWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		BB0000000000000000000007 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 96ABF140305C239A009CB38B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB0000000000000000000003;
+			remoteInfo = QuickCopyWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		BB0000000000000000000006 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BB0000000000000000000005 /* QuickCopyWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		2F358076306D53D90044081F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		2F358077306D53D90044081F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		2F358078306D53D90044081F /* DobbyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DobbyApp.swift; sourceTree = "<group>"; };
-		2F35809A306DDC9C0044081F /* Dobby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dobby.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		96ABF148305C239A009CB38B /* Dobby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dobby.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000004 /* QuickCopyWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = QuickCopyWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BB0000000000000000000015 /* Exceptions for "QuickCopyWidget" folder in "QuickCopyWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = BB0000000000000000000003 /* QuickCopyWidget */;
+		};
+		BB0000000000000000000016 /* Exceptions for "Dobby" folder in "Dobby" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				QuickCopyInfo.plist,
+			);
+			target = 96ABF147305C239A009CB38B /* Dobby */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		96ABF14A305C239A009CB38B /* Dobby */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB0000000000000000000016 /* Exceptions for "Dobby" folder in "Dobby" target */,
+			);
 			path = Dobby;
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000001 /* Dobby/QuickCopy/Core */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Dobby/QuickCopy/Core;
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000002 /* QuickCopyWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB0000000000000000000015 /* Exceptions for "QuickCopyWidget" folder in "QuickCopyWidget" target */,
+			);
+			path = QuickCopyWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -35,18 +88,33 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB0000000000000000000010 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		96ABF13F305C239A009CB38B = {
 			isa = PBXGroup;
 			children = (
-				2F358078306D53D90044081F /* DobbyApp.swift */,
-				2F358077306D53D90044081F /* ContentView.swift */,
-				2F358076306D53D90044081F /* Assets.xcassets */,
 				96ABF14A305C239A009CB38B /* Dobby */,
-				2F35809A306DDC9C0044081F /* Dobby.app */,
+				BB0000000000000000000001 /* Dobby/QuickCopy/Core */,
+				BB0000000000000000000002 /* QuickCopyWidget */,
+				96ABF149305C239A009CB38B /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		96ABF149305C239A009CB38B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				96ABF148305C239A009CB38B /* Dobby.app */,
+				BB0000000000000000000004 /* QuickCopyWidget.appex */,
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -59,10 +127,12 @@
 				96ABF144305C239A009CB38B /* Sources */,
 				96ABF145305C239A009CB38B /* Frameworks */,
 				96ABF146305C239A009CB38B /* Resources */,
+				BB0000000000000000000006 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				BB0000000000000000000008 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				96ABF14A305C239A009CB38B /* Dobby */,
@@ -71,8 +141,29 @@
 			packageProductDependencies = (
 			);
 			productName = Dobby;
-			productReference = 2F35809A306DDC9C0044081F /* Dobby.app */;
+			productReference = 96ABF148305C239A009CB38B /* Dobby.app */;
 			productType = "com.apple.product-type.application";
+		};
+		BB0000000000000000000003 /* QuickCopyWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000000012 /* Build configuration list for PBXNativeTarget "QuickCopyWidget" */;
+			buildPhases = (
+				BB0000000000000000000009 /* Sources */,
+				BB0000000000000000000010 /* Frameworks */,
+				BB0000000000000000000011 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB0000000000000000000001 /* Dobby/QuickCopy/Core */,
+				BB0000000000000000000002 /* QuickCopyWidget */,
+			);
+			name = QuickCopyWidget;
+			productName = QuickCopyWidget;
+			productReference = BB0000000000000000000004 /* QuickCopyWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -99,11 +190,12 @@
 			mainGroup = 96ABF13F305C239A009CB38B;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 96ABF13F305C239A009CB38B;
+			productRefGroup = 96ABF149305C239A009CB38B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				96ABF147305C239A009CB38B /* Dobby */,
+				BB0000000000000000000003 /* QuickCopyWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -113,7 +205,13 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2F358079306D53D90044081F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0000000000000000000011 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -124,12 +222,25 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2F35807F306D53D90044081F /* ContentView.swift in Sources */,
-				2F358080306D53D90044081F /* DobbyApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0000000000000000000009 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BB0000000000000000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BB0000000000000000000003 /* QuickCopyWidget */;
+			targetProxy = BB0000000000000000000007 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		96ABF151305C239C009CB38B /* Debug */ = {
@@ -262,6 +373,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Dobby/QuickCopyInfo.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -300,6 +412,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Dobby/QuickCopyInfo.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -327,6 +440,56 @@
 			};
 			name = Release;
 		};
+		BB0000000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = QuickCopyWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Dobby Quick Copy";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dobby.Dobby.QuickCopyWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BB0000000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = QuickCopyWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Dobby Quick Copy";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dobby.Dobby.QuickCopyWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -344,6 +507,15 @@
 			buildConfigurations = (
 				96ABF154305C239C009CB38B /* Debug */,
 				96ABF155305C239C009CB38B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB0000000000000000000012 /* Build configuration list for PBXNativeTarget "QuickCopyWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0000000000000000000013 /* Debug */,
+				BB0000000000000000000014 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
