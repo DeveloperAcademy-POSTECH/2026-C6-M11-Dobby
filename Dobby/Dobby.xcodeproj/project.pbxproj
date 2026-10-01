@@ -7,9 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CC0000000000000000000101 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000111 /* ContentView.swift */; };
-		CC0000000000000000000102 /* DobbyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000112 /* DobbyApp.swift */; };
-		CC0000000000000000000103 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000113 /* Assets.xcassets */; };
 		BB0000000000000000000005 /* QuickCopyWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000004 /* QuickCopyWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -38,9 +35,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		CC0000000000000000000111 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		CC0000000000000000000112 /* DobbyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DobbyApp.swift; sourceTree = "<group>"; };
-		CC0000000000000000000113 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		96ABF148305C239A009CB38B /* Dobby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dobby.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000000004 /* QuickCopyWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = QuickCopyWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -108,9 +102,6 @@
 			isa = PBXGroup;
 			children = (
 				96ABF14A305C239A009CB38B /* Dobby */,
-				CC0000000000000000000111 /* ContentView.swift */,
-				CC0000000000000000000112 /* DobbyApp.swift */,
-				CC0000000000000000000113 /* Assets.xcassets */,
 				BB0000000000000000000001 /* Dobby/QuickCopy/Core */,
 				BB0000000000000000000002 /* QuickCopyWidget */,
 				96ABF149305C239A009CB38B /* Products */,
@@ -214,7 +205,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CC0000000000000000000103 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -232,8 +222,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CC0000000000000000000101 /* ContentView.swift in Sources */,
-				CC0000000000000000000102 /* DobbyApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

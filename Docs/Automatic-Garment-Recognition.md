@@ -92,3 +92,9 @@ Mac에서 공급된 실제 사진 26장으로 분류→측정점→전경→구�
 `main`의 의류 데이터 모델 추가(#15)를 작업 브랜치에 반영했다. 이동된 앱 진입 파일·기본 에셋의 빌드 참조를 갱신하고, 기존 판매 채널과 새 저장 모델의 중복 `ExportChannel`을 하나로 통합했다. 채널의 rawValue·URL·기존 키와 `ExportRecord` API를 유지했다. SwiftData 저장소를 기존 LiDAR 기록 흐름에 연결하는 변경은 포함하지 않는다.
 
 통합 후 Core 360개와 네이티브 Debug·Release 빌드를 다시 확인했다. 새 임시 UI 프로젝트의 홈·링크 5개, 상·하의 촬영 2개, 번들 모델 2개, 저장 모델·채널 호환성 1개로 총 10개 회귀 검사가 통과했다. [통합 검증 기록](Validation/automatic-garment-main15-integration-2026-10-01.json)에 소스 해시와 실행 결과를 남겼다.
+
+### #17 충돌 해결과 현재 파일 구조
+
+`main`의 #17 변경에 맞춰 앱 진입 파일과 기본 에셋은 `Dobby/Dobby/` 안의 동기화된 앱 소스 폴더를 사용한다. Xcode 프로젝트와 UI 테스트 실행기에서 이전 루트 위치의 중복 참조를 제거했다. `GarmentEnums.swift`는 main의 중복 enum·미사용 표시 속성 제거를 따르고, 공용 `ExportChannel`의 `Codable`과 기존 식별자·URL을 유지한다.
+
+기능 코드와 원본 모델은 그대로 보존했다. Core 360개, 최신 구조의 홈·촬영·모델·저장 호환성 회귀 10개와 서명을 제외한 네이티브 Debug·Release 빌드가 통과했다. 해결 후 검사 범위와 실행 결과는 [#17 충돌 해결 검증](Validation/main17-conflict-resolution-2026-10-01.json)을 참고한다.
