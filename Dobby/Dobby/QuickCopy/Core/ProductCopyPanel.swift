@@ -21,7 +21,11 @@ struct ProductCopyPanel: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) { control(.productName); control(.description) }
-            HStack(spacing: 8) { control(.brand); control(.measurements) }
+            if let items = values.measurementItems, !items.isEmpty {
+                ProductMeasurementTable(items: items)
+            } else {
+                HStack(spacing: 8) { control(.brand); control(.measurements) }
+            }
         }
     }
     private func control(_ field: ProductCopyField) -> some View {
@@ -36,5 +40,50 @@ struct ProductCopyPanel: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ProductMeasurementTable: View {
+    let items: [ProductCopyMeasurement]
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 0) {
+                    ForEach(row) { item in
+                        VStack(spacing: 0) {
+                            Text(item.title)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.9))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.55)
+                                .frame(maxWidth: .infinity, minHeight: 26)
+                                .background(Color(white: 0.12))
+                            Text("\(item.value)cm")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.65)
+                                .frame(maxWidth: .infinity, minHeight: 28)
+                                .background(.black)
+                        }
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(.white.opacity(0.12))
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("상품 실측 정보")
+    }
+
+    /// 한 줄에 최대 6개를 표시하고, 더 많은 실측값은 다음 줄로 이어서 보여준다.
+    private var rows: [[ProductCopyMeasurement]] {
+        stride(from: 0, to: items.count, by: 6).map { start in
+            Array(items[start..<min(start + 6, items.count)])
+        }
     }
 }
