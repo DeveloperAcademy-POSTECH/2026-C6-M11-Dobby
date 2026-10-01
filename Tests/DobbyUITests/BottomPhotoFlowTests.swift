@@ -11,7 +11,7 @@ final class BottomPhotoFlowTests: XCTestCase {
                           "Run DOBBY_UI_PHOTO_FIXTURES=1 Tools/run-ui-tests.sh to seed an isolated photo library.")
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         openPhotoRecognition(in: app)
 
         selectFixture(at: 0, in: app)

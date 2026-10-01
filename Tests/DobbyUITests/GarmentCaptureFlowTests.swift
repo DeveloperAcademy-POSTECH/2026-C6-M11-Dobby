@@ -8,7 +8,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--garment-preview-reduce-motion"]
-        app.launch()
+        launchLiDARLab(app)
         let preview = app.buttons["openGarmentPreview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         reveal(preview, in: app)
@@ -33,7 +33,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
     func testTopSelectionUsesTopPhotoCheckAndSixMeasurementPreview() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let picker = app.segmentedControls["automaticGarmentKind"]
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         reveal(picker, in: app)
@@ -105,7 +105,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         #endif
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let capture = app.buttons["openGarmentCapture"]
         XCTAssertTrue(capture.waitForExistence(timeout: 10))
         reveal(capture, in: app)
@@ -125,7 +125,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         continueAfterFailure = false
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let preview = app.buttons["openGarmentPreview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         reveal(preview, in: app)
@@ -155,7 +155,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--garment-preview-partial"]
-        app.launch()
+        launchLiDARLab(app)
         let preview = app.buttons["openGarmentPreview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         reveal(preview, in: app)
@@ -189,7 +189,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--garment-preview-partial"]
-        app.launch()
+        launchLiDARLab(app)
         let preview = app.buttons["openGarmentPreview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         reveal(preview, in: app)
@@ -220,7 +220,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
     func testPreviewRecognitionResultRetakeAndConfirmedSave() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
 
         let preview = app.buttons["openGarmentPreview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))

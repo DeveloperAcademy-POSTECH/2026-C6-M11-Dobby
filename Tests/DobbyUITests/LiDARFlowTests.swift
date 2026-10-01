@@ -5,7 +5,7 @@ final class LiDARFlowTests: XCTestCase {
     func testBundledBottomModelOffersPhotoRecognitionWithoutLiDAR() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let open = app.buttons["openBottomRecognition"]
         XCTAssertTrue(open.waitForExistence(timeout: 10), "Bundled model and schema must load")
         reveal(open, in: app)
@@ -21,7 +21,7 @@ final class LiDARFlowTests: XCTestCase {
     func testAutomaticFixturePreservesPartialResultsAndReopensAllItems() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let demo = app.buttons["openAutomaticDemo"]
         XCTAssertTrue(demo.waitForExistence(timeout: 10))
         reveal(demo, in: app)
@@ -65,7 +65,7 @@ final class LiDARFlowTests: XCTestCase {
     func testAutomaticReferenceValidationAndEditedSaveState() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let demo = app.buttons["openAutomaticDemo"]
         XCTAssertTrue(demo.waitForExistence(timeout: 10))
         reveal(demo, in: app)
@@ -106,7 +106,7 @@ final class LiDARFlowTests: XCTestCase {
     func testManualReferenceValidationAndEditedContextSaveState() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let demo = app.buttons["openDemo"]
         XCTAssertTrue(demo.waitForExistence(timeout: 10))
         reveal(demo, in: app)
@@ -147,7 +147,7 @@ final class LiDARFlowTests: XCTestCase {
     func testFinalValidationSeparatesSyntheticAndPhysicalEvidence() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let button = app.buttons["openValidationReport"]
         XCTAssertTrue(button.waitForExistence(timeout: 10))
         reveal(button, in: app)
@@ -166,7 +166,7 @@ final class LiDARFlowTests: XCTestCase {
     func testDemoMeasurementSaveAndReopen() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let demo = app.buttons["openDemo"]
         XCTAssertTrue(demo.waitForExistence(timeout: 10))
         reveal(demo, in: app)
@@ -196,7 +196,7 @@ final class LiDARFlowTests: XCTestCase {
     func testMissingDepthShowsUnavailable() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let missing = app.buttons["깊이 결손"]
         XCTAssertTrue(missing.waitForExistence(timeout: 10))
         reveal(missing, in: app)
@@ -212,7 +212,7 @@ final class LiDARFlowTests: XCTestCase {
     func testLiveReadinessPreviewTransitions() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let preview = app.buttons["openReadinessDemo"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         reveal(preview, in: app)
@@ -248,7 +248,7 @@ final class LiDARFlowTests: XCTestCase {
     func testBaselineReportDoesNotClaimAccuracyForSyntheticRecords() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let button = app.buttons["openBaselineReport"]
         XCTAssertTrue(button.waitForExistence(timeout: 10))
         reveal(button, in: app)
@@ -264,7 +264,7 @@ final class LiDARFlowTests: XCTestCase {
     func testBottomsPresetClearsPreviousReferenceAndPoints() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launch()
+        launchLiDARLab(app)
         let demo = app.buttons["openDemo"]
         XCTAssertTrue(demo.waitForExistence(timeout: 10))
         reveal(demo, in: app)
