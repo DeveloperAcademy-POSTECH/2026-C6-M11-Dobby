@@ -10,6 +10,9 @@ struct GarmentCaptureFlowView: View {
     private let previewKind: AutomaticGarmentKind
     private let isPreview: Bool
     private let previewIsPartial: Bool
+    private let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
+    private let onCancel: (() -> Void)?
+    private let embedsNavigation: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -29,9 +32,14 @@ struct GarmentCaptureFlowView: View {
     @State private var errorTitle = "촬영을 완료하지 못했어요"
     @State private var manualRecovery: ManualMeasurement?
 
-    init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false) {
+    init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false,
+         onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
+         onCancel: (() -> Void)? = nil, embedsNavigation: Bool = true) {
         self.archive = archive
         self.isPreview = preview
+        self.onConfirmedRecord = onConfirmedRecord
+        self.onCancel = onCancel
+        self.embedsNavigation = embedsNavigation
         // Fixture selection affects only the labelled synthetic preview.
         // The physical camera always classifies its own current image.
         self.previewKind = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-top") ? .top : .bottoms
@@ -49,7 +57,7 @@ struct GarmentCaptureFlowView: View {
                 loadingError = error.localizedDescription
             }
         }
-        let camera = ARKitCaptureProvider(garmentRecognizer: recognizer)
+        let camera = ARKitCaptureProvider()
         _camera = StateObject(wrappedValue: camera)
         _service = State(initialValue: recognizer.map {
             RecordedMeasurementService(workflow: AutomaticMeasurementWorkflow(camera: camera,
@@ -59,18 +67,23 @@ struct GarmentCaptureFlowView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        captureNavigation {
             Group {
                 if let model {
                     GarmentMeasurementResultView(model: model, archive: archive, recordingError: recordingError,
-                        initialImage: processingImage, onRetake: retake, onConfirm: { dismiss() })
+                        initialImage: processingImage, onRetake: retake,
+                        onConfirm: { if onConfirmedRecord == nil { dismiss() } },
+                        onConfirmedRecord: onConfirmedRecord)
                 } else {
                     cameraScreen
                         .navigationTitle("실측 촬영")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .topBarLeading) {
-                                Button { cancel(); dismiss() } label: { Image(systemName: "chevron.left") }
+                                Button {
+                                    cancel()
+                                    if let onCancel { onCancel() } else { dismiss() }
+                                } label: { Image(systemName: "chevron.left") }
                                     .accessibilityLabel("촬영 닫기")
                                     .accessibilityIdentifier("closeGarmentCapture")
                             }
@@ -88,8 +101,9 @@ struct GarmentCaptureFlowView: View {
             else { await camera.start() }
         }
         .onChange(of: orientation) { _, value in
-            // A rotation invalidates live evidence and an in-flight shutter.
-            let interruptedCapture = isCapturing
+            // Before the snapshot, rotation invalidates an in-flight shutter.
+            // Once frozen, inference keeps that photo's original orientation.
+            let interruptedCapture = isCapturing && processingSnapshot == nil
             if interruptedCapture { cancel() }
             camera.updateImageOrientation(value)
             // Inference pauses ARKit. Cancelling that stage must restore a
@@ -121,6 +135,15 @@ struct GarmentCaptureFlowView: View {
             }
             Button("확인", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
+    }
+
+    @ViewBuilder
+    private func captureNavigation<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if embedsNavigation {
+            NavigationStack { content() }
+        } else {
+            content()
+        }
     }
 
     private var cameraScreen: some View {
@@ -198,13 +221,13 @@ struct GarmentCaptureFlowView: View {
                     .padding(.horizontal, 16).padding(.bottom, 24)
             }.allowsHitTesting(false)
             if silhouetteVisible {
-                Color.clear.accessibilityElement().accessibilityLabel("인식된 옷 모양의 반투명 윤곽")
+                Color.clear.accessibilityElement().accessibilityLabel("촬영을 돕는 옷 윤곽 미리보기")
                     .accessibilityIdentifier("garmentSilhouette").allowsHitTesting(false)
             }
         }.clipped()
     }
 
-    private var readyCue: Bool { isReady && !isCapturing }
+    private var outlineCue: Bool { silhouetteVisible }
 
     /// The launch flag affects only the labelled synthetic preview. Physical
     /// capture always follows the user's accessibility setting.
@@ -212,14 +235,13 @@ struct GarmentCaptureFlowView: View {
         reduceMotion || (isPreview && ProcessInfo.processInfo.arguments.contains("--garment-preview-reduce-motion"))
     }
 
-    /// Readiness, the symbol and guidance change immediately. Only the capsule's
-    /// recognition tint fades in; losing evidence removes the tint without a delay.
+    /// The outline is visual feedback, never a measurement or shutter gate.
     private var recognitionGuidance: some View {
         HStack(spacing: 8) {
-            if isCapturing || (!isPreview && camera.state == .preparingModel) {
+            if isCapturing {
                 ProgressView().controlSize(.small).tint(.white).frame(width: 18)
             } else {
-                Image(systemName: readyCue ? "checkmark.circle.fill" : "viewfinder")
+                Image(systemName: "viewfinder")
                     .font(.subheadline.weight(.semibold)).frame(width: 18)
             }
             Text(guidance).multilineTextAlignment(.center)
@@ -230,12 +252,12 @@ struct GarmentCaptureFlowView: View {
                 ZStack {
                     Capsule().fill(Color.black.opacity(0.85))
                     Capsule().fill(GarmentCaptureStyle.recognition)
-                        .animation(presentationReduceMotion || !readyCue ? nil : .easeInOut(duration: 0.20)) { content in
-                            content.opacity(readyCue ? 1 : 0)
+                        .animation(presentationReduceMotion || !outlineCue ? nil : .easeInOut(duration: 0.20)) { content in
+                            content.opacity(outlineCue ? 1 : 0)
                         }
                 }
             }
-            .overlay(Capsule().stroke(.white.opacity(readyCue ? 0.20 : 0.10), lineWidth: 0.5))
+            .overlay(Capsule().stroke(.white.opacity(outlineCue ? 0.20 : 0.10), lineWidth: 0.5))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(guidance)
             .accessibilityIdentifier("captureGuidance")
@@ -246,8 +268,11 @@ struct GarmentCaptureFlowView: View {
             Spacer(minLength: 12)
             GarmentShutterButton(isEnabled: canTakePhoto,
                 isCapturing: isCapturing, action: takePhoto, forceReduceMotion: presentationReduceMotion)
-            if isPreview, !previewRecognized {
-                Button("인식 상태 보기") { previewRecognized = true }
+            if isCapturing {
+                Text(processingSnapshot == nil ? "잠시 기기를 움직이지 말아 주세요" : "분석이 끝나면 실측 결과를 보여드려요")
+                    .font(.caption2).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.center)
+            } else if isPreview, !previewRecognized {
+                Button("윤곽 미리보기") { previewRecognized = true }
                     .font(.caption).accessibilityIdentifier("previewRecognizeGarment")
             } else {
                 Text(captureInstructions)
@@ -257,31 +282,18 @@ struct GarmentCaptureFlowView: View {
         }.padding(.horizontal, 12)
     }
 
-    private var recognizedKind: AutomaticGarmentKind? {
-        isPreview ? (previewRecognized ? previewModel?.landmarks.garmentKind : nil) : camera.liveReadiness.garmentKind
-    }
     private var captureInstructions: String {
-        switch recognizedKind {
-        case .top?: "긴팔·반팔 상의 · 소매를 곧게 펼쳐주세요"
-        case .bottoms?: "바지·반바지 · 허리를 위로, 밑단을 아래로 펼쳐주세요"
-        case nil: "상의나 하의 한 벌을 평평하게 펼쳐주세요"
-        }
+        "상의나 하의 한 벌을 평평하게 펼쳐주세요"
     }
-    private var isReady: Bool {
-        guard recognizedKind != nil else { return false }
-        return isPreview ? previewRecognized && previewModel != nil
-            : camera.isRunning && camera.liveReadiness.isReady && camera.liveReadiness.garmentRecognized
-    }
-    /// Recognition is advisory. A prepared camera can capture first; the frozen
-    /// photo must still pass the model and measurement checks before a result.
+    /// Only camera availability controls the shutter. The captured RGB/depth
+    /// must still pass the model and measurement checks before a result.
     private var canTakePhoto: Bool {
         guard !isCapturing else { return false }
         if isPreview { return previewModel != nil }
         return service != nil && camera.isRunning && camera.state == .ready
-            && camera.frameStatus?.hasDepth == true && camera.frameStatus?.tracking == .normal
     }
     private var silhouetteVisible: Bool {
-        !isCapturing && (isPreview ? previewRecognized : camera.liveReadiness.garmentRecognized && camera.liveReadiness.silhouette != nil)
+        !isCapturing && (isPreview ? previewRecognized : camera.liveReadiness.silhouette != nil)
     }
     private var permissionDenied: Bool { camera.state == .unavailable(.cameraPermissionDenied) }
     private var unavailableMessage: String {
@@ -297,21 +309,15 @@ struct GarmentCaptureFlowView: View {
             default: return "사진과 깊이를 확보하고 있어요. 잠시만 멈춰주세요"
             }
         }
-        if isReady, let recognizedKind { return "\(recognizedKind.title) 인식 완료! 촬영 버튼을 눌러주세요" }
-        if canTakePhoto { return "옷 한 벌 전체를 촬영하면 종류와 측정점을 확인해요" }
+        if silhouetteVisible { return "윤곽 미리보기 · 촬영 후 치수를 측정해요" }
+        if canTakePhoto { return "인식을 기다리지 않고 촬영해도 돼요" }
         if isPreview { return "옷 한 벌 전체가 보이도록 평평하게 펼쳐주세요" }
         switch camera.state {
         case .failed, .interrupted: return "카메라 연결이 중단됐어요. 다시 촬영 화면을 열어주세요"
         case .requestingPermission: return "카메라 접근을 허용해 주세요"
-        case .preparingModel: return "옷 인식 모델을 준비하고 있어요"
         default: break
         }
-        switch camera.liveReadiness.state {
-        case .analyzing: return "옷 모양을 확인하고 있어요. 잠시만 멈춰주세요"
-        case .searching: return "상의나 하의 한 벌 전체가 보이도록 펼쳐주세요"
-        case .ready: return "옷을 확인하고 있어요"
-        default: return camera.liveReadiness.state.hint
-        }
+        return "카메라를 준비하고 있어요"
     }
 
     private var processingProgress: some View {
@@ -323,7 +329,17 @@ struct GarmentCaptureFlowView: View {
         }.font(.caption.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 10)
             .background(.black.opacity(0.75), in: Capsule())
             .accessibilityElement(children: .combine)
+            .accessibilityValue(processingProgressDescription)
             .accessibilityIdentifier("garmentMeasurementProgress")
+    }
+
+    private var processingProgressDescription: String {
+        switch phase {
+        case .detectingLandmarks: "사진 완료 · 측정점 확인 중 · 길이 대기"
+        case .measuring: "사진 완료 · 측정점 완료 · 길이 계산 중"
+        case .completed: "사진 완료 · 측정점 완료 · 길이 완료"
+        default: "사진과 깊이 확보 중 · 측정점 대기 · 길이 대기"
+        }
     }
 
     private func progressStep(_ title: String, complete: Bool, active: Bool) -> some View {
@@ -336,7 +352,7 @@ struct GarmentCaptureFlowView: View {
 
     private func takePhoto() {
         guard canTakePhoto, !isCapturing else { return }
-        if isPreview, let previewModel { model = previewModel; return }
+        if isPreview, let previewModel { takePreviewPhoto(previewModel); return }
         guard let service else { return }
         let token = UUID()
         runID = token
@@ -352,10 +368,10 @@ struct GarmentCaptureFlowView: View {
                     onPhaseChange: { value in
                         guard runID == token else { return }
                         phase = value
-                        if value == .detectingLandmarks { camera.pauseForMeasurement() }
                     }, onSnapshot: { snapshot in
                         guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
                         processingSnapshot = snapshot
+                        camera.pauseForMeasurement()
                     })
                 guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
                 guard let measuredKind = output.workflowOutput.landmarks.garmentKind else {
@@ -374,6 +390,46 @@ struct GarmentCaptureFlowView: View {
                 restartCamera()
             }
             if runID == token { runID = nil; isCapturing = false; captureTask = nil }
+        }
+    }
+
+    /// Rehearses the same frozen-photo stages with explicitly synthetic data.
+    /// Observation delays exist only in the dedicated UI test fixture.
+    private func takePreviewPhoto(_ preview: AutomaticMeasurement) {
+        let token = UUID()
+        runID = token
+        processingSnapshot = preview.snapshot
+        processingImage = nil
+        errorMessage = nil
+        isCapturing = true
+        phase = .capturing
+        captureTask = Task {
+            do {
+                try await previewStagePause(.milliseconds(200))
+                guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
+                phase = .detectingLandmarks
+                try await previewStagePause(.seconds(2))
+                guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
+                phase = .measuring
+                try await previewStagePause(.seconds(2))
+                guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
+                phase = .completed
+                model = preview
+                isCapturing = false
+                runID = nil
+                captureTask = nil
+            } catch {
+                // The same cancel/retake path clears the owned fixture state.
+            }
+        }
+    }
+
+    private func previewStagePause(_ duration: Duration) async throws {
+        if ProcessInfo.processInfo.arguments.contains("--garment-preview-processing") {
+            try await Task.sleep(for: duration)
+        } else {
+            await Task.yield()
+            try Task.checkCancellation()
         }
     }
 

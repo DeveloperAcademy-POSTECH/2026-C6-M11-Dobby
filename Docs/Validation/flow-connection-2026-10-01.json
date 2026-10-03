@@ -1,0 +1,313 @@
+{
+  "date": "2026-10-01",
+  "issue": 23,
+  "branch": "feat/23-flowConnection",
+  "baseMainCommit": "2328117ef2fd3aa6d6a9ea436796b0ad0cf8c0b0",
+  "scope": "Connect confirmed measurement, detail photos, selected photo order, product information, completion, library and export with one SwiftData product.",
+  "sourceSha256": {
+    "Dobby/Dobby/ContentView.swift": "a85d9a8fab2a232f21f45d621d43fcaf7c35f5a51f8a2bd2f06f1f05fcacb19a",
+    "Dobby/Dobby/DobbyApp.swift": "d69b55fcfb2b5699e436b7b28016ee1e9984032e9e3e2af44deaff61bd9dff04",
+    "Dobby/Dobby/Export/ExportProduct+Garment.swift": "d53ead3b7a749e0e1662a35d8b521b53ea86482001627296af4a0175c4aec29b",
+    "Dobby/Dobby/Export/ExportView.swift": "6d53b7cd232d8f3e268a18973449c9c05a7cdb65150f80b2fe5c5afead462bce",
+    "Dobby/Dobby/Export/FruitsDetailCopyView.swift": "ee490daba03df04dc5fb7d22e70ce39157b4e48376cab6e1b0d22e0a59c9c872",
+    "Dobby/Dobby/Features/Camera/Integration/CapturedAsset.swift": "302c4007691600a49985e074f80618baaa563c999909171f015495d3858261df",
+    "Dobby/Dobby/Features/Camera/Integration/ProductPhotoHandoff.swift": "9ec4b23dc8c80e9e9ea129f7dd09343afa041ef2aaabf8af26e03025b2fa2011",
+    "Dobby/Dobby/Features/Camera/Integration/ProductPhotoPersistence.swift": "6d8fca6296b20f7669b43c4452f3cc4ade46a8fa4ba4c6b988d1f60675c3ed2b",
+    "Dobby/Dobby/Features/Camera/Models/ProductPhotoModel.swift": "1ff0d699151a397b957b004be84514f9ed8e80b422f1f19131631ce5a3f6f07f",
+    "Dobby/Dobby/Features/Camera/PreviewSupport/ProductPhotoFixtureCaptureProvider.swift": "d6692bbd2c211ee5ea1ecc0ab95fa062045609beed8e52e4eb9e66a1af0ef094",
+    "Dobby/Dobby/Features/Camera/Views/CameraFlowView.swift": "18921cf5545d7f58ed8a671a7fbe3cf5fe629996512d30a79601317fa5cd52aa",
+    "Dobby/Dobby/Features/Camera/Views/ProductPhotoSelectionView.swift": "162d97dbaacf6d3cd6965086c0a366efefba050b1e18a8aed3c6bbf702216a68",
+    "Dobby/Dobby/LiDAR/UI/GarmentCaptureFlowView.swift": "1052d91ec9c7deff13da76d122cc4dc824e4bfab7d9d9ade57ea27e3a9f60fc7",
+    "Dobby/Dobby/LiDAR/UI/GarmentMeasurementResultView.swift": "2077bbb1e043061e24ea264a47d8cffdc25724059f59e75e6d23efcf84997af9",
+    "Dobby/Dobby/Models/Garment.swift": "4dd9af851e8ddb91d96e84ca41d41964390052e9b1eba862cb42ec401702c3c0",
+    "Dobby/Dobby/Models/GarmentPhoto.swift": "1b001449e2375c6bb60f6d79630e58e7861deff30b873b050ccbb509c864f39a",
+    "Dobby/Dobby/Models/LandmarkPoint.swift": "a0a5c4ead498a8596439977bacc09a390ca4c4d90c27dc7aee969b8ab0e99404",
+    "Dobby/Dobby/Models/MeasuredValue.swift": "f6ebf74f15a0475ff92d670a3a23c3251ff58e91b6d952b00c871b8ee9bfff34",
+    "Dobby/Dobby/Store/GarmentStore+Measurement.swift": "2db35ced9cd920ab469719176761631f9ff870ce0d3a8c2b89dbbd41395710f6",
+    "Dobby/Dobby/Store/GarmentStore.swift": "084f65f08e4ff5f20724cee9ca45b89b0a010a5aaf05490ed99870182d690106",
+    "Dobby/Dobby/Store/ProductAppStorage.swift": "9919df56b6b2612c3cfbbae0856768a76aa5d3f2bc93b252fbbbcce4a255d857",
+    "Dobby/Dobby/Views/InfoInputView.swift": "f512623d80dda3d17c7ab998db48b7f6ac6a1bbc8b15abae41d4c20ba17d65dd",
+    "Dobby/Dobby/Views/ProductCreationFlowView.swift": "ea09ba2d8955af67f85d34bf22b0ea150f481f54a0d02edc6db43f9ed2a88d41"
+  },
+  "builds": {
+    "Debug": {
+      "status": "passed",
+      "signed": false,
+      "swiftSourceWarnings": 0,
+      "log": "/tmp/dobby-flow-ux-debug-final-20261002.log"
+    },
+    "Release": {
+      "status": "passed",
+      "signed": false,
+      "swiftSourceWarnings": 0,
+      "log": "/tmp/dobby-flow-ux-release-final-20261002.log"
+    }
+  },
+  "unitTests": {
+    "status": "passed",
+    "passed": 37,
+    "failed": 0,
+    "skipped": 0,
+    "groups": {
+      "measurementToSwiftData": 13,
+      "productInformation": 8,
+      "exportProduct": 7,
+      "detailPhotoHandoff": 9
+    },
+    "runs": [
+      {
+        "cases": 22,
+        "groups": [
+          "measurementToSwiftData",
+          "detailPhotoHandoff"
+        ],
+        "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/FlowConnectionUnitFinalResults.xcresult",
+        "log": "/tmp/dobby-flow-connection-unit-final-20261001.log",
+        "reuseReason": "These adapter, model and photo persistence sources are unchanged from the passing run."
+      },
+      {
+        "cases": 15,
+        "groups": [
+          "productInformation",
+          "exportProduct"
+        ],
+        "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/FlowConnectionInputFinalResults.xcresult",
+        "log": "/tmp/dobby-flow-connection-input-final-20261001.log",
+        "summary": "/tmp/dobby-flow-connection-input-final-summary-20261001.json"
+      }
+    ],
+    "runtimeWarnings": [],
+    "swiftSourceWarnings": 0,
+    "verification": [
+      "Legacy SQLite schema migration preserves values and relationships",
+      "Current/original measurement and landmark provenance separation",
+      "Persistent product reload and caller context ownership",
+      "Lossless raw JPEG pixels with four display orientations",
+      "Non-overwriting publication and failed-save cleanup/retry",
+      "Focused numeric draft keeps all typed digits after completion and repeated focus/navigation",
+      "Exact accepted measurement reaches export payload without rounded display overwrite"
+    ],
+    "finalUIOnlyChange": "The passing 37 helper/storage/photo/export cases retain unchanged tested logic. Follow-up view changes clear focus and inject retained parent input bindings so unfinished text survives native Back; the expanded top UI flow exercises those changes."
+  },
+  "uiTests": {
+    "status": "passed",
+    "passed": 4,
+    "failed": 0,
+    "skipped": 0,
+    "groups": {
+      "routing": 2,
+      "topCreation": 1,
+      "bottomCreation": 1
+    },
+    "simulator": {
+      "udid": "97F66EE8-AB26-46B2-8B94-BBFA36663856",
+      "device": "iPhone 17 Pro",
+      "os": "iOS 26.4",
+      "ownership": "task-only",
+      "finalState": "Shutdown"
+    },
+    "synthetic": true,
+    "verification": [
+      "Home entry, lab access and empty library",
+      "Cold copy-home without active session shows guidance and no mock product",
+      "Top point correction, two ordered selected photos and typed name/detail/brand",
+      "Focused numeric field visible above keyboard; 67.25 completes while focused",
+      "Exact 67.25 exported before and after same-product edit with unchanged focus",
+      "Back navigation retains both selected photos and detail source",
+      "Persistent name/detail/brand/current 67.25 after terminate/relaunch",
+      "Library edit completion explicitly returns to root list and retains 67.25",
+      "Bottom measurement-only selection stores all eight real measurement keys without invented top/hip/thigh values",
+      "Pending valid/invalid numeric drafts survive native Back before Done",
+      "Validation message explains the actual invalid shoulder field and retains input",
+      "Saved-detail pending draft is separate from stored value and commits only on Done"
+    ],
+    "runtimeWarnings": [],
+    "swiftSourceWarnings": 0,
+    "runs": [
+      {
+        "cases": 3,
+        "selectors": [
+          "AppRoutingTests/testCaptureEntryLabAndEmptyLibraryRemainReachable",
+          "AppRoutingTests/testColdCopyHomeWithoutSessionShowsGuidanceAndKeepsLibraryEmpty",
+          "ProductCreationFlowTests/testBottomEightValuesMeasurementOnlySelectionAndEmptyCopyHomeUseRealProductFlow"
+        ],
+        "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/FlowConnectionUINavigationFinalResults.xcresult",
+        "log": "/tmp/dobby-flow-connection-ui-navigation-final-20261002.log",
+        "reuseReason": "These unchanged routing/bottom contracts passed in the four-case run. The follow-up parent input binding and photo guidance changes are exercised by the fresh expanded top flow; helper/storage behavior is unchanged."
+      },
+      {
+        "cases": 1,
+        "selector": "ProductCreationFlowTests/testTopCreationKeepsCorrectedMeasurementsPhotosAndExportAcrossBackAndRelaunch",
+        "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/FlowConnectionUXRetryResults.xcresult",
+        "log": "/tmp/dobby-flow-ux-ui-retry-20261002.log",
+        "expandedAssertions": [
+          "Unfinished 68.39 survives Back/photo selection reentry",
+          "Invalid 0 survives Back and visible validation guidance; dismissal retains0",
+          "All previous exact67.25 export/edit/photo/back/relaunch assertions",
+          "Saved editor pending72.19 survives Back; stored67.25 unchanged before Done; explicit Done saves72.19"
+        ]
+      }
+    ]
+  },
+  "coreTests": {
+    "status": "391 prior tests passed; Core, Core tests and Package.swift unchanged from merged main",
+    "log": "/tmp/dobby-recognized-capture-core-final-20261001.log"
+  },
+  "priorFailedAttempts": [
+    {
+      "scope": "test-fixture compile",
+      "testsExecuted": false,
+      "cause": "legacy SQLite model initializer read a computed property before all properties initialized",
+      "fixed": true,
+      "log": "/tmp/dobby-flow-connection-unit-20261001.log"
+    },
+    {
+      "scope": "runtime storage",
+      "cause": "Foundation disallows combining atomic and withoutOverwriting Data writing options",
+      "fixed": "Staging then non-overwriting same-volume file move in measurement and detail writers; collision regressions added",
+      "log": "/tmp/dobby-flow-connection-unit-retry-20261001.log"
+    },
+    {
+      "scope": "first integrated UI run",
+      "passed": 1,
+      "failed": 3,
+      "log": "/tmp/dobby-flow-connection-ui-20261001.log",
+      "causes": [
+        "Parent accessibilityIdentifier inherited by completion buttons; explicit child containment added",
+        "Test scroll gesture fell inside keyboard; helper now uses content bounds above keyboard",
+        "XCUIApplication.open relaunches app; nil-session URL test explicitly verifies cold delivery instead of warm tab state"
+      ]
+    },
+    {
+      "scope": "second integrated UI run",
+      "passed": 3,
+      "failed": 1,
+      "log": "/tmp/dobby-flow-connection-ui-final-20261001.log",
+      "cause": "67.25 was persisted correctly, but a late focus-loss commit replaced the in-memory current value with rounded 67.2, which export then displayed",
+      "fixed": "Stable typed input text independent of consumed dirty drafts; no focus-loss numeric model writes; fresh editor displays up to two decimal places; focused row scrolls above keyboard",
+      "regression": "Expanded UI checks exact current value through export edit, repeated completion, back navigation and library edit after relaunch"
+    },
+    {
+      "scope": "third integrated UI run",
+      "passed": 3,
+      "failed": 1,
+      "log": "/tmp/dobby-flow-connection-ui-complete-20261001.log",
+      "cause": "After export edit, Info retained a decimal input focus/keyboard; the test also mistook zero offscreen field frames for a field above the viewport and scrolled in the wrong direction",
+      "fixed": "Clear numeric focus after successful completion and when leaving Info; test helper checks nonempty finite frames before scrolling down",
+      "alreadyVerified": [
+        "First numeric field stays above keyboard",
+        "Accepted 67.25 reaches actual export detail correctly",
+        "Export edit returns to the same Info screen"
+      ]
+    },
+    {
+      "scope": "two top-only navigation helper attempts",
+      "logs": [
+        "/tmp/dobby-flow-connection-ui-top-final-20261002.log",
+        "/tmp/dobby-flow-connection-ui-top-back-final-20261002.log"
+      ],
+      "cause": "After both exact 67.25 export checks, the executed back helper still followed the earlier implementation although the changed UI-test source was compiled.",
+      "fixed": "Rebuilt only the task-owned UI-test target intermediates and runner; unchanged helper then passed native back navigation and photo selection assertions.",
+      "preservedCacheBackup": "/var/folders/lg/1g9yb7k57pg5nsc7cxbhh4gr0000gp/T/dobby-ui-test-cache-20261002.qxi_5cvp"
+    },
+    {
+      "scope": "top-only fresh test-target run",
+      "log": "/tmp/dobby-flow-connection-ui-top-rebuilt-final-20261002.log",
+      "cause": "Saved-detail completion onLibrary used an ancestor dismiss action, leaving nested completion destinations displayed instead of returning to the library list.",
+      "fixed": "Library UUID NavigationStack path and explicit parent onLibrary callbacks reset the complete path; helper edit dismisses its owning sheet.",
+      "alreadyVerified": [
+        "Exact 67.25 through export edit and repeated completion",
+        "Two selected photos and original detail source after back navigation",
+        "Persistent name, brand, description and 67.25 after terminate/relaunch",
+        "Unchanged focused value after library edit"
+      ]
+    },
+    {
+      "scope": "expanded UX regression first run",
+      "log": "/tmp/dobby-flow-ux-ui-20261002.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/FlowConnectionUXFinalResults.xcresult",
+      "cause": "The correct native validation alert was visible, but its message did not expose the SwiftUI Text accessibility identifier.",
+      "fixed": "Assert the visible shoulder/positive-number/input-retained message and original invalid text after dismissal; no application change.",
+      "alreadyVerified": [
+        "Pending 68.39 survives native Back and photo reentry before completion",
+        "Invalid 0 survives native Back and correct validation alert is shown"
+      ]
+    },
+    {
+      "scope": "temporary camera contrast visual check first attempt",
+      "log": "/tmp/dobby-flow-camera-advance-smoke-20261002.log",
+      "cause": "The temporary driver expected an accessibility label from a decorative thumbnail image; two captured thumbnails and the corrected blue/white advance were already visible.",
+      "fixed": "The temporary driver checks actual captured detail row camera.photo.1 in selection plus advance readiness and real Info handoff. No app change."
+    }
+  ],
+  "limits": [
+    "No physical iPhone camera, latency or tape-measure accuracy test",
+    "Synthetic UI flow is labelled and isolated; production rejects synthetic measurement input",
+    "No external marketplace launch, clipboard writes or Live Activity started by these checks",
+    "Active-session warm copy-home presentation over an in-progress draft was code-reviewed; these UI tests deliberately do not start a real copy activity."
+  ],
+  "testRunner": {
+    "unitHostStore": "A fresh valid UUID isolates the SwiftData test-host store for each runner invocation.",
+    "verification": [
+      "bash -n passed",
+      "Both embedded Python heredocs compile successfully"
+    ]
+  },
+  "completedDate": "2026-10-02",
+  "testSourceSha256": {
+    "Tests/DobbyPresentationTests/MeasurementGarmentHandoffTests.swift": "ddcf8550b2b1e4ff76bc16b16e718e023ea35c6662ce3099534759a1d8dc5b1e",
+    "Tests/DobbyPresentationTests/ProductPhotoFlowHandoffTests.swift": "078b89ad3e5e5155b523cccc49cb337dbe52311a4b68f055836d4406359ea8ff",
+    "Tests/DobbyPresentationTests/GarmentInputCompletionTests.swift": "2759687e819547bba62025b4f80ce7de261833c084522a04568ef1313e3c6c53",
+    "Tests/DobbyPresentationTests/ExportProductHandoffTests.swift": "feb27f629ea526a3a14d9133ee41af43306ef5e5e4dde0710e9dc62e10c9bce7",
+    "Tests/DobbyUITests/ProductCreationFlowTests.swift": "b3c528071bbf61a40270405f79e421964ae8552f4e2d7fb422335a799df5a5e5",
+    "Tests/DobbyUITests/AppRoutingTests.swift": "b9a1c26a5f6435c4c9ef461b54dd818e3752c0a05a64f9f6d58e6659d29d0258",
+    "Tools/run-ui-tests.sh": "f332859d2ee4854eec3ec2bb0fc23b45e0aa1b40a2ba044255423bd0e8f618c2"
+  },
+  "uxReview": {
+    "date": "2026-10-02",
+    "status": "passed",
+    "reviewed": "Screen captures plus independent source review of forward/back/keyboard/photo storage guidance.",
+    "fixes": [
+      "Retain unfinished valid/invalid numeric text in the creation or saved-detail session across native Back; only explicit completion validates and commits.",
+      "Photo selection accurately states the original measurement is preserved and only selected detail photos are stored.",
+      "Give the detail-camera prominent advance button its own blue tint; inherited white tint with explicit white text made the action illegible."
+    ],
+    "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/FlowConnectionUXRetryResults.xcresult",
+    "log": "/tmp/dobby-flow-ux-ui-retry-20261002.log",
+    "physicalBoundary": "ARKit measurement capture stops/pauses before the detail AVCaptureSession becomes visible; actual sensor handoff and latency remain physical-device checks.",
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "runtimeWarnings": [],
+    "swiftSourceWarnings": 0,
+    "summary": "/tmp/dobby-flow-ux-ui-retry-summary-20261002.json",
+    "screenshotsDirectory": "/tmp/dobby-flow-ux-ui-retry-attachments-20261002/",
+    "visualReview": [
+      "Inspected measurement result, detail capture, selection order/storage guidance, unfocused/focused information, completion, export and saved-detail screen captures.",
+      "The camera advance contrast issue found in captures is fixed; the root visually confirms a readable blue/white action, and a narrow forward check passes."
+    ],
+    "cameraAdvanceCheck": {
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "temporaryDriver": "/tmp/dobby-lidar-ui.GhJ1cc/TemporaryCameraAdvanceSmokeTests.swift",
+      "temporaryDriverSha256": "c7a58e7975bd43ef265804143384fd7d214cc22aa232a3daf44d781c27019cde",
+      "permanentRepositoryTestsChanged": false,
+      "verification": [
+        "Root visually confirms white completion text on blue button",
+        "Advance enabled/hittable after detail capture",
+        "Captured detail exists in selection",
+        "Selection completes into real product information"
+      ],
+      "log": "/tmp/dobby-flow-camera-advance-smoke-retry-20261002.log",
+      "resultBundle": "/tmp/dobby-lidar-ui.GhJ1cc/FlowCameraAdvanceSmokeRetryResults.xcresult",
+      "runtimeWarnings": [],
+      "swiftSourceWarnings": 0,
+      "summary": "/tmp/dobby-flow-camera-advance-smoke-retry-summary-20261002.json",
+      "screenshot": "/tmp/dobby-flow-camera-advance-smoke-retry-attachments-20261002/5550EA12-16DD-4CA0-A4A3-B96BA1A83027.png",
+      "qaSpecRestored": true,
+      "simulatorFinalState": "Shutdown"
+    }
+  }
+}

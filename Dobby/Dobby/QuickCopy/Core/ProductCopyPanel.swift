@@ -59,7 +59,7 @@ private struct ProductMeasurementTable: View {
                                 .minimumScaleFactor(0.7)
                                 .frame(maxWidth: .infinity, minHeight: 30)
                                 .background(Color(white: 0.12))
-                            Text("\(item.value)cm")
+                            Text("\(MeasurementDisplayText.centimeters(item.value))cm")
                                 .font(.caption)
                                 .foregroundStyle(.white)
                                 .lineLimit(1)

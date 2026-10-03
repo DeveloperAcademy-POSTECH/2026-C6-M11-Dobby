@@ -8,7 +8,6 @@ import ImageIO
 nonisolated enum CaptureState: Equatable, Sendable {
     case idle
     case requestingPermission
-    case preparingModel
     case starting
     case ready
     case capturing
@@ -78,7 +77,7 @@ nonisolated enum ARKitCaptureError: LocalizedError, Sendable, AutomaticMeasureme
 /// Camera ownership is deliberately confined to this adapter. Mason's camera
 /// implementation can replace it while preserving CaptureSnapshotProviding.
 @MainActor
-final class ARKitCaptureProvider: NSObject, ObservableObject, PreparedCaptureSnapshotProviding {
+final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotProviding {
     let session = ARSession()
     @Published private(set) var state: CaptureState = .idle
     @Published private(set) var frameStatus: CaptureFrameStatus?
@@ -91,23 +90,15 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, PreparedCaptureSna
     }
 
     private nonisolated let worker = CaptureWorker()
-    private nonisolated let liveAnalyzer: LiveForegroundAnalyzer
-    private let garmentRecognizer: (any GarmentImageRecognizing)?
-    private var hasPreparedRecognizer = false
+    private nonisolated let liveAnalyzer = LiveForegroundAnalyzer()
     private var resumeTrackingOnNextStart = false
     private var freshnessTask: Task<Void, Never>?
-    private var freshnessGate = LiveReadinessFreshnessGate()
+    private var lastCameraTimestamp: TimeInterval?
+    private var lastCameraReceivedAt: TimeInterval?
     private var generation: UUID?
     private var permissionRequestInProgress = false
     private var imageOrientation: ImageOrientation = .right
-    /// One accepted, owned frame; never a most-recent kind or a cached mask
-    /// that may be attached to another camera frame.
-    private var preparedTicket: LiveRecognitionCaptureTicket?
-    private var handoffPolicy = PreparedCaptureHandoffPolicy()
-
-    init(garmentRecognizer: (any GarmentImageRecognizing)? = nil) {
-        self.garmentRecognizer = garmentRecognizer
-        liveAnalyzer = LiveForegroundAnalyzer(recognizer: garmentRecognizer)
+    override init() {
         super.init()
         session.delegate = self
         session.delegateQueue = worker.queue
@@ -123,7 +114,6 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, PreparedCaptureSna
     }
 
     func start() async {
-        invalidatePreparedTicket()
         if isRunning {
             if state != .capturing, let generation {
                 liveAnalyzer.resume(sessionID: generation)
@@ -158,19 +148,6 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, PreparedCaptureSna
         guard authorized else {
             state = .unavailable(.cameraPermissionDenied)
             return
-        }
-
-        if !hasPreparedRecognizer, let garmentRecognizer {
-            state = .preparingModel
-            do { try await garmentRecognizer.prepare() }
-            catch {
-                guard generation == identifier else { return }
-                state = .failed(error.localizedDescription)
-                return
-            }
-            guard generation == identifier else { return }
-            guard !Task.isCancelled else { stop(); return }
-            hasPreparedRecognizer = true
         }
 
         let configuration = ARWorldTrackingConfiguration()
@@ -263,133 +240,36 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, PreparedCaptureSna
         }
     }
 
-    func capturePrepared(orientation: ImageOrientation) async throws -> PreparedMeasurementCapture {
-        try Task.checkCancellation()
-        guard isRunning, let identifier = generation else { throw ARKitCaptureError.sessionNotRunning }
-        guard state != .capturing else { throw ARKitCaptureError.captureInProgress }
-        guard let ticket = consumePreparedTicket(orientation: orientation) else {
-            // Shooting before a semantic result is ready retains the existing
-            // fresh RGB/depth selection and frozen inference path.
-            return .init(snapshot: try await capture(orientation: orientation))
-        }
-        liveAnalyzer.suspend(sessionID: identifier)
-        resetReadiness()
-        state = .capturing
-        var completed = false
-        defer {
-            if !completed, generation == identifier, isRunning {
-                liveAnalyzer.resume(sessionID: identifier)
-                resetReadiness()
-            }
-        }
-        do {
-            let snapshot = try await worker.snapshot(from: ticket)
-            try Task.checkCancellation()
-            guard generation == identifier, isRunning, imageOrientation == orientation else {
-                throw ARKitCaptureError.stopped
-            }
-            completed = true
-            state = .ready
-            return .init(snapshot: snapshot, landmarks: ticket.landmarks)
-        } catch {
-            if generation == identifier, isRunning { state = .ready }
-            throw error
-        }
-    }
-
-    /// Synchronous main-actor validation and consumption is atomic with camera
-    /// UI events. The temporary ARFrame is released before JPEG work awaits.
-    private func consumePreparedTicket(orientation: ImageOrientation) -> LiveRecognitionCaptureTicket? {
-        guard let identifier = generation, let current = session.currentFrame else {
-            invalidatePreparedTicket()
-            return nil
-        }
-        let expired = freshnessGate.expireIfNeeded(now: ProcessInfo.processInfo.systemUptime,
-                                                   currentFrameTimestamp: current.timestamp)
-        if expired {
-            liveAnalyzer.invalidateReadiness()
-            liveReadiness = .waiting
-        }
-        guard let ticket = preparedTicket, liveAnalyzer.isCurrent(liveReadiness),
-              let camera = worker.handoffCameraStatus, camera.sessionID == identifier else {
-            invalidatePreparedTicket()
-            return nil
-        }
-        let age = current.timestamp - ticket.frame.timestamp
-        var translation = camera.translationSpeedMetersPerSecond
-        var rotation = camera.angularSpeedRadiansPerSecond
-        if age > 0 {
-            let distance = Double(simd_distance(current.camera.transform.columns.3, ticket.cameraTransform.columns.3)) / age
-            let relative = simd_quatf(current.camera.transform) * simd_quatf(ticket.cameraTransform).inverse
-            let angle = 2 * acos(min(1, abs(Double(relative.real)))) / age
-            translation = translation.map { max($0, distance) }
-            rotation = rotation.map { max($0, angle) }
-        }
-        let trackingNormal: Bool
-        if case .normal = current.camera.trackingState { trackingNormal = true }
-        else { trackingNormal = false }
-        let currentDepth = current.sceneDepth.flatMap(LiveForegroundAnalyzer.copyDepth)
-        let quality = CaptureFrameQuality.evaluate(depth: currentDepth, timestamp: current.timestamp,
-            trackingNormal: trackingNormal && camera.trackingNormal,
-            translationSpeedMetersPerSecond: translation, angularSpeedRadiansPerSecond: rotation)
-        let observation = PreparedCaptureHandoffObservation(sessionID: identifier, readiness: liveReadiness,
-            orientation: orientation, currentFrameTimestamp: current.timestamp,
-            cameraObservationTimestamp: camera.timestamp, trackingStable: quality.isEligible,
-            hasDepth: currentDepth != nil && quality.validDepthSampleCount >= 30,
-            freshnessExpired: expired, translationSpeedMetersPerSecond: translation,
-            angularSpeedRadiansPerSecond: rotation)
-        preparedTicket = nil
-        return handoffPolicy.consume(ticket.identity, observation: observation) ? ticket : nil
-    }
-
-    private func invalidatePreparedTicket() {
-        preparedTicket = nil
-        handoffPolicy.invalidate()
-    }
-
     private func receive(_ update: CaptureObservation) {
-        guard generation == update.sessionID, isRunning else { return }
-        guard freshnessGate.recordCamera(
-            timestamp: update.timestamp, receivedAt: ProcessInfo.processInfo.systemUptime,
-            trackingStable: update.trackingStable, hasDepth: update.status.hasDepth
-        ) else { return }
+        guard generation == update.sessionID, isRunning,
+              lastCameraTimestamp.map({ update.timestamp > $0 }) ?? true else { return }
+        lastCameraTimestamp = update.timestamp
+        lastCameraReceivedAt = ProcessInfo.processInfo.systemUptime
         frameStatus = update.status
-        if state == .starting, update.status.hasDepth { state = .ready }
-        if !update.trackingStable || !update.status.hasDepth {
-            liveAnalyzer.invalidateReadiness()
-            invalidatePreparedTicket()
-            liveReadiness = .status(update.status.hasDepth ? .unstable : .noDepth, timestamp: update.timestamp)
-        }
+        // An RGB preview frame enables the shutter. Snapshot selection still
+        // validates synchronized depth and camera quality after the tap.
+        if state == .starting { state = .ready }
     }
 
-    private func receiveLiveReadiness(sessionID: UUID, readiness: LiveCaptureReadiness,
-                                      ticket: LiveRecognitionCaptureTicket?) {
-        guard generation == sessionID, isRunning, readiness.imageOrientation == imageOrientation,
-              liveAnalyzer.isCurrent(readiness),
-              let current = session.currentFrame else { return }
-        let trackingStable: Bool
-        if case .normal = current.camera.trackingState { trackingStable = true }
-        else { trackingStable = false }
-        guard freshnessGate.acceptAnalysis(
-            timestamp: readiness.timestamp, currentFrameTimestamp: current.timestamp,
-            trackingStable: trackingStable, hasDepth: current.sceneDepth != nil,
-            now: ProcessInfo.processInfo.systemUptime
-        ) else { return }
+    private func receiveLiveReadiness(sessionID: UUID, readiness: LiveCaptureReadiness) {
+        guard generation == sessionID, isRunning, state != .capturing,
+              readiness.imageOrientation == imageOrientation, liveAnalyzer.isCurrent(readiness),
+              let current = session.currentFrame,
+              let receivedAt = lastCameraReceivedAt,
+              ProcessInfo.processInfo.systemUptime - receivedAt <= 1,
+              readiness.timestamp.isFinite,
+              readiness.timestamp >= liveReadiness.timestamp,
+              current.timestamp - readiness.timestamp >= 0,
+              current.timestamp - readiness.timestamp <= 2 else { return }
+        // Preview masks are advisory visual feedback only. They contain no
+        // garment kind, measurement points, depth checks or capture permission.
         liveReadiness = readiness
-        invalidatePreparedTicket()
-        if let ticket, ticket.frame.sessionID == sessionID,
-           ticket.frame.frameID == ticket.landmarks.frameID,
-           ticket.landmarks.sessionID == sessionID, ticket.frame.timestamp == readiness.timestamp,
-           ticket.landmarks.mask == readiness.silhouette,
-           handoffPolicy.offer(ticket.identity, readiness: readiness) {
-            preparedTicket = ticket
-        }
     }
 
     private func resetReadiness() {
-        invalidatePreparedTicket()
         liveReadiness = .waiting
-        freshnessGate.reset()
+        lastCameraTimestamp = nil
+        lastCameraReceivedAt = nil
     }
 
     private func startFreshnessMonitor(sessionID: UUID) {
@@ -399,24 +279,30 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, PreparedCaptureSna
                 do { try await Task.sleep(for: .milliseconds(300)) }
                 catch { return }
                 guard let self, generation == sessionID, isRunning else { return }
-                let now = ProcessInfo.processInfo.systemUptime
-                if freshnessGate.expireIfNeeded(now: now, currentFrameTimestamp: session.currentFrame?.timestamp) {
+                guard liveReadiness.silhouette != nil else { continue }
+                let cameraStale = lastCameraReceivedAt.map {
+                    ProcessInfo.processInfo.systemUptime - $0 > 1
+                } ?? true
+                let previewStale = session.currentFrame.map {
+                    $0.timestamp - self.liveReadiness.timestamp > 2
+                } ?? true
+                if cameraStale || previewStale {
                     liveAnalyzer.invalidateReadiness()
-                    invalidatePreparedTicket()
                     liveReadiness = .waiting
                 }
             }
         }
     }
+
 }
 
 extension ARKitCaptureProvider: ARSessionDelegate {
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
         let update = worker.consume(frame)
         if let identifier = worker.sessionID {
-            liveAnalyzer.submit(frame: frame, sessionID: identifier) { [weak self] sessionID, readiness, ticket in
+            liveAnalyzer.submit(frame: frame, sessionID: identifier) { [weak self] sessionID, readiness in
                 Task { @MainActor [weak self] in
-                    self?.receiveLiveReadiness(sessionID: sessionID, readiness: readiness, ticket: ticket)
+                    self?.receiveLiveReadiness(sessionID: sessionID, readiness: readiness)
                 }
             }
         }
@@ -466,16 +352,7 @@ extension ARKitCaptureProvider: ARSessionDelegate {
 private nonisolated struct CaptureObservation: Sendable {
     var sessionID: UUID
     var status: CaptureFrameStatus
-    var trackingStable: Bool
     var timestamp: TimeInterval
-}
-
-private nonisolated struct CaptureHandoffCameraStatus: Sendable {
-    var sessionID: UUID
-    var timestamp: TimeInterval
-    var trackingNormal: Bool
-    var translationSpeedMetersPerSecond: Double?
-    var angularSpeedRadiansPerSecond: Double?
 }
 
 /// Everything accessed from both the main actor and ARKit's delegate queue is
@@ -491,19 +368,12 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
     private var selector: CaptureFrameSelector?
     private var selectedCandidate: CopiedCaptureCandidate?
     private var lastObservationTime: TimeInterval = -.infinity
-    private var lastObservationPose: simd_float4x4?
     private var previousFramePose: simd_float4x4?
     private var previousFrameTime: TimeInterval?
-    private var latestHandoffCameraStatus: CaptureHandoffCameraStatus?
 
     var sessionID: UUID? {
         lock.lock(); defer { lock.unlock() }
         return identifier
-    }
-
-    var handoffCameraStatus: CaptureHandoffCameraStatus? {
-        lock.lock(); defer { lock.unlock() }
-        return acceptsFrames ? latestHandoffCameraStatus : nil
     }
 
     func activate(sessionID: UUID) {
@@ -516,10 +386,8 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         identifier = sessionID
         acceptsFrames = true
         lastObservationTime = -.infinity
-        lastObservationPose = nil
         previousFramePose = nil
         previousFrameTime = nil
-        latestHandoffCameraStatus = nil
         lock.unlock()
         previous?.finish(.failure(ARKitCaptureError.stopped))
     }
@@ -533,7 +401,6 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         selectedCandidate = nil
         identifier = nil
         acceptsFrames = false
-        latestHandoffCameraStatus = nil
         lock.unlock()
         previous?.finish(.failure(error))
     }
@@ -547,7 +414,6 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         selector = nil
         selectedCandidate = nil
         acceptsFrames = false
-        latestHandoffCameraStatus = nil
         lock.unlock()
         previous?.finish(.failure(error))
         return currentID
@@ -594,20 +460,8 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         let trackingNormal: Bool
         if case .normal = frame.camera.trackingState { trackingNormal = true }
         else { trackingNormal = false }
-        var trackingStable = false
-        if case .normal = frame.camera.trackingState { trackingStable = true }
         if shouldPublish {
-            let pose = frame.camera.transform
-            if let previous = lastObservationPose, elapsed > 0, elapsed <= 2 {
-                let speed = Double(simd_distance(pose.columns.3, previous.columns.3)) / elapsed
-                let currentRotation = simd_quatf(pose)
-                let previousRotation = simd_quatf(previous)
-                let relativeRotation = currentRotation * previousRotation.inverse
-                let angle = 2 * acos(min(1, abs(Double(relativeRotation.real))))
-                trackingStable = trackingStable && speed < 0.10 && angle / elapsed < 12 * .pi / 180
-            }
             lastObservationTime = frame.timestamp
-            lastObservationPose = pose
         }
         var translationSpeed: Double?
         var angularSpeed: Double?
@@ -623,9 +477,6 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         if previousFrameTime.map({ frame.timestamp > $0 }) ?? true {
             previousFrameTime = frame.timestamp
             previousFramePose = frame.camera.transform
-            latestHandoffCameraStatus = .init(sessionID: identifier, timestamp: frame.timestamp,
-                trackingNormal: trackingNormal, translationSpeedMetersPerSecond: translationSpeed,
-                angularSpeedRadiansPerSecond: angularSpeed)
         }
         let request: SnapshotRequest?
         if let pending, !copying, !pending.isFinished {
@@ -638,7 +489,7 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
             ? CaptureObservation(sessionID: identifier,
                                  status: CaptureFrameStatus(hasDepth: frame.sceneDepth != nil,
                                                             tracking: Self.trackingStatus(for: frame.camera.trackingState)),
-                                 trackingStable: trackingStable, timestamp: frame.timestamp)
+                                 timestamp: frame.timestamp)
             : nil
 
         if let request {
@@ -774,34 +625,6 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
             smoothedFrame = comparison
         }
         return CopiedCaptureCandidate(frame: rawFrame, smoothedFrame: smoothedFrame, image: copiedImage)
-    }
-
-    /// JPEG encoding is deferred until one accepted live frame is consumed.
-    /// No ARFrame, ARKit-owned RGB buffer or newer depth enters this operation.
-    func snapshot(from ticket: LiveRecognitionCaptureTicket) async throws -> CaptureSnapshot {
-        try Task.checkCancellation()
-        return try await withCheckedThrowingContinuation { continuation in
-            queue.async { [self] in
-                let result = Result {
-                    try autoreleasepool {
-                        lock.lock()
-                        let current = acceptsFrames && identifier == ticket.identity.sessionID
-                        lock.unlock()
-                        guard current else { throw ARKitCaptureError.stopped }
-                        guard ticket.frame.sessionID == ticket.landmarks.sessionID,
-                              ticket.frame.frameID == ticket.landmarks.frameID,
-                              ticket.frame.frameID == ticket.identity.frameID,
-                              ticket.frame.source == .sceneDepth,
-                              ticket.image.width == ticket.frame.imageSize.width,
-                              ticket.image.height == ticket.frame.imageSize.height else {
-                            throw ARKitCaptureError.invalidCalibration
-                        }
-                        return CaptureSnapshot(frame: ticket.frame, imageJPEG: try jpeg(ticket.image))
-                    }
-                }
-                continuation.resume(with: result)
-            }
-        }
     }
 
     private func snapshot(_ candidate: CopiedCaptureCandidate,

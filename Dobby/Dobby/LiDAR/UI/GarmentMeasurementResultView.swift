@@ -9,6 +9,7 @@ struct GarmentMeasurementResultView: View {
     let recordingError: String?
     let onRetake: () -> Void
     let onConfirm: () -> Void
+    let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var image: UIImage?
     @State private var selectedDefinition: MeasurementDefinition?
@@ -19,16 +20,21 @@ struct GarmentMeasurementResultView: View {
     @State private var manualReview: ManualMeasurement?
     @State private var isEditingPoint = false
     @State private var calculationRunID: UUID?
+    @State private var pendingRecord: SavedMeasurement?
+    @State private var pendingRecordRevision: UUID?
+    @State private var pendingRecordArchived = false
     private let pipeline = MeasurementPipeline()
 
     init(model: AutomaticMeasurement, archive: MeasurementArchive,
          recordingError: String? = nil, initialImage: UIImage? = nil, onRetake: @escaping () -> Void,
-         onConfirm: @escaping () -> Void) {
+         onConfirm: @escaping () -> Void,
+         onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil) {
         _model = State(initialValue: model)
         self.archive = archive
         self.recordingError = recordingError
         self.onRetake = onRetake
         self.onConfirm = onConfirm
+        self.onConfirmedRecord = onConfirmedRecord
         _image = State(initialValue: initialImage)
     }
 
@@ -142,7 +148,9 @@ struct GarmentMeasurementResultView: View {
             .buttonStyle(.plain).foregroundStyle(.white)
             .background(GarmentCaptureStyle.accent, in: Capsule())
             .disabled(isSaving || isEditingPoint || model.needsRecalculation)
-            .accessibilityHint("사진과 확인한 측정 결과를 저장하고 촬영을 마칩니다")
+            .accessibilityHint(onConfirmedRecord == nil
+                ? "사진과 확인한 측정 결과를 저장하고 촬영을 마칩니다"
+                : "사진과 확인한 측정 결과를 저장하고 제품 상세 촬영으로 이동합니다")
             .accessibilityIdentifier("confirmGarmentMeasurement")
             .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 12)
             .background(GarmentCaptureStyle.background)
@@ -246,7 +254,19 @@ struct GarmentMeasurementResultView: View {
         isSaving = true
         defer { isSaving = false }
         do {
-            _ = try await archive.save(model.makeRecord())
+            if pendingRecord == nil || pendingRecordRevision != model.persistenceRevision {
+                pendingRecord = try model.makeRecord()
+                pendingRecordRevision = model.persistenceRevision
+                pendingRecordArchived = false
+            }
+            guard let record = pendingRecord else { return }
+            if !pendingRecordArchived {
+                _ = try await archive.save(record)
+                pendingRecordArchived = true
+            }
+            // A downstream storage failure retries the same confirmed record;
+            // the already published immutable archive is not saved twice.
+            try await onConfirmedRecord?(record)
             onConfirm()
         } catch { saveError = error.localizedDescription }
     }
@@ -269,7 +289,7 @@ enum GarmentMeasurementText {
     static func value(_ value: MeasurementValue) -> String {
         guard value.status != .unavailable, let meters = value.meters,
               meters.isFinite, meters > 0 else { return "측정 불가" }
-        return String(format: "%.1f cm", meters * 100)
+        return MeasurementDisplayText.centimeters(meters * 100) + " cm"
     }
 
     static func shortTitle(_ definition: MeasurementDefinition) -> String {

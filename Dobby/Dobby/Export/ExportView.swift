@@ -4,6 +4,7 @@ struct ExportView: View {
     let product: ExportProduct
     let controller: CopyActivityController
     @Binding var showFruits: Bool
+    var onEditProduct: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var history = ExportHistoryStore()
@@ -40,7 +41,7 @@ struct ExportView: View {
             .navigationDestination(isPresented: $showDetailCopy) {
                 FruitsDetailCopyView(product: product, onOpened: {
                     openedFruitsMethods.insert(.detailCopyA)
-                })
+                }, onEdit: onEditProduct)
             }
             .disabled(isOpeningLink || controller.busy)
             .alert("페이지를 열 수 없습니다", isPresented: $isShowingOpenError) {

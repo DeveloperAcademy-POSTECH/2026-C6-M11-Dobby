@@ -4,7 +4,7 @@ import UIKit
 struct FruitsDetailCopyView: View {
     let product: ExportProduct
     let onOpened: () -> Void
-    var onEdit: () -> Void = {}
+    var onEdit: (() -> Void)? = nil
     @State private var message = ""
     @State private var feedbackTask: Task<Void, Never>?
     @State private var opening = false
@@ -35,7 +35,7 @@ struct FruitsDetailCopyView: View {
                                     .frame(maxHeight: .infinity)
                                     .background(surface)
                                 Rectangle().fill(surface).frame(width: 1)
-                                Text("\(measurement.value)cm")
+                                Text("\(measurement.displayValue)cm")
                                     .font(.subheadline)
                                     .padding(10)
                                     .frame(maxWidth: .infinity, minHeight: 64)
@@ -75,8 +75,11 @@ struct FruitsDetailCopyView: View {
         .navigationTitle("제품 상세 페이지")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("수정", action: onEdit)
+            if let onEdit {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("수정", action: onEdit)
+                        .accessibilityIdentifier("export.detail.edit")
+                }
             }
         }
         .alert("후루츠패밀리를 열 수 없어요", isPresented: $openFailed) {

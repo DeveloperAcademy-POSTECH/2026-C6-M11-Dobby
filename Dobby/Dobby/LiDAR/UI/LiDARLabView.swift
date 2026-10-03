@@ -57,9 +57,7 @@ private struct LiDARLabContent: View {
         self.usesBundledModel = landmarkProvider == nil
         let provider: (any GarmentLandmarkProviding)? = landmarkProvider ?? bundled
         let definitions = landmarkProvider == nil ? [] : MeasurementDefinition.longSleeve
-        let recognizer: (any GarmentImageRecognizing)? = landmarkProvider == nil
-            ? bundled : landmarkProvider as? any GarmentImageRecognizing
-        let camera = ARKitCaptureProvider(garmentRecognizer: recognizer)
+        let camera = ARKitCaptureProvider()
         _capture = StateObject(wrappedValue: camera)
         let journal = LiDARAppServices.attemptJournal
         _automaticService = State(initialValue: provider.map { provider in
@@ -210,7 +208,7 @@ private struct LiDARLabContent: View {
                                         Text(record.savedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    Text(record.centimeters.map { String(format: "%.1f cm", $0) } ?? "측정 불가").monospacedDigit()
+                                    Text(record.centimeters.map { MeasurementDisplayText.centimeters($0) + " cm" } ?? "측정 불가").monospacedDigit()
                                     Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                                 }.padding(.vertical, 8).contentShape(Rectangle())
                             }.buttonStyle(.plain)

@@ -70,7 +70,13 @@ struct LiDARCameraView: View {
                 Text(progressText).font(.headline).padding(12)
                     .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
             }
-            LiveReadinessStatusView(readiness: provider.liveReadiness)
+            VStack(alignment: .leading, spacing: 8) {
+                Label(provider.liveReadiness.silhouette == nil ? "인식 전에도 촬영할 수 있어요" : "윤곽 미리보기",
+                      systemImage: "viewfinder").font(.headline)
+                Text("사진과 깊이를 함께 확보한 뒤 측정합니다. 윤곽은 촬영을 돕는 미리보기예요.")
+                    .font(.subheadline)
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18))
             if !provider.isRunning, !takingPhoto {
                 Text(captureGuidance).font(.subheadline).padding(12)
                     .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
@@ -85,8 +91,6 @@ struct LiDARCameraView: View {
             return "카메라를 시작하거나 샘플을 불러와 주세요."
         case .requestingPermission:
             return "카메라 권한을 확인하고 있습니다."
-        case .preparingModel:
-            return "옷 인식 모델을 준비하고 있습니다."
         case .unavailable(.unsupportedDevice):
             return ARKitCaptureError.unsupportedDevice.localizedDescription
         case .unavailable(.cameraPermissionDenied):
@@ -193,8 +197,7 @@ struct CameraPreview: UIViewRepresentable {
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
         func updateOutline() {
-            guard readiness.garmentRecognized, let mask = readiness.silhouette,
-                  readiness.state != .unstable, readiness.state != .analyzing,
+            guard let mask = readiness.silhouette,
                   let frame = session.currentFrame,
                   frame.timestamp - readiness.timestamp >= 0,
                   frame.timestamp - readiness.timestamp <= 2,

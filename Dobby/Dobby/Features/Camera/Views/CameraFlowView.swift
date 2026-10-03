@@ -14,7 +14,7 @@ struct CameraFlowView: View {
     let model: ProductPhotoModel
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
-    let onComplete: (ProductPhotoOutput) -> Void
+    let onComplete: (ProductPhotoOutput) async throws -> Void
     var previewSource: CapturedAsset.Source?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
@@ -23,7 +23,7 @@ struct CameraFlowView: View {
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
          previewSource: CapturedAsset.Source? = nil,
-         onComplete: @escaping (ProductPhotoOutput) -> Void) {
+         onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
         self.camera = camera
         _permission = State(initialValue: permission)
@@ -72,6 +72,7 @@ struct CameraFlowView: View {
                     Text("완료").font(.body.weight(.semibold)).foregroundStyle(.white)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.blue)
                 .disabled(captureRequested || model.isCapturing)
                 .accessibilityIdentifier("camera.selectPhotos")
             }

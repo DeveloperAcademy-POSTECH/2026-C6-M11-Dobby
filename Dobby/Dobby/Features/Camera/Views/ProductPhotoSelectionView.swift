@@ -7,12 +7,14 @@
 
 import SwiftUI
 
-/// pretotype용 이미지 선택 화면. 선택 데이터와 결과는 촬영 화면의 같은 MV Model을 사용한다.
+/// 선택 데이터와 결과는 촬영 화면의 같은 MV Model을 사용한다.
 struct ProductPhotoSelectionView: View {
     let model: ProductPhotoModel
-    let onComplete: (ProductPhotoOutput) -> Void
+    let onComplete: (ProductPhotoOutput) async throws -> Void
     @State private var inspectedPhoto: CapturedAsset?
     @State private var didComplete = false
+    @State private var completionRequested = false
+    @State private var failureMessage: String?
 
     var body: some View {
         List {
@@ -20,9 +22,32 @@ struct ProductPhotoSelectionView: View {
                 Text("사용할 사진을 선택해 주세요.").font(.headline)
                 Text("\(model.selectedPhotoIDs.count)장 선택 · 최소 1장")
                     .accessibilityIdentifier("camera.selectedPhotoCount")
-                Text("먼저 선택한 사진이 대표 사진입니다. 선택을 해제해도 원본은 삭제되지 않아요.")
+                Text("먼저 선택한 사진이 대표 사진입니다. 실측 원본은 보관되고, 상세 사진은 선택한 사진만 제품에 저장돼요.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if completionRequested {
+                    ProgressView("선택한 사진 저장 중")
+                        .accessibilityIdentifier("camera.savingPhotos")
+                }
+            }
+            if !model.selectedPhotoIDs.isEmpty {
+                Section("선택 순서 · 첫 사진이 대표 사진") {
+                    ForEach(model.selectedPhotoIDs, id: \.self) { id in
+                        if let photo = model.photos.first(where: { $0.id == id }) {
+                            HStack(spacing: 12) {
+                                CameraPhotoView(source: photo.source, maximumPixelSize: 160)
+                                    .frame(width: 44, height: 56).clipShape(RoundedRectangle(cornerRadius: 6))
+                                    .accessibilityHidden(true)
+                                Text(photo.purpose == .measurement ? "실측 사진" : "상세 사진")
+                                Spacer()
+                                if id == model.selectedPhotoIDs.first {
+                                    Text("대표").font(.caption.weight(.semibold)).foregroundStyle(.tint)
+                                }
+                            }
+                        }
+                    }
+                    .onMove(perform: model.moveSelection)
+                }
             }
             Section("사용할 사진") {
                 ForEach(Array(model.photos.enumerated()), id: \.element.id) { index, photo in
@@ -32,19 +57,43 @@ struct ProductPhotoSelectionView: View {
                 }
             }
         }
-        .disabled(model.isCapturing || didComplete)
+        .disabled(model.isCapturing || completionRequested || didComplete)
         .navigationTitle("제품 사진 선택")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                EditButton()
+                    .disabled(model.selectedPhotoIDs.count < 2 || completionRequested || didComplete)
+                    .accessibilityIdentifier("camera.reorderPhotos")
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("완료") {
-                    guard !didComplete, let output = model.output else { return }
-                    didComplete = true
-                    onComplete(output)
+                    guard !didComplete, !completionRequested, model.output != nil else { return }
+                    completionRequested = true
                 }
-                .disabled(model.output == nil || didComplete)
+                .disabled(model.output == nil || completionRequested || didComplete)
                 .accessibilityIdentifier("camera.completePhotos")
             }
+        }
+        .task(id: completionRequested) {
+            guard completionRequested, let output = model.output else { return }
+            failureMessage = nil
+            do {
+                try await onComplete(output)
+                didComplete = true
+            } catch {
+                if !(error is CancellationError), !Task.isCancelled {
+                    failureMessage = error.localizedDescription
+                }
+            }
+            completionRequested = false
+        }
+        .alert("사진을 저장하지 못했어요", isPresented: Binding(
+            get: { failureMessage != nil }, set: { if !$0 { failureMessage = nil } }
+        )) {
+            Button("확인", role: .cancel) { failureMessage = nil }
+        } message: {
+            Text(failureMessage ?? "사진을 다시 선택하고 완료를 눌러 주세요.")
         }
         .onAppear { didComplete = false }
         .sheet(item: $inspectedPhoto) { photo in
@@ -105,7 +154,7 @@ private struct ProductPhotoChoice: View {
             .accessibilityIdentifier("camera.photo.\(index)")
             .accessibilityValue(order.map { "\($0)번째 선택" } ?? "선택 안 됨")
             .accessibilityAddTraits(order == nil ? [] : .isSelected)
-            .accessibilityHint("선택하거나 선택을 해제합니다. 원본은 삭제되지 않습니다.")
+            .accessibilityHint("선택하거나 선택을 해제합니다. 상세 사진은 선택한 사진만 제품에 저장됩니다.")
             Button(action: inspect) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
             }

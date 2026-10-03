@@ -26,6 +26,8 @@ final class MeasuredValue {
     var autoValueCm: Double?
     /// 사용자가 **숫자를 직접** 고쳤는지. 점을 옮겨 다시 계산된 경우는 여기 해당하지 않는다.
     var isEdited: Bool
+    /// 원본 LiDAR 결과의 valid/uncertain 상태. 값이 없는 항목은 보관 기록에만 남는다.
+    var sourceStatusRaw: String? = nil
 
     var garment: Garment?
 
@@ -62,4 +64,3 @@ final class MeasuredValue {
         garment?.syncFilterFields()
     }
 }
-

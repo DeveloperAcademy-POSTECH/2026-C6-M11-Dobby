@@ -4,7 +4,7 @@ import XCTest
 /// navigation, display and persistence, never camera or model accuracy.
 final class GarmentCaptureFlowTests: XCTestCase {
     @MainActor
-    func testReducedMotionPreviewKeepsRecognitionCaptureAndRetakeUsable() throws {
+    func testReducedMotionPreviewKeepsAdvisoryContourCaptureAndRetakeUsable() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--garment-preview-reduce-motion"]
@@ -17,9 +17,12 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(recognize.waitForExistence(timeout: 10))
         let shutter = app.buttons["captureGarment"]
         XCTAssertTrue(shutter.isEnabled)
+        let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
+        XCTAssertFalse(guidance.label.contains("인식 완료"))
         recognize.tap()
         XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
         XCTAssertTrue(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
+        assertAdvisoryContourGuidance(guidance)
         shutter.tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         app.buttons["retakeGarmentMeasurement"].tap()
@@ -51,7 +54,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
             let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
             XCTAssertTrue(app.staticTexts["garmentPreviewProvenance"].exists)
             XCTAssertFalse(silhouette.exists)
-            XCTAssertTrue(guidance.label.contains("촬영하면 종류와 측정점을 확인"))
+            XCTAssertTrue(guidance.label.contains("촬영"))
             XCTAssertFalse(guidance.label.contains("인식 완료"))
             XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
             shutter.tap()
@@ -81,7 +84,66 @@ final class GarmentCaptureFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testAutomaticTopPreviewUsesDetectedKindAndSixMeasurements() throws {
+    func testSyntheticCaptureFreezesPhotoAndShowsProcessingBeforeMeasurementResult() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--garment-preview-top", "--garment-preview-processing"]
+        launchLiDARLab(app)
+        let preview = app.buttons["openGarmentPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        reveal(preview, in: app)
+        preview.tap()
+
+        let shutter = app.buttons["captureGarment"]
+        XCTAssertTrue(shutter.waitForExistence(timeout: 10))
+        XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+        XCTAssertTrue(app.staticTexts["garmentPreviewProvenance"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["captureGuidance"].firstMatch.label.contains("인식 완료"))
+        // The fixture intentionally holds its processing presentation long
+        // enough to inspect it. It never exercises real model/depth accuracy.
+        shutter.tap()
+        let frozenPhoto = app.descendants(matching: .any)["garmentProcessingPhoto"].firstMatch
+        XCTAssertTrue(frozenPhoto.waitForExistence(timeout: 5),
+                      "Capture must keep the frozen photo visible while finding points and measuring")
+        let progress = app.descendants(matching: .any)["garmentMeasurementProgress"].firstMatch
+        XCTAssertTrue(progress.exists)
+        let capturedProgress = NSPredicate { _, _ in
+            guard let value = progress.value as? String else { return false }
+            return value.contains("사진 완료") && value.contains("측정점") && value.contains("길이")
+        }
+        expectation(for: capturedProgress, evaluatedWith: progress)
+        waitForExpectations(timeout: 5)
+        let stage = progress.value as? String ?? ""
+        XCTAssertTrue(stage.contains("사진 완료"))
+        XCTAssertTrue(stage.contains("측정점") && stage.contains("길이"),
+                      "Progress must explain the remaining work instead of asking for live recognition")
+        XCTAssertTrue(shutter.exists)
+        XCTAssertFalse(shutter.isEnabled, "A frozen capture must not accept a second shutter request")
+        XCTAssertFalse(app.buttons["confirmGarmentMeasurement"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists,
+                       "An advisory live contour must not overlay a different captured photo")
+        attachScreenshot(app, name: "garment-top-frozen-photo-and-measurement-progress")
+
+        let confirm = app.buttons["confirmGarmentMeasurement"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "garmentMeasurementLabel_top.")).count, 6)
+        XCTAssertFalse(frozenPhoto.exists)
+        XCTAssertFalse(progress.exists)
+        attachScreenshot(app, name: "garment-top-result-after-frozen-photo-processing")
+
+        app.buttons["retakeGarmentMeasurement"].tap()
+        XCTAssertTrue(shutter.waitForExistence(timeout: 5))
+        XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+        XCTAssertFalse(frozenPhoto.exists)
+        XCTAssertFalse(progress.exists)
+        XCTAssertFalse(confirm.exists)
+    }
+
+    @MainActor
+    func testSyntheticTopPreviewKeepsContourAdvisoryAndShowsSixCapturedMeasurements() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--garment-preview-top"]
@@ -104,8 +166,9 @@ final class GarmentCaptureFlowTests: XCTestCase {
         preview.tap()
         let recognize = app.buttons["previewRecognizeGarment"]
         XCTAssertTrue(recognize.waitForExistence(timeout: 10))
+        let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
         recognize.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["captureGuidance"].firstMatch.label.hasPrefix("상의 인식 완료"))
+        assertAdvisoryContourGuidance(guidance)
         XCTAssertTrue(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
         attachScreenshot(app, name: "garment-top-preview-recognized-outline")
         app.buttons["captureGarment"].tap()
@@ -275,7 +338,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testPreviewRecognitionResultRetakeAndConfirmedSave() throws {
+    func testAdvisoryContourPreviewResultRetakeAndConfirmedSave() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         launchLiDARLab(app)
@@ -286,11 +349,12 @@ final class GarmentCaptureFlowTests: XCTestCase {
         preview.tap()
         let recognize = app.buttons["previewRecognizeGarment"]
         XCTAssertTrue(recognize.waitForExistence(timeout: 10))
+        let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
         attachScreenshot(app, name: "garment-preview-camera")
         recognize.tap()
         let silhouette = app.descendants(matching: .any)["garmentSilhouette"].firstMatch
         XCTAssertTrue(silhouette.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["captureGuidance"].firstMatch.label.hasPrefix("하의 인식 완료"))
+        assertAdvisoryContourGuidance(guidance)
         attachScreenshot(app, name: "garment-preview-recognized-outline")
 
         let shutter = app.buttons["captureGarment"]
@@ -587,6 +651,14 @@ final class GarmentCaptureFlowTests: XCTestCase {
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
+    }
+
+    @MainActor
+    private func assertAdvisoryContourGuidance(_ guidance: XCUIElement) {
+        XCTAssertTrue(guidance.label.contains("윤곽 미리보기"))
+        XCTAssertTrue(guidance.label.contains("촬영 후"))
+        XCTAssertFalse(guidance.label.contains("인식 완료"),
+                       "An advisory contour must not claim that the captured garment was classified or measured")
     }
 
     @MainActor
