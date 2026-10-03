@@ -105,7 +105,7 @@ final class ProductCreationFlowTests: XCTestCase {
         reveal(fruitsDetails, in: app)
         fruitsDetails.tap()
         XCTAssertTrue(app.navigationBars["제품 상세 페이지"].waitForExistence(timeout: 10))
-        let actualShoulder = app.staticTexts["67.25cm"].firstMatch
+        let actualShoulder = app.staticTexts["67cm"].firstMatch
         reveal(actualShoulder, in: app)
         XCTAssertTrue(actualShoulder.exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "어깨", "복사")).firstMatch.exists,
@@ -129,8 +129,8 @@ final class ProductCreationFlowTests: XCTestCase {
         fruitsDetails.tap()
         XCTAssertTrue(app.navigationBars["제품 상세 페이지"].waitForExistence(timeout: 10))
         reveal(actualShoulder, in: app)
-        XCTAssertTrue(actualShoulder.exists, "An unchanged edit must preserve the exact export value")
-        attachScreenshot(app, name: "flow-top-export-after-unchanged-edit-67.25")
+        XCTAssertTrue(actualShoulder.exists, "An unchanged edit must preserve the integer export display")
+        attachScreenshot(app, name: "flow-top-export-after-unchanged-edit-67-display")
         tapBack(in: app)
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 5))
         app.buttons["export.close"].tap()
@@ -154,25 +154,25 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
         app.buttons["product-complete.library"].tap()
         openLibraryProduct(named: name, app: app)
-        assertSavedValue(key: "shoulderWidth", contains: "67.25", app: app)
+        assertSavedValue(key: "shoulderWidth", contains: "67 cm", app: app)
         app.terminate()
         app.launch()
         app.tabBars.buttons["보관함"].tap()
         openLibraryProduct(named: name, app: app)
-        assertSavedValue(key: "shoulderWidth", contains: "67.25", app: app)
+        assertSavedValue(key: "shoulderWidth", contains: "67 cm", app: app)
         XCTAssertTrue(app.staticTexts[brand].exists || app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", brand)).firstMatch.exists)
         XCTAssertTrue(app.staticTexts[description].exists)
         attachScreenshot(app, name: "flow-top-library-relaunch-corrected-value")
 
         app.buttons["library.edit"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
-        focusExistingShoulder(in: app)
+        focusExistingShoulder(in: app, expectedText: "67")
         app.buttons["product-info.done"].tap()
         XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
         app.buttons["product-complete.library"].tap()
         openLibraryProduct(named: name, app: app)
-        assertSavedValue(key: "shoulderWidth", contains: "67.25", app: app)
-        attachScreenshot(app, name: "flow-top-library-after-unchanged-edit-67.25")
+        assertSavedValue(key: "shoulderWidth", contains: "67 cm", app: app)
+        attachScreenshot(app, name: "flow-top-library-after-unchanged-edit-67-display")
 
         // A saved product keeps pending edits when returning to its detail
         // page, and commits them only after completing Info again.
@@ -181,7 +181,7 @@ final class ProductCreationFlowTests: XCTestCase {
         replaceText(in: shoulder, with: "72.19", app: app)
         tapBack(in: app)
         XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
-        assertSavedValue(key: "shoulderWidth", contains: "67.25", app: app)
+        assertSavedValue(key: "shoulderWidth", contains: "67 cm", app: app)
         app.buttons["library.edit"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
         reveal(shoulder, in: app)
@@ -191,8 +191,8 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
         app.buttons["product-complete.library"].tap()
         openLibraryProduct(named: name, app: app)
-        assertSavedValue(key: "shoulderWidth", contains: "72.19", app: app)
-        attachScreenshot(app, name: "flow-top-library-saved-restored-draft-72.19")
+        assertSavedValue(key: "shoulderWidth", contains: "72 cm", app: app)
+        attachScreenshot(app, name: "flow-top-library-saved-restored-draft-72-display")
     }
 
     @MainActor
@@ -321,21 +321,21 @@ final class ProductCreationFlowTests: XCTestCase {
         reveal(row, in: app)
         XCTAssertTrue(row.exists)
         let children = row.descendants(matching: .staticText).allElementsBoundByIndex.map(\.label)
-        XCTAssertTrue(([row.label] + children).contains { $0.contains(value) }, "Stored \(key) must retain \(value), found \(row.label) \(children)")
+        XCTAssertTrue(([row.label] + children).contains { $0.contains(value) }, "Displayed \(key) must show \(value), found \(row.label) \(children)")
     }
 
     @MainActor
-    private func focusExistingShoulder(in app: XCUIApplication) {
+    private func focusExistingShoulder(in app: XCUIApplication, expectedText: String = "67.25") {
         let shoulder = app.textFields["product-info.measurement.shoulderWidth"]
         reveal(shoulder, in: app)
         if !shoulder.isHittable {
             attachDiagnostic(app, element: shoulder, name: "flow-shoulder-not-hittable")
         }
         XCTAssertTrue(shoulder.isHittable)
-        XCTAssertEqual(shoulder.value as? String, "67.25")
+        XCTAssertEqual(shoulder.value as? String, expectedText)
         shoulder.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertEqual(shoulder.value as? String, "67.25")
+        XCTAssertEqual(shoulder.value as? String, expectedText)
         assertFocusedMeasurementVisible(shoulder, in: app)
     }
 

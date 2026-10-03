@@ -25,6 +25,7 @@ struct ExportMeasurement: Identifiable {
     let title: String
     /// 단위 없이 입력란에 붙여넣을 숫자 문자열.
     let value: String
+    var displayValue: String { MeasurementDisplayText.centimeters(value) }
 
     init(id: String, title: String, value: String) {
         self.id = id

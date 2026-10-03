@@ -289,7 +289,7 @@ enum GarmentMeasurementText {
     static func value(_ value: MeasurementValue) -> String {
         guard value.status != .unavailable, let meters = value.meters,
               meters.isFinite, meters > 0 else { return "측정 불가" }
-        return String(format: "%.1f cm", meters * 100)
+        return MeasurementDisplayText.centimeters(meters * 100) + " cm"
     }
 
     static func shortTitle(_ definition: MeasurementDefinition) -> String {

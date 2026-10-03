@@ -28,11 +28,11 @@ final class LiDARFlowTests: XCTestCase {
         demo.tap()
         let first = app.staticTexts["automaticValue_test"]
         XCTAssertTrue(first.waitForExistence(timeout: 10))
-        XCTAssertEqual(first.label, "50.00 cm")
+        XCTAssertEqual(first.label, "50 cm")
         XCTAssertTrue(app.staticTexts["automaticProvenance"].label.contains("합성"))
         let half = app.staticTexts["automaticValue_half"]
         reveal(half, in: app)
-        XCTAssertEqual(half.label, "25.00 cm")
+        XCTAssertEqual(half.label, "25 cm")
         let missing = app.staticTexts["automaticValue_missing"]
         reveal(missing, in: app)
         XCTAssertEqual(missing.label, "측정 불가")
@@ -54,7 +54,7 @@ final class LiDARFlowTests: XCTestCase {
         reveal(record, in: app)
         record.tap()
         XCTAssertTrue(first.waitForExistence(timeout: 10))
-        XCTAssertEqual(first.label, "50.00 cm")
+        XCTAssertEqual(first.label, "50 cm")
         reveal(reference, in: app)
         XCTAssertEqual(reference.value as? String, "50.00")
         reveal(missing, in: app)
@@ -173,7 +173,7 @@ final class LiDARFlowTests: XCTestCase {
         demo.tap()
         let value = app.staticTexts["measurementValue"]
         XCTAssertTrue(value.waitForExistence(timeout: 10))
-        XCTAssertEqual(value.label, "50.00")
+        XCTAssertEqual(value.label, "50")
         let image = XCTAttachment(screenshot: app.screenshot())
         image.name = "50cm-demo-result"
         image.lifetime = .keepAlways
@@ -188,7 +188,7 @@ final class LiDARFlowTests: XCTestCase {
         reveal(record, in: app)
         record.tap()
         XCTAssertTrue(value.waitForExistence(timeout: 10))
-        XCTAssertEqual(value.label, "50.00")
+        XCTAssertEqual(value.label, "50")
         XCTAssertEqual(app.textFields["referenceCentimeters"].value as? String, "50.00")
     }
 

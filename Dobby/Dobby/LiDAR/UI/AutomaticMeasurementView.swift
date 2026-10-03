@@ -49,7 +49,7 @@ struct AutomaticMeasurementResultView: View {
                             HStack {
                                 Text(value.title).font(.headline)
                                 Spacer()
-                                Text(value.meters.map { String(format: "%.2f cm", $0 * 100) } ?? "측정 불가")
+                                Text(value.meters.map { MeasurementDisplayText.centimeters($0 * 100) + " cm" } ?? "측정 불가")
                                     .font(.title3.monospacedDigit()).accessibilityIdentifier("automaticValue_\(value.id)")
                             }
                             Text(value.status.label).foregroundStyle(value.status == .valid ? .teal : .orange)

@@ -269,8 +269,7 @@ enum GarmentMeasurementInputText {
 
     static func format(_ cm: Double) -> String {
         guard cm.isFinite else { return "" }
-        return cm.formatted(.number.locale(Locale(identifier: "en_US_POSIX"))
-            .grouping(.never).precision(.fractionLength(0...2)))
+        return MeasurementDisplayText.centimeters(cm)
     }
 }
 

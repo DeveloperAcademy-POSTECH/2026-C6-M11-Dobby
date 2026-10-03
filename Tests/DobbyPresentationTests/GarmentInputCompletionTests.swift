@@ -40,7 +40,7 @@ struct GarmentInputCompletionTests {
             var input = GarmentMeasurementInputState()
             input.setText(fixture.text, for: length)
             try GarmentInputCompletion.save(garment: garment, drafts: &input.drafts) {}
-            #expect(input.drafts.isEmpty && GarmentMeasurementInputText.format(length.valueCm) == "67.25")
+            #expect(input.drafts.isEmpty && GarmentMeasurementInputText.format(length.valueCm) == "67")
             #expect(input.text(for: length) == fixture.text)
             for _ in 0..<3 {
                 // TextField can write its displayed value again while keyboard
@@ -61,7 +61,7 @@ struct GarmentInputCompletionTests {
         length.autoValueCm = 61.2491
         var input = GarmentMeasurementInputState()
         let rounded = input.text(for: length)
-        #expect(rounded == "61.25")
+        #expect(rounded == "61")
         input.setText(rounded, for: length)
         #expect(input.drafts.isEmpty)
         try GarmentInputCompletion.save(garment: garment, drafts: &input.drafts) {}
@@ -71,7 +71,7 @@ struct GarmentInputCompletionTests {
         input.setText(rounded, for: length)
         #expect(input.drafts[length.id] == rounded)
         try GarmentInputCompletion.save(garment: garment, drafts: &input.drafts) {}
-        #expect(length.valueCm == 61.25 && length.isEdited && length.autoValueCm == 61.2491)
+        #expect(length.valueCm == 61 && length.isEdited && length.autoValueCm == 61.2491)
         #expect(input.text(for: length) == rounded && input.drafts.isEmpty)
     }
 

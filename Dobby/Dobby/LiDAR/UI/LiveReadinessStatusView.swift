@@ -1,9 +1,9 @@
 import SwiftUI
 
 extension LiveCaptureReadiness {
-    static var waiting: Self { .status(.analyzing) }
+    nonisolated static var waiting: Self { .status(.analyzing) }
 
-    static func status(_ state: LiveReadinessState, timestamp: TimeInterval = 0) -> Self {
+    nonisolated static func status(_ state: LiveReadinessState, timestamp: TimeInterval = 0) -> Self {
         .init(state: state, timestamp: timestamp, bounds: nil, depthCoverage: nil,
               highConfidenceCoverage: nil, boundaryCoverage: nil, medianDepthMeters: nil)
     }

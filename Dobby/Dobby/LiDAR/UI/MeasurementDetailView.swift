@@ -233,7 +233,7 @@ struct MeasurementDetailView: View {
                 ProgressView("측정 중…")
             } else if let value = model.result?.values.first {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(value.meters.map { String(format: "%.2f", $0 * 100) } ?? "—")
+                    Text(value.meters.map { MeasurementDisplayText.centimeters($0 * 100) } ?? "—")
                         .font(.system(size: 48, weight: .semibold, design: .rounded)).monospacedDigit()
                         .accessibilityIdentifier("measurementValue")
                     Text("cm").font(.title2).foregroundStyle(.secondary)

@@ -211,7 +211,7 @@ struct ProductSavedDetailView: View {
                 if !garment.brand.isEmpty { LabeledContent("브랜드", value: garment.brand) }
                 Text("실측 사이즈").font(.headline)
                 ForEach(garment.orderedMeasurements) { value in
-                    LabeledContent(value.label, value: value.valueCm.formatted(.number.precision(.fractionLength(0...2))) + " cm")
+                    LabeledContent(value.label, value: MeasurementDisplayText.centimeters(value.valueCm) + " cm")
                         .accessibilityIdentifier("library.measurement.\(value.key)")
                 }
                 Button("내보내기") { openExport() }

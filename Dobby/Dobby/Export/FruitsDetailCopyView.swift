@@ -35,7 +35,7 @@ struct FruitsDetailCopyView: View {
                                     .frame(maxHeight: .infinity)
                                     .background(surface)
                                 Rectangle().fill(surface).frame(width: 1)
-                                Text("\(measurement.value)cm")
+                                Text("\(measurement.displayValue)cm")
                                     .font(.subheadline)
                                     .padding(10)
                                     .frame(maxWidth: .infinity, minHeight: 64)
