@@ -8,6 +8,7 @@ struct ExportProduct: Identifiable {
     let instagram: ProductCopyPayload
     var detailMeasurements: [ExportMeasurement]? = nil
     var photoData: [Data] = []
+    var garmentCategory: String? = nil
     var displayPhotos: [Data] { photoData.isEmpty ? imageData.map { [$0] } ?? [] : photoData }
     var name: String { fruits.productName }
 

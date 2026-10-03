@@ -46,7 +46,8 @@ extension ExportProduct {
             fruits: payload,
             instagram: payload,
             detailMeasurements: measurements,
-            photoData: photos.map(\.data)
+            photoData: photos.map(\.data),
+            garmentCategory: garment.category.isEmpty ? nil : garment.category
         )
     }
 }
