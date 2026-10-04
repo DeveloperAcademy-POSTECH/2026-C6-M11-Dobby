@@ -1,0 +1,23 @@
+name = "dobby-instagram"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Replace with the existing Instagram Worker's HTTPS origin before deploying.
+PUBLIC_BASE_URL = "https://YOUR-INSTAGRAM-WORKER.YOUR-SUBDOMAIN.workers.dev"
+INSTAGRAM_API_VERSION = "v25.0"
+
+[[kv_namespaces]]
+binding = "INSTAGRAM_MEDIA"
+id = "REPLACE_WITH_EXISTING_MEDIA_KV_NAMESPACE_ID"
+
+[[durable_objects.bindings]]
+name = "INSTAGRAM_CONNECTIONS"
+class_name = "InstagramConnection"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["InstagramConnection"]
+
+# Set through Cloudflare Secrets, never here:
+# DOBBY_APP_API_KEY, INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET
