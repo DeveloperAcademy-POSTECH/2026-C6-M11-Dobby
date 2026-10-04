@@ -21,6 +21,13 @@ final class ProductPhotoModel {
 
     var photos: [CapturedAsset] { [input.measurement] + detailPhotos }
 
+    /// 하단 표시 전용. 상단 캐러셀이 사용하는 촬영 순서는 바꾸지 않는다.
+    var selectionOrderedPhotos: [CapturedAsset] {
+        let selected = Set(selectedPhotoIDs)
+        let assets = Dictionary(uniqueKeysWithValues: photos.map { ($0.id, $0) })
+        return selectedPhotoIDs.compactMap { assets[$0] } + photos.filter { !selected.contains($0.id) }
+    }
+
     // 최소 한 장, 선택 순서 유지, 첫 선택이 대표 사진이다.
     var output: ProductPhotoOutput? {
         guard !isCapturing, let representativeID = selectedPhotoIDs.first else { return nil }
