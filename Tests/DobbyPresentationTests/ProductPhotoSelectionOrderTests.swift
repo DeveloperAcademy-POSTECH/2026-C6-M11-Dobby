@@ -25,6 +25,8 @@ struct ProductPhotoSelectionOrderTests {
         #expect(model.selectedPhotoIDs == [ids[2], ids[6]])
         model.moveSelection(fromOffsets: IndexSet(integer: 1), toOffset: 0)
         #expect(model.selectionOrderedPhotos.prefix(2).map(\.id) == [ids[6], ids[2]])
+        #expect(model.output?.representativePhotoID == ids[6])
+        #expect(model.output?.selectedPhotos.map(\.id) == [ids[6], ids[2]])
         model.toggleSelection(ids[6])
         model.toggleSelection(ids[2])
         #expect(model.output == nil)
