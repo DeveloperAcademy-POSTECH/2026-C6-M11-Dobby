@@ -25,6 +25,11 @@ struct ProductPhotoSelectionView: View {
                     .listRowBackground(Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255))
             }
             Section {
+                ProductPhotoSelectionStrip(model: model)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+            Section {
                 Text("사용할 사진을 선택해 주세요.").font(.headline)
                 Text("\(model.selectedPhotoIDs.count)장 선택 · 최소 1장")
                     .accessibilityIdentifier("camera.selectedPhotoCount")
