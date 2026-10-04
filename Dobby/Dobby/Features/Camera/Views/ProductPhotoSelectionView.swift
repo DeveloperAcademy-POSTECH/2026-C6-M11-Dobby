@@ -19,6 +19,12 @@ struct ProductPhotoSelectionView: View {
     var body: some View {
         List {
             Section {
+                ProductPhotoCarousel(photos: model.photos,
+                                     representativePhotoID: model.selectedPhotoIDs.first)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255))
+            }
+            Section {
                 Text("사용할 사진을 선택해 주세요.").font(.headline)
                 Text("\(model.selectedPhotoIDs.count)장 선택 · 최소 1장")
                     .accessibilityIdentifier("camera.selectedPhotoCount")
