@@ -1,6 +1,13 @@
 name = "dobby-instagram"
 main = "src/index.js"
-compatibility_date = "2026-10-01"
+compatibility_date = "2026-10-04"
+preview_urls = false
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
 
 [vars]
 # Replace with the existing Instagram Worker's HTTPS origin before deploying.

@@ -64,6 +64,13 @@ function failureResponse(error) {
   console.error(JSON.stringify({ event: "request_failed", type: error instanceof Failure ? "handled" : "unexpected", status: error.status || 500 }));
   return json({ message: error instanceof Failure ? error.message : "서버 처리 중 오류가 발생했습니다.", code: error.code }, error.status || 500);
 }
+function connectionRequest(request, url, headers = request.headers) {
+  const internalHeaders = new Headers(headers);
+  internalHeaders.set("X-Dobby-Internal-Path", url.pathname);
+  internalHeaders.set("X-Dobby-Internal-Search", url.search);
+  const internal = new Request("https://instagram-connection.internal/", request);
+  return new Request(internal, { headers: internalHeaders });
+}
 
 export default {
   async fetch(request, env) {
@@ -77,7 +84,8 @@ export default {
       if (url.pathname === "/oauth/callback" && request.method === "GET") {
         const state = url.searchParams.get("state") || "";
         if (!/^[a-f0-9]{64}\.[a-f0-9]{64}$/.test(state)) return json({ message: "유효하지 않은 로그인 요청입니다." }, 400);
-        return env.INSTAGRAM_CONNECTIONS.get(env.INSTAGRAM_CONNECTIONS.idFromName(state.split(".")[0])).fetch(request);
+        return env.INSTAGRAM_CONNECTIONS.get(env.INSTAGRAM_CONNECTIONS.idFromName(state.split(".")[0]))
+          .fetch(connectionRequest(request, url));
       }
       if (!env.DOBBY_APP_API_KEY) throw new Failure("서버 앱 접근 키 설정이 필요합니다.", 503);
       if (await hash(request.headers.get("X-Dobby-App-Key") || "") !== await hash(env.DOBBY_APP_API_KEY)) return json({ message: "앱 접근 키를 확인해 주세요." }, 401);
@@ -87,7 +95,8 @@ export default {
       const owner = await hash(bearer.slice(7));
       const headers = new Headers(request.headers);
       headers.set("X-Connection-Owner", owner);
-      return env.INSTAGRAM_CONNECTIONS.get(env.INSTAGRAM_CONNECTIONS.idFromName(owner)).fetch(new Request(request, { headers }));
+      return env.INSTAGRAM_CONNECTIONS.get(env.INSTAGRAM_CONNECTIONS.idFromName(owner))
+        .fetch(connectionRequest(request, url, headers));
     } catch (error) { return failureResponse(error); }
   }
 };
@@ -105,7 +114,9 @@ export class InstagramConnection {
   }
   async route(request) {
     const url = new URL(request.url), storage = this.ctx.storage, env = this.env;
-    if (url.pathname === "/oauth/start") {
+    const path = request.headers.get("X-Dobby-Internal-Path") || url.pathname;
+    const params = new URLSearchParams(request.headers.get("X-Dobby-Internal-Search") || url.search);
+    if (path === "/oauth/start") {
       if (!env.INSTAGRAM_APP_ID || !env.INSTAGRAM_APP_SECRET) throw new Failure("Instagram 로그인 서버 설정이 필요합니다.", 503);
       const attempt = randomToken();
       const state = `${request.headers.get("X-Connection-Owner")}.${randomToken()}`;
@@ -114,12 +125,12 @@ export class InstagramConnection {
       auth.search = new URLSearchParams({ client_id: env.INSTAGRAM_APP_ID, redirect_uri: `${origin(env)}/oauth/callback`, response_type: "code", scope: SCOPES.join(","), state, enable_fb_login: "0", force_authentication: "1" }).toString();
       return json({ authorizationURL: auth.href, attempt });
     }
-    if (url.pathname === "/oauth/callback") {
+    if (path === "/oauth/callback") {
       const pending = await storage.get("pending");
-      if (!pending || pending.state !== url.searchParams.get("state") || pending.expires < Date.now()) return json({ message: "로그인 요청이 만료되었거나 이미 사용되었습니다. 앱에서 다시 연결해 주세요." }, 400);
+      if (!pending || pending.state !== params.get("state") || pending.expires < Date.now()) return json({ message: "로그인 요청이 만료되었거나 이미 사용되었습니다. 앱에서 다시 연결해 주세요." }, 400);
       await storage.delete("pending"); // Consume once, including denial/failure.
-      if (url.searchParams.has("error")) return redirect("denied", pending.attempt);
-      const code = url.searchParams.get("code");
+      if (params.has("error")) return redirect("denied", pending.attempt);
+      const code = params.get("code");
       if (!code) return redirect("failed", pending.attempt);
       try {
         const short = await upstream("https://api.instagram.com/oauth/access_token", { method: "POST", body: new URLSearchParams({ client_id: env.INSTAGRAM_APP_ID, client_secret: env.INSTAGRAM_APP_SECRET, grant_type: "authorization_code", redirect_uri: `${origin(env)}/oauth/callback`, code }) });
@@ -138,14 +149,14 @@ export class InstagramConnection {
         return redirect("failed", pending.attempt);
       }
     }
-    if (url.pathname === "/disconnect") {
+    if (path === "/disconnect") {
       await storage.deleteAll();
       return json({ disconnected: true });
     }
     let connection = await storage.get("connection");
     if (!connection || connection.expires <= Date.now()) {
       if (connection) await storage.delete("connection");
-      if (url.pathname === "/account") return json({ connected: false, account: null, connectionMode: "oauth" });
+      if (path === "/account") return json({ connected: false, account: null, connectionMode: "oauth" });
       throw new Failure("Instagram 계정을 먼저 연결해 주세요.", 401);
     }
     // Refresh on use, only after the token is at least 24 hours old.
@@ -157,8 +168,8 @@ export class InstagramConnection {
       connection = { ...connection, token: token.access_token, expires: Date.now() + token.expires_in * 1000, refreshed: Date.now() };
       await storage.put("connection", connection);
     }
-    if (url.pathname === "/account") return json({ connected: true, account: connection.account, connectionMode: "oauth" });
-    if (url.pathname === "/publish") {
+    if (path === "/account") return json({ connected: true, account: connection.account, connectionMode: "oauth" });
+    if (path === "/publish") {
       const body = await readBody(request);
       if (body.accountID !== connection.account.id) throw new Failure("연결된 계정이 변경되었습니다. 다시 확인해 주세요.", 409);
       if (typeof body.caption !== "string" || !body.caption.trim() || body.caption.length > 2200) throw new Failure("게시물 내용은 1~2,200자로 입력해 주세요.");
