@@ -10,6 +10,10 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 
+DEFAULT_REVIEWERS = ("moogoochung", "tobae-time", "hana5111", "decl5th")
+MERGE_TARGET = "main"
+
+
 class SafeError(Exception):
     pass
 
@@ -72,17 +76,33 @@ def webhook_url(raw):
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
 
 
-def payload(content, title, url, description, color, user_id=None):
+def reviewers_for(author, users):
+    configured = os.environ.get("REVIEWER_LOGINS", "").strip()
+    logins = configured.split(",") if configured else DEFAULT_REVIEWERS
+    # GitHub login matching is case-insensitive. Never ping the author's Discord ID.
+    logins = dict.fromkeys(login.strip().lower() for login in logins if login.strip())
+    selected = [login for login in logins if login != author.lower()]
+    if any(login not in users for login in selected):
+        raise SafeError("리뷰어의 DISCORD_USER_MAP 항목이 누락되어 리뷰 요청 알림을 보류합니다.")
+    return list(dict.fromkeys(users[login] for login in selected
+                              if users[login] != users.get(author.lower())))
+
+
+def payload(content, title, url, description, user_ids=()):
+    # Mentions must be in message content to notify reviewers; embeds alone do not ping.
+    message = f"{content}\n**[{clean(title)}]({url})**\n{description}"
+    if len(message) > 2000:
+        raise SafeError("Discord 알림이 메시지 길이 제한을 초과했습니다.")
     return {
-        "content": content,
-        "allowed_mentions": {"parse": [], "users": [user_id] if user_id else []},
-        "embeds": [{"title": clean(title), "url": url,
-                    "description": description, "color": color}],
+        "content": message,
+        "allowed_mentions": {"parse": [], "users": list(dict.fromkeys(user_ids))},
+        "flags": 4,  # Keep the requested compact layout without automatic link previews.
     }
 
 
 def is_ready(pr):
     return (pr["state"] == "OPEN" and not pr["isDraft"]
+            and pr["baseRefName"] == MERGE_TARGET
             and pr["mergeable"] == "MERGEABLE"
             and pr["mergeStateStatus"] == "CLEAN"
             and pr.get("reviewDecision") in (None, "APPROVED")
@@ -149,7 +169,7 @@ class Notifier:
                 return
             self.send_once(item["number"], "issue-opened", "issue", payload(
                 "📝 새 이슈가 등록됐어요.", f'#{item["number"]} {item["title"]}',
-                item["html_url"], f'작성자: {clean(item["user"]["login"])}', 0x3498DB))
+                item["html_url"], f'작성자: {clean(item["user"]["login"])}'))
             return
         if event_name != "pull_request_target":
             return
@@ -158,20 +178,25 @@ class Notifier:
         if not self.allowed(item["base"]["ref"]):
             return
         if action == "closed" and item.get("merged"):
+            if item["base"]["ref"] != MERGE_TARGET:
+                return
             author = clean(item["user"]["login"])
-            merger = clean((item.get("merged_by") or {}).get("login", "확인 불가"))
             self.send_once(item["number"], "pr-merged", "pr", payload(
                 "🎉 PR이 머지됐어요.", f'#{item["number"]} {item["title"]}', item["html_url"],
-                f'작성자: {author}\n머지한 사람: {merger}\n대상: {clean(item["base"]["ref"])}', 0x9B59B6))
+                f'작성자: {author}\n대상: {MERGE_TARGET}'))
         elif action in ("opened", "ready_for_review") and not item.get("draft"):
             current = self.github(f'/pulls/{item["number"]}')
             if current["draft"] or current["state"] != "open" or not self.allowed(current["base"]["ref"]):
                 return
+            users = member_map(os.environ.get("DISCORD_USER_MAP", ""))
+            reviewer_ids = reviewers_for(current["user"]["login"], users)
+            reviewer_line = " ".join(f"<@{user_id}>" for user_id in reviewer_ids) or "없음"
             # Shared key: drafting/reopening repeatedly won't repeat the introduction.
             self.send_once(item["number"], "pr-announced", "pr", payload(
-                "👀 리뷰할 PR이 올라왔어요.", f'#{current["number"]} {current["title"]}',
+                "🚨 리뷰할 PR이 올라왔어요.", f'#{current["number"]} {current["title"]}',
                 current["html_url"], f'작성자: {clean(current["user"]["login"])}\n'
-                f'{clean(current["head"]["ref"])} → {clean(current["base"]["ref"])}', 0xF1C40F))
+                f'{clean(current["head"]["ref"], 120)} → {clean(current["base"]["ref"], 120)}\n'
+                f'리뷰어: {reviewer_line}', reviewer_ids))
 
     def snapshot(self, number):
         query = """query($owner:String!, $name:String!, $number:Int!) {
@@ -193,7 +218,8 @@ class Notifier:
         failed = False
         queues = {}
         for listed in self.pages("/pulls?state=open"):
-            if listed["draft"] or not self.allowed(listed["base"]["ref"]):
+            if (listed["draft"] or listed["base"]["ref"] != MERGE_TARGET
+                    or not self.allowed(listed["base"]["ref"])):
                 continue
             number = listed["number"]
             try:
@@ -227,8 +253,7 @@ class Notifier:
                 self.send_once(number, key, "pr", payload(
                     f"✅ <@{user_id}> GitHub에서 머지 준비 상태가 확인됐어요. PR을 확인하고 직접 머지해 주세요.",
                     f'#{number} {pr["title"]}', pr["url"],
-                    f'작성자: {clean(login)}\n대상: {clean(branch)}\n'
-                    '확인 시점 기준 GitHub 상태: CLEAN\n최종 상태는 PR 화면에서 확인해 주세요.', 0x2ECC71, user_id))
+                    f'작성자: <@{user_id}>\n대상: {clean(branch)}', [user_id]))
             except SafeError as error:
                 # Error strings here are controlled and never contain secrets.
                 print(f"::error::PR #{number}: {error}")

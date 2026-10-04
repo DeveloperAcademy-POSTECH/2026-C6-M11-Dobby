@@ -10,9 +10,13 @@ import discord_notify as d
 
 class NotificationTests(unittest.TestCase):
     def setUp(self):
+        # Synthetic Discord IDs; no real member IDs belong in the repository.
+        self.users = {"alice": "123456789012345678", "moogoochung": "111111111111111111",
+                      "tobae-time": "222222222222222222", "hana5111": "333333333333333333",
+                      "decl5th": "444444444444444444"}
         self.env = patch.dict(os.environ, {
             "GITHUB_REPOSITORY": "example/project", "GITHUB_TOKEN": "test-token",
-            "TARGET_BRANCHES": "main", "DISCORD_USER_MAP": '{"Alice":"123456789012345678"}',
+            "TARGET_BRANCHES": "main", "DISCORD_USER_MAP": json.dumps(self.users), "REVIEWER_LOGINS": "",
             "DISCORD_ISSUE_WEBHOOK_URL": "https://discord.com/api/webhooks/111/issue_test",
             "DISCORD_PR_WEBHOOK_URL": "https://discord.com/api/webhooks/222/pr_test"})
         self.env.start()
@@ -195,9 +199,105 @@ class NotificationTests(unittest.TestCase):
             request.assert_not_called()
 
     def test_title_mentions_are_not_in_allowed_mentions(self):
-        message = d.payload("New PR", "@everyone <@123456789012345678>", self.pr["url"], "description", 0)
+        message = d.payload("New PR", "@everyone <@123456789012345678>", self.pr["url"], "description")
         self.assertEqual(message["allowed_mentions"], {"parse": [], "users": []})
-        self.assertNotIn("@", message["embeds"][0]["title"])
+        self.assertNotIn("@", message["content"])
+
+    def review_message(self, author, action="opened", branch="main"):
+        item = dict(self.item, user={"login": author}, base={"ref": branch})
+        with patch.object(self.n, "send_once") as send, patch.object(self.n, "github", return_value=item):
+            self.n.event({"action": action, "pull_request": item}, "pull_request_target")
+            return send.call_args.args[3]
+
+    def test_each_team_author_pings_only_the_other_three_reviewers(self):
+        for author in d.DEFAULT_REVIEWERS:
+            with self.subTest(author=author):
+                message = self.review_message(author)
+                expected = [self.users[login] for login in d.DEFAULT_REVIEWERS if login != author]
+                self.assertEqual(message["allowed_mentions"]["users"], expected)
+                self.assertNotIn(f'<@{self.users[author]}>', message["content"])
+                self.assertIn(f"작성자: {author}", message["content"])
+                self.assertTrue(message["content"].startswith("🚨 리뷰할 PR이 올라왔어요.\n"))
+                self.assertTrue(message["content"].endswith("리뷰어: " + " ".join(f"<@{uid}>" for uid in expected)))
+
+    def test_ready_for_review_uses_same_reviewer_mentions(self):
+        self.assertEqual(self.review_message("tobae-time"), self.review_message("tobae-time", "ready_for_review"))
+
+    def test_author_outside_reviewer_group_pings_all_four(self):
+        message = self.review_message("alice")
+        self.assertEqual(message["allowed_mentions"]["users"], [self.users[login] for login in d.DEFAULT_REVIEWERS])
+        self.assertNotIn(self.users["alice"], message["content"])
+
+    def test_case_insensitive_author_is_excluded(self):
+        message = self.review_message("Tobae-Time")
+        self.assertNotIn(self.users["tobae-time"], message["allowed_mentions"]["users"])
+        self.assertEqual(len(message["allowed_mentions"]["users"]), 3)
+
+    def test_reviewer_override_is_deduplicated(self):
+        with patch.dict(os.environ, {"REVIEWER_LOGINS": " hana5111, HANa5111, tobae-time "}):
+            message = self.review_message("tobae-time")
+            self.assertEqual(message["allowed_mentions"]["users"], [self.users["hana5111"]])
+
+    def test_missing_reviewer_mapping_defers_without_partial_ping(self):
+        users = dict(self.users)
+        del users["decl5th"]
+        with patch.dict(os.environ, {"DISCORD_USER_MAP": json.dumps(users)}), \
+             patch.object(self.n, "send_once") as send, patch.object(self.n, "github", return_value=self.item):
+            with self.assertRaises(d.SafeError):
+                self.n.event({"action": "opened", "pull_request": self.item}, "pull_request_target")
+            send.assert_not_called()
+
+    def test_issue_author_is_github_login_and_title_is_linked(self):
+        item = dict(self.item, html_url="https://github.com/example/project/issues/12")
+        with patch.object(self.n, "send_once") as send:
+            self.n.event({"action": "opened", "issue": item}, "issues")
+            message = send.call_args.args[3]
+            self.assertEqual(message["content"],
+                             "📝 새 이슈가 등록됐어요.\n**[#12 Feature](https://github.com/example/project/issues/12)**\n작성자: alice")
+            self.assertEqual(message["allowed_mentions"]["users"], [])
+
+    def test_pr_title_is_linked_to_pr(self):
+        self.assertIn(f'**[#12 Feature]({self.pr["url"]})**', self.review_message("tobae-time")["content"])
+
+    def test_ready_author_uses_discord_mention_and_no_internal_state(self):
+        message = self.run_ready().call_args.args[3]
+        self.assertEqual(message["content"],
+                         "✅ <@123456789012345678> GitHub에서 머지 준비 상태가 확인됐어요. PR을 확인하고 직접 머지해 주세요.\n"
+                         "**[#12 Feature](https://github.com/example/project/pull/12)**\n작성자: <@123456789012345678>\n대상: main")
+        self.assertEqual(message["allowed_mentions"]["users"], [self.users["alice"]])
+
+    def test_merge_ready_to_other_branches_is_silent_without_optional_filter(self):
+        self.n.branches = set()
+        self.item = dict(self.item, base={"ref": "develop"})
+        with patch.object(self.n, "pages", return_value=iter([self.item])), patch.object(self.n, "snapshot") as snapshot, \
+             patch.object(self.n, "send_once") as send:
+            self.n.ready()
+            snapshot.assert_not_called()
+            send.assert_not_called()
+        self.assertFalse(d.is_ready(dict(self.pr, baseRefName="develop")))
+
+    def test_merge_completed_to_other_branches_is_silent_without_optional_filter(self):
+        self.n.branches = set()
+        for branch in ("develop", "feature", "Main"):
+            with self.subTest(branch=branch), patch.object(self.n, "send_once") as send:
+                item = dict(self.item, base={"ref": branch}, merged=True)
+                self.n.event({"action": "closed", "pull_request": item}, "pull_request_target")
+                send.assert_not_called()
+
+    def test_review_request_to_other_branches_still_notifies(self):
+        self.n.branches = set()
+        message = self.review_message("tobae-time", branch="develop")
+        self.assertIn("feature → develop", message["content"])
+        self.assertEqual(len(message["allowed_mentions"]["users"]), 3)
+
+    def test_merge_completed_message_omits_merger_and_mentions(self):
+        item = dict(self.item, merged=True, merged_by={"login": "bob"})
+        with patch.object(self.n, "send_once") as send:
+            self.n.event({"action": "closed", "pull_request": item}, "pull_request_target")
+            message = send.call_args.args[3]
+            self.assertEqual(message["content"],
+                             "🎉 PR이 머지됐어요.\n**[#12 Feature](https://github.com/example/project/pull/12)**\n작성자: alice\n대상: main")
+            self.assertEqual(message["allowed_mentions"]["users"], [])
 
 
 if __name__ == "__main__":
