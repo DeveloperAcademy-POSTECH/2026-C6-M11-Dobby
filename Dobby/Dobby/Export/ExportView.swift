@@ -13,6 +13,7 @@ struct ExportView: View {
     @State private var showDetailCopy = false
     @State private var showCafe24 = false
     @State private var showNaverStore = false
+    @State private var showInstagram = false
     @State private var openedFruitsMethods: Set<FruitsExportMethod> = []
 
     var body: some View {
@@ -51,6 +52,9 @@ struct ExportView: View {
             .navigationDestination(isPresented: $showNaverStore) {
                 NaverStoreExportView(product: product)
             }
+            .navigationDestination(isPresented: $showInstagram) {
+                InstagramExportView(product: product)
+            }
             .disabled(isOpeningLink || controller.busy)
             .alert("페이지를 열 수 없습니다", isPresented: $isShowingOpenError) {
                 Button("확인", role: .cancel) {}
@@ -73,6 +77,7 @@ struct ExportView: View {
     }
 
     private func didSelectChannel(_ channel: ExportChannel) {
+        if channel == .instagram { showInstagram = true; return }
         if channel == .fruitsFamily { showFruits = true; return }
         if channel == .cafe24 { showCafe24 = true; return }
         if channel == .naverStore { showNaverStore = true; return }
