@@ -11,10 +11,15 @@ struct GarmentMeasurementResultView: View {
     let onConfirm: () -> Void
     let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title2) private var headingTitleSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .subheadline) private var headingSubtitleSize: CGFloat = 14
     @State private var image: UIImage?
     @State private var selectedDefinition: MeasurementDefinition?
     @State private var showPhoto = false
     @State private var showDetails = false
+    @State private var showAuxiliaryDetails = false
+    @State private var detailDefinition: MeasurementDefinition?
+    @State private var detailManualReview: ManualMeasurement?
     @State private var isSaving = false
     @State private var saveError: String?
     @State private var manualReview: ManualMeasurement?
@@ -43,86 +48,12 @@ struct GarmentMeasurementResultView: View {
     private var uncertainCount: Int { model.result.values.filter { $0.status == .uncertain }.count }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                heading.padding(.horizontal, 20)
-                GarmentMeasurementPhotoEditor(image: image, snapshot: model.snapshot,
-                    editableLandmarks: model.editableLandmarks,
-                    definitions: model.definitions,
-                    values: model.result.values, showLabels: !dynamicTypeSize.isAccessibilitySize,
-                    isEnabled: !isSaving, isRecalculating: model.needsRecalculation,
-                    onSelect: { if !isEditingPoint && !model.needsRecalculation { selectedDefinition = $0 } },
-                    onEnlarge: { showPhoto = true }, onMove: { id, point in
-                        _ = model.placePoint(originalPoint: point, id: id)
-                    }, onEditingChanged: { isEditingPoint = $0 })
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("점을 끌어 위치를 수정할 수 있어요. 치수를 누르면 상세를 볼 수 있어요.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if model.needsRecalculation {
-                        ProgressView("수정한 위치로 다시 측정 중…")
-                            .font(.caption).tint(GarmentCaptureStyle.accent)
-                            .accessibilityIdentifier("garmentPointRecalculation")
-                    }
-                    if model.hasPointAdjustments {
-                        HStack(alignment: .firstTextBaseline) {
-                            Label("측정점 \(model.editedPointIDs.count)개 수동 보정", systemImage: "hand.draw")
-                                .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
-                                .accessibilityIdentifier("garmentMeasurementAdjustmentStatus")
-                            Spacer(minLength: 8)
-                            Button("원래 위치로") { model.resetPointAdjustments() }
-                                .font(.caption.weight(.semibold)).disabled(isSaving || isEditingPoint)
-                                .accessibilityIdentifier("resetGarmentMeasurementPoints")
-                        }
-                    }
-                    Menu {
-                        ForEach(model.definitions.filter { $0.landmarkIDs.count == 2 }) { definition in
-                            Button(definition.title) {
-                                manualReview = model.manualMeasurement(for: definition.id)
-                            }.accessibilityIdentifier("reviewGarmentItem_\(definition.id)")
-                        }
-                    } label: {
-                        Label("측정점 확인·수정", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
-                            .font(.subheadline.weight(.semibold))
-                    }.tint(GarmentCaptureStyle.accent)
-                        .disabled(isSaving || isEditingPoint || model.needsRecalculation)
-                        .accessibilityHint("항목을 고르면 같은 사진에서 두 점을 직접 확인하고 별도의 수동 측정으로 저장할 수 있습니다")
-                        .accessibilityIdentifier("reviewAllGarmentMeasurementPoints")
-                    if incompleteCount > 0 {
-                        Label("\(incompleteCount)개 항목은 측정하지 못했어요. 상세에서 이유를 확인해 주세요.", systemImage: "exclamationmark.circle")
-                            .font(.subheadline).foregroundStyle(GarmentCaptureStyle.accent)
-                            .accessibilityIdentifier("garmentUnavailableSummary")
-                    } else if uncertainCount > 0 {
-                        Label("\(uncertainCount)개 항목은 확인이 필요해요. 줄자와 비교해 주세요.", systemImage: "exclamationmark.circle")
-                            .font(.subheadline).foregroundStyle(GarmentCaptureStyle.accent)
-                    }
-                    if !reviewDefinitions.isEmpty {
-                        reviewNeededMeasurements
-                            .disabled(isSaving || isEditingPoint || model.needsRecalculation)
-                    }
-                    DisclosureGroup("측정 항목 상세", isExpanded: $showDetails) {
-                        VStack(spacing: 0) {
-                            ForEach(model.result.values) { value in
-                                if let definition = model.definitions.first(where: { $0.id == value.id }) {
-                                    Button { selectedDefinition = definition } label: {
-                                        measurementRow(value)
-                                    }.buttonStyle(.plain)
-                                        .disabled(isEditingPoint || model.needsRecalculation)
-                                }
-                            }
-                        }.padding(.top, 8)
-                    }.accessibilityElement(children: .contain)
-                        .accessibilityIdentifier("garmentMeasurementDetails")
-                    if let recordingError {
-                        Text("촬영 시도 기록을 완료하지 못했어요. 측정 결과는 확인을 눌러 따로 저장할 수 있어요.\n\(recordingError)")
-                            .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
-                    }
-                    Text(model.definitions.contains(where: { $0.id == "top.totalLength" })
-                         ? "단면과 소매는 두 점 사이 직선거리이며, 총장은 목 좌우 축에 수직인 길이예요. 소매를 곧게 펼치고 측정점을 눈으로 확인해 주세요. 민소매의 소매길이는 사용할 수 없어요."
-                         : "펼친 옷의 두 점 사이 직선거리예요. 주름이나 굽은 봉제선을 따라 잰 길이와 다를 수 있어요.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }.padding(.horizontal, 20)
-            }.padding(.top, 20).padding(.bottom, 24)
-                .frame(maxWidth: 700).frame(maxWidth: .infinity)
+        GeometryReader { geometry in
+            if geometry.size.width <= geometry.size.height && !dynamicTypeSize.isAccessibilitySize {
+                portraitResult(in: geometry.size)
+            } else {
+                accessibleResult
+            }
         }
         .background(GarmentCaptureStyle.background)
         .navigationTitle("실측 결과")
@@ -132,18 +63,22 @@ struct GarmentMeasurementResultView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: onRetake) { Image(systemName: "chevron.left") }
+                Button(action: onRetake) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("다시 촬영")
                     .accessibilityIdentifier("retakeGarmentMeasurement")
                     .disabled(isSaving || isEditingPoint)
-            }
+            }.sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .topBarTrailing) { resultActions }
+                .sharedBackgroundVisibility(.hidden)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Button { Task { await confirm() } } label: {
                 HStack(spacing: 10) {
                     if isSaving || model.needsRecalculation { ProgressView().tint(.white) }
-                    Text(isSaving ? "저장 중…" : model.needsRecalculation ? "다시 측정 중…" : "확인").font(.headline)
-                }.frame(maxWidth: .infinity).padding(.vertical, 18)
+                    Text(isSaving ? "저장 중…" : model.needsRecalculation ? "다시 측정 중…" : "확인")
+                        .font(.system(.callout, design: .default, weight: .semibold)).italic()
+                }.frame(maxWidth: .infinity).frame(minHeight: 62)
             }
             .buttonStyle(.plain).foregroundStyle(.white)
             .background(GarmentCaptureStyle.accent, in: Capsule())
@@ -152,7 +87,7 @@ struct GarmentMeasurementResultView: View {
                 ? "사진과 확인한 측정 결과를 저장하고 촬영을 마칩니다"
                 : "사진과 확인한 측정 결과를 저장하고 제품 상세 촬영으로 이동합니다")
             .accessibilityIdentifier("confirmGarmentMeasurement")
-            .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 12)
+            .padding(.leading, 32).padding(.trailing, 35).padding(.top, 28)
             .background(GarmentCaptureStyle.background)
         }
         .task {
@@ -172,6 +107,7 @@ struct GarmentMeasurementResultView: View {
         .sheet(item: $manualReview) { measurement in
             MeasurementDetailView(model: measurement, archive: archive)
         }
+        .sheet(isPresented: $showAuxiliaryDetails) { auxiliaryDetailsSheet }
         .alert("저장하지 못했어요", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button("확인", role: .cancel) { saveError = nil }
         } message: { Text(saveError ?? "") }
@@ -180,18 +116,239 @@ struct GarmentMeasurementResultView: View {
         .accessibilityIdentifier("garmentMeasurementResult")
     }
 
+    private func portraitResult(in size: CGSize) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            heading
+                .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 6)
+            GeometryReader { geometry in
+                let aspect = SnapshotPresentation.aspectRatio(for: model.snapshot)
+                let photoWidth = min(geometry.size.width, geometry.size.height * aspect)
+                let photoHeight = photoWidth / aspect
+                photoEditor(showsEnlargeControl: false)
+                    .frame(width: photoWidth, height: photoHeight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxHeight: size.width * 560 / 402)
+            .background(GarmentCaptureStyle.background)
+            .overlay(alignment: .topTrailing) {
+                VStack(alignment: .trailing, spacing: 6) {
+                    if isSynthetic { syntheticBadge.allowsHitTesting(false) }
+                    reviewNotice
+                }.padding(12)
+            }
+            .overlay(alignment: .bottomLeading) {
+                if model.needsRecalculation {
+                    pointRecalculation.padding(12).allowsHitTesting(false)
+                }
+            }
+        }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var accessibleResult: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                heading.padding(.horizontal, 20)
+                reviewNotice.padding(.horizontal, 20)
+                if isSynthetic { syntheticBadge.padding(.horizontal, 20) }
+                photoEditor(showsEnlargeControl: true)
+                auxiliaryContent.padding(.horizontal, 20)
+            }.padding(.top, 16).padding(.bottom, 24)
+                .frame(maxWidth: 700).frame(maxWidth: .infinity)
+        }
+    }
+
+    private func photoEditor(showsEnlargeControl: Bool) -> some View {
+        GarmentMeasurementPhotoEditor(image: image, snapshot: model.snapshot,
+            editableLandmarks: model.editableLandmarks,
+            definitions: model.definitions,
+            values: model.result.values, showLabels: !dynamicTypeSize.isAccessibilitySize,
+            isEnabled: !isSaving, isRecalculating: model.needsRecalculation,
+            showsEnlargeControl: showsEnlargeControl,
+            onSelect: { if !isEditingPoint && !model.needsRecalculation { selectedDefinition = $0 } },
+            onEnlarge: { showPhoto = true }, onMove: { id, point in
+                _ = model.placePoint(originalPoint: point, id: id)
+            }, onEditingChanged: { isEditingPoint = $0 })
+    }
+
     private var heading: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(model.hasPointAdjustments ? "측정 위치를 조정했어요" : incompleteCount == 0 && uncertainCount == 0 ? "자동으로 실측을 완료했어요" : "측정 결과를 확인해 주세요")
-                .font(.system(.title3, design: .default, weight: .bold))
-            Text("점을 선택하면 왼쪽 위에서 자세히 볼 수 있어요.")
-                .font(.footnote).foregroundStyle(.secondary)
+                .font(.system(size: headingTitleSize, weight: .bold))
+                .frame(minHeight: 28, alignment: .leading)
+            Text("필요하면 측정 위치와 길이를 수정할 수 있어요")
+                .font(.system(size: headingSubtitleSize, weight: .semibold)).foregroundStyle(.white)
+                .frame(minHeight: 20, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("garmentResultHeading")
+    }
+
+    @ViewBuilder
+    private var reviewNotice: some View {
+        if incompleteCount > 0 || uncertainCount > 0 {
+            Button { openAuxiliaryDetails() } label: {
+                Label(incompleteCount > 0 ? "\(incompleteCount)개 측정 불가" : "\(uncertainCount)개 확인 필요",
+                      systemImage: "exclamationmark.circle")
+                    .font(.caption.weight(.semibold)).foregroundStyle(GarmentCaptureStyle.accent)
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .background(GarmentCaptureStyle.background.opacity(0.9), in: Capsule())
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .accessibilityHint("측정 항목 상세에서 이유를 확인하고 측정점을 수정할 수 있어요")
+                .accessibilityIdentifier(incompleteCount > 0 ? "garmentUnavailableNotice" : "garmentUncertainNotice")
+        }
+    }
+
+    private var syntheticBadge: some View {
+        Label("화면 미리보기 · 합성 치수", systemImage: "cube.transparent")
+            .font(.caption2.weight(.semibold)).foregroundStyle(GarmentCaptureStyle.accent)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(GarmentCaptureStyle.background.opacity(0.9), in: Capsule())
+            .accessibilityIdentifier("garmentSyntheticResult")
+    }
+
+    private var pointRecalculation: some View {
+        ProgressView("수정한 위치로 다시 측정 중…")
+            .font(.caption).tint(GarmentCaptureStyle.accent)
+            .padding(8)
+            .background(GarmentCaptureStyle.background.opacity(0.9), in: Capsule())
+            .accessibilityIdentifier("garmentPointRecalculation")
+    }
+
+    private var resultActions: some View {
+        Menu {
+            Button("측정 항목 상세", systemImage: "list.bullet.rectangle") { openAuxiliaryDetails() }
+                .accessibilityIdentifier("openGarmentMeasurementDetails")
+            Button("촬영 사진 확대", systemImage: "arrow.up.left.and.arrow.down.right") { showPhoto = true }
+                .disabled(image == nil)
+                .accessibilityIdentifier("enlargeGarmentPhoto")
+            Button("측정점 확인·수정", systemImage: "point.topleft.down.curvedto.point.bottomright.up") {
+                openAuxiliaryDetails()
+            }.disabled(isSaving || isEditingPoint || model.needsRecalculation)
+            if model.hasPointAdjustments {
+                Button("원래 위치로", systemImage: "arrow.counterclockwise") { model.resetPointAdjustments() }
+                    .disabled(isSaving || isEditingPoint)
+                    .accessibilityIdentifier("resetGarmentMeasurementPoints")
+            }
+        } label: {
+            GarmentCaptureToolbarIcon(systemName: "ellipsis")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("실측 결과 메뉴")
+        .accessibilityIdentifier("garmentResultActions")
+        .disabled(isSaving || isEditingPoint)
+    }
+
+    private func openAuxiliaryDetails() {
+        showDetails = true
+        showAuxiliaryDetails = true
+    }
+
+    private var auxiliaryDetailsSheet: some View {
+        NavigationStack {
+            ScrollView {
+                auxiliaryContent.padding(20)
+                    .frame(maxWidth: 700).frame(maxWidth: .infinity)
+            }
+            .background(GarmentCaptureStyle.background)
+            .navigationTitle("측정 항목 상세").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("닫기") { showAuxiliaryDetails = false }
+                        .accessibilityIdentifier("closeGarmentMeasurementDetails")
+                }
+            }
+            .sheet(item: $detailDefinition) { definition in
+                GarmentMeasurementItemSheet(model: model, definition: definition, archive: archive)
+            }
+            .sheet(item: $detailManualReview) { measurement in
+                MeasurementDetailView(model: measurement, archive: archive)
+            }
+        }.tint(GarmentCaptureStyle.accent).preferredColorScheme(.dark)
+    }
+
+    private var auxiliaryContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("점을 끌어 위치를 수정할 수 있어요. 치수를 누르면 상세를 볼 수 있어요.")
+                .font(.caption).foregroundStyle(.secondary)
             if isSynthetic {
                 Label("화면 미리보기 · 합성 치수", systemImage: "cube.transparent")
                     .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
-                    .accessibilityIdentifier("garmentSyntheticResult")
+                Text("이 결과는 화면 검증용 합성 사진과 치수예요. 실제 옷의 인식률이나 실측 정확도를 나타내지 않아요.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
+            if model.needsRecalculation {
+                pointRecalculation
+            }
+            if model.hasPointAdjustments {
+                HStack(alignment: .firstTextBaseline) {
+                    Label("측정점 \(model.editedPointIDs.count)개 수동 보정", systemImage: "hand.draw")
+                        .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
+                        .accessibilityIdentifier("garmentMeasurementAdjustmentStatus")
+                    Spacer(minLength: 8)
+                    Button("원래 위치로") { model.resetPointAdjustments() }
+                        .font(.caption.weight(.semibold)).disabled(isSaving || isEditingPoint)
+                        .accessibilityIdentifier("resetGarmentMeasurementPoints")
+                }
+            }
+            Menu {
+                ForEach(model.definitions.filter { $0.landmarkIDs.count == 2 }) { definition in
+                    Button(definition.title) { openManualReview(for: definition.id) }
+                        .accessibilityIdentifier("reviewGarmentItem_\(definition.id)")
+                }
+            } label: {
+                Label("측정점 확인·수정", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                    .font(.subheadline.weight(.semibold))
+            }.tint(GarmentCaptureStyle.accent)
+                .disabled(isSaving || isEditingPoint || model.needsRecalculation)
+                .accessibilityHint("항목을 고르면 같은 사진에서 두 점을 직접 확인하고 별도의 수동 측정으로 저장할 수 있습니다")
+                .accessibilityIdentifier("reviewAllGarmentMeasurementPoints")
+            if incompleteCount > 0 {
+                Label("\(incompleteCount)개 항목은 측정하지 못했어요. 상세에서 이유를 확인해 주세요.", systemImage: "exclamationmark.circle")
+                    .font(.subheadline).foregroundStyle(GarmentCaptureStyle.accent)
+                    .accessibilityIdentifier("garmentUnavailableSummary")
+            }
+            if uncertainCount > 0 {
+                Label("\(uncertainCount)개 항목은 확인이 필요해요. 줄자와 비교해 주세요.", systemImage: "exclamationmark.circle")
+                    .font(.subheadline).foregroundStyle(GarmentCaptureStyle.accent)
+            }
+            if !reviewDefinitions.isEmpty {
+                reviewNeededMeasurements
+                    .disabled(isSaving || isEditingPoint || model.needsRecalculation)
+            }
+            DisclosureGroup("측정 항목 상세", isExpanded: $showDetails) {
+                VStack(spacing: 0) {
+                    ForEach(model.result.values) { value in
+                        if let definition = model.definitions.first(where: { $0.id == value.id }) {
+                            Button { openMeasurementDetail(definition) } label: { measurementRow(value) }
+                                .buttonStyle(.plain).disabled(isEditingPoint || model.needsRecalculation)
+                        }
+                    }
+                }.padding(.top, 8)
+            }.accessibilityElement(children: .contain)
+                .accessibilityIdentifier("garmentMeasurementDetails")
+            if let recordingError {
+                Text("촬영 시도 기록을 완료하지 못했어요. 측정 결과는 확인을 눌러 따로 저장할 수 있어요.\n\(recordingError)")
+                    .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
+            }
+            Text(model.definitions.contains(where: { $0.id == "top.totalLength" })
+                 ? "단면과 소매는 두 점 사이 직선거리이며, 총장은 목 좌우 축에 수직인 길이예요. 소매를 곧게 펼치고 측정점을 눈으로 확인해 주세요. 민소매의 소매길이는 사용할 수 없어요."
+                 : "펼친 옷의 두 점 사이 직선거리예요. 주름이나 굽은 봉제선을 따라 잰 길이와 다를 수 있어요.")
+                .font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    private func openMeasurementDetail(_ definition: MeasurementDefinition) {
+        if showAuxiliaryDetails { detailDefinition = definition }
+        else { selectedDefinition = definition }
+    }
+
+    private func openManualReview(for definitionID: String) {
+        let measurement = model.manualMeasurement(for: definitionID)
+        if showAuxiliaryDetails { detailManualReview = measurement }
+        else { manualReview = measurement }
     }
 
     private var reviewDefinitions: [MeasurementDefinition] {
@@ -212,7 +369,7 @@ struct GarmentMeasurementResultView: View {
                         }
                     }
                     Button("이 사진에서 측정점 직접 확인") {
-                        manualReview = model.manualMeasurement(for: definition.id)
+                        openManualReview(for: definition.id)
                     }.buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
                         .accessibilityLabel("\(definition.title) 측정점 직접 확인")
                         .accessibilityIdentifier("reviewGarmentMeasurement_\(definition.id)")

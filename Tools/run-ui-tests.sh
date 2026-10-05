@@ -8,6 +8,7 @@ if (( $# > 0 )); then shift; fi
 # reorder, or remove a developer's existing photos. New imports precede stock
 # sample photos in the fresh simulator's default Photos picker sort order.
 photo_fixtures="${DOBBY_UI_PHOTO_FIXTURES:-0}"
+design_reference="${DOBBY_UI_DESIGN_REFERENCE:-0}"
 photo_simulator=""
 cleanup_photo_simulator() {
   if [[ -n "$photo_simulator" ]]; then
@@ -36,10 +37,11 @@ PYDEVICE
   xcrun simctl boot "$photo_simulator"
   xcrun simctl bootstatus "$photo_simulator" -b
 fi
-python3 - "$repo_dir" "$test_dir" "$photo_fixtures" <<'PY'
+python3 - "$repo_dir" "$test_dir" "$photo_fixtures" "$design_reference" <<'PY'
 import json, pathlib, struct, sys, uuid, zlib
 repo, output = map(pathlib.Path, sys.argv[1:3])
 photo_fixtures = sys.argv[3] == '1'
+design_reference = sys.argv[4] == '1'
 if photo_fixtures:
     # Test-owned synthetic images, not training data or physical evidence.
     # The oversize PNG is valid media but exceeds the provider's 16,384 px
@@ -54,11 +56,18 @@ settings = {"ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS":"YES"
 # Preserve the app URL registration without copying its Info.plist as a resource.
 # The production widget target is validated by the native project build.
 app_sources = [{"path":str(repo/'Dobby/Dobby'), "excludes":["QuickCopyInfo.plist"]}]
+if design_reference:
+    # The original Figma garment photo belongs only to the opt-in validation
+    # app. Production targets never bundle the reference photo or fake depth.
+    reference = repo/'Tests/Fixtures/DesignReference/garment.png'
+    if not reference.is_file():
+        raise SystemExit('The opt-in Figma photo fixture is missing.')
+    app_sources.append({"path":str(reference), "buildPhase":"resources"})
 spec = {"name":"DobbyValidation", "options":{"deploymentTarget":{"iOS":"26.4"}}, "settings":{"base":settings}, "targets":{
 "Dobby":{"type":"application", "platform":"iOS", "sources":app_sources, "settings":{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"com.dobby.Dobby", "GENERATE_INFOPLIST_FILE":"YES", "INFOPLIST_FILE":str(repo/'Dobby/Dobby/QuickCopyInfo.plist'), "INFOPLIST_KEY_NSCameraUsageDescription":"옷 사진과 깊이로 길이를 측정합니다.", "INFOPLIST_KEY_UILaunchScreen_Generation":"YES", "INFOPLIST_KEY_UIApplicationSceneManifest_Generation":"YES", "INFOPLIST_KEY_UISupportedInterfaceOrientations":"UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight", "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad":"UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight", "TARGETED_DEVICE_FAMILY":"1,2"}}},
 "DobbyUITests":{"type":"bundle.ui-testing", "platform":"iOS", "sources":[str(repo/'Tests/DobbyUITests')], "dependencies":[{"target":"Dobby"}], "settings":{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"com.dobby.Dobby.UITests", "GENERATE_INFOPLIST_FILE":"YES", "TEST_TARGET_NAME":"Dobby"}}},
 "DobbyPresentationTests":{"type":"bundle.unit-test", "platform":"iOS", "sources":[str(repo/'Tests/DobbyPresentationTests')], "dependencies":[{"target":"Dobby"}], "settings":{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"com.dobby.Dobby.PresentationTests", "GENERATE_INFOPLIST_FILE":"YES"}}}},
-"schemes":{"Dobby":{"build":{"targets":{"Dobby":"all"}}, "test":{"targets":["DobbyUITests", "DobbyPresentationTests"], "environmentVariables":{"DOBBY_UI_PHOTO_FIXTURES":"1" if photo_fixtures else "0", "DOBBY_FLOW_TEST_STORE_TOKEN":str(uuid.uuid4())}}}}}
+"schemes":{"Dobby":{"build":{"targets":{"Dobby":"all"}}, "test":{"targets":["DobbyUITests", "DobbyPresentationTests"], "environmentVariables":{"DOBBY_UI_PHOTO_FIXTURES":"1" if photo_fixtures else "0", "DOBBY_UI_DESIGN_REFERENCE":"1" if design_reference else "0", "DOBBY_FLOW_TEST_STORE_TOKEN":str(uuid.uuid4())}}}}}
 (output/'project.json').write_text(json.dumps(spec))
 PY
 if [[ -n "$photo_simulator" ]]; then

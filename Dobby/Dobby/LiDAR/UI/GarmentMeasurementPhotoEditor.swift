@@ -12,6 +12,7 @@ struct GarmentMeasurementPhotoEditor: View {
     let showLabels: Bool
     let isEnabled: Bool
     let isRecalculating: Bool
+    var showsEnlargeControl = true
     let onSelect: (MeasurementDefinition) -> Void
     let onEnlarge: () -> Void
     let onMove: (String, ImagePoint) -> Void
@@ -19,8 +20,8 @@ struct GarmentMeasurementPhotoEditor: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .caption) private var labelHeight: CGFloat = 28
-    @ScaledMetric(relativeTo: .caption) private var labelFontSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .subheadline) private var labelHeight: CGFloat = 32
+    @ScaledMetric(relativeTo: .subheadline) private var labelFontSize: CGFloat = 14
     @State private var selectedPointID: String?
     @State private var drag: PointDrag?
     @GestureState private var gestureIsActive = false
@@ -67,20 +68,23 @@ struct GarmentMeasurementPhotoEditor: View {
                         .position(screenPoint(previewPoint(point), size: size))
                 }
                 if let image, let point = selectedPoint {
+                    let loupe = magnifierRect(in: size)
                     magnifier(image: image, point: point, photoSize: size)
-                        .padding(12).allowsHitTesting(false)
+                        .position(x: loupe.midX, y: loupe.midY).allowsHitTesting(false)
                 }
-                Button(action: onEnlarge) {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 36, height: 36)
-                        .modifier(MeasurementGlassCapsule(reduceTransparency: reduceTransparency))
-                        .frame(width: 44, height: 44).contentShape(Rectangle())
-                }.buttonStyle(.plain).foregroundStyle(.white)
-                    .disabled(image == nil)
-                    .position(x: size.width - 30, y: 30)
-                    .accessibilityLabel("촬영 사진 확대")
-                    .accessibilityIdentifier("enlargeGarmentPhoto")
+                if showsEnlargeControl {
+                    Button(action: onEnlarge) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 36, height: 36)
+                            .modifier(MeasurementGlassCapsule(reduceTransparency: reduceTransparency))
+                            .frame(width: 44, height: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).foregroundStyle(.white)
+                        .disabled(image == nil)
+                        .position(x: size.width - 30, y: 30)
+                        .accessibilityLabel("촬영 사진 확대")
+                        .accessibilityIdentifier("enlargeGarmentPhoto")
+                }
             }.frame(width: size.width, height: size.height).clipped()
                 .coordinateSpace(name: "garmentPhoto")
                 .onChange(of: size) { _, _ in
@@ -152,14 +156,16 @@ struct GarmentMeasurementPhotoEditor: View {
         Button { onSelect(item.definition) } label: {
             HStack(spacing: 4) {
                 Text(GarmentMeasurementText.shortTitle(item.definition)).foregroundStyle(.white.opacity(0.85))
+                    .font(.system(size: labelFontSize, weight: .semibold))
                     .fixedSize(horizontal: true, vertical: false)
-                Text(drag != nil || isRecalculating ? "…" : GarmentMeasurementText.value(item.value))
+                Text(drag != nil || isRecalculating ? "…" : visibleMeasurementValue(item.value))
+                    .font(.system(size: labelFontSize, weight: .regular))
                     .monospacedDigit().fixedSize(horizontal: true, vertical: false)
                 if item.value.status == .uncertain {
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(GarmentCaptureStyle.accent)
                         .frame(width: labelFontSize)
                 }
-            }.font(.system(size: labelFontSize, weight: .semibold)).foregroundStyle(.white)
+            }.font(.system(size: labelFontSize, weight: .regular)).foregroundStyle(.white)
                 .lineLimit(1).padding(.horizontal, 9)
                 .frame(width: item.labelSize.width, height: item.labelSize.height)
                 .modifier(MeasurementGlassCapsule(reduceTransparency: reduceTransparency))
@@ -180,9 +186,13 @@ struct GarmentMeasurementPhotoEditor: View {
         }
         return Button { selectedPointID = point.id } label: {
             ZStack {
-                Circle().fill(.black.opacity(0.6)).frame(width: 15, height: 15)
-                Circle().fill(selected ? GarmentCaptureStyle.accent : .white).frame(width: 9, height: 9)
-                Circle().stroke(.white, lineWidth: 1.25).frame(width: selected ? 21 : 15, height: selected ? 21 : 15)
+                Circle().fill(.black.opacity(0.35)).frame(width: 12.5, height: 12.5)
+                if selected {
+                    Circle().fill(GarmentCaptureStyle.accent.opacity(0.25)).frame(width: 18, height: 18)
+                    Circle().stroke(GarmentCaptureStyle.accent.opacity(0.8), lineWidth: 1)
+                        .frame(width: 18, height: 18)
+                }
+                Circle().fill(.white).frame(width: 8.5, height: 8.5)
             }.shadow(color: .black.opacity(0.4), radius: 2, y: 1)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: selected)
                 .frame(width: 56, height: 56)
@@ -234,33 +244,27 @@ struct GarmentMeasurementPhotoEditor: View {
     }
 
     private func magnifier(image: UIImage, point: GarmentLandmark, photoSize: CGSize) -> some View {
-        let loupeSize = magnifierSize(in: photoSize)
+        let loupeSize = magnifierRect(in: photoSize).size
         let display = ImageCoordinateTransform.originalToDisplay(previewPoint(point), orientation: snapshot.frame.orientation)
         let layout = GarmentPhotoGeometry.magnifier(displayPoint: display, photoSize: photoSize, loupeSize: loupeSize)
-        return VStack(alignment: .leading, spacing: 5) {
-            // A bounded canvas avoids a three-times-larger SwiftUI Image's
-            // layout/accessibility bounds leaking outside the clipped inset.
-            Canvas { context, _ in
-                context.draw(context.resolve(Image(uiImage: image)),
-                    in: CGRect(origin: layout.imageOrigin, size: layout.imageSize))
-                let marker = CGRect(x: layout.crosshair.x - 13, y: layout.crosshair.y - 13, width: 26, height: 26)
-                context.fill(Path(ellipseIn: marker), with: .color(.black.opacity(0.2)))
-                context.stroke(Path(ellipseIn: marker), with: .color(.white), lineWidth: 1)
-                var cross = Path()
-                cross.move(to: .init(x: layout.crosshair.x - 9, y: layout.crosshair.y))
-                cross.addLine(to: .init(x: layout.crosshair.x + 9, y: layout.crosshair.y))
-                cross.move(to: .init(x: layout.crosshair.x, y: layout.crosshair.y - 9))
-                cross.addLine(to: .init(x: layout.crosshair.x, y: layout.crosshair.y + 9))
-                context.stroke(cross, with: .color(.white), lineWidth: 1)
-            }.frame(width: loupeSize.width, height: loupeSize.height)
-                .accessibilityHidden(true)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.9), lineWidth: 1.5))
-                .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
-            Text(GarmentPointName.title(point.id)).font(.caption2.weight(.semibold)).lineLimit(1)
-                .foregroundStyle(.white).padding(.horizontal, 7).padding(.vertical, 3)
-                .background(.black.opacity(0.65), in: Capsule())
-        }.frame(width: loupeSize.width, alignment: .leading)
+        // A bounded canvas avoids a three-times-larger SwiftUI Image's
+        // layout/accessibility bounds leaking outside the clipped inset.
+        return Canvas { context, _ in
+            context.draw(context.resolve(Image(uiImage: image)),
+                in: CGRect(origin: layout.imageOrigin, size: layout.imageSize))
+            let marker = CGRect(x: layout.crosshair.x - 12, y: layout.crosshair.y - 12, width: 24, height: 24)
+            context.fill(Path(ellipseIn: marker), with: .color(.black.opacity(0.2)))
+            context.stroke(Path(ellipseIn: marker), with: .color(.white), lineWidth: 1)
+            var cross = Path()
+            cross.move(to: .init(x: layout.crosshair.x - 12, y: layout.crosshair.y))
+            cross.addLine(to: .init(x: layout.crosshair.x + 12, y: layout.crosshair.y))
+            cross.move(to: .init(x: layout.crosshair.x, y: layout.crosshair.y - 12))
+            cross.addLine(to: .init(x: layout.crosshair.x, y: layout.crosshair.y + 12))
+            context.stroke(cross, with: .color(.white), lineWidth: 1)
+        }.frame(width: loupeSize.width, height: loupeSize.height)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white, lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
             // The image is deliberately three times larger than the viewport.
             // Expose only the bounded loupe, never the clipped image's AX frame.
             .accessibilityElement(children: .ignore)
@@ -300,10 +304,11 @@ struct GarmentMeasurementPhotoEditor: View {
         }
         var occupied: [CGRect] = []
         if image != nil, selectedPoint != nil {
-            let loupe = magnifierSize(in: size)
-            occupied.append(CGRect(x: 8, y: 8, width: loupe.width + 8, height: loupe.height + 33))
+            occupied.append(magnifierRect(in: size).insetBy(dx: -4, dy: -4))
         }
-        occupied.append(CGRect(x: size.width - 56, y: 8, width: 48, height: 48))
+        if showsEnlargeControl {
+            occupied.append(CGRect(x: size.width - 56, y: 8, width: 48, height: 48))
+        }
         return definitions.compactMap { definition in
             guard definition.landmarkIDs.count == 2,
                   let value = values.first(where: { $0.id == definition.id }),
@@ -316,13 +321,13 @@ struct GarmentMeasurementPhotoEditor: View {
                 return resolved.imagePoint
             }
             let start = screenPoint(endpoints[0], size: size), end = screenPoint(endpoints[1], size: size)
-            // Match both rendered fonts, including semibold monospaced digits.
-            // Measuring a regular-font combined string clips units like "cm".
+            // Match the semibold title and regular monospaced value separately,
+            // using the same compact unit spacing as the visible capsule.
             let titleFont = UIFont.systemFont(ofSize: labelFontSize, weight: .semibold)
-            let valueFont = UIFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .semibold)
+            let valueFont = UIFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .regular)
             let titleWidth = (GarmentMeasurementText.shortTitle(definition) as NSString)
                 .size(withAttributes: [.font: titleFont]).width
-            let valueWidth = (GarmentMeasurementText.value(value) as NSString)
+            let valueWidth = (visibleMeasurementValue(value) as NSString)
                 .size(withAttributes: [.font: valueFont]).width
             let width = ceil(titleWidth + valueWidth + 22 + (value.status == .uncertain ? labelFontSize + 4 : 0)) + 4
             let labelSize = CGSize(width: min(max(78, width), size.width - 8), height: labelHeight)
@@ -345,10 +350,15 @@ struct GarmentMeasurementPhotoEditor: View {
         GarmentPhotoGeometry.screenPoint(point, photoSize: size, orientation: snapshot.frame.orientation)
     }
 
-    private func magnifierSize(in size: CGSize) -> CGSize {
-        // Keep the inset narrow enough to leave the garment's left shoulder and
-        // waistband visible on a phone, while retaining a tall close-up.
-        .init(width: min(96, size.width * 0.20), height: min(120, size.height * 0.26))
+    private func visibleMeasurementValue(_ value: MeasurementValue) -> String {
+        GarmentMeasurementText.value(value).replacingOccurrences(of: " cm", with: "cm")
+    }
+
+    private func magnifierRect(in size: CGSize) -> CGRect {
+        // The design's 100 × 140 inset only shrinks for unusually small photos.
+        // Rendering and label exclusion share this exact rectangle.
+        let scale = min(1, max(0, size.width - 40) / 100, max(0, size.height - 38) / 140)
+        return CGRect(x: 20, y: 19, width: 100 * scale, height: 140 * scale)
     }
 }
 

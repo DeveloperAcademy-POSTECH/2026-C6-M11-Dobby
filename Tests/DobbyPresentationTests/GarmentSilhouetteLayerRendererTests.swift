@@ -64,13 +64,14 @@ final class GarmentSilhouetteLayerRendererTests: XCTestCase {
     }
 
     private func update(_ fixture: Fixture, mask: GarmentMask, identity: GarmentSilhouetteRenderIdentity,
-                        reduceMotion: Bool = false, viewport: CGRect? = nil) {
+                        reduceMotion: Bool = false, viewport: CGRect? = nil, useGradient: Bool = false) {
         let viewport = viewport ?? fixture.view.bounds
         fixture.renderer.update(mask: mask, identity: identity,
             transform: CGAffineTransform(scaleX: viewport.width, y: viewport.height)
                 .concatenating(.init(translationX: viewport.minX, y: viewport.minY)),
-            viewport: viewport, fillColor: UIColor.systemMint.withAlphaComponent(0.20).cgColor,
-            strokeColor: UIColor.systemMint.cgColor, reduceMotion: reduceMotion)
+            viewport: viewport, fillColor: UIColor.systemMint.withAlphaComponent(useGradient ? 0.40 : 0.20).cgColor,
+            strokeColor: UIColor.systemMint.cgColor, reduceMotion: reduceMotion,
+            gradientEndColor: useGradient ? UIColor.white.cgColor : nil)
     }
 
     private func eventually(_ message: String, condition: @MainActor () -> Bool,
@@ -95,6 +96,30 @@ final class GarmentSilhouetteLayerRendererTests: XCTestCase {
         XCTAssertTrue(fixture.paths.isEmpty, file: file, line: line)
         XCTAssertTrue(fixture.animations.isEmpty, file: file, line: line)
         XCTAssertTrue(fixture.shapes.allSatisfy { $0.opacity == 0 }, file: file, line: line)
+    }
+
+    private func gradientComponents(of parent: CAShapeLayer) throws -> (
+        fill: CAGradientLayer, stroke: CAGradientLayer, fillMask: CAShapeLayer, strokeMask: CAShapeLayer
+    ) {
+        let gradients = parent.sublayers?.compactMap { $0 as? CAGradientLayer } ?? []
+        XCTAssertEqual(gradients.count, 2)
+        let fill = try XCTUnwrap(gradients.first { ($0.mask as? CAShapeLayer)?.fillColor != nil })
+        let stroke = try XCTUnwrap(gradients.first { ($0.mask as? CAShapeLayer)?.strokeColor != nil })
+        return (fill, stroke, try XCTUnwrap(fill.mask as? CAShapeLayer), try XCTUnwrap(stroke.mask as? CAShapeLayer))
+    }
+
+    private func assertGradientMasksCleared(_ fixture: Fixture) throws {
+        assertHidden(fixture)
+        for parent in fixture.shapes {
+            let parts = try gradientComponents(of: parent)
+            for mask in [parts.fillMask, parts.strokeMask] {
+                XCTAssertNil(mask.path)
+                XCTAssertTrue((mask.animationKeys() ?? []).isEmpty)
+            }
+            for gradient in [parts.fill, parts.stroke] {
+                XCTAssertTrue((gradient.animationKeys() ?? []).isEmpty)
+            }
+        }
     }
 
     private func assertFiniteClosed(_ path: CGPath, file: StaticString = #filePath, line: UInt = #line) {
@@ -287,5 +312,168 @@ final class GarmentSilhouetteLayerRendererTests: XCTestCase {
         XCTAssertTrue(fixture.animations.allSatisfy { $0.keyPath == "opacity" },
                       "A reduced-motion replacement may dissolve, but must not move the contour")
         for path in fixture.paths { assertFiniteClosed(path) }
+    }
+
+    func testGradientFillAndStrokePreserveTheHoledContourAndIndependentOpacity() async throws {
+        let fixture = try fixture()
+        defer { fixture.close() }
+        update(fixture, mask: topMask(hole: true), identity: identity(), useGradient: true)
+        try await settle(fixture)
+
+        XCTAssertEqual(fixture.shapes.count, 2, "Gradient presentation must preserve the two-layer transition contract")
+        let parent = try XCTUnwrap(fixture.shapes.first { $0.opacity == 1 })
+        let path = try XCTUnwrap(parent.path)
+        let parts = try gradientComponents(of: parent)
+        XCTAssertNil(parent.fillColor)
+        XCTAssertNil(parent.strokeColor)
+        XCTAssertFalse(parts.fill.isHidden)
+        XCTAssertFalse(parts.stroke.isHidden)
+        for mask in [parts.fillMask, parts.strokeMask] {
+            XCTAssertEqual(mask.path, path)
+            XCTAssertEqual(mask.fillRule, .evenOdd)
+            let maskPath = try XCTUnwrap(mask.path)
+            assertFiniteClosed(maskPath)
+            XCTAssertTrue(maskPath.contains(CGPoint(x: 100, y: 140), using: .evenOdd))
+            XCTAssertFalse(maskPath.contains(CGPoint(x: 128, y: 164), using: .evenOdd),
+                           "Adding gradient masks must not fill the garment's opening")
+        }
+        XCTAssertNil(parts.strokeMask.fillColor)
+        XCTAssertEqual(parts.strokeMask.lineWidth, 2)
+        let fillColors = try XCTUnwrap(parts.fill.colors as? [CGColor])
+        let strokeColors = try XCTUnwrap(parts.stroke.colors as? [CGColor])
+        XCTAssertEqual(fillColors.count, 2)
+        XCTAssertEqual(strokeColors.count, 2)
+        for color in fillColors { XCTAssertEqual(color.alpha, 0.4, accuracy: 0.0001) }
+        for color in strokeColors { XCTAssertEqual(color.alpha, 1, accuracy: 0.0001) }
+        XCTAssertEqual(parts.fill.frame, parent.bounds)
+        XCTAssertEqual(parts.stroke.frame, parent.bounds)
+        XCTAssertEqual(parts.fill.startPoint, parts.stroke.startPoint)
+        XCTAssertEqual(parts.fill.endPoint, parts.stroke.endPoint)
+    }
+
+    func testGradientMasksShareSteadyMorphAndClearRejectsQueuedGeometry() async throws {
+        let fixture = try fixture(), epoch = UUID()
+        defer { fixture.close() }
+        update(fixture, mask: topMask(), identity: identity(epoch: epoch), useGradient: true)
+        try await settle(fixture)
+        update(fixture, mask: topMask(shift: 1), identity: identity(epoch: epoch, timestamp: 2), useGradient: true)
+        try await eventually("The steady gradient contour must use the same native path morph") {
+            fixture.animations.contains { $0.keyPath == "path" }
+        }
+        let parent = try XCTUnwrap(fixture.shapes.first { $0.animation(forKey: "silhouette.path") != nil })
+        let parentAnimation = try XCTUnwrap(parent.animation(forKey: "silhouette.path") as? CABasicAnimation)
+        let parts = try gradientComponents(of: parent)
+        for mask in [parts.fillMask, parts.strokeMask] {
+            let animation = try XCTUnwrap(mask.animation(forKey: "silhouette.path") as? CABasicAnimation)
+            XCTAssertEqual(mask.path, parent.path)
+            XCTAssertEqual(animation.keyPath, "path")
+            XCTAssertEqual(animation.duration, 0.22, accuracy: 0.001)
+            XCTAssertEqual(animation.duration, parentAnimation.duration)
+            XCTAssertTrue(CFEqual(try XCTUnwrap(animation.fromValue) as AnyObject,
+                                  try XCTUnwrap(parentAnimation.fromValue) as AnyObject))
+            XCTAssertTrue(CFEqual(try XCTUnwrap(animation.toValue) as AnyObject,
+                                  try XCTUnwrap(parentAnimation.toValue) as AnyObject))
+            XCTAssertFalse(animation.autoreverses)
+            XCTAssertEqual(animation.repeatCount, 0)
+        }
+
+        // Queue two newer analyses while the accepted outline is animating,
+        // then invalidate before either worker can publish on the main actor.
+        update(fixture, mask: topMask(shift: 2), identity: identity(epoch: epoch, timestamp: 3), useGradient: true)
+        update(fixture, mask: topMask(shift: 3), identity: identity(epoch: epoch, timestamp: 4), useGradient: true)
+        fixture.renderer.clear()
+        try assertGradientMasksCleared(fixture)
+        let deadline = ProcessInfo.processInfo.systemUptime + 2
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            await Task.yield()
+            try assertGradientMasksCleared(fixture)
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func testSameIdentitySwitchesGradientAndFlatWithoutReplacingVisibleGeometry() async throws {
+        let fixture = try fixture(), acceptedIdentity = identity()
+        defer { fixture.close() }
+        update(fixture, mask: topMask(hole: true), identity: acceptedIdentity)
+        try await settle(fixture)
+        let parent = try XCTUnwrap(fixture.shapes.first { $0.opacity == 1 })
+        let acceptedPath = try XCTUnwrap(parent.path)
+
+        for useGradient in [true, false, true] {
+            update(fixture, mask: topMask(hole: true), identity: acceptedIdentity, useGradient: useGradient)
+            XCTAssertTrue(fixture.renderer.hasVisibleSilhouette)
+            XCTAssertEqual(fixture.paths.count, 1)
+            XCTAssertEqual(parent.path, acceptedPath)
+            XCTAssertEqual(parent.opacity, 1)
+            XCTAssertTrue(fixture.animations.isEmpty, "Changing paint alone must not restart an outline transition")
+            let parts = try gradientComponents(of: parent)
+            XCTAssertEqual(parts.fill.isHidden, !useGradient)
+            XCTAssertEqual(parts.stroke.isHidden, !useGradient)
+            XCTAssertEqual(parts.fillMask.path, acceptedPath)
+            XCTAssertEqual(parts.strokeMask.path, acceptedPath)
+            XCTAssertTrue((parts.fillMask.animationKeys() ?? []).isEmpty)
+            XCTAssertTrue((parts.strokeMask.animationKeys() ?? []).isEmpty)
+            if useGradient {
+                XCTAssertNil(parent.fillColor)
+                XCTAssertNil(parent.strokeColor)
+            } else {
+                XCTAssertNotNil(parent.fillColor)
+                XCTAssertNotNil(parent.strokeColor)
+                XCTAssertNil(parts.fill.colors)
+                XCTAssertNil(parts.stroke.colors)
+            }
+        }
+    }
+
+    func testPresentationViewRendersGradientPixelsAndKeepsTheOpeningTransparent() async throws {
+        let fixture = try fixture()
+        let presentation = GarmentSilhouettePresentationView(frame: fixture.view.bounds)
+        fixture.view.addSubview(presentation)
+        defer { presentation.tearDown(); fixture.close() }
+        presentation.update(mask: topMask(hole: true), orientation: .up, sourceID: UUID(), reduceMotion: true)
+        try await eventually("The actual preview view must finish presenting its gradient contour") {
+            let parents = presentation.layer.sublayers?.compactMap { $0 as? CAShapeLayer } ?? []
+            return parents.contains { $0.path != nil && $0.opacity == 1 }
+                && parents.allSatisfy { ($0.animationKeys() ?? []).isEmpty }
+        }
+
+        // Render the real UIView hierarchy after Core Animation commits; merely
+        // finding paths on its layers would miss an invisible gradient/mask.
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: presentation.bounds.size, format: format).image { context in
+            UIColor.black.setFill()
+            context.fill(presentation.bounds)
+            XCTAssertTrue(presentation.drawHierarchy(in: presentation.bounds, afterScreenUpdates: true))
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "actual-preview-gradient-pixels-and-transparent-opening"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        let body = try pixelRGBA(in: image, at: CGPoint(x: 100, y: 140))
+        XCTAssertGreaterThan(body[2], 20, "The garment body must contain visible gradient pixels, not only layer paths")
+        XCTAssertGreaterThan(body[0], 10)
+        for point in [CGPoint(x: 128, y: 164), CGPoint(x: 10, y: 10)] {
+            let background = try pixelRGBA(in: image, at: point)
+            XCTAssertTrue(background.prefix(3).allSatisfy { $0 <= 2 },
+                          "The hole and exterior must preserve the black background: \(background)")
+        }
+    }
+
+    private func pixelRGBA(in image: UIImage, at point: CGPoint) throws -> [UInt8] {
+        let source = try XCTUnwrap(image.cgImage)
+        let pixel = try XCTUnwrap(source.cropping(to: CGRect(x: floor(point.x * image.scale),
+            y: floor(point.y * image.scale), width: 1, height: 1)))
+        var rgba = [UInt8](repeating: 0, count: 4)
+        let rendered = rgba.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: 1, height: 1,
+                bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            return true
+        }
+        XCTAssertTrue(rendered)
+        return rgba
     }
 }
