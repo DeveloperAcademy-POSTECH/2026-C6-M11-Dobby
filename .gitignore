@@ -87,6 +87,14 @@ fastlane/test_output
 
 iOSInjectionProject/
 
+# Local app/backend secrets
+Config/DobbySecrets.xcconfig
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.wrangler/
+
 ### SwiftPackageManager ###
 Packages
 xcuserdata
