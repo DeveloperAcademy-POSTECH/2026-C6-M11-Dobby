@@ -32,7 +32,7 @@ final class ProductPhotoSelectionStripTests: XCTestCase {
         let first = app.buttons["camera.thumbnail.0"]
         let second = app.buttons["camera.thumbnail.2"]
         let last = app.buttons["camera.thumbnail.6"]
-        XCTAssertFalse(last.isHittable)
+        XCTAssertTrue(first.isHittable)
         strip.swipeLeft()
         XCTAssertTrue(last.wait(for: \.isHittable, toEqual: true, timeout: 5))
         last.tap()

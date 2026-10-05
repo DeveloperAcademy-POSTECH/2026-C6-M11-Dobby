@@ -30,7 +30,7 @@ final class ProductPhotoReorderTests: XCTestCase {
         XCTAssertTrue(strip.waitForExistence(timeout: 10))
         for index in 1...6 {
             let photo = app.buttons["camera.thumbnail.\(index)"]
-            if !photo.isHittable { strip.swipeLeft() }
+            if index == 5 { strip.swipeLeft() }
             XCTAssertTrue(photo.wait(for: \.isHittable, toEqual: true, timeout: 5))
             photo.tap()
         }

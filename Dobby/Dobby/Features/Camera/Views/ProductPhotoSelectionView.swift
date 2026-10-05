@@ -11,78 +11,51 @@ import SwiftUI
 struct ProductPhotoSelectionView: View {
     let model: ProductPhotoModel
     let onComplete: (ProductPhotoOutput) async throws -> Void
-    @State private var inspectedPhoto: CapturedAsset?
     @State private var didComplete = false
     @State private var completionRequested = false
     @State private var failureMessage: String?
+    private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
 
     var body: some View {
-        List {
-            Section {
+        GeometryReader { geometry in
+            // Figma 402×874: 캐러셀 421, 간격 52, 썸네일 109pt. 작은 높이에서는 사진부터 축소한다.
+            let scale = min(geometry.size.width / 402, max(0, (geometry.size.height - 109) / 473))
+            let freeHeight = max(0, geometry.size.height - 109 - 473 * scale)
+            VStack(spacing: 0) {
+                Spacer().frame(height: min(freeHeight, max(0, 177 * scale - geometry.frame(in: .global).minY)))
                 ProductPhotoCarousel(photos: model.photos,
                                      representativePhotoID: model.selectedPhotoIDs.first)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255))
-            }
-            Section {
-                ProductPhotoSelectionStrip(model: model)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-            }
-            Section {
-                Text("사용할 사진을 선택해 주세요.").font(.headline)
-                Text("\(model.selectedPhotoIDs.count)장 선택 · 최소 1장")
-                    .accessibilityIdentifier("camera.selectedPhotoCount")
-                Text("먼저 선택한 사진이 대표 사진입니다. 실측 원본은 보관되고, 상세 사진은 선택한 사진만 제품에 저장돼요.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                if completionRequested {
-                    ProgressView("선택한 사진 저장 중")
-                        .accessibilityIdentifier("camera.savingPhotos")
-                }
-            }
-            if !model.selectedPhotoIDs.isEmpty {
-                Section("선택 순서 · 첫 사진이 대표 사진") {
-                    ForEach(model.selectedPhotoIDs, id: \.self) { id in
-                        if let photo = model.photos.first(where: { $0.id == id }) {
-                            HStack(spacing: 12) {
-                                CameraPhotoView(source: photo.source, maximumPixelSize: 160)
-                                    .frame(width: 44, height: 56).clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .accessibilityHidden(true)
-                                Text(photo.purpose == .measurement ? "실측 사진" : "상세 사진")
-                                Spacer()
-                                if id == model.selectedPhotoIDs.first {
-                                    Text("대표").font(.caption.weight(.semibold)).foregroundStyle(.tint)
-                                }
-                            }
-                        }
-                    }
-                    .onMove(perform: model.moveSelection)
-                }
-            }
-            Section("사용할 사진") {
-                ForEach(Array(model.photos.enumerated()), id: \.element.id) { index, photo in
-                    let order = model.selectedPhotoIDs.firstIndex(of: photo.id).map { $0 + 1 }
-                    ProductPhotoChoice(photo: photo, index: index, order: order,
-                        toggle: { model.toggleSelection(photo.id) }, inspect: { inspectedPhoto = photo })
-                }
+                    .frame(height: 421 * scale)
+                Spacer().frame(height: 52 * scale)
+                ProductPhotoSelectionStrip(model: model).frame(height: 109).padding(.leading, 20)
+                Spacer(minLength: 0)
             }
         }
         .disabled(model.isCapturing || completionRequested || didComplete)
+        .background(background.ignoresSafeArea())
+        .preferredColorScheme(.dark)
         .navigationTitle("제품 사진 선택")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                EditButton()
-                    .disabled(model.selectedPhotoIDs.count < 2 || completionRequested || didComplete)
-                    .accessibilityIdentifier("camera.reorderPhotos")
+        .toolbarBackground(background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .overlay {
+            if completionRequested {
+                ProgressView("선택한 사진 저장 중").padding().background(.regularMaterial, in: Capsule())
+                    .accessibilityIdentifier("camera.savingPhotos")
             }
+        }
+        .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("완료") {
+                Button {
                     guard !didComplete, !completionRequested, model.output != nil else { return }
                     completionRequested = true
+                } label: {
+                    Text("완료").foregroundStyle(.white)
                 }
+                .font(.body.weight(.semibold))
+                .buttonStyle(.borderedProminent).tint(.blue)
                 .disabled(model.output == nil || completionRequested || didComplete)
+                .accessibilityValue("\(model.selectedPhotoIDs.count)장 선택 · 최소 1장")
                 .accessibilityIdentifier("camera.completePhotos")
             }
         }
@@ -107,72 +80,5 @@ struct ProductPhotoSelectionView: View {
             Text(failureMessage ?? "사진을 다시 선택하고 완료를 눌러 주세요.")
         }
         .onAppear { didComplete = false }
-        .sheet(item: $inspectedPhoto) { photo in
-            NavigationStack {
-                CameraPhotoView(source: photo.source, maximumPixelSize: 2400, contentMode: .fit)
-                    .background(.black)
-                    .accessibilityLabel("상품 사진 크게 보기")
-                    .navigationTitle("사진 크게 보기")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("닫기") { inspectedPhoto = nil }
-                        }
-                    }
-            }
-        }
-    }
-}
-
-/// 행 전체의 선택과 크게 보기 버튼을 분리해 사진 확인 중 선택이 바뀌지 않게 한다.
-private struct ProductPhotoChoice: View {
-    let photo: CapturedAsset
-    let index: Int
-    let order: Int?
-    let toggle: () -> Void
-    let inspect: () -> Void
-    @State private var imageAvailable: Bool?
-
-    private var title: String { photo.purpose == .measurement ? "실측 사진" : "상세 사진 \(index)" }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Button(action: toggle) {
-                HStack(spacing: 12) {
-                    CameraPhotoView(source: photo.source, maximumPixelSize: 480, contentMode: .fit,
-                                    onLoad: { imageAvailable = $0 })
-                        .frame(width: 96, height: 128)
-                        .background(.black)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(title).font(.headline)
-                        Text(order.map { $0 == 1 ? "1 · 대표 사진" : "\($0)번째 선택" } ?? "선택 안 됨")
-                            .font(.subheadline).foregroundStyle(order == nil ? Color.secondary : Color.accentColor)
-                        if imageAvailable == false {
-                            Text("사진을 불러올 수 없어요.").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: order == nil ? "circle" : "checkmark.circle.fill")
-                        .foregroundStyle(order == nil ? Color.secondary : Color.accentColor)
-                }
-                .contentShape(Rectangle())
-            }
-            // 읽기 실패한 새 사진은 선택하지 않는다. 기존 선택은 해제할 수 있다.
-            .disabled(imageAvailable != true && order == nil)
-            .accessibilityLabel(title)
-            .accessibilityIdentifier("camera.photo.\(index)")
-            .accessibilityValue(order.map { "\($0)번째 선택" } ?? "선택 안 됨")
-            .accessibilityAddTraits(order == nil ? [] : .isSelected)
-            .accessibilityHint("선택하거나 선택을 해제합니다. 상세 사진은 선택한 사진만 제품에 저장됩니다.")
-            Button(action: inspect) {
-                Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
-            }
-            .disabled(imageAvailable != true)
-            .accessibilityLabel("\(title) 크게 보기")
-            .accessibilityIdentifier("camera.inspectPhoto.\(index)")
-        }
-        .buttonStyle(.plain)
     }
 }

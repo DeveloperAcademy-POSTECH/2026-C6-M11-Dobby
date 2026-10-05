@@ -30,6 +30,12 @@ final class ProductPhotoCarouselTests: XCTestCase {
         let page = app.descendants(matching: .any)["camera.photoCarouselPage"].firstMatch
         XCTAssertTrue(page.waitForExistence(timeout: 10))
         XCTAssertEqual(page.value as? String, "1 / 3")
+        XCTAssertFalse(app.buttons["camera.reorderPhotos"].exists)
+        XCTAssertFalse(app.buttons["camera.photo.0"].exists)
+        let strip = app.scrollViews["camera.selectionStrip"]
+        XCTAssertTrue(strip.isHittable)
+        XCTAssertGreaterThan(strip.frame.minY, app.scrollViews["camera.photoCarousel"].frame.maxY)
+        XCTAssertLessThan(strip.frame.maxY, app.frame.maxY)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "photo-carousel-first-page"
         screenshot.lifetime = .keepAlways
@@ -47,6 +53,6 @@ final class ProductPhotoCarouselTests: XCTestCase {
         carousel.swipeRight()
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", "1 / 3"), object: page)], timeout: 5), .completed)
-        XCTAssertTrue(app.staticTexts["camera.selectedPhotoCount"].label.contains("1장 선택"))
+        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장")
     }
 }
