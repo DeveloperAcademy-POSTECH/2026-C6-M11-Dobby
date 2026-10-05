@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+<key>Cafe24BackendBaseURL</key><string>$(CAFE24_BACKEND_BASE_URL)</string>
+<key>Cafe24AppAPIKey</key><string>$(DOBBY_APP_API_KEY)</string>
+<key>NaverBackendBaseURL</key><string>$(NAVER_BACKEND_BASE_URL)</string>
+<key>InstagramBackendBaseURL</key><string>$(INSTAGRAM_BACKEND_BASE_URL)</string>
+<key>InstagramAppAPIKey</key><string>$(DOBBY_INSTAGRAM_APP_API_KEY)</string>
+<key>NSLocalNetworkUsageDescription</key><string>같은 네트워크의 네이버 커머스API 테스트 서버에 연결합니다.</string>
+<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 <key>NSSupportsLiveActivities</key><true/>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>com.dobby.quickcopy</string><key>CFBundleURLSchemes</key><array><string>dobby-copy</string></array></dict></array>
 </dict></plist>
