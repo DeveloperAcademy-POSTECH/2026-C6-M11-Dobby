@@ -217,8 +217,8 @@ struct CameraPreview: UIViewRepresentable {
                 identity: .init(epoch: readiness.analysisEpoch ?? fallbackOutlineEpoch,
                     timestamp: readiness.timestamp, orientation: Self.imageOrientation(for: orientation)),
                 transform: transform, viewport: bounds,
-                fillColor: color.withAlphaComponent(0.20).cgColor, strokeColor: color.cgColor,
-                reduceMotion: UIAccessibility.isReduceMotionEnabled)
+                fillColor: color.withAlphaComponent(0.40).cgColor, strokeColor: color.cgColor,
+                reduceMotion: UIAccessibility.isReduceMotionEnabled, gradientEndColor: UIColor.white.cgColor)
         }
 
         func tearDownOutline() {

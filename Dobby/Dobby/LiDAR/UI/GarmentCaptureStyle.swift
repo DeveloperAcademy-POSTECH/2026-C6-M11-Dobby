@@ -7,6 +7,17 @@ enum GarmentCaptureStyle {
     static let recognition = Color("CaptureRecognition")
 }
 
+struct GarmentCaptureToolbarIcon: View {
+    let systemName: String
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 17, weight: .semibold))
+            .frame(width: 44, height: 44)
+            .glassEffect(.regular.tint(.white.opacity(0.08)), in: Circle())
+    }
+}
+
 struct GarmentShutterButton: View {
     var isEnabled: Bool
     var isCapturing: Bool
@@ -19,14 +30,11 @@ struct GarmentShutterButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                Circle().fill(.white.opacity(0.12).gradient)
-                    .overlay(Circle().stroke(.white.opacity(0.22), lineWidth: 1))
-                Circle().stroke(.white.opacity(0.22), lineWidth: 0.7).padding(8)
-                Circle().stroke(.white.opacity(0.15), lineWidth: 0.7).padding(16)
-                Circle().fill(GarmentCaptureStyle.accent.gradient)
-                    .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 1))
-                    .shadow(color: .black.opacity(0.7), radius: 3, y: 2)
-                    .padding(31)
+                // Reuse the original Figma shutter already bundled by the
+                // detail-camera feature. Its export includes shadow margins.
+                Image("CameraShutter").resizable().frame(width: 152, height: 118)
+                    .offset(x: 12, y: 7).frame(width: 92, height: 92)
+                    .accessibilityHidden(true)
                 if isCapturing { ProgressView().tint(.white).transition(.opacity) }
             }.frame(width: 92, height: 92)
                 .opacity(isEnabled || isCapturing ? 1 : 0.45)
@@ -37,7 +45,7 @@ struct GarmentShutterButton: View {
         .buttonStyle(GarmentShutterPressStyle(reduceMotion: usesReducedMotion))
         .disabled(!isEnabled || isCapturing)
         .accessibilityLabel(isCapturing ? "실측 계산 중" : "실측 사진 촬영")
-        .accessibilityHint(isEnabled ? "사진을 촬영하고 옷 종류와 길이를 확인합니다" : "카메라와 깊이가 준비되면 촬영할 수 있습니다")
+        .accessibilityHint(isEnabled ? "인식을 기다리지 않고 사진을 촬영한 뒤 옷 종류와 길이를 확인합니다" : "카메라가 준비되면 촬영할 수 있습니다")
         .accessibilityIdentifier("captureGarment")
     }
 }

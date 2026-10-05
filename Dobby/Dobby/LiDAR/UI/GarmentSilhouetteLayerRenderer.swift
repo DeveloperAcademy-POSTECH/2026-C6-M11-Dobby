@@ -17,6 +17,7 @@ nonisolated struct GarmentSilhouetteRenderIdentity: Equatable, Sendable {
 final class GarmentSilhouetteLayerRenderer {
     private weak var containerLayer: CALayer?
     private let layers = [CAShapeLayer(), CAShapeLayer()]
+    private let gradientLayers = [GradientLayers(), GradientLayers()]
     private var activeLayerIndex = 0
     private var latest: Update?
     private var cachedIdentity: GarmentSilhouetteRenderIdentity?
@@ -42,6 +43,34 @@ final class GarmentSilhouetteLayerRenderer {
         var fillColor: CGColor?
         var strokeColor: CGColor?
         var reduceMotion: Bool
+        var gradientEndColor: CGColor?
+    }
+
+    /// The parent owns visibility/crossfades; these masks share its exact path.
+    /// Keeping them synchronized while hidden also permits a style-only update.
+    private struct GradientLayers {
+        let fill = CAGradientLayer()
+        let stroke = CAGradientLayer()
+        let fillMask = CAShapeLayer()
+        let strokeMask = CAShapeLayer()
+
+        var gradients: [CAGradientLayer] { [fill, stroke] }
+        var masks: [CAShapeLayer] { [fillMask, strokeMask] }
+
+        init() {
+            fillMask.fillRule = .evenOdd
+            fillMask.fillColor = UIColor.white.cgColor
+            strokeMask.fillRule = .evenOdd
+            strokeMask.fillColor = nil
+            strokeMask.strokeColor = UIColor.white.cgColor
+            strokeMask.lineWidth = 2
+            strokeMask.lineJoin = .round
+            strokeMask.lineCap = .round
+            fill.mask = fillMask
+            stroke.mask = strokeMask
+            for gradient in gradients { gradient.isHidden = true }
+            for mask in masks { mask.allowsEdgeAntialiasing = true }
+        }
     }
 
     private nonisolated struct PreparedGeometry: Sendable {
@@ -51,7 +80,7 @@ final class GarmentSilhouetteLayerRenderer {
 
     init(containerLayer: CALayer) {
         self.containerLayer = containerLayer
-        for layer in layers {
+        for (index, layer) in layers.enumerated() {
             layer.fillRule = .evenOdd
             layer.lineWidth = 2
             layer.lineJoin = .round
@@ -59,6 +88,8 @@ final class GarmentSilhouetteLayerRenderer {
             layer.opacity = 0
             layer.contentsScale = containerLayer.contentsScale
             layer.allowsEdgeAntialiasing = true
+            layer.addSublayer(gradientLayers[index].fill)
+            layer.addSublayer(gradientLayers[index].stroke)
             containerLayer.addSublayer(layer)
         }
     }
@@ -67,9 +98,12 @@ final class GarmentSilhouetteLayerRenderer {
 
     /// transform maps raw normalized image coordinates into container points.
     /// ARKit callers pass displayTransform followed by the viewport scale.
+    /// An optional endpoint enables a native transparent gradient. Fill and
+    /// stroke keep their respective input alpha; no private blend filter is used.
     func update(mask: GarmentMask, identity: GarmentSilhouetteRenderIdentity,
                 transform: CGAffineTransform, viewport: CGRect? = nil,
-                fillColor: CGColor?, strokeColor: CGColor?, reduceMotion: Bool) {
+                fillColor: CGColor?, strokeColor: CGColor?, reduceMotion: Bool,
+                gradientEndColor: CGColor? = nil) {
         guard !isTornDown, let containerLayer else { return }
         let viewport = viewport ?? containerLayer.bounds
         guard identity.timestamp.isFinite, identity.timestamp >= 0,
@@ -87,7 +121,8 @@ final class GarmentSilhouetteLayerRenderer {
         }
         let update = Update(mask: mask, identity: identity,
                             mapping: .init(transform: transform, viewport: viewport),
-                            fillColor: fillColor, strokeColor: strokeColor, reduceMotion: reduceMotion)
+                            fillColor: fillColor, strokeColor: strokeColor, reduceMotion: reduceMotion,
+                            gradientEndColor: gradientEndColor)
         latest = update
         configureLayers(update)
 
@@ -194,13 +229,67 @@ final class GarmentSilhouetteLayerRenderer {
     private func configureLayers(_ update: Update) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for layer in layers {
+        for (index, layer) in layers.enumerated() {
             layer.frame = update.mapping.viewport
             layer.contentsScale = containerLayer?.contentsScale ?? layer.contentsScale
-            layer.fillColor = update.fillColor
-            layer.strokeColor = update.strokeColor
+            layer.fillColor = update.gradientEndColor == nil ? update.fillColor : nil
+            layer.strokeColor = update.gradientEndColor == nil ? update.strokeColor : nil
+            let gradient = gradientLayers[index]
+            for child in gradient.gradients {
+                child.frame = layer.bounds
+                child.contentsScale = layer.contentsScale
+            }
+            for mask in gradient.masks {
+                mask.frame = layer.bounds
+                mask.contentsScale = layer.contentsScale
+            }
+            configureGradient(gradient.fill, startColor: update.fillColor, endColor: update.gradientEndColor)
+            configureGradient(gradient.stroke, startColor: update.strokeColor, endColor: update.gradientEndColor)
+            positionGradients(gradient, path: layer.path, bounds: layer.bounds)
         }
         CATransaction.commit()
+    }
+
+    private func configureGradient(_ gradient: CAGradientLayer, startColor: CGColor?, endColor: CGColor?) {
+        guard let startColor, let endColor = endColor?.copy(alpha: startColor.alpha) else {
+            gradient.isHidden = true
+            gradient.colors = nil
+            return
+        }
+        gradient.colors = [startColor, endColor]
+        gradient.locations = [0, 1]
+        gradient.isHidden = false
+    }
+
+    private func positionGradients(_ gradient: GradientLayers, path: CGPath?, bounds: CGRect) {
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let box = path?.boundingBoxOfPath ?? bounds
+        guard !box.isEmpty, !box.isInfinite, !box.isNull else { return }
+        let start = CGPoint(x: (box.minX + box.width * 0.30 - bounds.minX) / bounds.width,
+            y: (box.minY + box.height * 0.13 - bounds.minY) / bounds.height)
+        let end = CGPoint(x: (box.minX + box.width * 0.75 - bounds.minX) / bounds.width,
+            y: (box.minY + box.height * 0.92 - bounds.minY) / bounds.height)
+        for child in gradient.gradients {
+            child.startPoint = start
+            child.endPoint = end
+        }
+    }
+
+    /// All callers set paths with implicit actions disabled, just as for the
+    /// original parent shape. Explicit path morphs are installed on all three.
+    private func setPath(_ path: CGPath?, on layer: CAShapeLayer) {
+        layer.path = path
+        guard let index = layers.firstIndex(where: { $0 === layer }) else { return }
+        let gradient = gradientLayers[index]
+        for mask in gradient.masks { mask.path = path }
+        positionGradients(gradient, path: path, bounds: layer.bounds)
+    }
+
+    private func removeAnimations(from layer: CAShapeLayer) {
+        layer.removeAllAnimations()
+        guard let index = layers.firstIndex(where: { $0 === layer }) else { return }
+        for mask in gradientLayers[index].masks { mask.removeAllAnimations() }
+        for child in gradientLayers[index].gradients { child.removeAllAnimations() }
     }
 
     private func path(for contours: [[ImagePoint]], mapping: Mapping) -> CGPath {
@@ -225,7 +314,7 @@ final class GarmentSilhouetteLayerRenderer {
         let layer = layers[activeLayerIndex]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer.path = path(for: contours, mapping: update.mapping)
+        setPath(path(for: contours, mapping: update.mapping), on: layer)
         layer.opacity = 1
         CATransaction.commit()
         cachedMapping = update.mapping
@@ -246,7 +335,7 @@ final class GarmentSilhouetteLayerRenderer {
             active.removeAnimation(forKey: "silhouette.path")
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            active.path = target
+            setPath(target, on: active)
             active.opacity = 1
             CATransaction.commit()
             let animation = CABasicAnimation(keyPath: "path")
@@ -255,6 +344,9 @@ final class GarmentSilhouetteLayerRenderer {
             animation.duration = 0.22
             animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             active.add(animation, forKey: "silhouette.path")
+            for mask in gradientLayers[activeLayerIndex].masks {
+                mask.add(animation, forKey: "silhouette.path")
+            }
         } else if hasVisibleSilhouette, !sameMapping {
             // A bounds change remaps current geometry without an artificial pan.
             presentImmediately(geometry.contours, update: update)
@@ -284,18 +376,23 @@ final class GarmentSilhouetteLayerRenderer {
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        outgoing.removeAllAnimations()
-        incoming.removeAllAnimations()
-        outgoing.path = displayedPath
+        removeAnimations(from: outgoing)
+        removeAnimations(from: incoming)
+        setPath(displayedPath, on: outgoing)
         outgoing.opacity = 0
-        incoming.path = path
+        setPath(path, on: incoming)
         incoming.opacity = 1
         CATransaction.setCompletionBlock { [weak self, weak outgoing] in
             Task { @MainActor [weak self, weak outgoing] in
                 guard let self, transitionID == token, revision == jobRevision,
                       layers[activeLayerIndex] !== outgoing else { return }
-                outgoing?.removeAllAnimations()
-                outgoing?.path = nil
+                if let outgoing {
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    removeAnimations(from: outgoing)
+                    setPath(nil, on: outgoing)
+                    CATransaction.commit()
+                }
             }
         }
 
@@ -322,8 +419,8 @@ final class GarmentSilhouetteLayerRenderer {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for layer in layers {
-            layer.removeAllAnimations()
-            layer.path = nil
+            removeAnimations(from: layer)
+            setPath(nil, on: layer)
             layer.opacity = 0
         }
         CATransaction.commit()
