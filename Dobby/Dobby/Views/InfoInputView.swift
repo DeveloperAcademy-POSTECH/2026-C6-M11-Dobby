@@ -23,6 +23,10 @@ struct InfoInputView: View {
     @State private var saveError: String?
     @FocusState private var focusedMeasurementID: UUID?
     private static let measurementTableID = "product-info.measurement-table"
+    /// 표의 테두리와 칸 사이 선. 같은 선이므로 한 곳에서 정한다.
+    private static let tableLine = Color(.separator).opacity(0.5)
+    /// 이보다 많으면 고르게 나누지 않고 가로로 민다.
+    private static let evenlyFittingColumns = 5
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
          onComplete: ((Garment) -> Void)? = nil) {
@@ -172,19 +176,31 @@ struct InfoInputView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("product-info.measurement-warning")
             }
+            // 다섯 칸까지는 화면 폭을 고르게 나눠 갖고, 그보다 많으면 가로로 민다.
+            // 바지는 항목이 여덟 개라 고르게 나누면 한 칸이 "56.5" 를 못 담는다.
+            let columns = garment.orderedMeasurements
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
-                    ForEach(Array(garment.orderedMeasurements.enumerated()), id: \.element.id) { index, value in
+                    ForEach(Array(columns.enumerated()), id: \.element.id) { index, value in
                         if index > 0 {
-                            Divider().frame(height: 76)
+                            Rectangle().fill(Self.tableLine).frame(width: 1)
                         }
                         SizeColumn(value: value, text: Binding(
                             get: { measurementInput.wrappedValue.text(for: value) },
                             set: { measurementInput.wrappedValue.setText($0, for: value) }
                         ), focus: $focusedMeasurementID)
+                        .frame(maxWidth: columns.count <= Self.evenlyFittingColumns ? .infinity : nil)
                     }
                 }
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                .frame(minWidth: columns.count <= Self.evenlyFittingColumns
+                       ? UIScreen.main.bounds.width - 40 : nil)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .scrollDisabled(columns.count <= Self.evenlyFittingColumns)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12).stroke(Self.tableLine, lineWidth: 1)
             }
             .accessibilityIdentifier("product-info.measurements")
         }
@@ -207,10 +223,9 @@ private struct SizeColumn: View {
         VStack(spacing: 0) {
             Text(value.label)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(Color.primary.opacity(0.04))
+                .background(Color(.secondarySystemBackground))
 
             HStack(spacing: 1) {
                 TextField("", text: $text)
@@ -224,7 +239,7 @@ private struct SizeColumn: View {
                 Text("cm").font(.subheadline)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 14)
         }
         .frame(minWidth: 84)
     }
