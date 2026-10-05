@@ -54,7 +54,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
             let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
             XCTAssertTrue(app.staticTexts["garmentPreviewProvenance"].exists)
             XCTAssertFalse(silhouette.exists)
-            XCTAssertTrue(guidance.label.contains("촬영"))
+            XCTAssertTrue(guidance.label.contains("옷이 잘리지 않게 카메라 안에 넣어주세요"))
             XCTAssertFalse(guidance.label.contains("인식 완료"))
             XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
             shutter.tap()
@@ -185,6 +185,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         }
         attachScreenshot(app, name: "garment-top-preview-measurement-result")
         let shoulderValue = app.buttons["garmentMeasurementLabel_top.shoulderWidth"].label
+        openResultDetails(in: app)
         let reviewMenu = app.buttons["reviewAllGarmentMeasurementPoints"]
         reveal(reviewMenu, in: app)
         XCTAssertTrue(reviewMenu.exists)
@@ -194,6 +195,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["A 지정됨"].exists)
         XCTAssertTrue(app.buttons["B 지정됨"].exists)
         app.buttons["완료"].tap()
+        closeResultDetails(in: app)
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons["garmentMeasurementLabel_top.shoulderWidth"].label, shoulderValue,
                        "Reviewing valid model points must preserve the automatic result")
@@ -284,12 +286,13 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["garmentMeasurementLabel_bottom.waist_left.waist_right"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementLabel_bottom.crotch.hem_right_inner"].exists)
+        openResultDetails(in: app)
         let unavailable = app.staticTexts["garmentUnavailableSummary"]
         reveal(unavailable, in: app)
         XCTAssertTrue(unavailable.label.contains("2개 항목"))
-        let details = app.buttons["측정 항목 상세"]
-        reveal(details, in: app)
-        details.tap()
+        let details = app.descendants(matching: .any)["garmentMeasurementDetails"].firstMatch
+        XCTAssertTrue(details.exists)
+        // Opening the details sheet expands its measurement rows already.
         let missing = app.descendants(matching: .any)["garmentMeasurementValue_bottom.crotch.hem_right_inner"].firstMatch
         reveal(missing, in: app)
         XCTAssertTrue(missing.exists)
@@ -304,7 +307,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testMissingMeasurementCanBeReviewedDirectlyWithoutOpeningDetails() throws {
+    func testMissingMeasurementCanBeReviewedWithoutExpandingMeasurementRows() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--garment-preview-partial"]
@@ -318,6 +321,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         recognize.tap()
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        openResultDetails(in: app)
         let review = app.buttons["reviewGarmentMeasurement_bottom.crotch.hem_right_inner"]
         reveal(review, in: app)
         XCTAssertTrue(review.exists)
@@ -332,6 +336,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["measurementSaved"].exists)
         attachScreenshot(app, name: "garment-missing-measurement-direct-review")
         app.buttons["완료"].tap()
+        closeResultDetails(in: app)
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["garmentMeasurementLabel_bottom.crotch.hem_right_inner"].exists,
                        "Opening manual review must not replace an unavailable automatic value")
@@ -375,7 +380,10 @@ final class GarmentCaptureFlowTests: XCTestCase {
         }
         attachScreenshot(app, name: "garment-preview-measurement-result")
 
-        app.buttons["enlargeGarmentPhoto"].tap()
+        app.buttons["garmentResultActions"].tap()
+        let enlargePhoto = app.buttons["enlargeGarmentPhoto"]
+        XCTAssertTrue(enlargePhoto.waitForExistence(timeout: 5))
+        enlargePhoto.tap()
         XCTAssertTrue(app.navigationBars["촬영 사진"].waitForExistence(timeout: 5))
         app.buttons["확대"].tap()
         XCTAssertTrue(app.buttons["축소"].exists)
@@ -457,11 +465,14 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertLessThan(correctedShoulder, originalShoulder)
         XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: hem.label)), originalHem,
                        "Moving a shoulder must preserve an unrelated hem measurement")
-        let adjustment = app.descendants(matching: .any)["garmentMeasurementAdjustmentStatus"].firstMatch
-        XCTAssertTrue(adjustment.waitForExistence(timeout: 5))
-        XCTAssertTrue(adjustment.label.contains("수동"))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
         attachScreenshot(app, name: "garment-top-drag-selected-magnifier-and-correction")
+        openResultDetails(in: app)
+        let adjustment = app.descendants(matching: .any)["garmentMeasurementAdjustmentStatus"].firstMatch
+        XCTAssertTrue(adjustment.waitForExistence(timeout: 5))
+        reveal(adjustment, in: app)
+        XCTAssertTrue(adjustment.label.contains("수동"))
+        closeResultDetails(in: app)
 
         let confirm = app.buttons["confirmGarmentMeasurement"]
         expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: confirm)
@@ -614,10 +625,12 @@ final class GarmentCaptureFlowTests: XCTestCase {
         waitForChangedCentimeters(waist, from: originalWaist)
         XCTAssertNotEqual(point.value as? String, originalPoint)
         XCTAssertTrue(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
+        openResultDetails(in: app)
         let reset = app.buttons["resetGarmentMeasurementPoints"]
         reveal(reset, in: app)
         XCTAssertTrue(reset.isHittable)
         reset.tap()
+        closeResultDetails(in: app)
         expectation(for: NSPredicate(format: "value == %@", originalPoint), evaluatedWith: point)
         waitForExpectations(timeout: 5)
         waitForCentimeters(waist, equalTo: originalWaist)
@@ -633,7 +646,9 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
         XCTAssertEqual(point.value as? String, originalPoint)
+        openResultDetails(in: app)
         XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementAdjustmentStatus"].firstMatch.exists)
+        closeResultDetails(in: app)
         XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: waist.label)), originalWaist,
                        "A fresh capture must not carry forward the prior point adjustment")
     }
@@ -651,6 +666,39 @@ final class GarmentCaptureFlowTests: XCTestCase {
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
+    }
+
+    @MainActor
+    private func openResultDetails(in app: XCUIApplication) {
+        let actions = app.buttons["garmentResultActions"]
+        XCTAssertTrue(actions.waitForExistence(timeout: 5))
+        XCTAssertTrue(actions.isHittable)
+        actions.tap()
+        let details = app.buttons["openGarmentMeasurementDetails"]
+        XCTAssertTrue(details.waitForExistence(timeout: 5))
+        details.tap()
+        let close = app.buttons["closeGarmentMeasurementDetails"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate { _, _ in close.isHittable }, evaluatedWith: close)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(close.isHittable)
+    }
+
+    @MainActor
+    private func closeResultDetails(in app: XCUIApplication) {
+        let close = app.buttons["closeGarmentMeasurementDetails"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate { _, _ in close.isHittable }, evaluatedWith: close)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(close.isHittable)
+        close.tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: close)
+        waitForExpectations(timeout: 5)
+        let confirm = app.buttons["confirmGarmentMeasurement"]
+        expectation(for: NSPredicate { _, _ in confirm.isHittable }, evaluatedWith: confirm)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(confirm.isHittable,
+                      "Closing details must return to the editable result and its confirmation action")
     }
 
     @MainActor

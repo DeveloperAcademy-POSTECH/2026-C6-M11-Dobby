@@ -16,6 +16,7 @@ struct GarmentCaptureFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .subheadline) private var guidanceFontSize: CGFloat = 14
     @State private var orientation: ImageOrientation = .right
     @State private var model: AutomaticMeasurement?
     @State private var previewModel: AutomaticMeasurement?
@@ -83,10 +84,11 @@ struct GarmentCaptureFlowView: View {
                                 Button {
                                     cancel()
                                     if let onCancel { onCancel() } else { dismiss() }
-                                } label: { Image(systemName: "chevron.left") }
+                                } label: { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
+                                    .buttonStyle(.plain)
                                     .accessibilityLabel("촬영 닫기")
                                     .accessibilityIdentifier("closeGarmentCapture")
-                            }
+                            }.sharedBackgroundVisibility(.hidden)
                         }
                 }
             }
@@ -154,10 +156,16 @@ struct GarmentCaptureFlowView: View {
                     captureControls.frame(width: 180)
                 }
             } else {
+                // The handoff uses a 402 × 560 camera window. Keep that
+                // composition on phones without displacing the native bars.
+                let topGap: CGFloat = 15
+                let photoHeight = min(geometry.size.width * 560 / 402,
+                    max(180, geometry.size.height - topGap - 138))
                 VStack(spacing: 0) {
-                    cameraImage
-                    captureControls.frame(minHeight: 138, maxHeight: 172)
+                    cameraImage.frame(height: photoHeight)
+                    captureControls.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
+                .padding(.top, topGap)
             }
         }
         .background(GarmentCaptureStyle.background)
@@ -218,13 +226,15 @@ struct GarmentCaptureFlowView: View {
                 }
                 Spacer(minLength: 24)
                 recognitionGuidance
-                    .padding(.horizontal, 16).padding(.bottom, 24)
+                    .padding(.horizontal, 16).padding(.bottom, 25)
             }.allowsHitTesting(false)
             if silhouetteVisible {
                 Color.clear.accessibilityElement().accessibilityLabel("촬영을 돕는 옷 윤곽 미리보기")
                     .accessibilityIdentifier("garmentSilhouette").allowsHitTesting(false)
             }
         }.clipped()
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("garmentCameraViewport")
     }
 
     private var outlineCue: Bool { silhouetteVisible }
@@ -240,51 +250,38 @@ struct GarmentCaptureFlowView: View {
         HStack(spacing: 8) {
             if isCapturing {
                 ProgressView().controlSize(.small).tint(.white).frame(width: 18)
-            } else {
-                Image(systemName: "viewfinder")
-                    .font(.subheadline.weight(.semibold)).frame(width: 18)
             }
             Text(guidance).multilineTextAlignment(.center)
-        }.font(.subheadline.weight(.medium)).foregroundStyle(.white)
-            .padding(.horizontal, 16).padding(.vertical, 12)
+        }.font(.system(size: guidanceFontSize, weight: .semibold)).foregroundStyle(.white)
+            .frame(minWidth: outlineCue ? 217 : 238, minHeight: 20)
+            .padding(.horizontal, 16).padding(.vertical, 10)
             .transaction { $0.animation = nil }
             .background {
                 ZStack {
-                    Capsule().fill(Color.black.opacity(0.85))
+                    Capsule().fill(Color(white: 0.067))
                     Capsule().fill(GarmentCaptureStyle.recognition)
                         .animation(presentationReduceMotion || !outlineCue ? nil : .easeInOut(duration: 0.20)) { content in
                             content.opacity(outlineCue ? 1 : 0)
                         }
                 }
             }
-            .overlay(Capsule().stroke(.white.opacity(outlineCue ? 0.20 : 0.10), lineWidth: 0.5))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(guidance)
+            .accessibilityHint("윤곽 인식을 기다리지 않고 촬영할 수 있어요. 사진을 촬영한 뒤 치수를 측정합니다")
             .accessibilityIdentifier("captureGuidance")
     }
 
     private var captureControls: some View {
-        VStack(spacing: 10) {
-            Spacer(minLength: 12)
+        VStack(spacing: 8) {
             GarmentShutterButton(isEnabled: canTakePhoto,
                 isCapturing: isCapturing, action: takePhoto, forceReduceMotion: presentationReduceMotion)
-            if isCapturing {
-                Text(processingSnapshot == nil ? "잠시 기기를 움직이지 말아 주세요" : "분석이 끝나면 실측 결과를 보여드려요")
-                    .font(.caption2).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.center)
-            } else if isPreview, !previewRecognized {
+            if isPreview, !isCapturing, !previewRecognized {
                 Button("윤곽 미리보기") { previewRecognized = true }
                     .font(.caption).accessibilityIdentifier("previewRecognizeGarment")
-            } else {
-                Text(captureInstructions)
-                    .font(.caption2).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.center)
             }
-            Spacer(minLength: 10)
-        }.padding(.horizontal, 12)
+        }.padding(.horizontal, 12).padding(.top, 34)
     }
 
-    private var captureInstructions: String {
-        "상의나 하의 한 벌을 평평하게 펼쳐주세요"
-    }
     /// Only camera availability controls the shutter. The captured RGB/depth
     /// must still pass the model and measurement checks before a result.
     private var canTakePhoto: Bool {
@@ -309,8 +306,8 @@ struct GarmentCaptureFlowView: View {
             default: return "사진과 깊이를 확보하고 있어요. 잠시만 멈춰주세요"
             }
         }
-        if silhouetteVisible { return "윤곽 미리보기 · 촬영 후 치수를 측정해요" }
-        if canTakePhoto { return "인식을 기다리지 않고 촬영해도 돼요" }
+        if silhouetteVisible { return "윤곽 미리보기 · 촬영 후 측정해요" }
+        if canTakePhoto { return "옷이 잘리지 않게 카메라 안에 넣어주세요" }
         if isPreview { return "옷 한 벌 전체가 보이도록 평평하게 펼쳐주세요" }
         switch camera.state {
         case .failed, .interrupted: return "카메라 연결이 중단됐어요. 다시 촬영 화면을 열어주세요"

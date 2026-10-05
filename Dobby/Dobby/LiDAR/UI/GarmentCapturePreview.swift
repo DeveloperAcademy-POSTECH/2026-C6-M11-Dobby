@@ -5,12 +5,28 @@ import UIKit
 @MainActor
 enum GarmentCapturePreview {
     static func measurement(partial: Bool = false, kind: AutomaticGarmentKind = .bottoms) -> AutomaticMeasurement {
-        let size = PixelSize(width: 800, height: 1000)
-        let maskSize = PixelSize(width: 400, height: 500)
+        // The photographed garment is an opt-in design fixture, not model or
+        // sensor evidence. Its points, mask, calibration and 1 m depth are synthetic.
+        let referenceImage = kind == .top && ProcessInfo.processInfo.arguments.contains("--garment-preview-design-reference")
+            ? designReferenceImage() : nil
+        let isDesignReference = referenceImage != nil
+        let size = isDesignReference ? PixelSize(width: 804, height: 1120) : PixelSize(width: 800, height: 1000)
+        // The display contour extractor accepts at most 512 pixels per axis.
+        // Keep the reference mask bounded without changing its synthetic depth.
+        let maskSize = isDesignReference ? PixelSize(width: 201, height: 280) : PixelSize(width: 400, height: 500)
+        let depthSize = isDesignReference ? PixelSize(width: 402, height: 560) : maskSize
         let bottomVertices = [ImagePoint(x: 0.27, y: 0.15), .init(x: 0.73, y: 0.15),
             .init(x: 0.78, y: 0.87), .init(x: 0.57, y: 0.87), .init(x: 0.50, y: 0.46),
             .init(x: 0.43, y: 0.87), .init(x: 0.22, y: 0.87)]
-        let topVertices = [ImagePoint(x: 0.41, y: 0.16), .init(x: 0.30, y: 0.23),
+        let topVertices = isDesignReference
+            ? [ImagePoint(x: 0.448, y: 0.205), .init(x: 0.418, y: 0.246), .init(x: 0.132, y: 0.296),
+               .init(x: 0, y: 0.44), .init(x: 0.06, y: 0.56), .init(x: 0.182, y: 0.652),
+               .init(x: 0.24, y: 0.64), .init(x: 0.30, y: 0.75), .init(x: 0.50, y: 0.76),
+               .init(x: 0.719, y: 0.757),
+               .init(x: 0.78, y: 0.64), .init(x: 0.84, y: 0.64), .init(x: 0.95, y: 0.55),
+               .init(x: 1, y: 0.45), .init(x: 0.876, y: 0.288), .init(x: 0.590, y: 0.248),
+               .init(x: 0.537, y: 0.205)]
+            : [ImagePoint(x: 0.41, y: 0.16), .init(x: 0.30, y: 0.23),
             .init(x: 0.075, y: 0.42), .init(x: 0.13, y: 0.52), .init(x: 0.32, y: 0.43),
             .init(x: 0.32, y: 0.84), .init(x: 0.50, y: 0.86), .init(x: 0.68, y: 0.84),
             .init(x: 0.68, y: 0.43), .init(x: 0.87, y: 0.52), .init(x: 0.925, y: 0.42),
@@ -33,7 +49,7 @@ enum GarmentCapturePreview {
         let mask = GarmentMask(size: maskSize, values: pixels)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        let image = UIGraphicsImageRenderer(size: CGSize(width: size.width, height: size.height), format: format).image { renderer in
+        let image = referenceImage ?? UIGraphicsImageRenderer(size: CGSize(width: size.width, height: size.height), format: format).image { renderer in
             UIColor(red: 0.46, green: 0.45, blue: 0.42, alpha: 1).setFill()
             renderer.fill(CGRect(x: 0, y: 0, width: size.width, height: size.height))
             UIColor(red: 0.16, green: 0.23, blue: 0.31, alpha: 1).setFill()
@@ -56,13 +72,21 @@ enum GarmentCapturePreview {
         }
         let sessionID = UUID(), frameID = UUID()
         let frame = MeasurementFrame(sessionID: sessionID, frameID: frameID, timestamp: 1, capturedAt: .now,
-            imageSize: size, intrinsics: .init(fx: 850, fy: 850, cx: 400, cy: 500, referenceSize: size),
-            depth: .init(size: maskSize, values: .init(repeating: 1, count: pixels.count),
-                         confidence: .init(repeating: 2, count: pixels.count)), source: .synthetic, orientation: .up)
+            imageSize: size, intrinsics: .init(fx: 850, fy: 850,
+                cx: Double(size.width) / 2, cy: Double(size.height) / 2, referenceSize: size),
+            depth: .init(size: depthSize, values: .init(repeating: 1, count: depthSize.width * depthSize.height),
+                         confidence: .init(repeating: 2, count: depthSize.width * depthSize.height)),
+            source: .synthetic, orientation: .up)
         let bottomIDs = ["waist_left", "waist_right", "hem_right_outer", "hem_right_inner", "crotch", "hem_left_inner", "hem_left_outer"]
         let topIDs = ["neck_left", "neck_right", "shoulder_left", "shoulder_right", "armpit_left", "armpit_right",
                       "sleeve_end_left", "sleeve_end_right", "hem_left", "hem_center", "hem_right"]
-        let topPoints = [ImagePoint(x: 0.41, y: 0.16), .init(x: 0.59, y: 0.16),
+        let topPoints = isDesignReference
+            ? [ImagePoint(x: 0.453, y: 0.213), .init(x: 0.537, y: 0.213),
+               .init(x: 0.142, y: 0.302), .init(x: 0.856, y: 0.302),
+               .init(x: 0.229, y: 0.434), .init(x: 0.789, y: 0.434),
+               .init(x: 0.182, y: 0.652), .init(x: 0.84, y: 0.64),
+               .init(x: 0.30, y: 0.75), .init(x: 0.50, y: 0.76), .init(x: 0.719, y: 0.757)]
+            : [ImagePoint(x: 0.41, y: 0.16), .init(x: 0.59, y: 0.16),
             .init(x: 0.30, y: 0.23), .init(x: 0.70, y: 0.23), .init(x: 0.32, y: 0.43), .init(x: 0.68, y: 0.43),
             .init(x: 0.10, y: 0.47), .init(x: 0.90, y: 0.47), .init(x: 0.32, y: 0.84),
             .init(x: 0.50, y: 0.86), .init(x: 0.68, y: 0.84)]
@@ -70,7 +94,9 @@ enum GarmentCapturePreview {
         var points = zip(ids, kind == .top ? topPoints : bottomVertices)
             .map { GarmentLandmark(id: $0.0, point: $0.1, confidence: 1) }
         if kind == .top {
-            points.append(.init(id: "neck_center", point: .init(x: 0.5, y: 0.16), confidence: 1,
+            points.append(.init(id: "neck_center",
+                                point: .init(x: (topPoints[0].x + topPoints[1].x) / 2,
+                                             y: (topPoints[0].y + topPoints[1].y) / 2), confidence: 1,
                                 derivedFrom: ["neck_left", "neck_right"]))
         } else {
             points.append(.init(id: "waist_center", point: .init(x: 0.5, y: 0.15), confidence: 1,
@@ -91,7 +117,8 @@ enum GarmentCapturePreview {
         }
         let definitions = kind == .top ? TopLandmarkSchema.canonicalMeasurementDefinitions : bottomDefinitions
         let landmarks = GarmentLandmarkSet(sessionID: sessionID, frameID: frameID, origin: .synthetic,
-            modelVersion: kind == .top ? "garment-ui-top-preview-v1" : "garment-ui-preview-v1", points: points, mask: mask,
+            modelVersion: isDesignReference ? "garment-ui-design-reference-synthetic-v1"
+                : kind == .top ? "garment-ui-top-preview-v1" : "garment-ui-preview-v1", points: points, mask: mask,
             garmentKind: kind)
         let result = LiDARMeasurementEngine().measure(frame: frame, landmarks: landmarks, definitions: definitions)
         let output = AutomaticMeasurementOutput(runID: UUID(),
@@ -100,7 +127,33 @@ enum GarmentCapturePreview {
             timings: .init(captureSeconds: nil, landmarksSeconds: nil, measurementSeconds: nil, totalSeconds: 0),
             startedAt: .now, finishedAt: .now)
         return AutomaticMeasurement(output: output,
-            context: .init(category: kind.category, specimenName: "화면 미리보기", deviceModel: "Synthetic UI preview"))
+            context: .init(category: kind.category,
+                specimenName: isDesignReference ? "디자인 사진 비교 · 합성 깊이 1m" : "화면 미리보기",
+                deviceModel: "Synthetic UI preview"))
+    }
+
+    /// Keep the bundled source intact. Match the design's centered object-cover
+    /// crop at runtime, then render RGB at the synthetic frame's calibrated size.
+    private static func designReferenceImage() -> UIImage? {
+        guard let url = Bundle.main.url(forResource: "garment", withExtension: "png"),
+              let source = UIImage(contentsOfFile: url.path)?.cgImage else { return nil }
+        let target = CGSize(width: 804, height: 1120)
+        let aspect = target.width / target.height
+        let sourceSize = CGSize(width: source.width, height: source.height)
+        let cropWidth = min(sourceSize.width, sourceSize.height * aspect)
+        let cropHeight = min(sourceSize.height, sourceSize.width / aspect)
+        let cropRect = CGRect(x: (sourceSize.width - cropWidth) / 2,
+            y: (sourceSize.height - cropHeight) / 2, width: cropWidth, height: cropHeight).integral
+        guard let crop = source.cropping(to: cropRect) else { return nil }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let scale = max(target.width / CGFloat(crop.width), target.height / CGFloat(crop.height))
+        let drawnSize = CGSize(width: CGFloat(crop.width) * scale, height: CGFloat(crop.height) * scale)
+        let drawnRect = CGRect(x: (target.width - drawnSize.width) / 2,
+            y: (target.height - drawnSize.height) / 2, width: drawnSize.width, height: drawnSize.height)
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            UIImage(cgImage: crop).draw(in: drawnRect)
+        }
     }
 }
 
@@ -181,8 +234,8 @@ final class GarmentSilhouettePresentationView: UIView {
         let color = UIColor(GarmentCaptureStyle.recognition).resolvedColor(with: traitCollection)
         renderer.update(mask: mask, identity: identity,
             transform: displayTransform, viewport: bounds,
-            fillColor: color.withAlphaComponent(0.20).cgColor, strokeColor: color.cgColor,
-            reduceMotion: reduceMotion)
+            fillColor: color.withAlphaComponent(0.40).cgColor, strokeColor: color.cgColor,
+            reduceMotion: reduceMotion, gradientEndColor: UIColor.white.cgColor)
     }
 
     private var displayTransform: CGAffineTransform {
