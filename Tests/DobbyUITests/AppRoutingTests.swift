@@ -5,17 +5,12 @@ import XCTest
 /// captures a real photo, or opens an external marketplace.
 final class AppRoutingTests: XCTestCase {
     @MainActor
-    func testCaptureEntryLabAndEmptyLibraryRemainReachable() {
+    func testCaptureAndEmptyLibraryRemainReachableWithLabHidden() {
         continueAfterFailure = false
         let app = fixtureApp()
         app.launch()
         defer { app.terminate() }
         expectHome(in: app)
-
-        openLiDARLab(in: app)
-        app.buttons["closeLiDARLab"].tap()
-        expectHome(in: app)
-        XCTAssertFalse(app.buttons["closeLiDARLab"].exists)
 
         // This launches the explicitly labelled synthetic creation flow. Exit
         // before shutter/confirmation, so no product or measurement is stored.
@@ -29,7 +24,7 @@ final class AppRoutingTests: XCTestCase {
         expectEmptyLibrary(in: app)
         app.tabBars.buttons["홈"].tap()
         expectHome(in: app)
-        attachScreenshot(app, name: "routing-home-capture-lab-library")
+        attachScreenshot(app, name: "routing-home-capture-library")
     }
 
     @MainActor
@@ -78,12 +73,11 @@ final class AppRoutingTests: XCTestCase {
 
     @MainActor
     private func expectHome(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(app.navigationBars["Dobby"].waitForExistence(timeout: 10), file: file, line: line)
-        for identifier in ["product-flow.start", "openLiDARLab"] {
-            let entry = app.buttons[identifier]
-            XCTAssertTrue(entry.waitForExistence(timeout: 5), identifier, file: file, line: line)
-            XCTAssertTrue(entry.isHittable, identifier, file: file, line: line)
-        }
+        XCTAssertTrue(app.staticTexts["home.title"].waitForExistence(timeout: 10), file: file, line: line)
+        let entry = app.buttons["product-flow.start"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertTrue(entry.isHittable, file: file, line: line)
+        XCTAssertFalse(app.buttons["openLiDARLab"].exists, file: file, line: line)
         XCTAssertFalse(app.buttons["openQuickCopy"].exists, file: file, line: line)
         XCTAssertFalse(app.buttons["openExportChannels"].exists, file: file, line: line)
     }

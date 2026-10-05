@@ -23,26 +23,20 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $tab) {
             Tab("홈", systemImage: "house", value: .capture) {
-                NavigationStack {
-                    VStack(spacing: 24) {
-                        Spacer()
-                        Image("CameraShutter").resizable().scaledToFit().frame(width: 200, height: 180)
-                            .accessibilityHidden(true)
-                        Text("사진 한 장으로 시작하세요").font(.title2.bold())
-                        Text("실측부터 제품 정보와 내보내기까지 이어서 준비해요.")
-                            .multilineTextAlignment(.center).foregroundStyle(.secondary)
-                        Button { showCreation = true } label: {
-                            Label("옷 촬영 · 실측", systemImage: "ruler")
-                        }
-                        .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large)
-                        .accessibilityIdentifier("product-flow.start")
-                        Spacer()
+                HomeView { showCreation = true }
 #if DEBUG
-                        Button("측정 실험실") { showLiDAR = true }
-                            .font(.footnote).accessibilityIdentifier("openLiDARLab")
+                    .overlay(alignment: .bottomTrailing) {
+                        if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
+                            Button("측정 실험실") { showLiDAR = true }
+                                .font(.footnote)
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .padding(.trailing, 20)
+                                .padding(.bottom, 12)
+                                .accessibilityIdentifier("openLiDARLab")
+                        }
+                    }
 #endif
-                    }.padding(24).navigationTitle("Dobby")
-                }
             }
             Tab("보관함", systemImage: "hanger", value: .library) {
                 NavigationStack(path: $libraryPath) {
@@ -84,7 +78,7 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(.orange)
+        .tint(Color("HomeAccent"))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)

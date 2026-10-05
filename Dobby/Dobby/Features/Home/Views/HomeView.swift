@@ -13,10 +13,11 @@ struct HomeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Dobby")
+            Text("AllFit")
                 .font(.title2.bold())
                 .foregroundStyle(.black)
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("home.title")
                 .padding(.horizontal, 20)
                 .padding(.top, 34)
 

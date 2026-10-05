@@ -20,7 +20,7 @@ private struct HomePreview: View {
     @State private var showCaptureConfirmation = false
 
     var body: some View {
-        // 실제 앱 연결 전 확인용 컨테이너입니다. 기존 ContentView의 경로는 변경하지 않습니다.
+        // 독립 Preview에서는 실제 촬영 화면 대신 확인 알림을 표시합니다.
         TabView {
             Tab("홈", systemImage: "house") {
                 HomeView { showCaptureConfirmation = true }
@@ -34,7 +34,7 @@ private struct HomePreview: View {
         .alert("촬영 시작 버튼 확인", isPresented: $showCaptureConfirmation) {
             Button("확인", role: .cancel) { }
         } message: {
-            Text("실제 촬영 화면 연결은 3단계에서 진행합니다.")
+            Text("실제 앱에서는 제품 촬영 화면으로 이동합니다.")
         }
     }
 }

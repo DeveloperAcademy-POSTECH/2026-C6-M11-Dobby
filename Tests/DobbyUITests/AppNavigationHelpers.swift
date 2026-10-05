@@ -1,10 +1,11 @@
 import XCTest
 
 extension XCTestCase {
-    /// Existing measurement tests enter through the real home menu. This does
+    /// Measurement tests explicitly enable the hidden debug entry. This does
     /// not reset saved measurements, photos, preferences or the clipboard.
     @MainActor
     func launchLiDARLab(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        app.launchArguments.append("--show-measurement-lab")
         app.launch()
         openLiDARLab(in: app, file: file, line: line)
     }
