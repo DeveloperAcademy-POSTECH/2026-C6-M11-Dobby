@@ -42,9 +42,9 @@ final class GarmentMeasurementPresentationTests: XCTestCase {
 
     func testTopShowsOneSleeveAndKeepsPhysicalProjectionContributors() throws {
         let model = model(top: true)
-        XCTAssertEqual(model.visibleValues.map(\.id), ["top.shoulderWidth", "top.chestWidth",
-            "top.sleeveLengthLeft", "top.totalLength"])
-        XCTAssertEqual(model.visibleValues.map(\.title), ["어깨", "가슴", "소매", "총장"])
+        XCTAssertEqual(model.visibleValues.map(\.id), ["top.totalLength", "top.shoulderWidth", "top.chestWidth",
+            "top.sleeveLengthLeft"])
+        XCTAssertEqual(model.visibleValues.map(\.title), ["총장", "어깨", "가슴", "소매"])
         let handles = Set(model.visibleEditableLandmarks.points.map(\.id))
         XCTAssertFalse(handles.contains("sleeve_end_right"))
         XCTAssertTrue(handles.contains("neck_center"))
@@ -52,16 +52,16 @@ final class GarmentMeasurementPresentationTests: XCTestCase {
         XCTAssertTrue(handles.isSuperset(of: ["shoulder_right", "hem_center"]))
         XCTAssertFalse(handles.contains("hem_left"))
         XCTAssertFalse(handles.contains("hem_right"))
-        XCTAssertEqual(model.visibleValues.first?.meters, model.result.values.first?.meters)
+        XCTAssertEqual(model.visibleValues.first?.meters, model.result.values.first { $0.id == "top.totalLength" }?.meters)
         XCTAssertEqual(model.definitions.count, 6)
         XCTAssertEqual(model.landmarks.points.count, 12)
     }
 
     func testBottomShowsFourRowsAndArchivesAllBilateralEvidenceAfterPointCorrection() throws {
         var model = model(top: false)
-        XCTAssertEqual(model.visibleValues.map(\.id), ["bottom.waist_left.waist_right", "bottom.crotch.waist_center",
-            "bottom.hem_left_outer.waist_left", "bottom.hem_left_inner.hem_left_outer"])
-        XCTAssertEqual(model.visibleValues.map(\.title), ["허리", "밑위", "총장", "밑단"])
+        XCTAssertEqual(model.visibleValues.map(\.id), ["bottom.hem_left_outer.waist_left", "bottom.waist_left.waist_right",
+            "bottom.crotch.waist_center", "bottom.hem_left_inner.hem_left_outer"])
+        XCTAssertEqual(model.visibleValues.map(\.title), ["총장", "허리", "밑위", "밑단"])
         XCTAssertEqual(Set(model.visibleEditableLandmarks.points.map(\.id)),
                        ["waist_left", "waist_right", "crotch", "hem_left_outer", "hem_left_inner"])
         let originalRight = try XCTUnwrap(model.result.values.first { $0.id == "bottom.crotch.hem_right_inner" }?.meters)
@@ -110,6 +110,26 @@ final class GarmentMeasurementPresentationTests: XCTestCase {
         XCTAssertEqual(GarmentMeasurementPresentation.overlayMeasurements(ids, id: { $0 }),
                        ["bottom.waist_left.waist_right", "bottom.hipWidth", "bottom.thighWidth"])
         XCTAssertEqual(ids.count, 5)
+    }
+
+    func testProductColumnsMatchOverlayOrderTitlesAndValuesWithoutRightFallback() {
+        struct Item { let id: String; let cm: Double }
+        for top in [true, false] {
+            let session = model(top: top)
+            let columns = top ? GarmentMeasurementPresentation.topColumns : GarmentMeasurementPresentation.bottomColumns
+            let rows = columns.reversed().map { column in
+                Item(id: column.productKey, cm: session.result.values.first { $0.id == column.measurementID }!.meters! * 100)
+            }
+            let shown = GarmentMeasurementPresentation.productMeasurements(rows, isTop: top, key: { $0.id })
+            XCTAssertEqual(shown.map(\.cm), session.visibleValues.map { $0.meters! * 100 })
+            XCTAssertEqual(shown.map { GarmentMeasurementPresentation.productTitle(for: $0.id, fallback: "") },
+                           session.visibleValues.map(\.title))
+        }
+        let rows = [Item(id: "sleeveLengthRight", cm: 62), Item(id: "hemWidth", cm: 44),
+                    Item(id: "sleeveLengthLeft", cm: 0)]
+        let shown = GarmentMeasurementPresentation.productMeasurements(rows, isTop: true, key: { $0.id })
+        XCTAssertEqual(shown.map(\.id), ["sleeveLengthLeft"])
+        XCTAssertEqual(shown.map(\.cm), [0])
     }
 
     func testProductSideSelectionPreservesOrderPrecisionAndUnknownFields() {

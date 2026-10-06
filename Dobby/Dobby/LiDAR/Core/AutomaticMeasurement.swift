@@ -119,7 +119,8 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
 
     var visibleDefinitions: [MeasurementDefinition] {
         let ids = Set(visibleValues.map(\.id))
-        return definitions.filter { ids.contains($0.id) }.map { definition in
+        return GarmentMeasurementPresentation.overlayMeasurements(definitions, id: { $0.id })
+            .filter { ids.contains($0.id) }.map { definition in
             var presented = definition
             presented.title = GarmentMeasurementPresentation.overlayTitle(for: definition.id, fallback: definition.title)
             return presented

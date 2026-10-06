@@ -3,6 +3,36 @@ import Foundation
 /// Select one physical side for presentation without changing the measurements
 /// or landmarks retained for recalculation and saved evidence.
 nonisolated enum GarmentMeasurementPresentation {
+    struct Column {
+        let measurementID: String
+        let productKey: String
+        let title: String
+    }
+
+    static let topColumns: [Column] = [
+        .init(measurementID: "top.totalLength", productKey: "totalLength", title: "총장"),
+        .init(measurementID: "top.shoulderWidth", productKey: "shoulderWidth", title: "어깨"),
+        .init(measurementID: "top.chestWidth", productKey: "chestWidth", title: "가슴"),
+        .init(measurementID: "top.sleeveLengthLeft", productKey: "sleeveLengthLeft", title: "소매")
+    ]
+    static let bottomColumns: [Column] = [
+        .init(measurementID: "bottom.hem_left_outer.waist_left", productKey: "totalLengthLeft", title: "총장"),
+        .init(measurementID: "bottom.waist_left.waist_right", productKey: "waistWidth", title: "허리"),
+        .init(measurementID: "bottom.crotch.waist_center", productKey: "frontRise", title: "밑위"),
+        .init(measurementID: "bottom.hem_left_inner.hem_left_outer", productKey: "hemWidthLeft", title: "밑단")
+    ]
+
+    static func productMeasurements<Element>(_ measurements: [Element], isTop: Bool,
+                                             key: (Element) -> String) -> [Element] {
+        (isTop ? topColumns : bottomColumns).compactMap { column in
+            measurements.first { key($0) == column.productKey }
+        }
+    }
+
+    static func productTitle(for key: String, fallback: String) -> String {
+        (topColumns + bottomColumns).first { $0.productKey == key }?.title ?? fallback
+    }
+
     /// Result-photo overlays use the shop's current measurement list. Filter
     /// known omissions instead of assuming a fixed count, so future hip/thigh
     /// definitions can join without changing the editor or losing raw records.
@@ -13,21 +43,17 @@ nonisolated enum GarmentMeasurementPresentation {
     ]
 
     static func overlayMeasurements<Element>(_ measurements: [Element], id: (Element) -> String) -> [Element] {
-        measurements.filter { !hiddenOverlayIDs.contains(id($0)) }
+        let columns = topColumns + bottomColumns
+        return measurements.enumerated().filter { !hiddenOverlayIDs.contains(id($0.element)) }
+            .sorted { left, right in
+                let a = columns.firstIndex { $0.measurementID == id(left.element) } ?? columns.count
+                let b = columns.firstIndex { $0.measurementID == id(right.element) } ?? columns.count
+                return a == b ? left.offset < right.offset : a < b
+            }.map(\.element)
     }
 
     static func overlayTitle(for id: String, fallback: String) -> String {
-        switch id {
-        case "top.shoulderWidth": "어깨"
-        case "top.chestWidth": "가슴"
-        case "top.sleeveLengthLeft": "소매"
-        case "top.totalLength": "총장"
-        case "bottom.waist_left.waist_right": "허리"
-        case "bottom.crotch.waist_center": "밑위"
-        case "bottom.hem_left_outer.waist_left": "총장"
-        case "bottom.hem_left_inner.hem_left_outer": "밑단"
-        default: fallback
-        }
+        (topColumns + bottomColumns).first { $0.measurementID == id }?.title ?? fallback
     }
 
     private struct Pair {

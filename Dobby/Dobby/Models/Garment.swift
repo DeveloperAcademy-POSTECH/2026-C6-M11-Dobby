@@ -101,7 +101,11 @@ extension Garment {
 
     /// 화면과 내보내기에는 좌우 중 한쪽만 사용하고, 양쪽 원본은 관계 배열에 보존한다.
     var visibleMeasurements: [MeasuredValue] {
-        GarmentMeasurementPresentation.visibleMeasurements(orderedMeasurements,
+        if sourceMeasurementID != nil {
+            return GarmentMeasurementPresentation.productMeasurements(orderedMeasurements,
+                isTop: group == .top, key: { $0.key })
+        }
+        return GarmentMeasurementPresentation.visibleMeasurements(orderedMeasurements,
             id: { $0.key }, isUsable: { $0.valueCm.isFinite && $0.valueCm > 0 })
     }
 
