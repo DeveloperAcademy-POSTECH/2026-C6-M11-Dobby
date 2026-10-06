@@ -12,26 +12,26 @@ struct FruitsExportGuideOverlay: View {
     @State private var alertMessage: String?
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
-                Color.black.opacity(0.58)
-                    .ignoresSafeArea()
-                    .onTapGesture(perform: dismissIfPossible)
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.58)
+                .ignoresSafeArea()
+                .onTapGesture(perform: dismissIfPossible)
 
-                VStack(spacing: 0) {
-                    dynamicIslandPrompt
-                        .padding(.top, geometry.safeAreaInsets.top + 20)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .allowsHitTesting(false)
-
-                guideCard(height: geometry.size.height * 0.5)
-                    .padding(.horizontal, 6)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("export.fruits.overlay.sheet")
+            VStack(spacing: 0) {
+                dynamicIslandPrompt
+                    .padding(.top, 20)
+                Spacer()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+
+            guideCard
+                .padding(.horizontal, 6)
+                .padding(.bottom, 6)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("export.fruits.overlay.sheet")
         }
+        .ignoresSafeArea(edges: .bottom)
         .accessibilityIdentifier("export.fruits.overlay")
         .onAppear { controller.refresh() }
         .onChange(of: phase) { _, value in
@@ -60,20 +60,24 @@ struct FruitsExportGuideOverlay: View {
         .accessibilityIdentifier("export.fruits.overlay.prompt")
     }
 
-    private func guideCard(height: CGFloat) -> some View {
+    private var sheetShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: 38,
+            bottomLeadingRadius: 58,
+            bottomTrailingRadius: 58,
+            topTrailingRadius: 38
+        )
+    }
+
+    private var guideCard: some View {
         FruitsExportGuideContent(
             opening: opening,
             busy: controller.busy,
             onDismiss: dismissIfPossible,
             onOpen: startAndOpenFruits
         )
-        .frame(height: height, alignment: .top)
-        .glassEffect(.regular, in: UnevenRoundedRectangle(
-            topLeadingRadius: 38,
-            bottomLeadingRadius: 58,
-            bottomTrailingRadius: 58,
-            topTrailingRadius: 38
-        ))
+        .clipShape(sheetShape)
+        .glassEffect(.regular, in: sheetShape)
         .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
     }
 
@@ -128,7 +132,7 @@ private struct FruitsExportGuideContent: View {
     let onOpen: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack {
             Capsule()
                 .fill(Color.secondary.opacity(0.35))
                 .frame(width: 36, height: 5)
@@ -139,7 +143,7 @@ private struct FruitsExportGuideContent: View {
                     Image(systemName: "xmark")
                         .font(.body.weight(.semibold))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .foregroundStyle(.primary)
                 .disabled(opening || busy)
@@ -158,48 +162,45 @@ private struct FruitsExportGuideContent: View {
             .padding(.horizontal, 14)
             .frame(height: 58)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            guideStep(1) {
-                                Text("**후루츠패밀리**의 게시글 작성 화면으로\n이동해주세요")
-                            }
-
-                            Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
-                                .font(.subheadline)
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        guideStep(1) {
+                            Text("**후루츠패밀리**의 게시글 작성 화면으로\n이동해주세요")
                         }
 
-                        Button(action: onOpen) {
-                            HStack(spacing: 8) {
-                                if opening { ProgressView().tint(.white) }
-                                Text("후루츠패밀리 열기")
-                                    .font(.subheadline.weight(.semibold))
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 62)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.white)
-                        .background(Color("BrandMain"), in: Capsule())
-                        .disabled(opening || busy)
-                        .accessibilityIdentifier("export.fruits.overlay.open")
+                        Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
+                            .font(.subheadline)
                     }
 
-                    guideStep(2) {
-                        Text("다이나믹 아일랜드를 클릭해서 값을\n복사해주세요")
+                    Button(action: onOpen) {
+                        HStack(spacing: 8) {
+                            if opening { ProgressView().tint(.white) }
+                            Text("후루츠패밀리 열기")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 62)
                     }
-                    guideStep(3) {
-                        Text("후루츠패밀리의 입력 항목에 붙여넣기해주세요")
-                    }
-                    guideStep(4) {
-                        Text("모든 값들을 하나씩 반복해주세요")
-                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .background(Color("BrandMain"), in: Capsule())
+                    .disabled(opening || busy)
+                    .accessibilityIdentifier("export.fruits.overlay.open")
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 4)
-                .padding(.bottom, 26)
+
+                guideStep(2) {
+                    Text("다이나믹 아일랜드를 클릭해서 값을\n복사해주세요")
+                }
+                guideStep(3) {
+                    Text("후루츠패밀리의 입력 항목에 붙여넣기해주세요")
+                }
+                guideStep(4) {
+                    Text("모든 값들을 하나씩 반복해주세요")
+                }
             }
-            .scrollIndicators(.hidden)
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+            .padding(.bottom, 26)
         }
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity)

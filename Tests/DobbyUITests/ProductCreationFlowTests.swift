@@ -180,8 +180,9 @@ final class ProductCreationFlowTests: XCTestCase {
         let guidePrompt = app.descendants(matching: .any)["export.fruits.overlay.prompt"]
         XCTAssertTrue(guideSheet.waitForExistence(timeout: 5))
         XCTAssertTrue(guidePrompt.waitForExistence(timeout: 5))
-        XCTAssertEqual(guideSheet.frame.minY, app.frame.midY, accuracy: 3)
-        XCTAssertEqual(guideSheet.frame.maxY, app.frame.maxY, accuracy: 3)
+        XCTAssertEqual(guideSheet.frame.minX, app.frame.minX + 6, accuracy: 3)
+        XCTAssertEqual(guideSheet.frame.maxX, app.frame.maxX - 6, accuracy: 3)
+        XCTAssertEqual(guideSheet.frame.maxY, app.frame.maxY - 6, accuracy: 3)
         let statusBar = app.statusBars.firstMatch
         XCTAssertTrue(statusBar.exists)
         XCTAssertGreaterThanOrEqual(guidePrompt.frame.minY, statusBar.frame.maxY + 19)
