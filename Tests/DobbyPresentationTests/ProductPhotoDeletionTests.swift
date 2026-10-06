@@ -1,10 +1,41 @@
 // Created by mason on 10/6/26.
 import Foundation
 import Testing
+import UIKit
 @testable import Dobby
 
 @MainActor
 struct ProductPhotoDeletionTests {
+    @Test func diskDeletionRemovesOnlyRequestedDetailAndKeepsMeasurement() async throws {
+        let folder = URL.temporaryDirectory.appending(path: "Dobby-delete-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let seedURL = folder.appending(path: "measurement.jpg")
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10), format: format).jpegData(withCompressionQuality: 1) {
+            UIColor.blue.setFill(); $0.fill(CGRect(x: 0, y: 0, width: 10, height: 10))
+        }
+        try data.write(to: seedURL)
+        let source = CapturedAsset.Source.localFile(seedURL, metadata: .init(
+            pixelWidth: 10, pixelHeight: 10, contentType: "public.jpeg", orientation: .up))
+        let measured = CapturedAsset(id: UUID(), sessionID: UUID(), garmentID: UUID(),
+            purpose: .measurement, capturedAt: .now, source: source)
+        let model = try ProductPhotoModel(input: .init(sessionID: measured.sessionID,
+            garmentID: measured.garmentID, measurement: measured),
+            captureProvider: ProductPhotoFixtureCaptureProvider(seed: source, directory: folder.appending(path: "details")))
+        try await model.captureDetail()
+        try await model.captureDetail()
+        let first = model.detailPhotos[0], second = model.detailPhotos[1]
+        guard case let .localFile(firstURL, _) = first.source,
+              case let .localFile(secondURL, _) = second.source else { Issue.record("파일 촬영본 필요"); return }
+        #expect(FileManager.default.fileExists(atPath: firstURL.path))
+        try await model.deleteDetail(first.id)
+        #expect(!FileManager.default.fileExists(atPath: firstURL.path))
+        #expect(FileManager.default.fileExists(atPath: secondURL.path))
+        #expect(try Data(contentsOf: seedURL) == data)
+    }
+
     @Test func deletionProtectsMeasurementAndPreservesRemainingOrder() async throws {
         let (model, provider) = try fixture()
         for _ in 0..<3 { try await model.captureDetail() }
