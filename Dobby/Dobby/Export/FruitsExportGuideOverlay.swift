@@ -12,26 +12,25 @@ struct FruitsExportGuideOverlay: View {
     @State private var alertMessage: String?
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black.opacity(0.58)
-                .ignoresSafeArea()
-                .onTapGesture(perform: dismissIfPossible)
+        GeometryReader { geometry in
+            ZStack(alignment: .bottom) {
+                Color.black.opacity(0.58)
+                    .ignoresSafeArea()
+                    .onTapGesture(perform: dismissIfPossible)
 
-            VStack(spacing: 8) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 36, weight: .light))
-                Text("다이나믹 아일랜드를\n꾹 눌러보세요")
-                    .font(.title3)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 0) {
+                    dynamicIslandPrompt
+                        .padding(.top, geometry.safeAreaInsets.top + 20)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+
+                guideCard(height: geometry.size.height * 0.5)
+                    .padding(.horizontal, 6)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("export.fruits.overlay.sheet")
             }
-            .foregroundStyle(.white)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .padding(.top, 68)
-            .allowsHitTesting(false)
-
-            guideCard
-                .padding(.horizontal, 6)
-                .padding(.bottom, 6)
         }
         .accessibilityIdentifier("export.fruits.overlay")
         .onAppear { controller.refresh() }
@@ -48,13 +47,27 @@ struct FruitsExportGuideOverlay: View {
         }
     }
 
-    private var guideCard: some View {
+    private var dynamicIslandPrompt: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 36, weight: .light))
+            Text("다이나믹 아일랜드를\n꾹 눌러보세요")
+                .font(.title3)
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(.white)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("export.fruits.overlay.prompt")
+    }
+
+    private func guideCard(height: CGFloat) -> some View {
         FruitsExportGuideContent(
             opening: opening,
             busy: controller.busy,
             onDismiss: dismissIfPossible,
             onOpen: startAndOpenFruits
         )
+        .frame(height: height, alignment: .top)
         .background(Color(.systemBackground), in: UnevenRoundedRectangle(
             topLeadingRadius: 38,
             bottomLeadingRadius: 58,
@@ -154,45 +167,48 @@ private struct FruitsExportGuideContent: View {
             .padding(.horizontal, 14)
             .frame(height: 58)
 
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        guideStep(1) {
-                            Text("**후루츠패밀리**의 게시글 작성 화면으로\n이동해주세요")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            guideStep(1) {
+                                Text("**후루츠패밀리**의 게시글 작성 화면으로\n이동해주세요")
+                            }
+
+                            Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
+                                .font(.subheadline)
                         }
 
-                        Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
-                            .font(.subheadline)
-                    }
-
-                    Button(action: onOpen) {
-                        HStack(spacing: 8) {
-                            if opening { ProgressView().tint(.white) }
-                            Text("후루츠패밀리 열기")
-                                .font(.subheadline.weight(.semibold))
+                        Button(action: onOpen) {
+                            HStack(spacing: 8) {
+                                if opening { ProgressView().tint(.white) }
+                                Text("후루츠패밀리 열기")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 62)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 62)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
+                        .background(Color("BrandMain"), in: Capsule())
+                        .disabled(opening || busy)
+                        .accessibilityIdentifier("export.fruits.overlay.open")
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(Color("BrandMain"), in: Capsule())
-                    .disabled(opening || busy)
-                    .accessibilityIdentifier("export.fruits.overlay.open")
-                }
 
-                guideStep(2) {
-                    Text("다이나믹 아일랜드를 클릭해서 값을\n복사해주세요")
+                    guideStep(2) {
+                        Text("다이나믹 아일랜드를 클릭해서 값을\n복사해주세요")
+                    }
+                    guideStep(3) {
+                        Text("후루츠패밀리의 입력 항목에 붙여넣기해주세요")
+                    }
+                    guideStep(4) {
+                        Text("모든 값들을 하나씩 반복해주세요")
+                    }
                 }
-                guideStep(3) {
-                    Text("후루츠패밀리의 입력 항목에 붙여넣기해주세요")
-                }
-                guideStep(4) {
-                    Text("모든 값들을 하나씩 반복해주세요")
-                }
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+                .padding(.bottom, 26)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 4)
-            .padding(.bottom, 26)
+            .scrollIndicators(.hidden)
         }
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity)

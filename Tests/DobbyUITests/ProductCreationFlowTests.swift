@@ -176,6 +176,15 @@ final class ProductCreationFlowTests: XCTestCase {
         reveal(fruitsOverlay, in: app)
         fruitsOverlay.tap()
         XCTAssertTrue(app.otherElements["export.fruits.overlay"].waitForExistence(timeout: 5))
+        let guideSheet = app.descendants(matching: .any)["export.fruits.overlay.sheet"]
+        let guidePrompt = app.descendants(matching: .any)["export.fruits.overlay.prompt"]
+        XCTAssertTrue(guideSheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(guidePrompt.waitForExistence(timeout: 5))
+        XCTAssertEqual(guideSheet.frame.minY, app.frame.midY, accuracy: 3)
+        XCTAssertEqual(guideSheet.frame.maxY, app.frame.maxY, accuracy: 3)
+        let statusBar = app.statusBars.firstMatch
+        XCTAssertTrue(statusBar.exists)
+        XCTAssertGreaterThanOrEqual(guidePrompt.frame.minY, statusBar.frame.maxY + 19)
         XCTAssertTrue(app.navigationBars["내보내기"].exists)
         XCTAssertTrue(app.staticTexts["다이나믹 아일랜드를\n꾹 눌러보세요"].exists)
         attachScreenshot(app, name: "flow-top-export-dynamic-island-guide-b-overlay")
