@@ -112,6 +112,14 @@ final class ProductCreationFlowTests: XCTestCase {
         replaceText(in: field("brand", app: app), with: brand, app: app)
         let shoulder = app.textFields["product-info.measurement.shoulderWidth"]
         reveal(shoulder, in: app)
+        let topTable = app.scrollViews["product-info.measurements"]
+        XCTAssertTrue(topTable.exists)
+        for key in ["totalLength", "shoulderWidth", "chestWidth", "sleeveLengthLeft", "hemWidth"] {
+            let cell = app.textFields["product-info.measurement." + key]
+            XCTAssertTrue(cell.isHittable, "All five selected columns must fit without horizontal scrolling: " + key)
+            XCTAssertTrue(topTable.frame.insetBy(dx: -1, dy: -1).contains(cell.frame), key)
+        }
+        attachScreenshot(app, name: "flow-top-five-columns-fit-current-main-table")
 
         // Native Back must keep an unfinished measurement edit in this same
         // draft while the selected photo originals remain available.
@@ -299,6 +307,18 @@ final class ProductCreationFlowTests: XCTestCase {
         let expected = Set(["waistWidth", "frontRise", "totalLengthLeft", "hemWidthLeft", "inseamLeft"])
         let table = app.scrollViews["product-info.measurements"]
         XCTAssertTrue(table.exists)
+        for key in expected {
+            let cell = app.textFields["product-info.measurement." + key]
+            XCTAssertTrue(cell.isHittable, "The fifth field must remain visible while scrolling is disabled: " + key)
+            XCTAssertTrue(table.frame.insetBy(dx: -1, dy: -1).contains(cell.frame), key)
+        }
+        let lastField = app.textFields["product-info.measurement.inseamLeft"]
+        replaceText(in: lastField, with: "123.456789", app: app)
+        XCTAssertEqual(lastField.value as? String, "123.456789")
+        XCTAssertTrue(table.frame.insetBy(dx: -1, dy: -1).contains(lastField.frame),
+                      "A long decimal input must scroll inside its field without pushing the fifth column out of the table")
+        assertFocusedMeasurementVisible(lastField, in: app)
+        attachScreenshot(app, name: "flow-bottom-five-columns-fit-long-decimal-input")
         var seen: Set<String> = []
         for _ in 0..<9 {
             for element in app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.measurement.")).allElementsBoundByIndex {

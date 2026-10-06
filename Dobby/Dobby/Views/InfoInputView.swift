@@ -23,6 +23,10 @@ struct InfoInputView: View {
     @State private var saveError: String?
     @FocusState private var focusedMeasurementID: UUID?
     private static let measurementTableID = "product-info.measurement-table"
+    /// 표의 테두리와 칸 사이 선. 같은 선이므로 한 곳에서 정한다.
+    private static let tableLine = Color(.separator).opacity(0.5)
+    /// 이보다 많으면 고르게 나누지 않고 가로로 민다.
+    private static let evenlyFittingColumns = 5
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
          onComplete: ((Garment) -> Void)? = nil) {
@@ -172,19 +176,34 @@ struct InfoInputView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("product-info.measurement-warning")
             }
+            // 선택한 항목이 다섯 개 이하이면 실제 표 너비에 고르게 배치한다.
+            // 더 많은 항목은 최소 칸 너비를 유지하면서 가로로 스크롤한다.
+            let columns = garment.visibleMeasurements
+            let fitsEvenly = columns.count <= Self.evenlyFittingColumns
+            let scrollWidth = CGFloat(columns.count) * 84 + CGFloat(max(0, columns.count - 1))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
-                    ForEach(Array(garment.visibleMeasurements.enumerated()), id: \.element.id) { index, value in
+                    ForEach(Array(columns.enumerated()), id: \.element.id) { index, value in
                         if index > 0 {
-                            Divider().frame(height: 76)
+                            Rectangle().fill(Self.tableLine).frame(width: 1)
                         }
                         SizeColumn(value: value, text: Binding(
                             get: { measurementInput.wrappedValue.text(for: value) },
                             set: { measurementInput.wrappedValue.setText($0, for: value) }
-                        ), focus: $focusedMeasurementID)
+                        ), focus: $focusedMeasurementID, isCompact: fitsEvenly)
+                        .frame(maxWidth: fitsEvenly ? .infinity : nil)
                     }
                 }
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                .containerRelativeFrame(.horizontal) { width, _ in
+                    fitsEvenly ? width : max(width, scrollWidth)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .scrollDisabled(fitsEvenly)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12).stroke(Self.tableLine, lineWidth: 1)
             }
             .accessibilityIdentifier("product-info.measurements")
         }
@@ -202,15 +221,15 @@ private struct SizeColumn: View {
 
     @Binding var text: String
     let focus: FocusState<UUID?>.Binding
+    let isCompact: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             Text(value.displayLabel)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(Color.primary.opacity(0.04))
+                .background(Color(.secondarySystemBackground))
 
             HStack(spacing: 1) {
                 TextField("", text: $text)
@@ -219,14 +238,14 @@ private struct SizeColumn: View {
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.center)
                     .focused(focus, equals: value.id)
-                    .fixedSize()
+                    .fixedSize(horizontal: false, vertical: true)
                     .monospacedDigit()
                 Text("cm").font(.subheadline)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 14)
         }
-        .frame(minWidth: 84)
+        .frame(minWidth: isCompact ? 0 : 84)
     }
 }
 
