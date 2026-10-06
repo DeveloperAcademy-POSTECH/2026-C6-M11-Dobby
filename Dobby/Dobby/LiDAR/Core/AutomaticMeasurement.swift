@@ -109,6 +109,44 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         calculationLandmarks.replacingDerivedImagePoints(with: needsRecalculation ? nil : result)
     }
 
+    var visibleValues: [MeasurementValue] {
+        GarmentMeasurementPresentation.overlayMeasurements(result.values, id: { $0.id }).map { value in
+            var presented = value
+            presented.title = GarmentMeasurementPresentation.overlayTitle(for: value.id, fallback: value.title)
+            return presented
+        }
+    }
+
+    var visibleDefinitions: [MeasurementDefinition] {
+        let ids = Set(visibleValues.map(\.id))
+        return definitions.filter { ids.contains($0.id) }.map { definition in
+            var presented = definition
+            presented.title = GarmentMeasurementPresentation.overlayTitle(for: definition.id, fallback: definition.title)
+            return presented
+        }
+    }
+
+    /// Include physical contributors to derived/projection endpoints, but omit
+    /// handles used exclusively by the hidden opposite-side measurement.
+    var visibleEditableLandmarks: GarmentLandmarkSet {
+        let current = calculationLandmarks
+        var pending = visibleDefinitions.flatMap {
+            $0.landmarkIDs + ($0.projection?.referenceAxisLandmarkIDs ?? [])
+        }
+        var required = Set(pending)
+        var cursor = 0
+        while cursor < pending.count && required.count <= 200 {
+            let id = pending[cursor]
+            cursor += 1
+            for sourceID in current.effectiveDerivedSourceIDs(for: id) ?? [] where required.insert(sourceID).inserted {
+                pending.append(sourceID)
+            }
+        }
+        var visible = editableLandmarks
+        visible.points = visible.points.filter { required.contains($0.id) }
+        return visible
+    }
+
     /// Raw direct points are the drag targets. A derived midpoint or projected
     /// length annotation never replaces the actual physical source coordinate.
     var editableLandmarks: GarmentLandmarkSet {

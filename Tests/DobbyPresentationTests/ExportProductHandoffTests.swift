@@ -56,7 +56,7 @@ struct ExportProductHandoffTests {
         #expect(fallback.imageData == Data([1]))
     }
 
-    @Test func pantsUseAcceptedLeftMeasurementsAndKeepAllActualRows() {
+    @Test func pantsUseOneAcceptedSideAndPreserveOriginalRows() {
         let garment = Garment(category: "Jeans", group: .pants)
         garment.measurements = [
             MeasuredValue(key: "thighWidthRight", label: "허벅지 우", displayOrder: 3, valueCm: 31.2, autoValueCm: 31.2),
@@ -67,9 +67,90 @@ struct ExportProductHandoffTests {
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
         #expect(product.fruits.length == "102.25123")
         #expect(product.fruits.waist == "43.1256" && product.fruits.thigh == "32.32145")
-        #expect(product.copyMeasurements.map(\.id) == ["totalLengthLeft", "waistWidth", "thighWidthLeft", "thighWidthRight"])
+        #expect(product.copyMeasurements.map(\.id) == ["totalLengthLeft", "waistWidth", "thighWidthLeft"])
+        #expect(product.copyMeasurements.map(\.title) == ["총장", "허리", "허벅지 단면"])
+        #expect(garment.orderedMeasurements.count == 4)
+        #expect(garment.measurement("thighWidthRight")?.valueCm == 31.2)
+        #expect(garment.measurement("thighWidthLeft")?.label == "허벅지 좌")
         garment.measurements.removeAll { $0.key == "thighWidthLeft" }
-        #expect(ExportProduct(garment: garment, loadPhoto: { _ in nil }).fruits.thigh == "31.2")
+        let fallback = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+        #expect(fallback.fruits.thigh == "31.2")
+        #expect(fallback.copyMeasurements.map(\.id) == ["totalLengthLeft", "waistWidth", "thighWidthRight"])
+        #expect(fallback.copyMeasurements.last?.title == "허벅지 단면")
+    }
+
+    @Test func topExportShowsOneSleeveWithoutChangingEitherStoredObservation() {
+        let garment = Garment(category: "Jacket", group: .top)
+        let definitions: [(String, String, Double)] = [
+            ("shoulderWidth", "어깨", 45.1256),
+            ("chestWidth", "가슴", 55.25123),
+            ("hemWidth", "밑단", 51.25),
+            ("sleeveLengthLeft", "왼쪽 소매길이(직선)", 62.25123456789),
+            ("sleeveLengthRight", "오른쪽 소매길이(직선)", 63.875),
+            ("totalLength", "총장", 68.25123)
+        ]
+        garment.measurements = definitions.enumerated().map { index, definition in
+            MeasuredValue(key: definition.0, label: definition.1, displayOrder: index,
+                          valueCm: definition.2, autoValueCm: definition.2)
+        }
+        let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+        #expect(product.copyMeasurements.map(\.id) == ["shoulderWidth", "chestWidth", "hemWidth",
+                                                    "sleeveLengthLeft", "totalLength"])
+        #expect(product.copyMeasurements.first { $0.id == "sleeveLengthLeft" }?.title == "소매길이")
+        #expect(product.copyMeasurements.first { $0.id == "sleeveLengthLeft" }?.value == "62.25123456789")
+        #expect(!product.fruits.measurements.contains("오른쪽") && !product.fruits.measurements.contains("왼쪽"))
+        #expect(product.instagram == product.fruits)
+        #expect(garment.orderedMeasurements.count == 6 && garment.visibleMeasurements.count == 5)
+        for (value, definition) in zip(garment.orderedMeasurements, definitions) {
+            #expect(value.label == definition.1)
+            #expect(value.valueCm == definition.2 && value.autoValueCm == definition.2)
+            #expect(!value.isEdited)
+        }
+    }
+
+    @Test func bottomExportShowsFiveActualMeasurementsAndKeepsAllEightOriginals() {
+        let garment = Garment(category: "Jeans", group: .pants)
+        let definitions: [(String, String, Double)] = [
+            ("waistWidth", "허리", 43.1256), ("frontRise", "밑위", 31.25),
+            ("totalLengthLeft", "왼쪽 총장", 102.25123), ("hemWidthLeft", "왼쪽 밑단", 21.125),
+            ("inseamLeft", "왼쪽 인심", 72.5123), ("totalLengthRight", "오른쪽 총장", 103.75),
+            ("hemWidthRight", "오른쪽 밑단", 22.75), ("inseamRight", "오른쪽 인심", 73.125)
+        ]
+        garment.measurements = definitions.enumerated().map { index, definition in
+            MeasuredValue(key: definition.0, label: definition.1, displayOrder: index,
+                          valueCm: definition.2, autoValueCm: definition.2)
+        }
+        let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+        #expect(product.copyMeasurements.map(\.id) == ["waistWidth", "frontRise", "totalLengthLeft",
+                                                    "hemWidthLeft", "inseamLeft"])
+        #expect(product.copyMeasurements.map(\.title) == ["허리", "밑위", "총장", "밑단 단면", "인심(직선)"])
+        #expect(product.fruits.length == "102.25123" && product.fruits.waist == "43.1256")
+        #expect(product.fruits.thigh.isEmpty)
+        #expect(garment.orderedMeasurements.count == 8 && garment.visibleMeasurements.count == 5)
+        #expect(garment.orderedMeasurements.map(\.valueCm) == definitions.map { $0.2 })
+        #expect(garment.orderedMeasurements.map(\.label) == definitions.map { $0.1 })
+    }
+
+    @Test func unusableLeftMeasurementsUseRightInExportAndFilterCopies() {
+        let garment = Garment(category: "Jeans", group: .pants)
+        let left = MeasuredValue(key: "totalLengthLeft", label: "왼쪽 총장", displayOrder: 0,
+                                 valueCm: .nan, autoValueCm: 103)
+        let right = MeasuredValue(key: "totalLengthRight", label: "오른쪽 총장", displayOrder: 3,
+                                  valueCm: 101.25123456789, autoValueCm: 101.5)
+        let leftThigh = MeasuredValue(key: "thighWidthLeft", label: "왼쪽 허벅지", displayOrder: 1,
+                                      valueCm: 0, autoValueCm: 31)
+        let rightThigh = MeasuredValue(key: "thighWidthRight", label: "오른쪽 허벅지", displayOrder: 2,
+                                       valueCm: 32.1256, autoValueCm: 32)
+        garment.measurements = [right, leftThigh, rightThigh, left]
+        garment.syncFilterFields()
+        let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+        #expect(product.copyMeasurements.map(\.id) == ["thighWidthRight", "totalLengthRight"])
+        #expect(product.copyMeasurements.map(\.title) == ["허벅지 단면", "총장"])
+        #expect(product.fruits.length == "101.25123456789" && product.fruits.thigh == "32.1256")
+        #expect(garment.lengthCm == right.valueCm)
+        #expect(left.valueCm.isNaN && left.autoValueCm == 103 && !left.isEdited)
+        #expect(leftThigh.valueCm == 0 && leftThigh.autoValueCm == 31 && !leftThigh.isEdited)
+        #expect(right.label == "오른쪽 총장" && garment.orderedMeasurements.count == 4)
     }
 
     @Test func invalidValuesAndPantsFieldsAreNeverSubstitutedIntoTopExport() {

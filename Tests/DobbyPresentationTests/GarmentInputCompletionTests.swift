@@ -173,4 +173,77 @@ struct GarmentInputCompletionTests {
             #expect(error.localizedDescription.contains("총장"))
         }
     }
+
+    @Test func rightSleeveFallbackCanBeEditedAndSavedWithoutChangingHiddenLeftEvidence() throws {
+        let container = try ModelContainer(for: Garment.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let garment = Garment(category: "Jacket", group: .top)
+        let left = MeasuredValue(key: "sleeveLengthLeft", label: "왼쪽 소매", displayOrder: 0,
+                                 valueCm: 0, autoValueCm: 61.125)
+        let right = MeasuredValue(key: "sleeveLengthRight", label: "오른쪽 소매", displayOrder: 1,
+                                  valueCm: 62.25123456789, autoValueCm: 62.5)
+        left.garment = garment
+        right.garment = garment
+        garment.measurements = [left, right]
+        context.insert(garment)
+        #expect(garment.visibleMeasurements.map(\.key) == ["sleeveLengthRight"])
+        #expect(right.displayLabel == "소매길이")
+        var drafts = [right.id: "63.5123456789"]
+        try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { try context.save() }
+        #expect(drafts.isEmpty && garment.informationCompletedAt != nil)
+        #expect(right.valueCm == 63.5123456789 && right.autoValueCm == 62.5 && right.isEdited)
+        #expect(left.valueCm == 0 && left.autoValueCm == 61.125 && !left.isEdited)
+        #expect(garment.sleeveCm == right.valueCm)
+        let reader = ModelContext(container)
+        let saved = try #require(reader.fetch(FetchDescriptor<Garment>()).first)
+        #expect(saved.orderedMeasurements.count == 2 && saved.visibleMeasurements.count == 1)
+        #expect(saved.measurement("sleeveLengthLeft")?.valueCm == 0)
+        #expect(saved.measurement("sleeveLengthLeft")?.label == "왼쪽 소매")
+        #expect(saved.measurement("sleeveLengthRight")?.valueCm == 63.5123456789)
+        #expect(saved.measurement("sleeveLengthRight")?.label == "오른쪽 소매")
+        #expect(saved.sleeveCm == 63.5123456789)
+        let exported = ExportProduct(garment: saved, loadPhoto: { _ in nil })
+        #expect(exported.copyMeasurements.map(\.id) == ["sleeveLengthRight"])
+        #expect(exported.copyMeasurements.first?.value == "63.5123456789")
+    }
+
+    @Test func usableLeftCanCompleteWhileInvalidRightOriginalRemainsStored() throws {
+        let garment = Garment(category: "Jeans", group: .pants)
+        let left = MeasuredValue(key: "totalLengthLeft", label: "왼쪽 총장", displayOrder: 0,
+                                 valueCm: 101.25123, autoValueCm: 101.5)
+        let right = MeasuredValue(key: "totalLengthRight", label: "오른쪽 총장", displayOrder: 1,
+                                  valueCm: -1, autoValueCm: 102)
+        garment.measurements = [left, right]
+        var drafts: [UUID: String] = [:]
+        var saves = 0
+        try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { saves += 1 }
+        #expect(saves == 1 && garment.informationCompletedAt != nil)
+        #expect(garment.visibleMeasurements.map(\.key) == ["totalLengthLeft"])
+        #expect(garment.lengthCm == left.valueCm)
+        #expect(right.valueCm == -1 && right.autoValueCm == 102 && !right.isEdited)
+        #expect(left.valueCm == 101.25123 && !left.isEdited)
+    }
+
+    @Test func whenNeitherSideIsUsableDisplayedLeftStillRequiresCorrection() {
+        let garment = Garment(category: "Jacket", group: .top)
+        let left = MeasuredValue(key: "sleeveLengthLeft", label: "왼쪽 소매", displayOrder: 0,
+                                 valueCm: 0, autoValueCm: 61)
+        let right = MeasuredValue(key: "sleeveLengthRight", label: "오른쪽 소매", displayOrder: 1,
+                                  valueCm: -1, autoValueCm: 62)
+        garment.measurements = [left, right]
+        #expect(garment.visibleMeasurements.map(\.key) == ["sleeveLengthLeft"])
+        var drafts: [UUID: String] = [:]
+        var saves = 0
+        do {
+            try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { saves += 1 }
+            Issue.record("The displayed invalid sleeve must require correction")
+        } catch {
+            #expect(error.localizedDescription.contains("소매길이"))
+            #expect(!error.localizedDescription.contains("왼쪽"))
+        }
+        #expect(saves == 0 && garment.informationCompletedAt == nil)
+        #expect(left.valueCm == 0 && right.valueCm == -1)
+    }
 }

@@ -1,9 +1,58 @@
 import XCTest
+import UIKit
 
 /// Only the explicitly labelled synthetic flow runs here. Each test uses a new
 /// isolated SwiftData store and never imports Photos, starts a copy activity,
 /// presses a copy control, or opens a marketplace link.
 final class ProductCreationFlowTests: XCTestCase {
+    @MainActor
+    func testTopAndBottomResultsShowFourShortCompactMeasurementLabels() throws {
+        continueAfterFailure = false
+        let fixtures: [(top: Bool, labels: [(id: String, title: String, previousTitle: String)])] = [
+            (true, [("top.shoulderWidth", "어깨", "어깨"), ("top.chestWidth", "가슴", "가슴"),
+                    ("top.sleeveLengthLeft", "소매", "왼 소매"), ("top.totalLength", "총장", "총장")]),
+            (false, [("bottom.waist_left.waist_right", "허리", "허리"), ("bottom.crotch.waist_center", "밑위", "밑위"),
+                     ("bottom.hem_left_outer.waist_left", "총장", "왼 총장"),
+                     ("bottom.hem_left_inner.hem_left_outer", "밑단", "왼 밑단")])
+        ]
+        for fixture in fixtures {
+            let app = fixtureApp(token: UUID().uuidString, top: fixture.top)
+            app.launch()
+            openCapture(in: app)
+            app.buttons["captureGarment"].tap()
+            XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
+            let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+                "garmentMeasurementLabel_")).allElementsBoundByIndex
+            XCTAssertEqual(Set(labels.map(\.identifier)), Set(fixture.labels.map { "garmentMeasurementLabel_" + $0.id }))
+            for expected in fixture.labels {
+                let label = app.buttons["garmentMeasurementLabel_" + expected.id]
+                XCTAssertTrue(label.isHittable)
+                let parts = label.label.components(separatedBy: ", ")
+                XCTAssertEqual(parts.first, expected.title)
+                XCTAssertFalse(label.label.contains("(") || label.label.contains(")"),
+                               "The result label must use the shop's short measurement title")
+                let value = try XCTUnwrap(parts.dropFirst().first).replacingOccurrences(of: " cm", with: "cm")
+                // Compare the real button width to the former 14-point caption,
+                // including its old padding and optional uncertainty icon.
+                let previousTitleWidth = (expected.previousTitle as NSString).size(withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 14, weight: .semibold)
+                ]).width
+                let previousValueWidth = (value as NSString).size(withAttributes: [
+                    .font: UIFont.monospacedDigitSystemFont(ofSize: 14, weight: .regular)
+                ]).width
+                let previousWidth = max(78, ceil(previousTitleWidth + previousValueWidth + 22
+                    + (label.label.contains("확인 필요") ? 18 : 0)) + 4)
+                XCTAssertLessThan(label.frame.width, previousWidth,
+                                  "The compact caption must be narrower than its previous presentation")
+                XCTAssertGreaterThanOrEqual(label.frame.height, 44 - 0.001,
+                                            "The smaller visible caption must retain its full touch target")
+                XCTAssertLessThanOrEqual(label.frame.height, 45)
+            }
+            attachScreenshot(app, name: fixture.top ? "flow-top-four-compact-result-labels" : "flow-bottom-four-compact-result-labels")
+            app.terminate()
+        }
+    }
+
     @MainActor
     func testTopCreationKeepsCorrectedMeasurementsPhotosAndExportAcrossBackAndRelaunch() throws {
         continueAfterFailure = false
@@ -18,7 +67,12 @@ final class ProductCreationFlowTests: XCTestCase {
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).count, 6)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).count, 4)
+        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.hemWidth"].exists)
+        XCTAssertTrue(app.buttons["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
+        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
+        XCTAssertTrue(app.buttons["garmentMeasurementPoint_sleeve_end_left"].exists)
+        XCTAssertFalse(app.buttons["garmentMeasurementPoint_sleeve_end_right"].exists)
 
         // A small physical-point correction must still be usable in the new
         // full flow. This is synthetic depth evidence, not a camera accuracy test.
@@ -196,7 +250,7 @@ final class ProductCreationFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testBottomEightValuesMeasurementOnlySelectionAndEmptyCopyHomeUseRealProductFlow() throws {
+    func testBottomFiveValuesMeasurementOnlySelectionAndEmptyCopyHomeUseRealProductFlow() throws {
         continueAfterFailure = false
         let token = UUID().uuidString
         let name = "Flow bottom " + String(token.prefix(8))
@@ -221,7 +275,16 @@ final class ProductCreationFlowTests: XCTestCase {
         app.buttons["captureGarment"].tap()
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).count, 8)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).count, 4)
+        for id in ["bottom.hem_left_outer.waist_left", "bottom.hem_left_inner.hem_left_outer"] {
+            XCTAssertTrue(app.buttons["garmentMeasurementLabel_" + id].exists)
+        }
+        for id in ["bottom.hem_right_outer.waist_right", "bottom.hem_right_inner.hem_right_outer", "bottom.crotch.hem_right_inner", "bottom.crotch.hem_left_inner"] {
+            XCTAssertFalse(app.buttons["garmentMeasurementLabel_" + id].exists)
+        }
+        XCTAssertTrue(app.buttons["garmentMeasurementPoint_hem_left_inner"].exists)
+        XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_right_inner"].exists)
+        XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_right_outer"].exists)
         waitEnabled(confirm)
         confirm.tap()
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
@@ -233,8 +296,7 @@ final class ProductCreationFlowTests: XCTestCase {
         replaceText(in: field("name", app: app), with: name, app: app)
         let first = app.textFields["product-info.measurement.waistWidth"]
         reveal(first, in: app)
-        let expected = Set(["waistWidth", "frontRise", "totalLengthLeft", "hemWidthLeft", "inseamLeft",
-                            "totalLengthRight", "hemWidthRight", "inseamRight"])
+        let expected = Set(["waistWidth", "frontRise", "totalLengthLeft", "hemWidthLeft", "inseamLeft"])
         let table = app.scrollViews["product-info.measurements"]
         XCTAssertTrue(table.exists)
         var seen: Set<String> = []
@@ -258,7 +320,11 @@ final class ProductCreationFlowTests: XCTestCase {
             reveal(value, in: app)
             XCTAssertTrue(value.exists, key)
         }
-        attachScreenshot(app, name: "flow-bottom-library-eight-measurements")
+        for key in ["totalLengthRight", "hemWidthRight", "inseamRight"] {
+            XCTAssertFalse(app.descendants(matching: .any)["library.measurement.\(key)"].firstMatch.exists,
+                           "The saved product must present only the selected side")
+        }
+        attachScreenshot(app, name: "flow-bottom-library-five-measurements")
     }
 
     @MainActor

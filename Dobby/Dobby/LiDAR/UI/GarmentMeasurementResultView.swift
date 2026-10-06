@@ -44,8 +44,8 @@ struct GarmentMeasurementResultView: View {
     }
 
     private var isSynthetic: Bool { model.snapshot.frame.source == .synthetic }
-    private var incompleteCount: Int { model.result.values.filter { $0.status == .unavailable }.count }
-    private var uncertainCount: Int { model.result.values.filter { $0.status == .uncertain }.count }
+    private var incompleteCount: Int { model.visibleValues.filter { $0.status == .unavailable }.count }
+    private var uncertainCount: Int { model.visibleValues.filter { $0.status == .uncertain }.count }
 
     var body: some View {
         GeometryReader { geometry in
@@ -79,9 +79,10 @@ struct GarmentMeasurementResultView: View {
                     Text(isSaving ? "저장 중…" : model.needsRecalculation ? "다시 측정 중…" : "확인")
                         .font(.system(.callout, design: .default, weight: .semibold)).italic()
                 }.frame(maxWidth: .infinity).frame(minHeight: 62)
+                    .background(GarmentCaptureStyle.accent, in: Capsule())
+                    .contentShape(.interaction, Capsule())
             }
             .buttonStyle(.plain).foregroundStyle(.white)
-            .background(GarmentCaptureStyle.accent, in: Capsule())
             .disabled(isSaving || isEditingPoint || model.needsRecalculation)
             .accessibilityHint(onConfirmedRecord == nil
                 ? "사진과 확인한 측정 결과를 저장하고 촬영을 마칩니다"
@@ -159,9 +160,9 @@ struct GarmentMeasurementResultView: View {
 
     private func photoEditor(showsEnlargeControl: Bool) -> some View {
         GarmentMeasurementPhotoEditor(image: image, snapshot: model.snapshot,
-            editableLandmarks: model.editableLandmarks,
-            definitions: model.definitions,
-            values: model.result.values, showLabels: !dynamicTypeSize.isAccessibilitySize,
+            editableLandmarks: model.visibleEditableLandmarks,
+            definitions: model.visibleDefinitions,
+            values: model.visibleValues, showLabels: !dynamicTypeSize.isAccessibilitySize,
             isEnabled: !isSaving, isRecalculating: model.needsRecalculation,
             showsEnlargeControl: showsEnlargeControl,
             onSelect: { if !isEditingPoint && !model.needsRecalculation { selectedDefinition = $0 } },
@@ -294,7 +295,7 @@ struct GarmentMeasurementResultView: View {
                 }
             }
             Menu {
-                ForEach(model.definitions.filter { $0.landmarkIDs.count == 2 }) { definition in
+                ForEach(model.visibleDefinitions.filter { $0.landmarkIDs.count == 2 }) { definition in
                     Button(definition.title) { openManualReview(for: definition.id) }
                         .accessibilityIdentifier("reviewGarmentItem_\(definition.id)")
                 }
@@ -320,8 +321,8 @@ struct GarmentMeasurementResultView: View {
             }
             DisclosureGroup("측정 항목 상세", isExpanded: $showDetails) {
                 VStack(spacing: 0) {
-                    ForEach(model.result.values) { value in
-                        if let definition = model.definitions.first(where: { $0.id == value.id }) {
+                    ForEach(model.visibleValues) { value in
+                        if let definition = model.visibleDefinitions.first(where: { $0.id == value.id }) {
                             Button { openMeasurementDetail(definition) } label: { measurementRow(value) }
                                 .buttonStyle(.plain).disabled(isEditingPoint || model.needsRecalculation)
                         }
@@ -352,8 +353,8 @@ struct GarmentMeasurementResultView: View {
     }
 
     private var reviewDefinitions: [MeasurementDefinition] {
-        let ids = Set(model.result.values.filter { $0.status != .valid }.map(\.id))
-        return model.definitions.filter { ids.contains($0.id) && $0.landmarkIDs.count == 2 }
+        let ids = Set(model.visibleValues.filter { $0.status != .valid }.map(\.id))
+        return model.visibleDefinitions.filter { ids.contains($0.id) && $0.landmarkIDs.count == 2 }
     }
 
     private var reviewNeededMeasurements: some View {
@@ -450,23 +451,17 @@ enum GarmentMeasurementText {
     }
 
     static func shortTitle(_ definition: MeasurementDefinition) -> String {
+        let fallback: String
         switch definition.id {
-        case "bottom.waist_left.waist_right": "허리"
-        case "bottom.crotch.waist_center": "밑위"
-        case "bottom.hem_left_outer.waist_left": "왼 총장"
-        case "bottom.hem_right_outer.waist_right": "오른 총장"
-        case "bottom.hem_left_inner.hem_left_outer": "왼 밑단"
-        case "bottom.hem_right_inner.hem_right_outer": "오른 밑단"
-        case "bottom.crotch.hem_left_inner": "왼 인심"
-        case "bottom.crotch.hem_right_inner": "오른 인심"
-        case "top.shoulderWidth": "어깨"
-        case "top.chestWidth": "가슴"
-        case "top.hemWidth": "밑단"
-        case "top.sleeveLengthLeft": "왼 소매"
-        case "top.sleeveLengthRight": "오른 소매"
-        case "top.totalLength": "총장"
-        default: definition.title
+        case "bottom.waist_left.waist_right": fallback = "허리"
+        case "bottom.crotch.waist_center": fallback = "밑위"
+        case "top.shoulderWidth": fallback = "어깨"
+        case "top.chestWidth": fallback = "가슴"
+        case "top.hemWidth": fallback = "밑단"
+        case "top.totalLength": fallback = "총장"
+        default: fallback = definition.title
         }
+        return GarmentMeasurementPresentation.shortTitle(for: definition.id, fallback: fallback)
     }
 }
 

@@ -10,6 +10,7 @@ struct GarmentCaptureFlowView: View {
     private let previewKind: AutomaticGarmentKind
     private let isPreview: Bool
     private let previewIsPartial: Bool
+    private let previewBothSidesPartial: Bool
     private let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
     private let onCancel: (() -> Void)?
     private let embedsNavigation: Bool
@@ -45,6 +46,7 @@ struct GarmentCaptureFlowView: View {
         // The physical camera always classifies its own current image.
         self.previewKind = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-top") ? .top : .bottoms
         self.previewIsPartial = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-partial")
+        self.previewBothSidesPartial = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-both-sides-partial")
         let recognizer: AutoGarmentLandmarkProvider?
         if preview {
             recognizer = nil
@@ -99,7 +101,10 @@ struct GarmentCaptureFlowView: View {
         .tint(.white)
         .preferredColorScheme(.dark)
         .task {
-            if isPreview { previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial, kind: previewKind) }
+            if isPreview {
+                previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial,
+                    bothSidesPartial: previewBothSidesPartial, kind: previewKind)
+            }
             else { await camera.start() }
         }
         .onChange(of: orientation) { _, value in
@@ -488,7 +493,10 @@ struct GarmentCaptureFlowView: View {
         recordingError = nil
         previewRecognized = false
         phase = .idle
-        if isPreview { previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial, kind: previewKind) }
+        if isPreview {
+            previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial,
+                bothSidesPartial: previewBothSidesPartial, kind: previewKind)
+        }
         else { restartCamera() }
     }
 }
