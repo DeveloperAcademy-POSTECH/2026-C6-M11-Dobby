@@ -68,21 +68,12 @@ struct FruitsExportGuideOverlay: View {
             onOpen: startAndOpenFruits
         )
         .frame(height: height, alignment: .top)
-        .background(Color(.systemBackground), in: UnevenRoundedRectangle(
+        .glassEffect(.regular, in: UnevenRoundedRectangle(
             topLeadingRadius: 38,
             bottomLeadingRadius: 58,
             bottomTrailingRadius: 58,
             topTrailingRadius: 38
         ))
-        .overlay {
-            UnevenRoundedRectangle(
-                topLeadingRadius: 38,
-                bottomLeadingRadius: 58,
-                bottomTrailingRadius: 58,
-                topTrailingRadius: 38
-            )
-            .stroke(.white.opacity(0.55), lineWidth: 0.5)
-        }
         .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
     }
 
