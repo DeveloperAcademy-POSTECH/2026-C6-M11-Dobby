@@ -16,31 +16,91 @@ struct Cafe24ExportView: View {
     }
 
     var body: some View {
-        Form {
-            Section("카페24 계정") {
+        ExportScreenContent {
+            ExportServiceHeader(
+                channel: .cafe24,
+                title: "카페24",
+                description: "연결한 쇼핑몰에 상품 정보를 바로 등록해요.",
+                status: connectedMallID == nil ? nil : "연결됨"
+            )
+
+            ExportSectionCard(
+                title: "쇼핑몰 연결",
+                subtitle: connectedMallID == nil ? "상품을 등록할 카페24 쇼핑몰 ID를 입력해 주세요." : nil
+            ) {
                 if let connectedMallID {
-                    LabeledContent("연결된 쇼핑몰", value: connectedMallID)
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(ExportScreenStyle.accent)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("연결된 쇼핑몰")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(connectedMallID)
+                                .font(.headline)
+                        }
+                        Spacer()
+                        ExportStatusBadge(title: "사용 가능")
+                    }
+                    .padding(16)
+                    .background(ExportScreenStyle.field, in: RoundedRectangle(cornerRadius: ExportScreenStyle.fieldCornerRadius))
+
                     Button("다른 쇼핑몰 연결") { self.connectedMallID = nil }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ExportScreenStyle.accent)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(ExportScreenStyle.accent.opacity(0.08), in: Capsule())
                 } else {
-                    TextField("쇼핑몰 ID", text: $mallID).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    ExportField(label: "쇼핑몰 ID") {
+                        TextField("예: myshop", text: $mallID)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .exportTextFieldStyle()
+                    }
                     Button("카페24 계정 연결") { Task { await connect() } }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(ExportScreenStyle.accent, in: Capsule())
                         .disabled(isWorking || mallID.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .opacity(mallID.trimmingCharacters(in: .whitespaces).isEmpty ? 0.45 : 1)
                 }
             }
-            Section("등록할 상품") {
-                LabeledContent("상품명", value: product.name)
-                TextField("판매가", text: $priceText).keyboardType(.numberPad)
-                LabeledContent("사진", value: product.imageData == nil ? "없음" : "1장")
-                Text("첫 테스트는 고객에게 노출되지 않도록 진열 안 함·판매 안 함 상태로 등록됩니다.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section {
-                Button("카페24에 상품 등록") { Task { await publish() } }
-                    .frame(maxWidth: .infinity).disabled(isWorking || connectedMallID == nil)
+
+            ExportSectionCard(title: "등록할 상품") {
+                ExportProductSummary(product: product)
+                Divider()
+                ExportField(label: "판매가") {
+                    HStack(spacing: 8) {
+                        TextField("판매가 입력", text: $priceText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                        Text("원")
+                            .foregroundStyle(.secondary)
+                    }
+                    .exportTextFieldStyle()
+                }
+                ExportInfoBanner(
+                    text: "첫 등록은 고객에게 노출되지 않도록 진열 안 함·판매 안 함 상태로 등록됩니다.",
+                    systemImage: "eye.slash.fill"
+                )
             }
         }
-        .navigationTitle("카페24 내보내기").navigationBarTitleDisplayMode(.inline)
-        .overlay { if isWorking { ProgressView().controlSize(.large) } }
+        .navigationTitle("카페24 내보내기")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ExportBottomActionBar {
+                ExportBottomAction(
+                    title: "카페24에 상품 등록",
+                    isWorking: isWorking,
+                    isEnabled: connectedMallID != nil && !priceText.filter(\.isNumber).isEmpty
+                ) {
+                    Task { await publish() }
+                }
+            }
+        }
+        .overlay { if isWorking { ExportLoadingOverlay(message: "카페24와 연결 중…") } }
         .task { await loadStatus() }
         .alert(isError ? "등록할 수 없습니다" : "등록 완료",
                isPresented: Binding(get: { resultMessage != nil }, set: { if !$0 { resultMessage = nil } })) {
