@@ -21,80 +21,185 @@ struct NaverStoreExportView: View {
     }
 
     var body: some View {
-        Form {
-            Section("등록할 상품") {
-                LabeledContent("상품명", value: product.name)
-                TextField("판매 가격 · 10원 이상 입력", text: $priceText).keyboardType(.numberPad)
-                Text("판매 가격은 10원 이상 입력해 주세요.").font(.caption).foregroundStyle(.secondary)
-                LabeledContent("사진", value: product.imageData == nil ? "없음" : "1장")
-            }
-            Section("카테고리") {
-                if let selectedCategory {
-                    LabeledContent("선택됨", value: selectedCategory.wholeCategoryName)
-                }
-                if categories.isEmpty {
-                    Button("카테고리 불러오기") { Task { await searchCategories() } }
-                }
-            }
-            Section("추천 카테고리") {
-                Text("촬영 시 저장한 의류 종류를 참고한 후보입니다. 성별과 세부 종류를 확인해 선택해 주세요.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if recommendations.isEmpty {
-                    Text("추천 정보가 없어요. 전체 탐색이나 검색으로 선택해 주세요.")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(recommendations) { category in categoryButton(category) }
-            }
-            Section("카테고리 검색") {
-                TextField("예: 여성 청바지, 남성 재킷", text: $categoryQuery)
-                if !categoryQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    if searchResults.isEmpty { Text("검색 결과가 없어요. 다른 단어로 검색해 주세요.") }
-                    ForEach(searchResults) { category in categoryButton(category) }
-                }
-            }
-            Section("전체 카테고리 탐색") {
-                Text(categoryPath.isEmpty ? "패션의류 또는 패션잡화를 선택해 주세요." : categoryPath.joined(separator: " > "))
-                    .font(.caption).foregroundStyle(.secondary)
-                if !categoryPath.isEmpty {
-                    Button("이전 분류로") { categoryPath.removeLast() }
-                }
-                ForEach(childNames, id: \.self) { name in
-                    Button {
-                        let next = categoryPath + [name]
-                        if let leaf = categories.first(where: { parts($0) == next }) {
-                            selectedCategory = leaf
-                        } else { categoryPath = next }
-                    } label: {
-                        HStack {
-                            Text(name)
-                            Spacer()
-                            Image(systemName: selectedCategory.map { parts($0) == categoryPath + [name] } == true
-                                  ? "checkmark.circle.fill" : "chevron.right")
-                        }
+        ExportScreenContent {
+            ExportServiceHeader(
+                channel: .naverStore,
+                title: "네이버 스마트스토어",
+                description: "상품 정보와 카테고리를 확인하고 스토어에 등록해요.",
+                status: selectedCategory == nil ? nil : "카테고리 선택 완료"
+            )
+
+            ExportSectionCard(title: "등록할 상품") {
+                ExportProductSummary(product: product)
+                Divider()
+                ExportField(label: "판매 가격") {
+                    HStack(spacing: 8) {
+                        TextField("10원 이상 입력", text: $priceText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                        Text("원")
+                            .foregroundStyle(.secondary)
                     }
+                    .exportTextFieldStyle()
+                }
+                if product.imageData == nil {
+                    ExportInfoBanner(
+                        text: "상품을 등록하려면 대표 사진이 필요해요.",
+                        systemImage: "photo.badge.exclamationmark",
+                        tint: .red
+                    )
                 }
             }
-            Section("상품 고시 정보") {
-                TextField("소재", text: $material)
-                TextField("색상", text: $color)
-                TextField("사이즈", text: $size)
-            }
-            Section {
-                Text("테스트 상품은 재고 1개·중고·판매 중지 및 전시 중지 상태로 등록됩니다.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                Button("네이버 스마트스토어에 등록") { Task { await publish() } }
-                    .frame(maxWidth: .infinity)
-                    .disabled(isWorking || selectedCategory == nil || product.imageData == nil || (Int(priceText) ?? 0) < 10)
+
+            categorySelection
+            categoryExplorer
+            productNotice
+
+            ExportInfoBanner(
+                text: "테스트 상품은 재고 1개·중고·판매 중지 및 전시 중지 상태로 등록됩니다.",
+                systemImage: "eye.slash.fill"
+            )
+
+            if let validationMessage {
+                ExportInfoBanner(text: validationMessage, systemImage: "exclamationmark.circle.fill", tint: .red)
             }
         }
         .navigationTitle("네이버스토어 내보내기")
         .navigationBarTitleDisplayMode(.inline)
         .task { await searchCategories() }
-        .overlay { if isWorking { ProgressView().controlSize(.large) } }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ExportBottomActionBar {
+                ExportBottomAction(
+                    title: "네이버 스마트스토어에 등록",
+                    isWorking: isWorking,
+                    isEnabled: canPublish
+                ) {
+                    Task { await publish() }
+                }
+            }
+        }
+        .overlay { if isWorking { ExportLoadingOverlay(message: "스토어 정보를 확인 중…") } }
         .alert(isError ? "등록할 수 없습니다" : "등록 완료",
                isPresented: Binding(get: { resultMessage != nil }, set: { if !$0 { resultMessage = nil } })) {
             Button("확인", role: .cancel) {}
         } message: { Text(resultMessage ?? "") }
+    }
+
+    private var categorySelection: some View {
+        ExportSectionCard(
+            title: "카테고리 선택",
+            subtitle: "촬영한 의류 종류를 바탕으로 찾은 추천 카테고리예요."
+        ) {
+            if let selectedCategory {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(ExportScreenStyle.accent)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("선택한 카테고리")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(selectedCategory.wholeCategoryName)
+                            .font(.subheadline.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(ExportScreenStyle.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: ExportScreenStyle.fieldCornerRadius))
+            }
+
+            if categories.isEmpty {
+                Button { Task { await searchCategories() } } label: {
+                    Label("카테고리 불러오기", systemImage: "arrow.clockwise")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(ExportScreenStyle.accent, in: Capsule())
+            } else if recommendations.isEmpty {
+                Text("추천 정보가 없어요. 검색하거나 전체 카테고리에서 선택해 주세요.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 10)], spacing: 10) {
+                    ForEach(recommendations) { category in
+                        recommendationButton(category)
+                    }
+                }
+            }
+
+            Divider()
+
+            ExportField(label: "카테고리 검색") {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("예: 여성 청바지, 남성 재킷", text: $categoryQuery)
+                        .textInputAutocapitalization(.never)
+                }
+                .exportTextFieldStyle()
+            }
+
+            if !categoryQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if searchResults.isEmpty {
+                    Text("검색 결과가 없어요. 다른 단어로 검색해 주세요.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 12)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(searchResults) { category in
+                            categoryButton(category)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var categoryExplorer: some View {
+        ExportSectionCard(
+            title: "전체 카테고리 탐색",
+            subtitle: categoryPath.isEmpty ? "패션의류 또는 패션잡화부터 선택해 주세요." : categoryPath.joined(separator: "  ›  ")
+        ) {
+            if !categoryPath.isEmpty {
+                Button { categoryPath.removeLast() } label: {
+                    Label("이전 분류", systemImage: "chevron.left")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(ExportScreenStyle.accent)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(childNames, id: \.self) { name in
+                    categoryPathButton(name)
+                }
+            }
+        }
+    }
+
+    private var productNotice: some View {
+        ExportSectionCard(
+            title: "상품 고시 정보",
+            subtitle: "구매자가 확인할 기본 상품 정보를 입력해 주세요."
+        ) {
+            ExportField(label: "소재") {
+                TextField("예: 상품 상세 참조", text: $material)
+                    .exportTextFieldStyle()
+            }
+            ExportField(label: "색상") {
+                TextField("예: 상품 상세 참조", text: $color)
+                    .exportTextFieldStyle()
+            }
+            ExportField(label: "사이즈") {
+                TextField("예: 상품 상세 참조", text: $size)
+                    .exportTextFieldStyle()
+            }
+        }
     }
 
     private func searchCategories() async {
@@ -139,14 +244,82 @@ struct NaverStoreExportView: View {
         }.sorted { $0.wholeCategoryName < $1.wholeCategoryName }.prefix(8))
     }
 
+    private var canPublish: Bool {
+        !isWorking && selectedCategory != nil && product.imageData != nil && (Int(priceText) ?? 0) >= 10
+    }
+
+    private var validationMessage: String? {
+        if product.imageData == nil { return "대표 사진을 추가해야 등록할 수 있어요." }
+        if (Int(priceText) ?? 0) < 10 { return "판매 가격을 10원 이상 입력해 주세요." }
+        if selectedCategory == nil { return "상품 카테고리를 선택해 주세요." }
+        return nil
+    }
+
     private func categoryButton(_ category: NaverCategory) -> some View {
         Button { selectedCategory = category } label: {
-            HStack {
+            HStack(spacing: 12) {
                 Text(category.wholeCategoryName)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.leading)
                 Spacer()
-                if selectedCategory?.id == category.id { Image(systemName: "checkmark.circle.fill") }
+                Image(systemName: selectedCategory?.id == category.id ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selectedCategory?.id == category.id ? ExportScreenStyle.accent : Color.secondary)
             }
-        }.foregroundStyle(.primary)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ExportScreenStyle.field, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+    }
+
+    private func recommendationButton(_ category: NaverCategory) -> some View {
+        let isSelected = selectedCategory?.id == category.id
+        return Button { selectedCategory = category } label: {
+            HStack(spacing: 6) {
+                if isSelected { Image(systemName: "checkmark") }
+                Text(shortCategoryName(category))
+                    .lineLimit(2)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isSelected ? Color.white : ExportScreenStyle.label)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .padding(.horizontal, 10)
+            .background(isSelected ? ExportScreenStyle.accent : ExportScreenStyle.field, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(category.wholeCategoryName)
+        .accessibilityValue(isSelected ? "선택됨" : "선택 안 됨")
+    }
+
+    private func shortCategoryName(_ category: NaverCategory) -> String {
+        parts(category).suffix(2).joined(separator: " · ")
+    }
+
+    private func categoryPathButton(_ name: String) -> some View {
+        let next = categoryPath + [name]
+        let leaf = categories.first(where: { parts($0) == next })
+        let isSelected = leaf?.id == selectedCategory?.id
+        return Button {
+            if let leaf {
+                selectedCategory = leaf
+            } else {
+                categoryPath = next
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Text(name)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Image(systemName: isSelected ? "checkmark.circle.fill" : leaf == nil ? "chevron.right" : "circle")
+                    .foregroundStyle(isSelected ? ExportScreenStyle.accent : Color.secondary)
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(ExportScreenStyle.field, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
     }
 
     private func publish() async {
