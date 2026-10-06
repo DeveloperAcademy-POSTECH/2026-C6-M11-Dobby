@@ -4,13 +4,12 @@ struct ExportView: View {
     let product: ExportProduct
     let controller: CopyActivityController
     @Binding var showFruits: Bool
-    var onEditProduct: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var history = ExportHistoryStore()
     @State private var isShowingOpenError = false
     @State private var isOpeningLink = false
-    @State private var showDetailCopy = false
+    @State private var showFruitsGuideA = false
     @State private var showCafe24 = false
     @State private var showNaverStore = false
     @State private var showInstagram = false
@@ -42,7 +41,7 @@ struct ExportView: View {
                     history.recordOpenResult(for: .fruitsFamily, accepted: true)
                 }
             }
-            .navigationDestination(isPresented: $showDetailCopy) {
+            .navigationDestination(isPresented: $showFruitsGuideA) {
                 FruitsExportView(product: product, controller: controller) {
                     openedFruitsMethods.insert(.dynamicIslandA)
                     history.recordOpenResult(for: .fruitsFamily, accepted: true)
@@ -85,7 +84,7 @@ struct ExportView: View {
         if method == .dynamicIslandB {
             showFruitsGuideOverlay = true
         } else {
-            showDetailCopy = true
+            showFruitsGuideA = true
         }
     }
 
