@@ -407,6 +407,7 @@ private struct MeasurementGlassCapsule: ViewModifier {
 enum GarmentPointName {
     static func title(_ id: String) -> String {
         switch id {
+        case "neck_center": "목 중앙점"
         case "neck_left": "왼쪽 목점"
         case "neck_right": "오른쪽 목점"
         case "shoulder_left": "왼쪽 어깨점"

@@ -179,10 +179,36 @@ final class AutomaticLandmarkAdjustmentTests: XCTestCase {
         XCTAssertNil(try session.makeRecord().originalAutomaticLandmarks)
     }
 
+    func testNeckCenterEditRecalculatesPersistsAndResetsWithoutMovingParents() throws {
+        var session = model()
+        let original = session.calculationLandmarks
+        let initialLength = try value(session.result, "top.totalLength").meters
+        let target = ImagePoint(x: 0.5, y: 0.35)
+        XCTAssertTrue(session.placePoint(originalPoint: target, id: "neck_center"))
+        XCTAssertNil(try point(session.calculationLandmarks, "neck_center").derivedFrom)
+        XCTAssertEqual(session.editedPointIDs, ["neck_center"])
+        for id in ["neck_left", "neck_right"] {
+            XCTAssertEqual(try point(session.calculationLandmarks, id).point, try point(original, id).point)
+        }
+        XCTAssertTrue(session.apply(calculate(session), for: session.calculationRevision))
+        let length = try XCTUnwrap(value(session.result, "top.totalLength").meters)
+        XCTAssertLessThan(length, try XCTUnwrap(initialLength))
+        let data = try JSONEncoder().encode(session.makeRecord())
+        var reopened = AutomaticMeasurement(record: try JSONDecoder().decode(SavedMeasurement.self, from: data))
+        XCTAssertEqual(try point(reopened.calculationLandmarks, "neck_center").point, target)
+        XCTAssertNil(try point(reopened.calculationLandmarks, "neck_center").derivedFrom)
+        XCTAssertTrue(reopened.placePoint(originalPoint: .init(x: 0.2, y: 0.3), id: "shoulder_left"))
+        XCTAssertEqual(try point(reopened.calculationLandmarks, "neck_center").point, target)
+        reopened.resetPointAdjustments()
+        XCTAssertEqual(try point(reopened.calculationLandmarks, "neck_center").derivedFrom, ["neck_left", "neck_right"])
+        XCTAssertTrue(reopened.apply(calculate(reopened), for: reopened.calculationRevision))
+        XCTAssertEqual(try value(reopened.result, "top.totalLength").meters, initialLength)
+    }
+
     func testInvalidCoordinatesUnknownAndDerivedIDsDoNotMutateRevisionOrGeometry() {
         var session = model()
         let revision = session.calculationRevision
-        for (id, point) in [("missing", ImagePoint(x: 0.5, y: 0.5)), ("neck_center", .init(x: 0.5, y: 0.3)),
+        for (id, point) in [("missing", ImagePoint(x: 0.5, y: 0.5)), ("neck_center", .init(x: -0.1, y: 0.3)),
                             ("hem_center", .init(x: 1, y: 0.3)), ("hem_center", .init(x: .nan, y: 0.3))] {
             XCTAssertFalse(session.placePoint(originalPoint: point, id: id))
         }
