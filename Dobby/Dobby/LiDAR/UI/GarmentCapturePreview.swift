@@ -4,7 +4,8 @@ import UIKit
 /// Explicit UI rehearsal. Never used as a fallback for a camera/model failure.
 @MainActor
 enum GarmentCapturePreview {
-    static func measurement(partial: Bool = false, kind: AutomaticGarmentKind = .bottoms) -> AutomaticMeasurement {
+    static func measurement(partial: Bool = false, bothSidesPartial: Bool = false,
+                            kind: AutomaticGarmentKind = .bottoms) -> AutomaticMeasurement {
         // The photographed garment is an opt-in design fixture, not model or
         // sensor evidence. Its points, mask, calibration and 1 m depth are synthetic.
         let referenceImage = kind == .top && ProcessInfo.processInfo.arguments.contains("--garment-preview-design-reference")
@@ -103,6 +104,11 @@ enum GarmentCapturePreview {
                                 derivedFrom: ["waist_left", "waist_right"]))
         }
         if partial { points.removeAll { $0.id == (kind == .top ? "sleeve_end_right" : "hem_right_inner") } }
+        if bothSidesPartial {
+            let missingIDs: Set<String> = kind == .top
+                ? ["sleeve_end_left", "sleeve_end_right"] : ["hem_left_outer", "hem_right_outer"]
+            points.removeAll { missingIDs.contains($0.id) }
+        }
         let pairs: [(String, String, String)] = [
             ("waist_left", "waist_right", "허리 단면"), ("waist_center", "crotch", "밑위(직선)"),
             ("waist_left", "hem_left_outer", "왼쪽 총장(직선)"),

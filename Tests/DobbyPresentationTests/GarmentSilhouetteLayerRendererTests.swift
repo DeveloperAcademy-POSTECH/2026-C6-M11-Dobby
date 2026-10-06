@@ -167,12 +167,75 @@ final class GarmentSilhouetteLayerRendererTests: XCTestCase {
             fixture.animations.contains { $0.keyPath == "path" }
         }
         let animation = try XCTUnwrap(fixture.animations.first { $0.keyPath == "path" })
-        XCTAssertEqual(animation.duration, 0.22, accuracy: 0.01)
+        XCTAssertLessThan(animation.duration, 0.20, "A regular camera result must not interrupt every other morph")
         XCTAssertEqual(animation.repeatCount, 0)
         XCTAssertFalse(animation.autoreverses)
         XCTAssertNotNil(animation.timingFunction)
         XCTAssertFalse(fixture.animations.contains { $0.keyPath == "opacity" })
         for path in fixture.paths { assertFiniteClosed(path) }
+    }
+
+    func testRegularCameraCadenceKeepsPathMotionInsteadOfAlternatingOpacityFades() async throws {
+        let fixture = try fixture(), epoch = UUID()
+        defer { fixture.close() }
+        update(fixture, mask: topMask(), identity: identity(epoch: epoch), useGradient: true)
+        try await settle(fixture)
+        let startedAt = CACurrentMediaTime()
+        for shift in 1...4 {
+            let remaining = startedAt + Double(shift - 1) * 0.20 - CACurrentMediaTime()
+            if remaining > 0 { try await Task.sleep(for: .seconds(remaining)) }
+            update(fixture, mask: topMask(shift: shift),
+                identity: identity(epoch: epoch, timestamp: 1 + Double(shift) * 0.20), useGradient: true)
+            try await eventually("Each regular result must move the visible contour to its newest position") {
+                fixture.shapes.contains { layer in
+                    layer.opacity == 1 && layer.path.map {
+                        abs($0.boundingBoxOfPath.minX - Double(28 + shift * 2)) < 0.1
+                    } == true
+                }
+            }
+            XCTAssertTrue(fixture.animations.contains { $0.keyPath == "path" })
+            XCTAssertFalse(fixture.animations.contains { $0.keyPath == "opacity" },
+                "Small motion at the live analysis cadence must not dissolve between two silhouettes")
+            XCTAssertEqual(fixture.paths.count, 1)
+            for path in fixture.paths { assertFiniteClosed(path) }
+        }
+    }
+
+    func testNewResultDuringNativeMorphContinuesFromDisplayedShapeWithSynchronizedGradientMasks() async throws {
+        let fixture = try fixture(), epoch = UUID()
+        defer { fixture.close() }
+        update(fixture, mask: topMask(), identity: identity(epoch: epoch), useGradient: true)
+        try await settle(fixture)
+        update(fixture, mask: topMask(shift: 1), identity: identity(epoch: epoch, timestamp: 1.20), useGradient: true)
+        try await eventually("Enter the first path animation before delivering another result") {
+            fixture.animations.contains { $0.keyPath == "path" }
+        }
+        try await Task.sleep(for: .milliseconds(30))
+        update(fixture, mask: topMask(shift: 2), identity: identity(epoch: epoch, timestamp: 1.25), useGradient: true)
+        try await eventually("The interrupted morph must accept its next target") {
+            fixture.shapes.contains { layer in
+                layer.opacity == 1 && layer.path.map { abs($0.boundingBoxOfPath.minX - 32) < 0.1 } == true
+            }
+        }
+        let parent = try XCTUnwrap(fixture.shapes.first { $0.animation(forKey: "silhouette.path") != nil })
+        let animation = try XCTUnwrap(parent.animation(forKey: "silhouette.path") as? CABasicAnimation)
+        let from = try XCTUnwrap(animation.fromValue) as! CGPath
+        assertFiniteClosed(from)
+        XCTAssertGreaterThanOrEqual(from.boundingBoxOfPath.minX, 28 - 0.01)
+        XCTAssertLessThan(from.boundingBoxOfPath.minX, 30 - 0.01,
+            "Retarget from the visible intermediate shape instead of jumping to the prior model target")
+        XCTAssertFalse(fixture.animations.contains { $0.keyPath == "opacity" })
+        XCTAssertEqual(fixture.paths.count, 1)
+        let parts = try gradientComponents(of: parent)
+        for mask in [parts.fillMask, parts.strokeMask] {
+            let maskAnimation = try XCTUnwrap(mask.animation(forKey: "silhouette.path") as? CABasicAnimation)
+            XCTAssertEqual(maskAnimation.duration, animation.duration)
+            XCTAssertEqual(maskAnimation.beginTime, animation.beginTime)
+            XCTAssertTrue(CFEqual(try XCTUnwrap(maskAnimation.fromValue) as AnyObject,
+                                  try XCTUnwrap(animation.fromValue) as AnyObject))
+            XCTAssertTrue(CFEqual(try XCTUnwrap(maskAnimation.toValue) as AnyObject,
+                                  try XCTUnwrap(animation.toValue) as AnyObject))
+        }
     }
 
     func testHoleTopologyChangeCrossfadesCompletePathsAndPreservesOpening() async throws {
@@ -367,7 +430,7 @@ final class GarmentSilhouetteLayerRendererTests: XCTestCase {
             let animation = try XCTUnwrap(mask.animation(forKey: "silhouette.path") as? CABasicAnimation)
             XCTAssertEqual(mask.path, parent.path)
             XCTAssertEqual(animation.keyPath, "path")
-            XCTAssertEqual(animation.duration, 0.22, accuracy: 0.001)
+            XCTAssertLessThan(animation.duration, 0.20)
             XCTAssertEqual(animation.duration, parentAnimation.duration)
             XCTAssertTrue(CFEqual(try XCTUnwrap(animation.fromValue) as AnyObject,
                                   try XCTUnwrap(parentAnimation.fromValue) as AnyObject))

@@ -57,7 +57,7 @@ struct ContentView: View {
                                         VStack(alignment: .leading, spacing: 6) {
                                             Text(garment.name.isEmpty ? "이름 없는 \(garment.group.label)" : garment.name)
                                                 .font(.headline)
-                                            Text("\(garment.orderedMeasurements.count)개 실측 · \(garment.productPhotos.count)장 사진")
+                                            Text("\(garment.visibleMeasurements.count)개 실측 · \(garment.productPhotos.count)장 사진")
                                                 .font(.caption).foregroundStyle(.secondary)
                                             if garment.sourceMeasurementID != nil && garment.informationCompletedAt == nil {
                                                 Text("작성 중 · 이어서 입력할 수 있어요").font(.caption).foregroundStyle(.orange)
@@ -204,8 +204,8 @@ struct ProductSavedDetailView: View {
                 if !garment.detail.isEmpty { Text(garment.detail) }
                 if !garment.brand.isEmpty { LabeledContent("브랜드", value: garment.brand) }
                 Text("실측 사이즈").font(.headline)
-                ForEach(garment.orderedMeasurements) { value in
-                    LabeledContent(value.label, value: MeasurementDisplayText.centimeters(value.valueCm) + " cm")
+                ForEach(garment.visibleMeasurements) { value in
+                    LabeledContent(value.displayLabel, value: MeasurementDisplayText.centimeters(value.valueCm) + " cm")
                         .accessibilityIdentifier("library.measurement.\(value.key)")
                 }
                 Button("내보내기") { openExport() }

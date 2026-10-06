@@ -15,6 +15,7 @@ struct GarmentCaptureToolbarIcon: View {
             .font(.system(size: 17, weight: .semibold))
             .frame(width: 44, height: 44)
             .glassEffect(.regular.tint(.white.opacity(0.08)), in: Circle())
+            .contentShape(.interaction, Rectangle())
     }
 }
 

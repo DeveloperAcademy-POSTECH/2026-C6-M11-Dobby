@@ -19,13 +19,30 @@ nonisolated enum GarmentSilhouettePresentationGeometry {
     /// retain their winding and nesting, and are suitable for even-odd filling.
     /// Returns nil instead of dropping a hole/component when capacity is exceeded.
     static func contours(from mask: GarmentMask) -> [[ImagePoint]]? {
-        guard let exact = GarmentSilhouetteGeometry.contours(from: mask),
-              exact.count <= maximumContours else { return nil }
+        guard let exact = GarmentSilhouetteGeometry.contours(from: mask) else { return nil }
+        return contours(fromExactContours: exact, size: mask.size)
+    }
+
+    /// Reuses the exact pixel boundaries from GarmentSilhouetteGeometry, so a
+    /// caller can fall back to those boundaries without tracing the mask again.
+    /// This applies the same display budget and topology checks as the mask API.
+    static func contours(fromExactContours exact: [[ImagePoint]], size: PixelSize) -> [[ImagePoint]]? {
+        guard size.isValid,
+              size.width <= GarmentSilhouetteGeometry.maximumMaskDimension,
+              size.height <= GarmentSilhouetteGeometry.maximumMaskDimension,
+              exact.count <= maximumContours,
+              exact.reduce(0, { $0 + $1.count }) <= GarmentSilhouetteGeometry.maximumContourVertices,
+              exact.allSatisfy({ loop in
+                  loop.count >= 4 && loop.allSatisfy(isValidDisplayPoint)
+                      && loop.indices.allSatisfy {
+                          squaredDistance(loop[$0], loop[($0 + 1) % loop.count]) > 1e-20
+                      }
+              }) else { return nil }
         if exact.isEmpty { return [] }
         var output: [[ImagePoint]] = []
         for loop in exact {
-            let pixels = loop.map { ImagePoint(x: $0.x * Double(mask.size.width),
-                                               y: $0.y * Double(mask.size.height)) }
+            let pixels = loop.map { ImagePoint(x: $0.x * Double(size.width),
+                                               y: $0.y * Double(size.height)) }
             var work = 0
             var simplified: [ImagePoint]?
             for tolerance in simplificationBudgets {
@@ -35,8 +52,8 @@ nonisolated enum GarmentSilhouettePresentationGeometry {
             guard let simplified else { return nil }
             let anchors = roundedAnchors(simplified)
             guard let sampled = densify(anchors, count: samplesPerContour) else { return nil }
-            output.append(sampled.map { .init(x: $0.x / Double(mask.size.width),
-                                              y: $0.y / Double(mask.size.height)) })
+            output.append(sampled.map { .init(x: $0.x / Double(size.width),
+                                              y: $0.y / Double(size.height)) })
         }
         guard hasSameTopology(output, as: exact) else { return nil }
         return output
@@ -46,14 +63,8 @@ nonisolated enum GarmentSilhouettePresentationGeometry {
     /// Holes, components, large shape changes or crossing intermediate polygons
     /// require a fade between complete paths, rather than a misleading path morph.
     static func aligned(_ next: [[ImagePoint]], to previous: [[ImagePoint]]) -> [[ImagePoint]]? {
-        guard next.count == 1, previous.count == 1,
-              next[0].count == samplesPerContour, previous[0].count == samplesPerContour,
-              isSimple(next[0]), isSimple(previous[0]) else { return nil }
+        guard hasCompatibleEndpoints(next, previous) else { return nil }
         let incoming = next[0], old = previous[0]
-        let oldArea = signedArea(old), newArea = signedArea(incoming)
-        guard oldArea > 1e-10, newArea > 1e-10,
-              (0.8...1.25).contains(newArea / oldArea),
-              distance(center(old), center(incoming)) <= 0.035 else { return nil }
         var bestShift = 0, bestCost = Double.infinity
         for shift in incoming.indices {
             var cost = 0.0
@@ -64,15 +75,37 @@ nonisolated enum GarmentSilhouettePresentationGeometry {
             if cost < bestCost { bestCost = cost; bestShift = shift }
         }
         let aligned = old.indices.map { incoming[($0 + bestShift) % incoming.count] }
-        guard zip(aligned, old).allSatisfy({ distance($0.0, $0.1) <= 0.06 }) else { return nil }
+        guard hasSafeInterpolation(aligned, from: old) else { return nil }
+        return [aligned]
+    }
+
+    /// Checks the actual displayed path against a new target without changing
+    /// its vertex correspondence. A running native morph retains that order.
+    /// Sampled intermediates use the same safety checks as phase alignment.
+    static func canInterpolate(_ next: [[ImagePoint]], from previous: [[ImagePoint]]) -> Bool {
+        hasCompatibleEndpoints(next, previous) && hasSafeInterpolation(next[0], from: previous[0])
+    }
+
+    private static func hasCompatibleEndpoints(_ next: [[ImagePoint]], _ previous: [[ImagePoint]]) -> Bool {
+        guard next.count == 1, previous.count == 1,
+              next[0].count == samplesPerContour, previous[0].count == samplesPerContour,
+              isSimple(next[0]), isSimple(previous[0]) else { return false }
+        let oldArea = signedArea(previous[0]), newArea = signedArea(next[0])
+        return oldArea > 1e-10 && newArea > 1e-10
+            && (0.8...1.25).contains(newArea / oldArea)
+            && distance(center(previous[0]), center(next[0])) <= 0.035
+    }
+
+    private static func hasSafeInterpolation(_ next: [ImagePoint], from previous: [ImagePoint]) -> Bool {
+        guard zip(next, previous).allSatisfy({ distance($0.0, $0.1) <= 0.06 }) else { return false }
         for fraction in [0.25, 0.5, 0.75] {
-            let intermediate = zip(old, aligned).map {
+            let intermediate = zip(previous, next).map {
                 ImagePoint(x: $0.0.x + ($0.1.x - $0.0.x) * fraction,
                            y: $0.0.y + ($0.1.y - $0.0.y) * fraction)
             }
-            guard signedArea(intermediate) > 1e-10, isSimple(intermediate) else { return nil }
+            guard signedArea(intermediate) > 1e-10, isSimple(intermediate) else { return false }
         }
-        return [aligned]
+        return true
     }
 
     private static func simplifyClosed(_ loop: [ImagePoint], tolerance: Double, work: inout Int) -> [ImagePoint]? {

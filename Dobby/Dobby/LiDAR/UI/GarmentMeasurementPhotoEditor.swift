@@ -20,8 +20,8 @@ struct GarmentMeasurementPhotoEditor: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .subheadline) private var labelHeight: CGFloat = 32
-    @ScaledMetric(relativeTo: .subheadline) private var labelFontSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var labelHeight: CGFloat = 24
+    @ScaledMetric(relativeTo: .caption) private var labelFontSize: CGFloat = 12
     @State private var selectedPointID: String?
     @State private var drag: PointDrag?
     @GestureState private var gestureIsActive = false
@@ -154,9 +154,9 @@ struct GarmentMeasurementPhotoEditor: View {
 
     private func measurementLabel(_ item: Annotation) -> some View {
         Button { onSelect(item.definition) } label: {
-            HStack(spacing: 4) {
-                Text(GarmentMeasurementText.shortTitle(item.definition)).foregroundStyle(.white.opacity(0.85))
-                    .font(.system(size: labelFontSize, weight: .semibold))
+            HStack(spacing: 3) {
+                Text(GarmentMeasurementText.shortTitle(item.definition)).foregroundStyle(.white.opacity(0.95))
+                    .font(.system(size: labelFontSize, weight: .medium))
                     .fixedSize(horizontal: true, vertical: false)
                 Text(drag != nil || isRecalculating ? "…" : visibleMeasurementValue(item.value))
                     .font(.system(size: labelFontSize, weight: .regular))
@@ -166,7 +166,8 @@ struct GarmentMeasurementPhotoEditor: View {
                         .frame(width: labelFontSize)
                 }
             }.font(.system(size: labelFontSize, weight: .regular)).foregroundStyle(.white)
-                .lineLimit(1).padding(.horizontal, 9)
+                .shadow(color: .black.opacity(0.65), radius: 0.75, y: 0.5)
+                .lineLimit(1).padding(.horizontal, 6)
                 .frame(width: item.labelSize.width, height: item.labelSize.height)
                 .modifier(MeasurementGlassCapsule(reduceTransparency: reduceTransparency))
                 .frame(height: max(44, item.labelSize.height))
@@ -286,22 +287,56 @@ struct GarmentMeasurementPhotoEditor: View {
 
     private func annotations(in size: CGSize) -> [Annotation] {
         if let moving = drag {
-            // Keep the capsules still under the finger and skip the collision
-            // search/font measurement during every touch update.
-            return moving.annotations.map { item in
+            // Cache text sizes during touch updates, but place captions against
+            // the current endpoints so a shortened line cannot obscure its dots.
+            let items: [Annotation] = moving.annotations.map { item in
                 guard item.definition.projection == nil else { return item }
+                let start = item.value.points[0].id == moving.id ? screenPoint(moving.current, size: size) : item.start
+                let end = item.value.points[1].id == moving.id ? screenPoint(moving.current, size: size) : item.end
                 return .init(definition: item.definition, value: item.value,
-                    start: item.value.points[0].id == moving.id ? screenPoint(moving.current, size: size) : item.start,
-                    end: item.value.points[1].id == moving.id ? screenPoint(moving.current, size: size) : item.end,
-                    labelCenter: item.labelCenter, labelSize: item.labelSize, isCallout: item.isCallout)
+                    start: start, end: end, labelCenter: nil,
+                    labelSize: item.labelSize, isCallout: item.isCallout)
             }
+            return positionedAnnotations(items, in: size)
         }
-        let markers = handles.map { point in
+        let items: [Annotation] = definitions.compactMap { definition in
+            guard definition.landmarkIDs.count == 2,
+                  let value = values.first(where: { $0.id == definition.id }),
+                  value.status != .unavailable, let meters = value.meters, meters.isFinite, meters > 0,
+                  value.points.count == 2, value.points.allSatisfy({ $0.imagePoint.isValid }) else { return nil }
+            let start = screenPoint(value.points[0].imagePoint, size: size)
+            let end = screenPoint(value.points[1].imagePoint, size: size)
+            // Match the medium title and regular monospaced value separately,
+            // using the same compact unit spacing as the visible capsule.
+            let titleFont = UIFont.systemFont(ofSize: labelFontSize, weight: .medium)
+            let valueFont = UIFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .regular)
+            let titleWidth = (GarmentMeasurementText.shortTitle(definition) as NSString)
+                .size(withAttributes: [.font: titleFont]).width
+            let valueWidth = (visibleMeasurementValue(value) as NSString)
+                .size(withAttributes: [.font: valueFont]).width
+            let width = ceil(titleWidth + valueWidth + 15 + (value.status == .uncertain ? labelFontSize + 3 : 0)) + 2
+            let labelSize = CGSize(width: min(max(60, width), size.width - 8), height: labelHeight)
+            return .init(definition: definition, value: value, start: start, end: end,
+                labelCenter: nil, labelSize: labelSize, isCallout: false)
+        }
+        return positionedAnnotations(items, in: size)
+    }
+
+    private func positionedAnnotations(_ items: [Annotation], in size: CGSize) -> [Annotation] {
+        let physicalMarkers = handles.map { point in
             let center = screenPoint(previewPoint(point), size: size)
             let diameter: CGFloat = selectedPoint?.id == point.id ? 24 : 18
             return CGRect(x: center.x - diameter / 2, y: center.y - diameter / 2,
                 width: diameter, height: diameter)
         }
+        // Protect derived/projected dots as well as physical handles, including
+        // during a drag. Projected segments stay engine-owned until recalculation.
+        let endpointMarkers = items.flatMap { item in
+            [item.start, item.end].map {
+                CGRect(x: $0.x - 6, y: $0.y - 6, width: 12, height: 12)
+            }
+        }
+        let markers = physicalMarkers + endpointMarkers
         var occupied: [CGRect] = []
         if image != nil, selectedPoint != nil {
             occupied.append(magnifierRect(in: size).insetBy(dx: -4, dy: -4))
@@ -309,35 +344,13 @@ struct GarmentMeasurementPhotoEditor: View {
         if showsEnlargeControl {
             occupied.append(CGRect(x: size.width - 56, y: 8, width: 48, height: 48))
         }
-        return definitions.compactMap { definition in
-            guard definition.landmarkIDs.count == 2,
-                  let value = values.first(where: { $0.id == definition.id }),
-                  value.status != .unavailable, let meters = value.meters, meters.isFinite, meters > 0,
-                  value.points.count == 2, value.points.allSatisfy({ $0.imagePoint.isValid }) else { return nil }
-            // Projection endpoints come exclusively from the engine. While a
-            // physical source is moving, keep that segment until recalculation.
-            let endpoints = value.points.map { resolved -> ImagePoint in
-                if definition.projection == nil, let moving = drag, moving.id == resolved.id { return moving.current }
-                return resolved.imagePoint
-            }
-            let start = screenPoint(endpoints[0], size: size), end = screenPoint(endpoints[1], size: size)
-            // Match the semibold title and regular monospaced value separately,
-            // using the same compact unit spacing as the visible capsule.
-            let titleFont = UIFont.systemFont(ofSize: labelFontSize, weight: .semibold)
-            let valueFont = UIFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .regular)
-            let titleWidth = (GarmentMeasurementText.shortTitle(definition) as NSString)
-                .size(withAttributes: [.font: titleFont]).width
-            let valueWidth = (visibleMeasurementValue(value) as NSString)
-                .size(withAttributes: [.font: valueFont]).width
-            let width = ceil(titleWidth + valueWidth + 22 + (value.status == .uncertain ? labelFontSize + 4 : 0)) + 4
-            let labelSize = CGSize(width: min(max(78, width), size.width - 8), height: labelHeight)
-            let placement = GarmentPhotoGeometry.segmentLabelPlacement(start: start, end: end,
-                labelSize: labelSize,
-                imageSize: size, occupied: occupied, markers: markers)
+        return items.map { item in
+            let placement = GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: item.start, end: item.end,
+                labelSize: item.labelSize, imageSize: size, occupied: occupied, markers: markers)
             if let placement { occupied.append(placement.rect) }
-            return .init(definition: definition, value: value, start: start, end: end,
-                labelCenter: placement.map { .init(x: $0.rect.midX, y: $0.rect.midY) }, labelSize: labelSize,
-                isCallout: placement?.isCallout ?? false)
+            return .init(definition: item.definition, value: item.value, start: item.start, end: item.end,
+                labelCenter: placement.map { .init(x: $0.rect.midX, y: $0.rect.midY) },
+                labelSize: item.labelSize, isCallout: placement?.isCallout ?? false)
         }
     }
 
@@ -386,7 +399,7 @@ private struct MeasurementGlassCapsule: ViewModifier {
             content.background(Color(white: 0.14), in: Capsule())
                 .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 0.75))
         } else {
-            content.glassEffect(.regular.tint(.black.opacity(0.18)).interactive(), in: Capsule())
+            content.glassEffect(.clear.tint(.black.opacity(0.06)).interactive(), in: Capsule())
         }
     }
 }
