@@ -67,6 +67,16 @@ struct ContentView: View {
                         }
                     }
                     .navigationTitle("보관함")
+#if DEBUG
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("내보내기 샘플", systemImage: "shippingbox") {
+                                openDebugExportSample()
+                            }
+                            .accessibilityIdentifier("debug.export-sample")
+                        }
+                    }
+#endif
                     .navigationDestination(for: UUID.self) { productID in
                         if let garment = garments.first(where: { $0.id == productID }) {
                             ProductSavedDetailView(garment: garment, controller: controller,
@@ -107,6 +117,21 @@ struct ContentView: View {
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
     }
+
+#if DEBUG
+    private func openDebugExportSample() {
+        do {
+            let sample = try SampleData.exportSample(in: context)
+            libraryPath.removeAll()
+            Task { @MainActor in
+                await Task.yield()
+                libraryPath.append(sample.id)
+            }
+        } catch {
+            linkError = "디버그용 내보내기 샘플을 준비하지 못했어요. \(error.localizedDescription)"
+        }
+    }
+#endif
 
     private func handleURL(_ url: URL) {
         if ForegroundCopyRelay.canHandle(url) {
