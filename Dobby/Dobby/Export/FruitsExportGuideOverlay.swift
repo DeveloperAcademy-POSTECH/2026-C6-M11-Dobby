@@ -55,7 +55,7 @@ struct FruitsExportGuideOverlay: View {
             onDismiss: dismissIfPossible,
             onOpen: startAndOpenFruits
         )
-        .background(.ultraThinMaterial, in: UnevenRoundedRectangle(
+        .background(Color(.systemBackground), in: UnevenRoundedRectangle(
             topLeadingRadius: 38,
             bottomLeadingRadius: 58,
             bottomTrailingRadius: 58,
