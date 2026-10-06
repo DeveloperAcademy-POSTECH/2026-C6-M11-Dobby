@@ -6,6 +6,8 @@ import Foundation
 final class ProductPhotoFixtureCaptureProvider: CaptureProviding {
     private let source: CapturedAsset.Source
     private let store: CameraPhotoStore
+    // 명시적 flow-preview 테스트에서만 첫 실패와 재시도 화면을 재현한다.
+    private var failNextDeletion = ProcessInfo.processInfo.arguments.contains("--detail-delete-failure-once")
 
     init(seed source: CapturedAsset.Source, directory: URL? = nil) {
         self.source = source
@@ -25,6 +27,10 @@ final class ProductPhotoFixtureCaptureProvider: CaptureProviding {
     }
 
     func discardUncommitted(_ asset: CapturedAsset) async throws {
+        if failNextDeletion {
+            failNextDeletion = false
+            throw CameraFailure.saveFailed
+        }
         try await store.discardUncommitted(asset)
     }
 }

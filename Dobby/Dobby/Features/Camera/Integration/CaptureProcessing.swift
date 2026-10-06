@@ -11,7 +11,8 @@ import Foundation
 @MainActor
 protocol CaptureProviding {
     func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset
-    /// 목록에 반영하지 못한 새 촬영본만 정리한다. 외부 입력이나 이미 채택한 사진에는 호출하지 않는다.
+    /// 이 provider가 만든 임시 촬영본을 정리한다. 초안의 개별 삭제·취소에도 사용한다.
+    /// 외부 실측 입력과 영구 저장소로 복사한 상품 사진은 삭제하지 않는다.
     func discardUncommitted(_ asset: CapturedAsset) async throws
 }
 

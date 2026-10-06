@@ -19,6 +19,9 @@ struct CameraFlowView: View {
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
     @State private var failureMessage: String?
+    @State private var photoToDelete: CapturedAsset?
+    @State private var deletionRequested: UUID?
+    @State private var deletionFailed = false
 
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
@@ -33,7 +36,8 @@ struct CameraFlowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            photoStrip
+            DetailPhotoStrip(photos: model.photos, deletingPhotoID: deletionRequested,
+                             isBusy: isPhotoOperationInProgress) { photoToDelete = $0 }
             CameraPermissionGate(permission: permission) {
                 VStack(spacing: 0) {
                     preview
@@ -73,9 +77,30 @@ struct CameraFlowView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
-                .disabled(captureRequested || model.isCapturing)
+                .disabled(isPhotoOperationInProgress)
                 .accessibilityIdentifier("camera.selectPhotos")
             }
+        }
+        .alert("상세 사진을 삭제할까요?", isPresented: Binding(
+            get: { photoToDelete != nil }, set: { if !$0 { photoToDelete = nil } }
+        ), presenting: photoToDelete) { photo in
+            Button("취소", role: .cancel) { photoToDelete = nil }
+            Button("삭제", role: .destructive) { deletionRequested = photo.id }
+        } message: { _ in
+            Text("이 촬영본은 삭제 후 복구할 수 없어요.")
+        }
+        .alert("사진을 삭제하지 못했어요", isPresented: $deletionFailed) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text("사진을 유지했어요. 삭제 버튼을 눌러 다시 시도해 주세요.")
+        }
+        .task(id: deletionRequested) {
+            guard let id = deletionRequested else { return }
+            do { try await model.deleteDetail(id) }
+            catch {
+                if !(error is CancellationError), !Task.isCancelled { deletionFailed = true }
+            }
+            deletionRequested = nil
         }
         .task(id: captureRequested) {
             guard captureRequested else { return }
@@ -112,27 +137,6 @@ struct CameraFlowView: View {
         }
     }
 
-    private var photoStrip: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 5) {
-                    ForEach(Array(model.photos.enumerated()), id: \.element.id) { index, photo in
-                        CameraPhotoView(source: photo.source, maximumPixelSize: 160)
-                            .frame(width: 36.5, height: 51)
-                            .accessibilityLabel(index == 0 ? "실측 사진" : "상세 사진 \(index)")
-                            .id(photo.id)
-                    }
-                }.padding(.horizontal, 16)
-            }
-            .onChange(of: model.photos.count) { _, _ in
-                if let id = model.photos.last?.id { withAnimation { proxy.scrollTo(id, anchor: .trailing) } }
-            }
-        }
-        .frame(height: 51)
-        .padding(.top, 8)
-        .padding(.bottom, 15)
-    }
-
     private var shutter: some View {
         Button { captureRequested = true } label: {
             // Figma 내보내기에 포함된 그림자 여백: 왼쪽 18pt, 위 6pt.
@@ -149,7 +153,11 @@ struct CameraFlowView: View {
     }
 
     private var canCapture: Bool {
-        !captureRequested && !model.isCapturing && (previewSource != nil || camera?.canCapture == true)
+        !isPhotoOperationInProgress && (previewSource != nil || camera?.canCapture == true)
+    }
+
+    private var isPhotoOperationInProgress: Bool {
+        captureRequested || model.isCapturing || model.isDeleting || deletionRequested != nil || photoToDelete != nil
     }
 }
 

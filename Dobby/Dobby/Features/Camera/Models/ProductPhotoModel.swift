@@ -16,6 +16,9 @@ final class ProductPhotoModel {
     private(set) var detailPhotos: [CapturedAsset] = []
     private(set) var selectedPhotoIDs: [UUID] = []
     private(set) var isCapturing = false
+    private(set) var isDeleting = false
+    private var isDiscardingDetails = false
+    @ObservationIgnored private var deletionTask: Task<Void, Error>?
     @ObservationIgnored private let captureProvider: any CaptureProviding
     @ObservationIgnored private var discardRevision = 0
 
@@ -30,7 +33,8 @@ final class ProductPhotoModel {
 
     // 최소 한 장, 선택 순서 유지, 첫 선택이 대표 사진이다.
     var output: ProductPhotoOutput? {
-        guard !isCapturing, let representativeID = selectedPhotoIDs.first else { return nil }
+        guard !isCapturing, !isDeleting, !isDiscardingDetails,
+              let representativeID = selectedPhotoIDs.first else { return nil }
         return ProductPhotoOutput(
             sessionID: input.sessionID, garmentID: input.garmentID,
             detailPhotos: detailPhotos,
@@ -55,7 +59,7 @@ final class ProductPhotoModel {
 
     func captureDetail() async throws {
         try Task.checkCancellation()
-        guard !isCapturing else { throw CameraFailure.operationInProgress }
+        guard !isCapturing, !isDeleting, !isDiscardingDetails else { throw CameraFailure.operationInProgress }
         isCapturing = true
         defer { isCapturing = false }
         let revision = discardRevision
@@ -78,8 +82,26 @@ final class ProductPhotoModel {
         }
     }
 
+    /// 저장소 삭제가 성공한 뒤에만 목록을 갱신한다. 실측 입력은 삭제할 수 없다.
+    func deleteDetail(_ id: UUID) async throws {
+        try Task.checkCancellation()
+        guard !isCapturing, !isDeleting, !isDiscardingDetails else { throw CameraFailure.operationInProgress }
+        guard let photo = detailPhotos.first(where: { $0.id == id }),
+              photo.purpose == .detail, id != input.measurement.id else { throw CameraFailure.missingCapture }
+        isDeleting = true
+        defer { isDeleting = false; deletionTask = nil }
+        // 화면 이탈로 호출 Task가 취소되어도 파일 삭제와 목록 반영을 함께 마친다.
+        let task = Task {
+            try await captureProvider.discardUncommitted(photo)
+            detailPhotos.removeAll { $0.id == id }
+            selectedPhotoIDs.removeAll { $0 == id }
+        }
+        deletionTask = task
+        try await task.value
+    }
+
     func toggleSelection(_ id: UUID) {
-        guard photos.contains(where: { $0.id == id }) else { return }
+        guard !isDeleting, !isDiscardingDetails, photos.contains(where: { $0.id == id }) else { return }
         if selectedPhotoIDs.contains(id) {
             selectedPhotoIDs.removeAll { $0 == id }
         } else {
@@ -88,7 +110,8 @@ final class ProductPhotoModel {
     }
 
     func moveSelection(fromOffsets offsets: IndexSet, toOffset destination: Int) {
-        guard !isCapturing, destination >= 0, destination <= selectedPhotoIDs.count,
+        guard !isCapturing, !isDeleting, !isDiscardingDetails,
+              destination >= 0, destination <= selectedPhotoIDs.count,
               offsets.allSatisfy({ selectedPhotoIDs.indices.contains($0) }) else { return }
         let moved = offsets.sorted().map { selectedPhotoIDs[$0] }
         let insertion = destination - offsets.filter { $0 < destination }.count
@@ -99,7 +122,12 @@ final class ProductPhotoModel {
     /// 완료 또는 취소 시 이 모델이 촬영한 임시 상세 원본만 정리한다.
     /// 실측 입력과 영구 저장소로 복사한 상품 사진은 이 provider가 소유하지 않는다.
     func discardUncommittedDetails() async throws {
+        guard !isDiscardingDetails else { throw CameraFailure.operationInProgress }
+        isDiscardingDetails = true
+        defer { isDiscardingDetails = false }
         discardRevision += 1
+        // 단건 삭제가 끝난 목록을 정리하고, 삭제 실패한 사진도 다시 정리한다.
+        if let deletionTask { _ = try? await deletionTask.value }
         let discarded = detailPhotos
         detailPhotos = []
         selectedPhotoIDs.removeAll { id in discarded.contains { $0.id == id } }
