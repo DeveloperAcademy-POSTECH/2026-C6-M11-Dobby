@@ -49,78 +49,12 @@ struct FruitsExportGuideOverlay: View {
     }
 
     private var guideCard: some View {
-        VStack(spacing: 0) {
-            Capsule()
-                .fill(Color.secondary.opacity(0.35))
-                .frame(width: 36, height: 5)
-                .padding(.top, 6)
-
-            HStack {
-                Button(action: dismissIfPossible) {
-                    Image(systemName: "xmark")
-                        .font(.body.weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
-                .foregroundStyle(.primary)
-                .disabled(opening || controller.busy)
-                .accessibilityLabel("가이드 닫기")
-                .accessibilityIdentifier("export.fruits.overlay.close")
-
-                Spacer()
-
-                Text("후루츠패밀리로 내보내기")
-                    .font(.headline)
-
-                Spacer()
-
-                Color.clear.frame(width: 44, height: 44)
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 58)
-
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        guideStep(1) {
-                            Text("**후루츠패밀리**의 게시글 작성 화면으로\n이동해주세요")
-                        }
-
-                        Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
-                            .font(.subheadline)
-                    }
-
-                    Button(action: startAndOpenFruits) {
-                        HStack(spacing: 8) {
-                            if opening { ProgressView().tint(.white) }
-                            Text("후루츠패밀리 열기")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 62)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(Color("BrandMain"), in: Capsule())
-                    .disabled(opening || controller.busy)
-                    .accessibilityIdentifier("export.fruits.overlay.open")
-                }
-
-                guideStep(2) {
-                    Text("다이나믹 아일랜드를 클릭해서 값을\n복사해주세요")
-                }
-                guideStep(3) {
-                    Text("후루츠패밀리의 입력 항목에 붙여넣기해주세요")
-                }
-                guideStep(4) {
-                    Text("모든 값들을 하나씩 반복해주세요")
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 4)
-            .padding(.bottom, 26)
-        }
-        .foregroundStyle(.primary)
-        .frame(maxWidth: .infinity)
+        FruitsExportGuideContent(
+            opening: opening,
+            busy: controller.busy,
+            onDismiss: dismissIfPossible,
+            onOpen: startAndOpenFruits
+        )
         .background(.ultraThinMaterial, in: UnevenRoundedRectangle(
             topLeadingRadius: 38,
             bottomLeadingRadius: 58,
@@ -137,24 +71,6 @@ struct FruitsExportGuideOverlay: View {
             .stroke(.white.opacity(0.55), lineWidth: 0.5)
         }
         .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
-    }
-
-    private func guideStep<Content: View>(
-        _ number: Int,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text("\(number)")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(Color("BrandMain"), in: Circle())
-
-            content()
-                .font(.callout.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 
     private func startAndOpenFruits() {
@@ -199,6 +115,107 @@ struct FruitsExportGuideOverlay: View {
         guard !opening, !controller.busy else { return }
         onDismiss()
     }
+}
+
+private struct FruitsExportGuideContent: View {
+    let opening: Bool
+    let busy: Bool
+    let onDismiss: () -> Void
+    let onOpen: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Color.secondary.opacity(0.35))
+                .frame(width: 36, height: 5)
+                .padding(.top, 6)
+
+            HStack {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .foregroundStyle(.primary)
+                .disabled(opening || busy)
+                .accessibilityLabel("가이드 닫기")
+                .accessibilityIdentifier("export.fruits.overlay.close")
+
+                Spacer()
+
+                Text("후루츠패밀리로 내보내기")
+                    .font(.headline)
+
+                Spacer()
+
+                Color.clear.frame(width: 44, height: 44)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 58)
+
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        guideStep(1) {
+                            Text("**후루츠패밀리**의 게시글 작성 화면으로\n이동해주세요")
+                        }
+
+                        Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
+                            .font(.subheadline)
+                    }
+
+                    Button(action: onOpen) {
+                        HStack(spacing: 8) {
+                            if opening { ProgressView().tint(.white) }
+                            Text("후루츠패밀리 열기")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 62)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .background(Color("BrandMain"), in: Capsule())
+                    .disabled(opening || busy)
+                    .accessibilityIdentifier("export.fruits.overlay.open")
+                }
+
+                guideStep(2) {
+                    Text("다이나믹 아일랜드를 클릭해서 값을\n복사해주세요")
+                }
+                guideStep(3) {
+                    Text("후루츠패밀리의 입력 항목에 붙여넣기해주세요")
+                }
+                guideStep(4) {
+                    Text("모든 값들을 하나씩 반복해주세요")
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+            .padding(.bottom, 26)
+        }
+        .foregroundStyle(.primary)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func guideStep<Content: View>(
+        _ number: Int,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("\(number)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(Color("BrandMain"), in: Circle())
+
+            content()
+                .font(.callout.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
 }
 
 #Preview {
