@@ -65,6 +65,53 @@ final class AppRoutingTests: XCTestCase {
     }
 
     @MainActor
+    func testDebugExportSampleOpensRealLibraryExportFlowWithoutDuplicates() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        app.tabBars.buttons["보관함"].tap()
+        expectEmptyLibrary(in: app)
+
+        let sampleButton = app.buttons["debug.export-sample"]
+        XCTAssertTrue(sampleButton.waitForExistence(timeout: 5))
+        sampleButton.tap()
+
+        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["90s 나이키 트랙탑"].exists)
+        XCTAssertTrue(app.staticTexts["나이키"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["library.measurement.shoulderWidth"].exists)
+
+        let exportButton = app.buttons["library.export"]
+        reveal(exportButton, in: app)
+        exportButton.tap()
+
+        XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
+        let fruitsA = app.buttons["후루츠패밀리로 내보내기 (A)"]
+        let fruitsB = app.buttons["후루츠패밀리로 내보내기 (B)"]
+        reveal(fruitsB, in: app)
+        XCTAssertTrue(fruitsA.exists)
+        XCTAssertTrue(fruitsB.exists)
+        attachScreenshot(app, name: "debug-library-sample-export-channels")
+
+        app.buttons["export.close"].tap()
+        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 5))
+        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "library.product."
+        )).count, 1)
+
+        app.buttons["debug.export-sample"].tap()
+        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 5))
+        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertEqual(app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "library.product."
+        )).count, 1)
+    }
+
+    @MainActor
     private func fixtureApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
@@ -88,6 +135,20 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["보관된 제품이 없어요"].waitForExistence(timeout: 5), file: file, line: line)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "library.product.")).firstMatch.exists, file: file, line: line)
+    }
+
+    @MainActor
+    private func reveal(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for _ in 0..<8 where !element.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(element.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertTrue(element.isHittable, file: file, line: line)
     }
 
     @MainActor
