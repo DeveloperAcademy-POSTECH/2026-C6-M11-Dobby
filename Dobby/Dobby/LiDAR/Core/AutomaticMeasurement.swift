@@ -144,6 +144,19 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         }
         var visible = editableLandmarks
         visible.points = visible.points.filter { required.contains($0.id) }
+        if allowsNeckCenterEditing, required.contains("neck_center"),
+           var center = current.points.first(where: { $0.id == "neck_center" }) {
+            // Start at the depth-backed midpoint when available; keep the raw
+            // midpoint editable even when the automatic measurement failed.
+            if let displayed = displayLandmarks.points.first(where: {
+                $0.id == "neck_center" && $0.isVisible && $0.point.isValid
+            }) {
+                center.point = displayed.point
+            }
+            center.isVisible = center.point.isValid
+            visible.points.removeAll { ["neck_left", "neck_right", "neck_center"].contains($0.id) }
+            visible.points.append(center)
+        }
         return visible
     }
 
@@ -154,6 +167,10 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         var editable = current
         editable.points = current.points.filter { current.effectiveDerivedSourceIDs(for: $0.id) == nil }
         return editable
+    }
+
+    private var allowsNeckCenterEditing: Bool {
+        definitions.contains { $0.id == "top.totalLength" && $0.landmarkIDs.contains("neck_center") }
     }
 
     var calculationLandmarks: GarmentLandmarkSet { adjustedLandmarks ?? landmarks }
@@ -181,8 +198,14 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
               updated.sessionID == snapshot.frame.sessionID,
               updated.frameID == snapshot.frame.frameID,
               let index = updated.points.firstIndex(where: { $0.id == id }),
-              updated.effectiveDerivedSourceIDs(for: id) == nil else { return false }
+              updated.effectiveDerivedSourceIDs(for: id) == nil
+                || (id == "neck_center" && allowsNeckCenterEditing) else { return false }
         if updated.points[index].origin == .manual, updated.points[index].point == originalPoint { return false }
+        // An explicitly placed neck center samples its own depth instead of
+        // being recomputed from the two hidden model neck points.
+        if id == "neck_center", allowsNeckCenterEditing {
+            updated.points[index].derivedFrom = nil
+        }
         updated.points[index].point = originalPoint
         updated.points[index].isVisible = true
         updated.points[index].confidence = nil
