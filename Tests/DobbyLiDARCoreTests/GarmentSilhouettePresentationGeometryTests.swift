@@ -25,6 +25,47 @@ final class GarmentSilhouettePresentationGeometryTests: XCTestCase {
             mask { _, _ in false })), [])
     }
 
+    func testReusedExactContoursMatchMaskPresentationIncludingHolesAndCapacityFallback() throws {
+        let examples = [
+            shirt(),
+            mask { _, _ in false },
+            mask { x, y in
+                let ring = (8..<60).contains(x) && (8..<80).contains(y)
+                    && !((20..<40).contains(x) && (25..<55).contains(y))
+                return ring || ((75..<88).contains(x) && (50..<75).contains(y))
+            },
+            mask(width: 16, height: 16) { x, y in
+                (2..<14).contains(x) && (2..<14).contains(y) && !(x == 7 && y == 7)
+            },
+            mask(width: 256, height: 128) { x, y in
+                let nx = (Double(x) + 0.5 - 128) / 90, ny = (Double(y) + 0.5 - 64) / 45
+                return nx * nx + ny * ny < 1
+            },
+            mask(width: 32, height: 32) { x, y in x.isMultiple(of: 4) && y.isMultiple(of: 4) }
+        ]
+        for original in examples {
+            let exact = try XCTUnwrap(GarmentSilhouetteGeometry.contours(from: original))
+            XCTAssertEqual(GarmentSilhouettePresentationGeometry.contours(fromExactContours: exact, size: original.size),
+                           GarmentSilhouettePresentationGeometry.contours(from: original))
+            XCTAssertEqual(GarmentSilhouetteGeometry.contours(from: original), exact,
+                           "Reusing exact boundaries must not change them for the fallback path")
+        }
+    }
+
+    func testExactContourReuseRejectsInvalidDimensionsAndMalformedPoints() throws {
+        let original = shirt()
+        let exact = try XCTUnwrap(GarmentSilhouetteGeometry.contours(from: original))
+        for size in [PixelSize(width: 0, height: 96), .init(width: 96, height: 513)] {
+            XCTAssertNil(GarmentSilhouettePresentationGeometry.contours(fromExactContours: exact, size: size))
+        }
+        XCTAssertNil(GarmentSilhouettePresentationGeometry.contours(fromExactContours: [[]], size: original.size))
+        for point in [ImagePoint(x: .nan, y: 0.5), .init(x: 1.01, y: 0.5), exact[0][1]] {
+            var malformed = exact
+            malformed[0][0] = point
+            XCTAssertNil(GarmentSilhouettePresentationGeometry.contours(fromExactContours: malformed, size: original.size))
+        }
+    }
+
     func testFixedSamplesRetainNeckArmpitSleevesAndDoNotModifyMeasurementMask() throws {
         let original = shirt()
         let exact = try XCTUnwrap(GarmentSilhouetteGeometry.contours(from: original))
@@ -209,6 +250,70 @@ final class GarmentSilhouettePresentationGeometryTests: XCTestCase {
             XCTAssertGreaterThan(area(intermediate), 0)
             XCTAssertFalse(contains(.init(x: 0.5 + 0.004 * fraction, y: 0.25 - 0.003 * fraction), in: intermediate))
         }
+    }
+
+    func testInterruptedFractionalTranslationCanRetargetWithExistingVertexCorrespondence() throws {
+        let contour = try XCTUnwrap(GarmentSilhouettePresentationGeometry.contours(from: shirt()))[0]
+        let firstTarget = contour.map { ImagePoint(x: $0.x + 0.012, y: $0.y - 0.006) }
+        let certified = try XCTUnwrap(GarmentSilhouettePresentationGeometry.aligned([firstTarget], to: [contour]))[0]
+        // Native animation may be between mask pixels when the next analysis
+        // arrives. Validate those displayed points without rounding or phasing.
+        let displayed = zip(contour, certified).map {
+            ImagePoint(x: $0.0.x + ($0.1.x - $0.0.x) * 0.4,
+                       y: $0.0.y + ($0.1.y - $0.0.y) * 0.4)
+        }
+        let next = contour.map { ImagePoint(x: $0.x + 0.018, y: $0.y - 0.008) }
+        XCTAssertTrue(GarmentSilhouettePresentationGeometry.canInterpolate([next], from: [displayed]))
+        XCTAssertTrue(GarmentSilhouettePresentationGeometry.canInterpolate([certified], from: [contour]),
+                      "The fixed-correspondence API must accept already certified endpoints")
+        XCTAssertTrue(GarmentSilhouettePresentationGeometry.canInterpolate([displayed], from: [displayed]))
+        XCTAssertEqual(displayed.count, GarmentSilhouettePresentationGeometry.samplesPerContour)
+    }
+
+    func testFixedCorrespondenceRejectsCrossingIntermediateEvenWhenEndpointsAreTheSameSimpleShape() throws {
+        let corners: [ImagePoint] = [.init(x: 0.48, y: 0.48), .init(x: 0.52, y: 0.48),
+            .init(x: 0.52, y: 0.52), .init(x: 0.51, y: 0.52), .init(x: 0.51, y: 0.49),
+            .init(x: 0.49, y: 0.49), .init(x: 0.49, y: 0.52), .init(x: 0.48, y: 0.52)]
+        let contour = corners.indices.flatMap { index in
+            let start = corners[index], end = corners[(index + 1) % corners.count]
+            return (0..<16).map { step in
+                let fraction = Double(step) / 16
+                return ImagePoint(x: start.x + (end.x - start.x) * fraction,
+                                  y: start.y + (end.y - start.y) * fraction)
+            }
+        }
+        let next = Array(contour[24...]) + Array(contour[..<24])
+        XCTAssertFalse(hasCrossing(contour))
+        XCTAssertFalse(hasCrossing(next))
+        XCTAssertEqual(try XCTUnwrap(GarmentSilhouettePresentationGeometry.aligned([next], to: [contour])), [contour],
+                       "Phase alignment may repair correspondence before an animation begins")
+        let quarter = zip(contour, next).map {
+            ImagePoint(x: $0.0.x + ($0.1.x - $0.0.x) * 0.25,
+                       y: $0.0.y + ($0.1.y - $0.0.y) * 0.25)
+        }
+        XCTAssertTrue(hasCrossing(quarter), "Both endpoints are simple, but their fixed-order transition crosses")
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate([next], from: [contour]),
+                       "Retargeting must reject the actual correspondence instead of silently reordering it")
+    }
+
+    func testFixedCorrespondenceRejectsTopologyLargeShapeChangesAndUnsafeEndpoints() throws {
+        let contour = try XCTUnwrap(GarmentSilhouettePresentationGeometry.contours(from: shirt()))[0]
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate([], from: [contour]))
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate([contour, contour], from: [contour]))
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate([contour], from: [contour, contour]))
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate([Array(contour.dropLast())], from: [contour]))
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate([Array(contour.reversed())], from: [contour]))
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate(
+            [contour.map { .init(x: $0.x + 0.04, y: $0.y) }], from: [contour]),
+            "Center movement retains the existing 0.035 normalized limit")
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate(
+            [contour.map { .init(x: 0.5 + ($0.x - 0.5) * 0.8, y: 0.5 + ($0.y - 0.5) * 0.8) }], from: [contour]),
+            "Large area changes must fade rather than morph")
+        var crossing = contour
+        crossing.swapAt(4, 60)
+        XCTAssertTrue(hasCrossing(crossing))
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate([crossing], from: [contour]))
+        XCTAssertFalse(GarmentSilhouettePresentationGeometry.canInterpolate([contour], from: [crossing]))
     }
 
     func testLargeMovementWindingAndUnsafeEndpointDoNotMorph() throws {

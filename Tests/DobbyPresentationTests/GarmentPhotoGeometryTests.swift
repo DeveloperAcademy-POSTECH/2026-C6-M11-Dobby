@@ -353,6 +353,193 @@ final class GarmentPhotoGeometryTests: XCTestCase {
             labelSize: .init(width: 0, height: 28), imageSize: size, occupied: []))
     }
 
+    func testOverlayLabelsSitDirectlyOnHorizontalVerticalAndDiagonalSegmentMidpoints() throws {
+        let size = photoSizes[0], label = CGSize(width: 94, height: 24)
+        let segments: [(CGPoint, CGPoint)] = [
+            (.init(x: 40, y: 260), .init(x: 350, y: 260)),
+            (.init(x: 195, y: 80), .init(x: 195, y: 440)),
+            (.init(x: 50, y: 90), .init(x: 340, y: 430)),
+            (.init(x: 50, y: 430), .init(x: 340, y: 90))
+        ]
+        for (start, end) in segments {
+            let markers = [markerRect(start), markerRect(end)]
+            let placement = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+                labelSize: label, imageSize: size, occupied: [], markers: markers))
+            assertPlacement(placement, visibleLabel: label, imageSize: size, occupied: [])
+            XCTAssertFalse(placement.isCallout)
+            assertPoint(.init(x: placement.rect.midX, y: placement.rect.midY),
+                        .init(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2))
+            let visible = CGRect(x: placement.rect.minX, y: placement.rect.midY - label.height / 2,
+                                 width: label.width, height: label.height)
+            for marker in markers { XCTAssertFalse(visible.intersects(marker.insetBy(dx: -3, dy: -3))) }
+            let reversed = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: end, end: start,
+                labelSize: label, imageSize: size, occupied: [], markers: markers))
+            XCTAssertEqual(placement.rect, reversed.rect)
+            XCTAssertEqual(placement.isCallout, reversed.isCallout)
+        }
+    }
+
+    func testObstructedOverlayMidpointSlidesPreciselyAlongItsOwnLineBeforeUsingCallout() throws {
+        let size = photoSizes[0], label = CGSize(width: 70, height: 24)
+        let start = CGPoint(x: 25, y: 260), end = CGPoint(x: 365, y: 260)
+        let blocker = CGRect(x: 153, y: 238, width: 85, height: 44)
+        let markers = [markerRect(start), markerRect(end)]
+        let placement = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+            labelSize: label, imageSize: size, occupied: [blocker], markers: markers))
+        assertPlacement(placement, visibleLabel: label, imageSize: size, occupied: [blocker])
+        XCTAssertFalse(placement.isCallout)
+        XCTAssertEqual(placement.rect.midY, 260, accuracy: 1e-9)
+        XCTAssertEqual(placement.rect.maxX, blocker.minX - 4, accuracy: 1e-9,
+            "Find the nearest clear span rather than moving off the measurement line")
+        let reversed = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: end, end: start,
+            labelSize: label, imageSize: size, occupied: [blocker], markers: markers))
+        XCTAssertEqual(placement.rect, reversed.rect)
+    }
+
+    func testOverlaySlidingAvoidsLoupeAndPhysicalMarkerAtTheMidpoint() throws {
+        let size = photoSizes[0], label = CGSize(width: 94, height: 24)
+        let start = CGPoint(x: 90, y: 30), end = CGPoint(x: 90, y: 260)
+        let loupe = CGRect(x: 8, y: 8, width: 116, height: 157)
+        let markers = [markerRect(start), markerRect(end)]
+        let placement = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+            labelSize: label, imageSize: size, occupied: [loupe], markers: markers))
+        assertPlacement(placement, visibleLabel: label, imageSize: size, occupied: [loupe])
+        XCTAssertFalse(placement.isCallout)
+        XCTAssertEqual(placement.rect.midX, start.x, accuracy: 1e-9)
+        XCTAssertEqual(placement.rect.minY, loupe.maxY + 4, accuracy: 1e-9)
+
+        let horizontalStart = CGPoint(x: 40, y: 350), horizontalEnd = CGPoint(x: 350, y: 350)
+        let crossingMarker = markerRect(.init(x: 195, y: 350))
+        let allMarkers = [markerRect(horizontalStart), markerRect(horizontalEnd), crossingMarker]
+        let shifted = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(
+            start: horizontalStart, end: horizontalEnd, labelSize: label, imageSize: size,
+            occupied: [], markers: allMarkers))
+        XCTAssertFalse(shifted.isCallout)
+        XCTAssertEqual(shifted.rect.midY, 350, accuracy: 1e-9)
+        let visible = CGRect(x: shifted.rect.minX, y: shifted.rect.midY - label.height / 2,
+                             width: label.width, height: label.height)
+        for marker in allMarkers { XCTAssertFalse(visible.intersects(marker.insetBy(dx: -3, dy: -3))) }
+    }
+
+    func testShortOverlayUsesNearbyCalloutAndAlwaysProtectsBothEndpoints() throws {
+        let size = photoSizes[0], label = CGSize(width: 94, height: 24)
+        let start = CGPoint(x: 175, y: 240), end = CGPoint(x: 215, y: 240)
+        let placement = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+            labelSize: label, imageSize: size, occupied: []))
+        assertPlacement(placement, visibleLabel: label, imageSize: size, occupied: [])
+        XCTAssertTrue(placement.isCallout)
+        XCTAssertLessThan(hypot(placement.rect.midX - 195, placement.rect.midY - 240), 100)
+        let visible = CGRect(x: placement.rect.minX, y: placement.rect.midY - label.height / 2,
+                             width: label.width, height: label.height)
+        for point in [start, end] {
+            let endpoint = CGRect(x: point.x - 9, y: point.y - 9, width: 18, height: 18)
+            XCTAssertFalse(visible.intersects(endpoint.insetBy(dx: -3, dy: -3)),
+                "Endpoint protection remains even if the caller omits its marker list")
+        }
+    }
+
+    func testDraggedEndpointShorteningSegmentRepositionsCachedSizeIntoSafeCallout() throws {
+        let size = photoSizes[0], cachedLabelSize = CGSize(width: 94, height: 24)
+        let start = CGPoint(x: 50, y: 240), initialEnd = CGPoint(x: 340, y: 240)
+        let initial = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: initialEnd,
+            labelSize: cachedLabelSize, imageSize: size, occupied: [],
+            markers: [markerRect(start), markerRect(initialEnd)]))
+        XCTAssertFalse(initial.isCallout)
+        let currentEnd = CGPoint(x: 80, y: 240)
+        let currentMarkers = [markerRect(start), markerRect(currentEnd)]
+        let moved = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: currentEnd,
+            labelSize: cachedLabelSize, imageSize: size, occupied: [], markers: currentMarkers))
+        assertPlacement(moved, visibleLabel: cachedLabelSize, imageSize: size, occupied: [])
+        XCTAssertTrue(moved.isCallout, "A formerly inline caption must change placement when the dragged line becomes short")
+        let visible = CGRect(x: moved.rect.minX, y: moved.rect.midY - cachedLabelSize.height / 2,
+                             width: cachedLabelSize.width, height: cachedLabelSize.height)
+        for marker in currentMarkers {
+            XCTAssertFalse(visible.intersects(marker.insetBy(dx: -3, dy: -3)))
+        }
+        XCTAssertEqual(moved.rect.width, initial.rect.width, "Reuse cached string sizing during a drag")
+        XCTAssertLessThan(hypot(moved.rect.midX - 65, moved.rect.midY - 240), 100)
+    }
+
+    func testDraggedEndpointMovingLineBehindLoupeRepositionsWithoutCoveringLoupeOrCurrentPoints() throws {
+        let size = photoSizes[0], cachedLabelSize = CGSize(width: 94, height: 24)
+        let start = CGPoint(x: 50, y: 300), initialEnd = CGPoint(x: 340, y: 300)
+        let loupe = CGRect(x: 8, y: 8, width: 116, height: 157)
+        let initial = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: initialEnd,
+            labelSize: cachedLabelSize, imageSize: size, occupied: [loupe],
+            markers: [markerRect(start), markerRect(initialEnd)]))
+        XCTAssertFalse(initial.isCallout)
+        let currentEnd = CGPoint(x: 120, y: 20)
+        let currentMiddle = CGPoint(x: (start.x + currentEnd.x) / 2, y: (start.y + currentEnd.y) / 2)
+        XCTAssertTrue(loupe.contains(currentMiddle), "The stale midpoint-following strategy would put the caption behind the loupe")
+        let currentMarkers = [markerRect(start), markerRect(currentEnd)]
+        let moved = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: currentEnd,
+            labelSize: cachedLabelSize, imageSize: size, occupied: [loupe], markers: currentMarkers))
+        assertPlacement(moved, visibleLabel: cachedLabelSize, imageSize: size, occupied: [loupe])
+        let visible = CGRect(x: moved.rect.minX, y: moved.rect.midY - cachedLabelSize.height / 2,
+                             width: cachedLabelSize.width, height: cachedLabelSize.height)
+        for marker in currentMarkers {
+            XCTAssertFalse(visible.intersects(marker.insetBy(dx: -3, dy: -3)))
+        }
+        XCTAssertEqual(moved.rect.width, initial.rect.width)
+        XCTAssertNotEqual(moved.rect.midY, currentMiddle.y)
+    }
+
+    func testCrowdedOverlayCalloutAvoidsPreviouslyPlacedLabelAndLoupe() throws {
+        let size = photoSizes[0], label = CGSize(width: 104, height: 24)
+        let firstStart = CGPoint(x: 40, y: 240), firstEnd = CGPoint(x: 350, y: 240)
+        let secondStart = CGPoint(x: 40, y: 248), secondEnd = CGPoint(x: 350, y: 248)
+        let markers = [firstStart, firstEnd, secondStart, secondEnd].map(markerRect)
+        let loupe = CGRect(x: 8, y: 8, width: 116, height: 157)
+        let first = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: firstStart, end: firstEnd,
+            labelSize: label, imageSize: size, occupied: [loupe], markers: markers))
+        let second = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: secondStart, end: secondEnd,
+            labelSize: label, imageSize: size, occupied: [loupe, first.rect], markers: markers))
+        assertPlacement(second, visibleLabel: label, imageSize: size, occupied: [loupe, first.rect])
+        XCTAssertTrue(second.isCallout)
+        XCTAssertLessThan(hypot(second.rect.midX - 195, second.rect.midY - 248), 100)
+    }
+
+    func testOverlayTransparentTouchPaddingCanOverlapMarkerWhileVisibleCapsuleCannot() throws {
+        let size = photoSizes[0], label = CGSize(width: 112, height: 22)
+        let start = CGPoint(x: 40, y: 240), end = CGPoint(x: 350, y: 240)
+        let marker = CGRect(x: 186, y: 257, width: 18, height: 18)
+        let placement = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+            labelSize: label, imageSize: size, occupied: [], markers: [marker]))
+        XCTAssertFalse(placement.isCallout)
+        XCTAssertEqual(placement.rect.midX, 195, accuracy: 1e-9)
+        XCTAssertEqual(placement.rect.midY, 240, accuracy: 1e-9)
+        XCTAssertTrue(placement.rect.intersects(marker))
+        let visible = CGRect(x: placement.rect.minX, y: placement.rect.midY - label.height / 2,
+                             width: label.width, height: label.height)
+        XCTAssertFalse(visible.intersects(marker.insetBy(dx: -3, dy: -3)))
+    }
+
+    func testOverlayEdgesCrowdingDegenerateSegmentsAndInvalidInputRemainSafe() throws {
+        let size = photoSizes[0], label = CGSize(width: 94, height: 24)
+        let start = CGPoint(x: 40, y: 8), end = CGPoint(x: 350, y: 8)
+        let edge = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+            labelSize: label, imageSize: size, occupied: []))
+        assertPlacement(edge, visibleLabel: label, imageSize: size, occupied: [])
+        XCTAssertTrue(edge.isCallout, "A line at the photo edge cannot contain a complete caption touch area")
+        let coincident = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(
+            start: .init(x: 195, y: 260), end: .init(x: 195, y: 260),
+            labelSize: label, imageSize: size, occupied: []))
+        XCTAssertTrue(coincident.isCallout)
+        assertPlacement(coincident, visibleLabel: label, imageSize: size, occupied: [])
+        XCTAssertNil(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+            labelSize: label, imageSize: size, occupied: [CGRect(origin: .zero, size: size)]))
+        XCTAssertNil(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+            labelSize: label, imageSize: .init(width: 80, height: 40), occupied: []))
+        XCTAssertNil(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: .init(x: CGFloat.nan, y: 10), end: end,
+            labelSize: label, imageSize: size, occupied: []))
+        XCTAssertNil(GarmentPhotoGeometry.overlaySegmentLabelPlacement(start: start, end: end,
+            labelSize: .init(width: 0, height: 24), imageSize: size, occupied: []))
+        XCTAssertNil(GarmentPhotoGeometry.overlaySegmentLabelPlacement(
+            start: .init(x: -CGFloat.greatestFiniteMagnitude, y: 10),
+            end: .init(x: CGFloat.greatestFiniteMagnitude, y: 20),
+            labelSize: label, imageSize: size, occupied: []))
+    }
+
     private func hitPath(_ vertices: [CGPoint]) -> CGPath {
         let path = CGMutablePath()
         if let first = vertices.first {

@@ -28,6 +28,8 @@ final class GarmentSilhouetteLayerRenderer {
     private var pending: Update?
     private var revision: UInt64 = 0
     private var transitionID = UUID()
+    private var pathMotion: PathMotion?
+    private var analysisInterval: TimeInterval = 0.20
     private var isTornDown = false
     private(set) var hasVisibleSilhouette = false
 
@@ -76,6 +78,23 @@ final class GarmentSilhouetteLayerRenderer {
     private nonisolated struct PreparedGeometry: Sendable {
         var contours: [[ImagePoint]]
         var canMorph: Bool
+    }
+
+    private struct PathMotion {
+        var from: [[ImagePoint]]
+        var to: [[ImagePoint]]
+        var startedAt: CFTimeInterval
+        var duration: TimeInterval
+
+        func contours(at time: CFTimeInterval) -> [[ImagePoint]] {
+            let fraction = min(1, max(0, (time - startedAt) / duration))
+            return zip(from, to).map { old, new in
+                zip(old, new).map { a, b in
+                    ImagePoint(x: a.x + (b.x - a.x) * fraction,
+                               y: a.y + (b.y - a.y) * fraction)
+                }
+            }
+        }
     }
 
     init(containerLayer: CALayer) {
@@ -160,6 +179,8 @@ final class GarmentSilhouetteLayerRenderer {
         cachedIdentity = nil
         cachedContours = []
         cachedMapping = nil
+        pathMotion = nil
+        analysisInterval = 0.20
         workerTask?.cancel()
         hideLayers()
     }
@@ -183,17 +204,21 @@ final class GarmentSilhouetteLayerRenderer {
             let geometry: PreparedGeometry?
             if Task.isCancelled {
                 geometry = nil
-            } else if let contours = GarmentSilhouettePresentationGeometry.contours(from: mask), !Task.isCancelled {
-                if let aligned = GarmentSilhouettePresentationGeometry.aligned(contours, to: previous) {
-                    geometry = .init(contours: aligned, canMorph: true)
+            } else if let exact = GarmentSilhouetteGeometry.contours(from: mask), !Task.isCancelled {
+                // Trace the raster once, including when smoothing must fall
+                // back to an exact path with all components and holes intact.
+                if let contours = GarmentSilhouettePresentationGeometry.contours(fromExactContours: exact, size: mask.size),
+                   !Task.isCancelled {
+                    if let aligned = GarmentSilhouettePresentationGeometry.aligned(contours, to: previous) {
+                        geometry = .init(contours: aligned, canMorph: true)
+                    } else {
+                        geometry = .init(contours: contours, canMorph: false)
+                    }
+                } else if !Task.isCancelled, exact.reduce(0, { $0 + $1.count }) <= 4_096 {
+                    geometry = .init(contours: exact, canMorph: false)
                 } else {
-                    geometry = .init(contours: contours, canMorph: false)
+                    geometry = nil
                 }
-            } else if !Task.isCancelled, let exact = GarmentSilhouetteGeometry.contours(from: mask),
-                      exact.reduce(0, { $0 + $1.count }) <= 4_096 {
-                // Keep every component/hole if smooth presentation is too
-                // complex. Exact geometry is displayed without path morphing.
-                geometry = .init(contours: exact, canMorph: false)
             } else {
                 geometry = nil
             }
@@ -307,6 +332,37 @@ final class GarmentSilhouetteLayerRenderer {
         return path
     }
 
+    /// Read only the fixed-size polygon used by a native path animation. The
+    /// expensive raster tracing and phase matching stay on the geometry worker.
+    private func contours(in path: CGPath, mapping: Mapping) -> [[ImagePoint]]? {
+        guard abs(mapping.transform.a * mapping.transform.d - mapping.transform.b * mapping.transform.c) > 1e-12 else {
+            return nil
+        }
+        let inverse = mapping.transform.inverted()
+        var contours: [[ImagePoint]] = [], current: [ImagePoint] = []
+        var valid = true
+        path.applyWithBlock { element in
+            switch element.pointee.type {
+            case .moveToPoint, .addLineToPoint:
+                if element.pointee.type == .moveToPoint, !current.isEmpty { valid = false }
+                let point = element.pointee.points[0]
+                let normalized = CGPoint(x: point.x + mapping.viewport.minX,
+                                         y: point.y + mapping.viewport.minY).applying(inverse)
+                current.append(.init(x: normalized.x, y: normalized.y))
+                if current.count > GarmentSilhouettePresentationGeometry.samplesPerContour { valid = false }
+            case .closeSubpath:
+                contours.append(current)
+                current = []
+                if contours.count > 1 { valid = false }
+            default:
+                valid = false
+            }
+        }
+        guard valid, current.isEmpty, contours.count == 1,
+              contours[0].count == GarmentSilhouettePresentationGeometry.samplesPerContour else { return nil }
+        return contours
+    }
+
     private func presentImmediately(_ contours: [[ImagePoint]], update: Update) {
         transitionID = UUID()
         hideLayers()
@@ -325,13 +381,35 @@ final class GarmentSilhouetteLayerRenderer {
         let target = path(for: geometry.contours, mapping: update.mapping)
         let active = layers[activeLayerIndex]
         let sameMapping = cachedMapping == update.mapping
-        let canMorph = geometry.canMorph && hasVisibleSilhouette && sameMapping && !update.reduceMotion
+        let now = CACurrentMediaTime()
+        var from = cachedContours
+        var displayed = active.presentation()?.path ?? active.path
+        var canMorph = geometry.canMorph && hasVisibleSilhouette && sameMapping && !update.reduceMotion
             && layers[1 - activeLayerIndex].path == nil
-            && active.animation(forKey: "silhouette.path") == nil
+        if canMorph, active.animation(forKey: "silhouette.path") != nil {
+            // Retarget from the currently visible shape instead of alternating
+            // movement and opacity fades at the camera's regular update cadence.
+            // A fallback uses the same linear timing if CA has not committed a
+            // presentation layer yet. Validate this new interpolation, too.
+            if let presentationPath = active.presentation()?.path,
+               let current = contours(in: presentationPath, mapping: update.mapping) {
+                from = current
+                displayed = presentationPath
+            } else if let motion = pathMotion {
+                from = motion.contours(at: now)
+                displayed = path(for: from, mapping: update.mapping)
+            } else {
+                canMorph = false
+            }
+            canMorph = canMorph && GarmentSilhouettePresentationGeometry.canInterpolate(geometry.contours, from: from)
+        }
+        if let previous = cachedIdentity {
+            let interval = update.identity.timestamp - previous.timestamp
+            if (0.05...0.50).contains(interval) {
+                analysisInterval = analysisInterval * 0.70 + interval * 0.30
+            }
+        }
         if canMorph {
-            // Interruption uses the crossfade branch below. A path already
-            // between targets has not been certified against this new contour.
-            let displayed = active.presentation()?.path ?? active.path
             active.removeAnimation(forKey: "silhouette.path")
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -341,8 +419,13 @@ final class GarmentSilhouetteLayerRenderer {
             let animation = CABasicAnimation(keyPath: "path")
             animation.fromValue = displayed
             animation.toValue = target
-            animation.duration = 0.22
-            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            // Native CA fills display frames between analysis results. Finish
+            // slightly before the typical next result, without easing to a
+            // standstill on every frame. Irregular updates can safely retarget.
+            animation.duration = min(0.30, max(0.10, analysisInterval * 0.90))
+            animation.beginTime = active.convertTime(now, from: nil)
+            animation.timingFunction = CAMediaTimingFunction(name: .linear)
+            pathMotion = .init(from: from, to: geometry.contours, startedAt: now, duration: animation.duration)
             active.add(animation, forKey: "silhouette.path")
             for mask in gradientLayers[activeLayerIndex].masks {
                 mask.add(animation, forKey: "silhouette.path")
@@ -360,6 +443,7 @@ final class GarmentSilhouetteLayerRenderer {
     }
 
     private func crossfade(to path: CGPath, update: Update) {
+        pathMotion = nil
         let outgoing = layers[activeLayerIndex]
         let incomingIndex = 1 - activeLayerIndex
         let incoming = layers[incomingIndex]
@@ -416,6 +500,7 @@ final class GarmentSilhouetteLayerRenderer {
     }
 
     private func hideLayers() {
+        pathMotion = nil
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for layer in layers {

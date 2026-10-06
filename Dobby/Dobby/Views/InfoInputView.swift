@@ -162,23 +162,25 @@ struct InfoInputView: View {
 
     // MARK: 실측 사이즈
 
-    /// 항목을 가로로 늘어놓는 표. 바지는 항목이 여덟 개라 화면을 넘기므로 가로 스크롤을 둔다.
+    /// 한쪽씩 선택한 실측 항목을 가로로 늘어놓고, 좁은 화면에서는 가로로 스크롤한다.
     private var sizeTable: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("실측 사이즈").font(.headline)
-            let uncertain = garment.orderedMeasurements.filter {
+            let uncertain = garment.visibleMeasurements.filter {
                 $0.sourceStatusRaw == MeasurementStatus.uncertain.rawValue && !$0.isEdited
             }
             if !uncertain.isEmpty {
-                Label("\(uncertain.map(\.label).joined(separator: ", ")): 자동 측정값을 확인해 주세요.",
+                Label("\(uncertain.map(\.displayLabel).joined(separator: ", ")): 자동 측정값을 확인해 주세요.",
                       systemImage: "exclamationmark.circle")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("product-info.measurement-warning")
             }
-            // 다섯 칸까지는 화면 폭을 고르게 나눠 갖고, 그보다 많으면 가로로 민다.
-            // 바지는 항목이 여덟 개라 고르게 나누면 한 칸이 "56.5" 를 못 담는다.
-            let columns = garment.orderedMeasurements
+            // 선택한 항목이 다섯 개 이하이면 실제 표 너비에 고르게 배치한다.
+            // 더 많은 항목은 최소 칸 너비를 유지하면서 가로로 스크롤한다.
+            let columns = garment.visibleMeasurements
+            let fitsEvenly = columns.count <= Self.evenlyFittingColumns
+            let scrollWidth = CGFloat(columns.count) * 84 + CGFloat(max(0, columns.count - 1))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     ForEach(Array(columns.enumerated()), id: \.element.id) { index, value in
@@ -188,15 +190,16 @@ struct InfoInputView: View {
                         SizeColumn(value: value, text: Binding(
                             get: { measurementInput.wrappedValue.text(for: value) },
                             set: { measurementInput.wrappedValue.setText($0, for: value) }
-                        ), focus: $focusedMeasurementID)
-                        .frame(maxWidth: columns.count <= Self.evenlyFittingColumns ? .infinity : nil)
+                        ), focus: $focusedMeasurementID, isCompact: fitsEvenly)
+                        .frame(maxWidth: fitsEvenly ? .infinity : nil)
                     }
                 }
-                .frame(minWidth: columns.count <= Self.evenlyFittingColumns
-                       ? UIScreen.main.bounds.width - 40 : nil)
+                .containerRelativeFrame(.horizontal) { width, _ in
+                    fitsEvenly ? width : max(width, scrollWidth)
+                }
                 .fixedSize(horizontal: false, vertical: true)
             }
-            .scrollDisabled(columns.count <= Self.evenlyFittingColumns)
+            .scrollDisabled(fitsEvenly)
             .background(.white)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay {
@@ -218,10 +221,11 @@ private struct SizeColumn: View {
 
     @Binding var text: String
     let focus: FocusState<UUID?>.Binding
+    let isCompact: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(value.label)
+            Text(value.displayLabel)
                 .font(.subheadline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -229,19 +233,19 @@ private struct SizeColumn: View {
 
             HStack(spacing: 1) {
                 TextField("", text: $text)
-                    .accessibilityLabel("\(value.label) 센티미터")
+                    .accessibilityLabel("\(value.displayLabel) 센티미터")
                     .accessibilityIdentifier("product-info.measurement.\(value.key)")
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.center)
                     .focused(focus, equals: value.id)
-                    .fixedSize()
+                    .fixedSize(horizontal: false, vertical: true)
                     .monospacedDigit()
                 Text("cm").font(.subheadline)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
         }
-        .frame(minWidth: 84)
+        .frame(minWidth: isCompact ? 0 : 84)
     }
 }
 
@@ -301,19 +305,21 @@ enum GarmentInputCompletion {
         }
     }
 
-    /// Validate all fields before modifying any of them. A failed database save
+    /// Validate all visible fields before modifying any of them. A failed database save
     /// retains the edits in the context, so retrying does not lose typed values.
     static func save(garment: Garment, drafts: inout [UUID: String],
                      persist: () throws -> Void) throws {
-        let measurements = garment.orderedMeasurements
+        // Hidden bilateral evidence stays untouched. An invalid hidden left
+        // observation must not block editing and saving the usable right one.
+        let measurements = garment.visibleMeasurements
         for value in measurements {
             let entered = drafts[value.id].flatMap { GarmentMeasurementInputText.parsed($0) }
             if drafts[value.id] != nil && entered == nil {
-                throw ValidationError.invalidMeasurement(value.label)
+                throw ValidationError.invalidMeasurement(value.displayLabel)
             }
             let accepted = entered ?? value.valueCm
             guard accepted.isFinite, accepted > 0 else {
-                throw ValidationError.invalidMeasurement(value.label)
+                throw ValidationError.invalidMeasurement(value.displayLabel)
             }
         }
         for value in measurements {

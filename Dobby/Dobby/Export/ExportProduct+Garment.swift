@@ -13,12 +13,12 @@ extension ExportProduct {
     init(garment: Garment, loadPhoto: @MainActor (GarmentPhoto) -> Data? = {
         try? Data(contentsOf: GarmentStore.url(for: $0))
     }) {
-        let measurements = garment.orderedMeasurements
+        let measurements = garment.visibleMeasurements
             .filter { $0.valueCm.isFinite && $0.valueCm > 0 }
             .map { value in
                 // Export the accepted stored value; the rounded input display
                 // and automatic original are not an export data source.
-                return ExportMeasurement(id: value.key, title: value.label,
+                return ExportMeasurement(id: value.key, title: value.displayLabel,
                     value: value.valueCm.formatted(.number.locale(Locale(identifier: "en_US_POSIX"))
                         .grouping(.never).precision(.significantDigits(1...15))))
             }
@@ -33,7 +33,8 @@ extension ExportProduct {
             measurements: measurements.map { "\($0.title) \($0.value) cm" }.joined(separator: "\n"),
             price: garment.price.map { String($0) } ?? "",
             length: measurements.first { $0.id == "totalLength" }?.value
-                ?? measurements.first { $0.id == "totalLengthLeft" }?.value ?? "",
+                ?? measurements.first { $0.id == "totalLengthLeft" }?.value
+                ?? measurements.first { $0.id == "totalLengthRight" }?.value ?? "",
             waist: garment.group == .top ? "" : measurements.first { $0.id == "waistWidth" }?.value ?? "",
             thigh: garment.group == .pants
                 ? measurements.first { $0.id == "thighWidthLeft" }?.value

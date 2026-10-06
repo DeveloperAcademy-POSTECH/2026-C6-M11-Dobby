@@ -47,7 +47,7 @@ final class Garment {
     var lengthCm: Double?      // 총장 — 세 종류 모두
     var shoulderCm: Double?    // 어깨 — 상의
     var chestCm: Double?       // 가슴 — 상의
-    var sleeveCm: Double?      // 소매(좌) — 상의
+    var sleeveCm: Double?      // 표시하는 한쪽 소매 — 상의
     var waistCm: Double?       // 허리 — 바지·스커트
 
     // MARK: 관계
@@ -99,6 +99,12 @@ extension Garment {
         measurements.sorted { $0.displayOrder < $1.displayOrder }
     }
 
+    /// 화면과 내보내기에는 좌우 중 한쪽만 사용하고, 양쪽 원본은 관계 배열에 보존한다.
+    var visibleMeasurements: [MeasuredValue] {
+        GarmentMeasurementPresentation.visibleMeasurements(orderedMeasurements,
+            id: { $0.key }, isUsable: { $0.valueCm.isFinite && $0.valueCm > 0 })
+    }
+
     var thumbnail: GarmentPhoto? {
         orderedPhotos.first { $0.role == .thumbnail } ?? orderedPhotos.first
     }
@@ -128,12 +134,13 @@ extension Garment {
     /// 바지·스커트에는 어깨가 없고 상의에는 허리가 없으므로, 해당 없는 값은 nil로 남는다.
     /// 필터 쪽에서 "범위가 걸렸는데 값이 nil이면 제외"로 다룬다.
     func syncFilterFields() {
-        lengthCm = measurement("totalLength")?.valueCm
-            ?? measurement("totalLengthLeft")?.valueCm
-        shoulderCm = measurement("shoulderWidth")?.valueCm
-        chestCm = measurement("chestWidth")?.valueCm
-        sleeveCm = measurement("sleeveLengthLeft")?.valueCm
-        waistCm = measurement("waistWidth")?.valueCm
+        let selected = visibleMeasurements.filter { $0.valueCm.isFinite && $0.valueCm > 0 }
+        lengthCm = selected.first { $0.key == "totalLength" }?.valueCm
+            ?? selected.first { $0.key == "totalLengthLeft" || $0.key == "totalLengthRight" }?.valueCm
+        shoulderCm = selected.first { $0.key == "shoulderWidth" }?.valueCm
+        chestCm = selected.first { $0.key == "chestWidth" }?.valueCm
+        sleeveCm = selected.first { $0.key == "sleeveLengthLeft" || $0.key == "sleeveLengthRight" }?.valueCm
+        waistCm = selected.first { $0.key == "waistWidth" }?.valueCm
         updatedAt = .now
     }
 }

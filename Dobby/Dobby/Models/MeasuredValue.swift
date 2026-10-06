@@ -41,6 +41,11 @@ final class MeasuredValue {
         self.isEdited = false
     }
 
+    /// 좌우를 생략한 현재 표시 이름. 저장 당시의 원본 표기는 변경하지 않는다.
+    var displayLabel: String {
+        GarmentMeasurementPresentation.title(for: key, fallback: label)
+    }
+
     /// 사람이 고친 폭. 모델 오차를 볼 때 쓴다.
     var correctionCm: Double? {
         guard isEdited, let autoValueCm else { return nil }

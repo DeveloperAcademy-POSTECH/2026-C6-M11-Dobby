@@ -23,17 +23,22 @@ final class GarmentCaptureDesignTests: XCTestCase {
         XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
         XCTAssertTrue(app.staticTexts["garmentPreviewProvenance"].exists)
         let viewport = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
+        let back = app.buttons["closeGarmentCapture"]
+        XCTAssertTrue(back.isHittable)
+        XCTAssertEqual(back.frame.width, 44, accuracy: 1)
+        XCTAssertEqual(back.frame.height, 44, accuracy: 1)
+        XCTAssertTrue(app.frame.contains(back.frame))
+        XCTAssertLessThanOrEqual(back.frame.minX, app.frame.minX + 40)
+        XCTAssertLessThanOrEqual(back.frame.maxY, viewport.frame.minY)
         if app.frame.width == 402 && app.frame.height == 874 {
-            let back = app.buttons["closeGarmentCapture"]
-            XCTAssertEqual(back.frame.minX, 16, accuracy: 1)
-            XCTAssertEqual(back.frame.minY, 62, accuracy: 1)
-            XCTAssertEqual(back.frame.width, 44, accuracy: 1)
-            XCTAssertEqual(back.frame.height, 44, accuracy: 1)
-            XCTAssertEqual(viewport.frame.minY, 131, accuracy: 1)
+            // Native navigation-bar margins vary by SDK. The photo window and
+            // its guidance retain the handoff's dimensions below that bar.
+            XCTAssertEqual(viewport.frame.width, 402, accuracy: 1)
             XCTAssertEqual(viewport.frame.height, 560, accuracy: 1)
+            XCTAssertTrue(app.frame.contains(viewport.frame))
             let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
-            XCTAssertEqual(guidance.frame.minY, 626, accuracy: 1)
             XCTAssertEqual(guidance.frame.height, 40, accuracy: 1)
+            XCTAssertEqual(guidance.frame.maxY, viewport.frame.maxY - 25, accuracy: 1)
         }
         screenshot(app, "figma32-01-capture")
 
@@ -56,14 +61,16 @@ final class GarmentCaptureDesignTests: XCTestCase {
         XCTAssertTrue(photo.exists)
         if app.frame.width == 402 && app.frame.height == 874 {
             XCTAssertEqual(photo.frame.minX, 0, accuracy: 1)
-            XCTAssertEqual(photo.frame.minY, 190, accuracy: 1)
             XCTAssertEqual(photo.frame.width, 402, accuracy: 1)
             XCTAssertEqual(photo.frame.height, 560, accuracy: 1)
             XCTAssertEqual(confirm.frame.minX, 32, accuracy: 1)
-            XCTAssertEqual(confirm.frame.minY, 778, accuracy: 1)
+            XCTAssertEqual(confirm.frame.minY, photo.frame.maxY + 28, accuracy: 1)
             XCTAssertEqual(confirm.frame.width, 335, accuracy: 1)
             XCTAssertEqual(confirm.frame.height, 62, accuracy: 1)
+            XCTAssertLessThanOrEqual(confirm.frame.maxY, app.frame.maxY)
         }
+        XCTAssertEqual(photo.frame.width / photo.frame.height, 804.0 / 1120.0, accuracy: 0.001,
+                       "The reference photograph must preserve its source aspect ratio")
         let shoulder = app.buttons["garmentMeasurementPoint_shoulder_left"]
         XCTAssertTrue(shoulder.isHittable)
         // A tall viewport must not stretch or rebase the photograph's point
@@ -74,7 +81,17 @@ final class GarmentCaptureDesignTests: XCTestCase {
         XCTAssertTrue(magnifier.exists)
         XCTAssertTrue(photo.frame.contains(magnifier.frame))
         let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).allElementsBoundByIndex
-        XCTAssertEqual(labels.count, 6)
+        XCTAssertEqual(labels.count, 4)
+        XCTAssertEqual(Set(labels.map(\.identifier)), Set(["top.totalLength", "top.shoulderWidth", "top.chestWidth", "top.sleeveLengthLeft"].map {
+            "garmentMeasurementLabel_" + $0
+        }))
+        XCTAssertTrue(app.buttons["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
+        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
+        XCTAssertTrue(app.buttons["garmentMeasurementPoint_sleeve_end_left"].exists)
+        XCTAssertFalse(app.buttons["garmentMeasurementPoint_sleeve_end_right"].exists)
+        XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_left"].exists)
+        XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_right"].exists)
+        XCTAssertTrue(app.buttons["garmentMeasurementPoint_hem_center"].exists)
         for (index, label) in labels.enumerated() {
             XCTAssertTrue(label.isHittable)
             for other in labels.dropFirst(index + 1) {
