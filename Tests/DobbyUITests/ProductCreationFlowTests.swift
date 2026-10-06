@@ -166,33 +166,11 @@ final class ProductCreationFlowTests: XCTestCase {
         let fruitsDetails = app.buttons["후루츠패밀리로 내보내기 (A)"]
         reveal(fruitsDetails, in: app)
         fruitsDetails.tap()
-        XCTAssertTrue(app.navigationBars["제품 상세 페이지"].waitForExistence(timeout: 10))
-        let actualShoulder = app.staticTexts["67cm"].firstMatch
-        reveal(actualShoulder, in: app)
-        XCTAssertTrue(actualShoulder.exists)
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "어깨", "복사")).firstMatch.exists,
-                      "An upper-body measurement must reach the export detail list")
-        XCTAssertFalse(app.buttons["허리 단면 복사"].exists)
-        attachScreenshot(app, name: "flow-top-export-actual-shoulder-no-copy")
-
-        // The export detail's edit action returns to this same product. Simply
-        // focusing an existing number must not round it or create a new draft.
-        let editFromExport = app.buttons["export.detail.edit"]
-        XCTAssertTrue(editFromExport.waitForExistence(timeout: 5))
-        editFromExport.tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
-        focusExistingShoulder(in: app)
-        attachScreenshot(app, name: "flow-top-export-edit-retains-67.25")
-        app.buttons["product-info.done"].tap()
-        XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 10))
-        app.buttons["product-complete.export"].tap()
-        XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
-        reveal(fruitsDetails, in: app)
-        fruitsDetails.tap()
-        XCTAssertTrue(app.navigationBars["제품 상세 페이지"].waitForExistence(timeout: 10))
-        reveal(actualShoulder, in: app)
-        XCTAssertTrue(actualShoulder.exists, "An unchanged edit must preserve the integer export display")
-        attachScreenshot(app, name: "flow-top-export-after-unchanged-edit-67-display")
+        XCTAssertTrue(app.navigationBars["후루츠패밀리로 내보내기"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["화면 상단부에 있는 다이나믹 아일랜드를 길게 눌러 펼쳐 주세요"].exists)
+        XCTAssertTrue(app.images["export.fruits.guide"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "어깨", "복사")).firstMatch.exists)
+        attachScreenshot(app, name: "flow-top-export-dynamic-island-guide-a")
         tapBack(in: app)
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 5))
         app.buttons["export.close"].tap()

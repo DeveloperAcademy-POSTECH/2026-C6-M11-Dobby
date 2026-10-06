@@ -42,9 +42,10 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showDetailCopy) {
-                FruitsDetailCopyView(product: product, onOpened: {
-                    openedFruitsMethods.insert(.detailCopyA)
-                }, onEdit: onEditProduct)
+                FruitsExportView(product: product, controller: controller) {
+                    openedFruitsMethods.insert(.dynamicIslandA)
+                    history.recordOpenResult(for: .fruitsFamily, accepted: true)
+                }
             }
             .navigationDestination(isPresented: $showCafe24) {
                 Cafe24ExportView(product: product)
@@ -67,12 +68,7 @@ struct ExportView: View {
         if method == .dynamicIslandB {
             showFruits = true
         } else {
-            isOpeningLink = true
-            Task { @MainActor in
-                await controller.stop()
-                isOpeningLink = false
-                showDetailCopy = true
-            }
+            showDetailCopy = true
         }
     }
 
