@@ -14,6 +14,7 @@ struct ExportView: View {
     @State private var showCafe24 = false
     @State private var showNaverStore = false
     @State private var showInstagram = false
+    @State private var showFruitsGuideOverlay = false
     @State private var openedFruitsMethods: Set<FruitsExportMethod> = []
 
     var body: some View {
@@ -61,12 +62,28 @@ struct ExportView: View {
                 Button("확인", role: .cancel) {}
             } message: { Text("잠시 후 다시 시도해 주세요.") }
         }
+        .overlay {
+            if showFruitsGuideOverlay {
+                FruitsExportGuideOverlay(
+                    product: product,
+                    controller: controller,
+                    onDismiss: { showFruitsGuideOverlay = false },
+                    onOpened: {
+                        openedFruitsMethods.insert(.dynamicIslandB)
+                        history.recordOpenResult(for: .fruitsFamily, accepted: true)
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showFruitsGuideOverlay)
     }
 
     private func selectFruits(_ method: FruitsExportMethod) {
         guard !controller.busy, !isOpeningLink else { return }
         if method == .dynamicIslandB {
-            showFruits = true
+            showFruitsGuideOverlay = true
         } else {
             showDetailCopy = true
         }
