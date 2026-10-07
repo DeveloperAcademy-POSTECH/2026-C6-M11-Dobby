@@ -14,6 +14,8 @@ import SwiftData
 import SwiftUI
 
 enum SampleData {
+    static let exportSampleID = UUID(uuidString: "53E00000-0000-4000-8000-000000000053")!
+
     /// 미리보기용 저장소. `isStoredInMemoryOnly`라 디스크에 남지 않는다.
     @MainActor
     static var previewContainer: ModelContainer = {
@@ -43,6 +45,23 @@ enum SampleData {
         let fallback = Garment(category: "Jacket", group: .top, name: "샘플 상품")
         context.insert(fallback)
         return fallback
+    }
+
+    /// 보관함에서 실제 내보내기 흐름을 확인할 때 쓰는 단일 상품이다.
+    /// 고정 ID를 사용해 버튼을 여러 번 눌러도 상품이 중복 생성되지 않는다.
+    @MainActor
+    static func exportSample(in context: ModelContext) throws -> Garment {
+        let descriptor = FetchDescriptor<Garment>(
+            predicate: #Predicate { $0.id == exportSampleID }
+        )
+        if let existing = try context.fetch(descriptor).first {
+            return existing
+        }
+
+        let garment = insert(exportSampleItem, id: exportSampleID, into: context)
+        garment.informationCompletedAt = .now
+        try context.save()
+        return garment
     }
 
     // MARK: 더미 목록
@@ -114,9 +133,27 @@ enum SampleData {
                      ("totalLength", "총장", 72.0, nil)]),
     ]
 
-    private static func insert(_ item: Item, into context: ModelContext) {
+    private static let exportSampleItem = Item(
+        category: "Jacket",
+        group: .top,
+        name: "90s 나이키 트랙탑",
+        brand: "나이키",
+        detail: "소매 끝에 자연스러운 사용감이 있으며 지퍼는 정상 작동합니다.",
+        price: 89_000,
+        color: UIColor(red: 0.12, green: 0.18, blue: 0.35, alpha: 1),
+        sizes: [
+            ("shoulderWidth", "어깨", 56.0, nil),
+            ("chestWidth", "가슴", 55.0, nil),
+            ("totalLength", "총장", 68.0, nil),
+            ("sleeveLengthLeft", "소매", 52.0, nil)
+        ]
+    )
+
+    @discardableResult
+    private static func insert(_ item: Item, id: UUID? = nil, into context: ModelContext) -> Garment {
         let garment = Garment(category: item.category, group: item.group, name: item.name,
                               brand: item.brand, detail: item.detail, price: item.price)
+        if let id { garment.id = id }
         context.insert(garment)
 
         for (index, size) in item.sizes.enumerated() {
@@ -134,6 +171,7 @@ enum SampleData {
         garment.syncFilterFields()
         // 등록 시각을 조금씩 벌려 두어야 최신순 정렬이 눈에 보인다.
         garment.createdAt = .now.addingTimeInterval(-Double(items.count) * 3_600)
+        return garment
     }
 
     /// 실제 사진 대신 단색 이미지를 만들어 저장한다. 목록이 비어 보이지 않게 하려는 것뿐이다.

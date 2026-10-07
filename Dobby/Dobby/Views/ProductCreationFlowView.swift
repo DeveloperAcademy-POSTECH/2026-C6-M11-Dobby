@@ -19,7 +19,6 @@ struct ProductCreationFlowView: View {
     @State private var camera: CameraPreviewSession?
     @State private var permission: CameraPermission?
     @State private var exportProduct: ExportProduct?
-    @State private var pendingProductEdit = false
     @State private var showFruits = false
     @State private var isFinishing = false
     @State private var cleanupError: String?
@@ -75,14 +74,8 @@ struct ProductCreationFlowView: View {
         .environment(\.modelContext, context)
         .preferredColorScheme(path.last == .information || path.last == .completed ? .light : .dark)
         .tint(path.last == .information || path.last == .completed ? .orange : .white)
-        .fullScreenCover(item: $exportProduct, onDismiss: {
-            guard pendingProductEdit else { return }
-            pendingProductEdit = false
-            if path.last == .completed { path.removeLast() }
-            else if path.last != .information { path.append(.information) }
-        }) { product in
-            ExportView(product: product, controller: controller, showFruits: $showFruits,
-                       onEditProduct: exportEditAction(for: product))
+        .fullScreenCover(item: $exportProduct) { product in
+            ExportView(product: product, controller: controller, showFruits: $showFruits)
                 .preferredColorScheme(.light)
         }
         .onChange(of: copyHomeProduct?.id) { _, _ in
@@ -105,11 +98,6 @@ struct ProductCreationFlowView: View {
             // Only the parent dismissing this flow releases temporary captures.
             if !presented, let photoModel { Task { try? await photoModel.discardUncommittedDetails() } }
         }
-    }
-
-    private func exportEditAction(for product: ExportProduct) -> (() -> Void)? {
-        guard product.id == garment?.id.uuidString else { return nil }
-        return { pendingProductEdit = true; exportProduct = nil }
     }
 
     @ViewBuilder

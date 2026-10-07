@@ -13,8 +13,6 @@ struct ContentView: View {
     @State private var creationCopyHomeProduct: ExportProduct?
     @State private var showLiDAR = false
     @State private var exportProduct: ExportProduct?
-    @State private var pendingExportEdit: Garment?
-    @State private var libraryEditProduct: Garment?
     @State private var showFruits = false
     @State private var controller = CopyActivityController()
     @State private var linkError: String?
@@ -69,6 +67,16 @@ struct ContentView: View {
                         }
                     }
                     .navigationTitle("보관함")
+#if DEBUG
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("내보내기 샘플", systemImage: "shippingbox") {
+                                openDebugExportSample()
+                            }
+                            .accessibilityIdentifier("debug.export-sample")
+                        }
+                    }
+#endif
                     .navigationDestination(for: UUID.self) { productID in
                         if let garment = garments.first(where: { $0.id == productID }) {
                             ProductSavedDetailView(garment: garment, controller: controller,
@@ -100,21 +108,8 @@ struct ContentView: View {
                 }.padding(.horizontal, 20).padding(.vertical, 8).background(.bar)
             }
         }
-        .fullScreenCover(item: $exportProduct, onDismiss: {
-            if let garment = pendingExportEdit {
-                pendingExportEdit = nil
-                tab = .library
-                libraryEditProduct = garment
-            }
-        }) { product in
-            ExportView(product: product, controller: controller, showFruits: $showFruits,
-                       onEditProduct: exportEditAction(for: product))
-        }
-        .sheet(item: $libraryEditProduct) { garment in
-            NavigationStack {
-                ProductSavedDetailView(garment: garment, controller: controller,
-                    onLibrary: { libraryEditProduct = nil; libraryPath.removeAll() }, initiallyEditing: true)
-            }
+        .fullScreenCover(item: $exportProduct) { product in
+            ExportView(product: product, controller: controller, showFruits: $showFruits)
         }
         .alert("내보내기를 열 수 없어요", isPresented: Binding(
             get: { linkError != nil }, set: { if !$0 { linkError = nil } })) {
@@ -123,10 +118,20 @@ struct ContentView: View {
         .onOpenURL(perform: handleURL)
     }
 
-    private func exportEditAction(for product: ExportProduct) -> (() -> Void)? {
-        guard let garment = garments.first(where: { $0.id.uuidString == product.id }) else { return nil }
-        return { pendingExportEdit = garment; exportProduct = nil }
+#if DEBUG
+    private func openDebugExportSample() {
+        do {
+            let sample = try SampleData.exportSample(in: context)
+            libraryPath.removeAll()
+            Task { @MainActor in
+                await Task.yield()
+                libraryPath.append(sample.id)
+            }
+        } catch {
+            linkError = "디버그용 내보내기 샘플을 준비하지 못했어요. \(error.localizedDescription)"
+        }
     }
+#endif
 
     private func handleURL(_ url: URL) {
         if ForegroundCopyRelay.canHandle(url) {
@@ -173,12 +178,9 @@ struct ProductSavedDetailView: View {
     @Bindable var garment: Garment
     let controller: CopyActivityController
     let onLibrary: () -> Void
-    var initiallyEditing = false
     @State private var showCompletion = false
     @State private var showInformation = false
     @State private var measurementInput = GarmentMeasurementInputState()
-    @State private var didOpenInitialEdit = false
-    @State private var pendingExportEdit = false
     @State private var exportProduct: ExportProduct?
     @State private var showFruits = false
 
@@ -226,21 +228,8 @@ struct ProductSavedDetailView: View {
         .navigationDestination(isPresented: $showCompletion) {
             ProductInputCompletionView(garment: garment, onExport: openExport, onLibrary: onLibrary)
         }
-        .fullScreenCover(item: $exportProduct, onDismiss: {
-            if pendingExportEdit {
-                pendingExportEdit = false
-                showCompletion = false
-                showInformation = true
-            }
-        }) { product in
-            ExportView(product: product, controller: controller, showFruits: $showFruits,
-                       onEditProduct: { pendingExportEdit = true; exportProduct = nil })
-        }
-        .task {
-            if initiallyEditing, !didOpenInitialEdit {
-                didOpenInitialEdit = true
-                showInformation = true
-            }
+        .fullScreenCover(item: $exportProduct) { product in
+            ExportView(product: product, controller: controller, showFruits: $showFruits)
         }
     }
 

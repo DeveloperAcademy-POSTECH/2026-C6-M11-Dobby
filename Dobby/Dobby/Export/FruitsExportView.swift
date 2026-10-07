@@ -54,14 +54,16 @@ struct FruitsExportView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("어떻게 내보내나요?").font(.title2.bold())
                     step(1, "게시글 작성 화면으로 이동해주세요")
-                    step(2, "다이나믹 아일랜드를 클릭해서 복사해주세요")
+                    step(2, "화면 상단부에 있는 다이나믹 아일랜드를 길게 눌러 펼쳐 주세요")
+                    step(3, "원하는 버튼을 눌러 복사하세요")
                     Image("FruitsDynamicIslandGuide")
                         .resizable()
                         .scaledToFit()
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 17)
                         .accessibilityLabel("다이나믹 아일랜드에서 제품명, 설명과 실측 정보를 복사하는 화면")
-                    step(3, "각 입력 항목에 붙여넣기해주세요")
+                        .accessibilityIdentifier("export.fruits.guide")
+                    step(4, "각 입력 항목에 붙여넣으세요")
                 }
                 .padding(.horizontal, 21)
                 .padding(.top, 24)
