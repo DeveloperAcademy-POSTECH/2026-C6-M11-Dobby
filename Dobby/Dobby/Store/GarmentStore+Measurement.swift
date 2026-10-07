@@ -58,8 +58,13 @@ extension GarmentStore {
         let originalResult = record.originalAutomaticResult ?? record.result
         for (index, definition) in record.definitions.enumerated() {
             let value = record.result.values[index]
-            guard value.status != .unavailable, let meters = value.meters,
-                  meters.isFinite, meters > 0 else { continue }
+            let usableMeters = value.status == .unavailable ? nil : value.meters.flatMap {
+                $0.isFinite && $0 > 0 ? $0 : nil
+            }
+            let columns = kind == .top ? GarmentMeasurementPresentation.topColumns
+                : GarmentMeasurementPresentation.bottomColumns
+            // Visible failures remain editable blank cells; never substitute the other side.
+            guard usableMeters != nil || columns.contains(where: { $0.measurementID == definition.id }) else { continue }
             // Validation guarantees all definition IDs have an explicit bridge key.
             guard let key = productMeasurementKeys[definition.id] else {
                 throw MeasurementImportError.invalidRecord
@@ -69,7 +74,7 @@ extension GarmentStore {
                 $0.isFinite && $0 > 0 ? $0 * 100 : nil
             }
             let measured = MeasuredValue(key: key, label: value.title, displayOrder: index,
-                                         valueCm: meters * 100, autoValueCm: originalCm)
+                                         valueCm: usableMeters.map { $0 * 100 } ?? 0, autoValueCm: originalCm)
             measured.sourceStatusRaw = value.status.rawValue
             measured.garment = garment
             insertionContext.insert(measured)

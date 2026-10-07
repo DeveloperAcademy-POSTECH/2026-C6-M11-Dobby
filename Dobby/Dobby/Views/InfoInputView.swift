@@ -24,7 +24,7 @@ struct InfoInputView: View {
     @FocusState private var focusedMeasurementID: UUID?
     private static let measurementTableID = "product-info.measurement-table"
     /// 표의 테두리와 칸 사이 선. 같은 선이므로 한 곳에서 정한다.
-    private static let tableLine = Color(.separator).opacity(0.5)
+    private static let tableLine = Color(white: 0.93)
     /// 이보다 많으면 고르게 나누지 않고 가로로 민다.
     private static let evenlyFittingColumns = 5
 
@@ -185,7 +185,10 @@ struct InfoInputView: View {
                 HStack(spacing: 0) {
                     ForEach(Array(columns.enumerated()), id: \.element.id) { index, value in
                         if index > 0 {
-                            Rectangle().fill(Self.tableLine).frame(width: 1)
+                            VStack(spacing: 0) {
+                                Color(white: 0.95).frame(height: 44)
+                                Rectangle().fill(Self.tableLine)
+                            }.frame(width: 1)
                         }
                         SizeColumn(value: value, text: Binding(
                             get: { measurementInput.wrappedValue.text(for: value) },
@@ -201,9 +204,9 @@ struct InfoInputView: View {
             }
             .scrollDisabled(fitsEvenly)
             .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay {
-                RoundedRectangle(cornerRadius: 12).stroke(Self.tableLine, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16).stroke(Self.tableLine, lineWidth: 1)
             }
             .accessibilityIdentifier("product-info.measurements")
         }
@@ -226,24 +229,28 @@ private struct SizeColumn: View {
     var body: some View {
         VStack(spacing: 0) {
             Text(value.displayLabel)
-                .font(.subheadline)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color(white: 0.32))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(Color(.secondarySystemBackground))
+                .frame(height: 44)
+                .background(Color(white: 0.95))
 
-            HStack(spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
                 TextField("", text: $text)
                     .accessibilityLabel("\(value.displayLabel) 센티미터")
                     .accessibilityIdentifier("product-info.measurement.\(value.key)")
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.center)
                     .focused(focus, equals: value.id)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: min(58, max(24, CGFloat(text.count) * 10 + 6)))
                     .monospacedDigit()
-                Text("cm").font(.subheadline)
+                Text("cm")
             }
+            .font(.body)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
+            .frame(height: 64)
         }
         .frame(minWidth: isCompact ? 0 : 84)
     }
@@ -287,7 +294,7 @@ enum GarmentMeasurementInputText {
     }
 
     static func format(_ cm: Double) -> String {
-        guard cm.isFinite else { return "" }
+        guard cm.isFinite, cm > 0 else { return "" }
         return MeasurementDisplayText.centimeters(cm)
     }
 }

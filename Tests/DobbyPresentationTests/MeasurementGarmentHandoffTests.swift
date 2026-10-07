@@ -166,10 +166,12 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         record.result.values[3].status = .uncertain
         let garment = try GarmentStore.importMeasurement(record, in: ModelContext(container),
             photosDirectory: directory, allowsSynthetic: true)
-        XCTAssertEqual(garment.orderedMeasurements.count, 5)
-        XCTAssertNil(garment.measurement("chestWidth"))
+        XCTAssertEqual(garment.orderedMeasurements.count, 6)
+        XCTAssertEqual(garment.measurement("chestWidth")?.valueCm, 0)
+        XCTAssertEqual(GarmentMeasurementInputText.format(garment.measurement("chestWidth")!.valueCm), "")
+        XCTAssertEqual(garment.visibleMeasurements.map(\.key), ["totalLength", "shoulderWidth", "chestWidth", "sleeveLengthLeft"])
         XCTAssertNil(garment.chestCm)
-        XCTAssertEqual(garment.orderedMeasurements.map(\.displayOrder), [0, 2, 3, 4, 5])
+        XCTAssertEqual(garment.orderedMeasurements.map(\.displayOrder), [0, 1, 2, 3, 4, 5])
         XCTAssertEqual(garment.measurement("sleeveLengthLeft")?.sourceStatusRaw, "uncertain")
         XCTAssertEqual(record.result.values[1].status, .unavailable, "The archive input stays untouched")
     }
