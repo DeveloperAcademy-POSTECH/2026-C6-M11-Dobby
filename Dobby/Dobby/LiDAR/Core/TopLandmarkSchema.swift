@@ -51,7 +51,15 @@ nonisolated struct TopLandmarkSchema: Sendable {
             .init(id: "top.hemWidth", title: "밑단 단면", landmarkIDs: ["hem_left", "hem_right"]),
             .init(id: "top.sleeveLengthLeft", title: "왼쪽 소매길이(직선)", landmarkIDs: ["shoulder_left", "sleeve_end_left"]),
             .init(id: "top.sleeveLengthRight", title: "오른쪽 소매길이(직선)", landmarkIDs: ["shoulder_right", "sleeve_end_right"]),
-            .init(id: "top.totalLength", title: "총장(목선에 수직)", landmarkIDs: ["neck_center", "hem_center"],
-                  projection: .init(referenceAxisLandmarkIDs: ["neck_left", "neck_right"]))
+            // 목선에 수직인 성분만 재던 보정을 뺐다. 그 보정은 끝점을 옮겨 놓기 때문에, 화면에서
+            // 모델이 찍은 hem_center 와 총장 선이 끝나는 자리가 따로 보였다. 사장님은 흰 점을
+            // 끄는데 선은 다른 데서 끝나고, 목옆 점을 움직이면 건드리지도 않은 밑단 점이 따라
+            // 움직였다.
+            //
+            // 막으려던 것은 `hem_center` 의 좌우 흔들림이 길이에 섞이는 것이었다. 그런데 흔들림은
+            // 좌우이고 총장은 세로라, 직선으로 재도 거의 영향이 없다 — 좌우로 5cm 어긋나도 세로
+            // 60cm 에서는 0.2cm 늘어난다. 채점셋으로 확인한 오차는 긴팔 3.3% → 3.4%,
+            // 반팔 3.7% → 3.8% 로 총장 60cm 기준 0.6mm 차이다.
+            .init(id: "top.totalLength", title: "총장", landmarkIDs: ["neck_center", "hem_center"])
         ]
 }
