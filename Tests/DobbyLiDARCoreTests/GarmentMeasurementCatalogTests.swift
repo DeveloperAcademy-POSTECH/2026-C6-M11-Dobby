@@ -67,6 +67,15 @@ final class GarmentMeasurementCatalogTests: XCTestCase {
         XCTAssertTrue(unknownGuide.contains("아닙니다"))
     }
 
+    func testCurrentTopTotalLengthGuideMatchesItsStraightPhysicalEndpoints() {
+        let guide = GarmentMeasurementCatalog.guide(for: "top.totalLength")
+        XCTAssertTrue(guide.contains("목 중앙"))
+        XCTAssertTrue(guide.contains("밑단 중앙"))
+        XCTAssertTrue(guide.contains("직선거리"))
+        XCTAssertFalse(guide.contains("가로축"))
+        XCTAssertFalse(guide.contains("수직"))
+    }
+
     func testCategoryMetadataRoundTripsForSavedRecords() throws {
         let encoded = try JSONEncoder().encode(GarmentCategory.allCases)
         let decoded = try JSONDecoder().decode([GarmentCategory].self, from: encoded)

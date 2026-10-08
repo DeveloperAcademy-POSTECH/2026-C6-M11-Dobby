@@ -31,6 +31,9 @@ final class LandmarkPoint {
     /// 쓰이는 정보다 — 어느 점이 어디로 가야 했는지가 사진과 함께 그대로 남는다.
     var autoX: Double
     var autoY: Double
+    /// nil은 기존 기록처럼 원본 관측이 있음을 뜻한다. false인 수동 복구점의
+    /// autoX/Y는 저장 형식을 위한 현재 좌표의 사본이며 원본 관측으로 쓰지 않는다.
+    var hasAutomaticObservation: Bool? = nil
     var isMoved: Bool
     /// 사진 좌표와 함께 모델/수동 출처 및 파생점의 입력을 보존한다.
     var originRaw: String? = nil
@@ -57,7 +60,7 @@ final class LandmarkPoint {
 
     /// 모델이 찍은 자리에서 옮겨진 거리. 사진 크기 대비 비율이다.
     var movedDistance: Double {
-        guard isMoved else { return 0 }
+        guard isMoved, hasAutomaticObservation != false else { return 0 }
         let dx = x - autoX, dy = y - autoY
         return (dx * dx + dy * dy).squareRoot()
     }
@@ -74,6 +77,7 @@ final class LandmarkPoint {
     }
 
     func resetToAuto() {
+        guard hasAutomaticObservation != false else { return }
         x = autoX
         y = autoY
         isMoved = false

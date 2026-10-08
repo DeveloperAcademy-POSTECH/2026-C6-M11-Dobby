@@ -65,9 +65,13 @@ final class MeasurementProjectionTests: XCTestCase {
             tensor[7 + 3 * index] = 0.99
         }
         let prediction = try BottomLandmarkDecoder(schema: schema.decoderSchema).decode(shape: [1, 38, 1], geometry: geometry) { channel, _ in tensor[channel] }
+        // Projection is an archived opt-in contract, independent of the current
+        // canonical top schema whose total length is a straight segment.
+        var definitions = schema.measurementDefinitions
+        definitions[5].projection = .init(referenceAxisLandmarkIDs: ["neck_left", "neck_right"])
         return .init(frame: frame, landmarks: .init(sessionID: frame.sessionID, frameID: frame.frameID,
             origin: .model, modelVersion: "analytic-perfect-top-keypoints", points: prediction.points, mask: nil),
-            definitions: schema.measurementDefinitions, projectedEnd: transform(.init(x: 0, y: 0.3, z: 0)))
+            definitions: definitions, projectedEnd: transform(.init(x: 0, y: 0.3, z: 0)))
     }
 
     private func project(_ p: Point3D, frame: MeasurementFrame) -> ImagePoint {
@@ -163,7 +167,8 @@ final class MeasurementProjectionTests: XCTestCase {
         let oldJSON = Data("{\"id\":\"test\",\"title\":\"두 점 사이\",\"landmarkIDs\":[\"A\",\"B\"]}".utf8)
         let old = try JSONDecoder().decode(MeasurementDefinition.self, from: oldJSON)
         XCTAssertNil(old.projection)
-        let definition = try XCTUnwrap(schema().measurementDefinitions.last)
+        let definition = try XCTUnwrap(scene().definitions.last)
+        XCTAssertEqual(definition.projection?.referenceAxisLandmarkIDs, ["neck_left", "neck_right"])
         let restored = try JSONDecoder().decode(MeasurementDefinition.self, from: JSONEncoder().encode(definition))
         XCTAssertEqual(restored.projection, definition.projection)
         XCTAssertEqual(restored.landmarkIDs, definition.landmarkIDs)

@@ -188,6 +188,67 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         }.map(\.id))
     }
 
+    /// Only the current straight total length can accept two manually confirmed
+    /// endpoints. Older projected records still require their original axis.
+    var canCorrectTotalLength: Bool {
+        let matches = definitions.filter { $0.id == "top.totalLength" }
+        return matches.count == 1
+            && matches[0].landmarkIDs == ["neck_center", "hem_center"]
+            && matches[0].projection == nil
+    }
+
+    /// Apply both explicitly placed endpoints together to this frozen capture.
+    /// Missing total-length points may be restored here; ordinary point dragging
+    /// cannot create arbitrary model points or promote an unconfirmed prediction.
+    /// The manual result is not copied: all measurements recalculate from the
+    /// original depth, mask, options and unaffected model observations.
+    @discardableResult
+    mutating func applyTotalLengthCorrection(from manual: ManualMeasurement) -> Bool {
+        let ids = ["neck_center", "hem_center"]
+        let frame = snapshot.frame
+        let correctedFrame = manual.snapshot.frame
+        guard canCorrectTotalLength,
+              manual.definition.id == "top.totalLength",
+              manual.definition.landmarkIDs == ids, manual.definition.projection == nil,
+              correctedFrame.sessionID == frame.sessionID, correctedFrame.frameID == frame.frameID,
+              correctedFrame.source == frame.source, correctedFrame.orientation == frame.orientation,
+              correctedFrame.imageSize == frame.imageSize, correctedFrame.intrinsics == frame.intrinsics,
+              manual.landmarks.sessionID == frame.sessionID, manual.landmarks.frameID == frame.frameID,
+              manual.landmarks.origin == .manual,
+              manual.landmarks.points.count == ids.count,
+              Set(manual.landmarks.points.map(\.id)) == Set(ids),
+              manual.landmarks.points.allSatisfy({
+                  $0.origin == .manual && $0.isVisible && $0.point.isValid
+                      && $0.derivedFrom == nil && $0.confidence == nil
+              }) else { return false }
+
+        var updated = calculationLandmarks
+        let existingIDs = updated.points.map(\.id)
+        let missingCount = ids.filter { !existingIDs.contains($0) }.count
+        guard updated.sessionID == frame.sessionID, updated.frameID == frame.frameID,
+              updated.points.count + missingCount <= 200,
+              existingIDs.allSatisfy({ !$0.isEmpty }), Set(existingIDs).count == existingIDs.count else {
+            return false
+        }
+        var changed = false
+        for id in ids {
+            guard let corrected = manual.landmarks.points.first(where: { $0.id == id }) else { return false }
+            if let index = updated.points.firstIndex(where: { $0.id == id }) {
+                let previous = updated.points[index]
+                changed = changed || previous.point != corrected.point || previous.origin != .manual
+                    || !previous.isVisible || previous.derivedFrom != nil || previous.confidence != nil
+                updated.points[index] = corrected
+            } else {
+                updated.points.append(corrected)
+                changed = true
+            }
+        }
+        guard changed else { return true }
+        adjustedLandmarks = updated.refreshingDerivations(affectedBy: Set(ids))
+        invalidateCalculation()
+        return true
+    }
+
     /// Coordinates already refer to the complete original sensor image. The UI
     /// performs orientation conversion exactly once before calling this method.
     @discardableResult
