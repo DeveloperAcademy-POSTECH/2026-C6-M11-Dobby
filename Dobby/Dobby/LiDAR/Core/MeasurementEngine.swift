@@ -5,7 +5,7 @@ import Foundation
 /// Positions use optical coordinates: x right, y down, z forward, all in metres.
 /// `valid` describes input support, not a guaranteed physical error in centimetres.
 nonisolated struct LiDARMeasurementEngine {
-    static let algorithmVersion = "lidar-unprojection-1.1.0"
+    static let algorithmVersion = "lidar-unprojection-1.2.0"
     private let options: MeasurementOptions
 
     init(options: MeasurementOptions = .init()) {
@@ -22,6 +22,12 @@ nonisolated struct LiDARMeasurementEngine {
         let groupedDefinitions = Dictionary(grouping: definitions, by: \.id)
         var resolved: [String: PointResolution] = [:]
         var pointFailures: [String: MeasurementFailure] = [:]
+        // Older records with projected definitions retain their original dependency
+        // behavior. Recovery belongs only to the current straight top total length.
+        let allowsTopNeckDepthRecovery = definitions.contains {
+            $0.id == "top.totalLength" && $0.landmarkIDs == ["neck_center", "hem_center"]
+                && $0.projection == nil
+        } && definitions.allSatisfy { $0.projection == nil }
 
         // Resolve dependencies once per frame. A bad derived point only invalidates
         // measurements that depend on it, not unrelated direct measurements.
@@ -57,16 +63,25 @@ nonisolated struct LiDARMeasurementEngine {
                     visiting.insert(id)
                     var sources: [PointResolution] = []
                     var failure: PointResolutionError?
+                    var sourceFailures: [PointResolutionError] = []
                     for sourceID in sourceIDs {
                         switch resolveID(sourceID, visiting: &visiting) {
                         case .success(let value): sources.append(value)
                         case .failure(let error):
                             if failure == nil { failure = error }
+                            sourceFailures.append(error)
                         }
                     }
                     visiting.remove(id)
                     if let failure {
-                        resolution = .failure(failure)
+                        if allowsTopNeckDepthRecovery,
+                           sourceFailures.allSatisfy({ $0.reason == .insufficientDepth }),
+                           let recovered = recoverTopNeckCenterDepth(landmark, sourceIDs: sourceIDs,
+                               groupedPoints: groupedPoints, frame: frame, set: landmarks) {
+                            resolution = .success(recovered)
+                        } else {
+                            resolution = .failure(failure)
+                        }
                     } else {
                         resolution = spatialAverage(landmark, sourceIDs: sourceIDs, sources: sources,
                                                     frame: frame, origin: landmark.origin ?? landmarks.origin)
@@ -345,6 +360,46 @@ nonisolated struct LiDARMeasurementEngine {
             else { return .lowLandmarkConfidence }
         }
         return nil
+    }
+
+    /// A reliable model midpoint can have supported depth even when one neckline
+    /// boundary has a sensor hole. Sample the midpoint's own camera ray only for
+    /// this known top schema, never to repair missing or untrusted model geometry.
+    private func recoverTopNeckCenterDepth(
+        _ landmark: GarmentLandmark, sourceIDs: [String],
+        groupedPoints: [String: [GarmentLandmark]], frame: MeasurementFrame, set: GarmentLandmarkSet
+    ) -> PointResolution? {
+        guard landmark.id == "neck_center", sourceIDs == ["neck_left", "neck_right"],
+              landmark.derivedFrom == sourceIDs,
+              set.origin == .model, set.garmentKind == .top,
+              set.modelVersion == AutomaticGarmentKind.top.modelVersion,
+              (landmark.origin ?? set.origin) == .model,
+              let mask = set.mask, landmark.point.isValid else { return nil }
+        let sources = sourceIDs.compactMap { id -> GarmentLandmark? in
+            guard let matches = groupedPoints[id], matches.count == 1 else { return nil }
+            return matches[0]
+        }
+        guard sources.count == 2, sources.allSatisfy({ source in
+            source.derivedFrom == nil && source.point.isValid && source.isVisible
+                && (source.origin ?? set.origin) == .model
+                && source.confidence.map {
+                    $0.isFinite && $0 >= options.minimumModelConfidence && $0 <= 1
+                } == true
+        }) else { return nil }
+        let midpoint = ImagePoint(x: (sources[0].point.x + sources[1].point.x) / 2,
+                                  y: (sources[0].point.y + sources[1].point.y) / 2)
+        guard abs(landmark.point.x - midpoint.x) <= 1e-12,
+              abs(landmark.point.y - midpoint.y) <= 1e-12 else { return nil }
+        let x = Int(landmark.point.x * Double(mask.size.width))
+        let y = Int(landmark.point.y * Double(mask.size.height))
+        guard mask.values[y * mask.size.width + x] == 1,
+              case .success(var sampled) = resolve(landmark, frame: frame, set: set),
+              sampled.landmark.quality.method == .localPlane else { return nil }
+        // The IDs describe the model's 2D coordinate contributors; localPlane
+        // records that depth came from this midpoint, not an average of sources.
+        sampled.landmark.sourceLandmarkIDs = sourceIDs
+        sampled.uncertain = true
+        return sampled
     }
 
     private func spatialAverage(

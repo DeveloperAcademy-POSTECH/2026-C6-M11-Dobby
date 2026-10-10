@@ -4,7 +4,7 @@ import UIKit
 /// Explicit UI rehearsal. Never used as a fallback for a camera/model failure.
 @MainActor
 enum GarmentCapturePreview {
-    static func measurement(partial: Bool = false, bothSidesPartial: Bool = false,
+    static func measurement(partial: Bool = false, bothSidesPartial: Bool = false, missingTopLength: Bool = false,
                             kind: AutomaticGarmentKind = .bottoms) -> AutomaticMeasurement {
         // The photographed garment is an opt-in design fixture, not model or
         // sensor evidence. Its points, mask, calibration and 1 m depth are synthetic.
@@ -104,6 +104,11 @@ enum GarmentCapturePreview {
                                 derivedFrom: ["waist_left", "waist_right"]))
         }
         if partial { points.removeAll { $0.id == (kind == .top ? "sleeve_end_right" : "hem_right_inner") } }
+        if missingTopLength && kind == .top {
+            // Opt-in regression fixture: an omitted neck channel prevents the
+            // decoder's midpoint while the other garment dimensions survive.
+            points.removeAll { ["neck_left", "neck_center"].contains($0.id) }
+        }
         if bothSidesPartial {
             let missingIDs: Set<String> = kind == .top
                 ? ["sleeve_end_left", "sleeve_end_right"] : ["hem_left_outer", "hem_right_outer"]

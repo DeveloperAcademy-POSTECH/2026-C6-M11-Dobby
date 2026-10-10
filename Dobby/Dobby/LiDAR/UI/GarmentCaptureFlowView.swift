@@ -11,6 +11,7 @@ struct GarmentCaptureFlowView: View {
     private let isPreview: Bool
     private let previewIsPartial: Bool
     private let previewBothSidesPartial: Bool
+    private let previewMissingTopLength: Bool
     private let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
     private let onCancel: (() -> Void)?
     private let embedsNavigation: Bool
@@ -47,6 +48,7 @@ struct GarmentCaptureFlowView: View {
         self.previewKind = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-top") ? .top : .bottoms
         self.previewIsPartial = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-partial")
         self.previewBothSidesPartial = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-both-sides-partial")
+        self.previewMissingTopLength = preview && ProcessInfo.processInfo.arguments.contains("--garment-preview-missing-top-length")
         let recognizer: AutoGarmentLandmarkProvider?
         if preview {
             recognizer = nil
@@ -103,7 +105,7 @@ struct GarmentCaptureFlowView: View {
         .task {
             if isPreview {
                 previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial,
-                    bothSidesPartial: previewBothSidesPartial, kind: previewKind)
+                    bothSidesPartial: previewBothSidesPartial, missingTopLength: previewMissingTopLength, kind: previewKind)
             }
             else { await camera.start() }
         }
@@ -495,7 +497,7 @@ struct GarmentCaptureFlowView: View {
         phase = .idle
         if isPreview {
             previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial,
-                bothSidesPartial: previewBothSidesPartial, kind: previewKind)
+                bothSidesPartial: previewBothSidesPartial, missingTopLength: previewMissingTopLength, kind: previewKind)
         }
         else { restartCamera() }
     }

@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class AutomaticLandmarkAdjustmentTests: XCTestCase {
-    private func model(tilted: Bool = false) -> AutomaticMeasurement {
+    private func model(tilted: Bool = false, legacyProjection: Bool = false) -> AutomaticMeasurement {
         let size = PixelSize(width: 200, height: 200)
         let values: [Float] = (0..<40_000).map { index in
             let ray = (Double(index % 200) + 0.5 - 100) / 200
@@ -32,7 +32,13 @@ final class AutomaticLandmarkAdjustmentTests: XCTestCase {
         let landmarks = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID, origin: .model,
             modelVersion: AutomaticGarmentKind.top.modelVersion, points: points,
             mask: .init(size: size, values: .init(repeating: 1, count: values.count)), garmentKind: .top)
-        let definitions = TopLandmarkSchema.canonicalMeasurementDefinitions
+        let definitions = TopLandmarkSchema.canonicalMeasurementDefinitions.map { definition in
+            var result = definition
+            if legacyProjection, result.id == "top.totalLength" {
+                result.projection = .init(referenceAxisLandmarkIDs: ["neck_left", "neck_right"])
+            }
+            return result
+        }
         let result = LiDARMeasurementEngine().measure(frame: frame, landmarks: landmarks, definitions: definitions)
         return .init(output: .init(runID: UUID(), snapshot: .init(frame: frame, imageJPEG: Data([1, 2, 3])),
             landmarks: landmarks, result: result, definitions: definitions, options: .init(),
@@ -96,8 +102,8 @@ final class AutomaticLandmarkAdjustmentTests: XCTestCase {
         XCTAssertEqual(session.calculationLandmarks.origin, .model)
     }
 
-    func testCorrectedNeckParentRepairsDerivedVisibilityAndConfidenceWhilePreservingProjectionContract() throws {
-        var record = try model().makeRecord()
+    private func correctedNeckParent(legacyProjection: Bool = false) throws -> AutomaticMeasurement {
+        var record = try model(legacyProjection: legacyProjection).makeRecord()
         for id in ["neck_left", "neck_center"] {
             let index = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == id })
             record.landmarks.points[index].confidence = 0.1
@@ -111,6 +117,23 @@ final class AutomaticLandmarkAdjustmentTests: XCTestCase {
         XCTAssertTrue(neck.isVisible)
         XCTAssertNil(neck.confidence)
         XCTAssertEqual(neck.origin, .manual)
+        return session
+    }
+
+    func testCorrectedNeckParentRepairsDerivedVisibilityAndConfidenceForCurrentStraightTotalLength() throws {
+        let session = try correctedNeckParent()
+        let output = calculate(session)
+        let length = try value(output, "top.totalLength")
+        XCTAssertEqual(try XCTUnwrap(length.meters), hypot(0.2, 0.55), accuracy: 0.000001)
+        XCTAssertEqual(length.points.first?.quality.method, .spatialAverage)
+        XCTAssertNotEqual(length.points.last?.quality.method, .axisProjection)
+        XCTAssertNil(session.definitions.last?.projection)
+        XCTAssertEqual(length.points.last?.imagePoint, try point(session.calculationLandmarks, "hem_center").point,
+                       "The current straight segment ends at its editable physical hem marker")
+    }
+
+    func testCorrectedNeckParentPreservesExplicitLegacyProjectionContract() throws {
+        let session = try correctedNeckParent(legacyProjection: true)
         let output = calculate(session)
         let length = try value(output, "top.totalLength")
         XCTAssertEqual(try XCTUnwrap(length.meters), 0.55, accuracy: 0.000001)

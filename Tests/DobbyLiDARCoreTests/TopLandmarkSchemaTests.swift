@@ -51,8 +51,8 @@ final class TopLandmarkSchemaTests: XCTestCase {
             ["hem_left", "hem_right"], ["shoulder_left", "sleeve_end_left"],
             ["shoulder_right", "sleeve_end_right"], ["neck_center", "hem_center"]
         ])
-        XCTAssertEqual(definitions.last?.projection?.referenceAxisLandmarkIDs, ["neck_left", "neck_right"])
-        XCTAssertTrue(definitions.dropLast().allSatisfy { $0.projection == nil })
+        XCTAssertTrue(definitions.allSatisfy { $0.projection == nil },
+                      "Current top measurements keep their physical endpoints and use straight distances")
         XCTAssertEqual(Set(definitions.map(\.id)).count, 6)
         XCTAssertTrue(definitions[3].title.contains("직선"))
         XCTAssertTrue(definitions[4].title.contains("직선"))

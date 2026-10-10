@@ -109,23 +109,33 @@ extension GarmentStore {
 
         let originalLandmarks = record.originalAutomaticLandmarks ?? record.landmarks
         for (index, current) in record.landmarks.points.enumerated() {
-            guard let original = originalLandmarks.points.first(where: { $0.id == current.id }) else {
-                throw MeasurementImportError.invalidRecord
-            }
             let point = LandmarkPoint(name: current.id, index: index,
                                       x: current.point.x, y: current.point.y)
-            point.autoX = original.point.x
-            point.autoY = original.point.y
             point.originRaw = (current.origin ?? record.landmarks.origin).rawValue
-            point.autoOriginRaw = (original.origin ?? originalLandmarks.origin).rawValue
             point.confidence = current.confidence
-            point.autoConfidence = original.confidence
             point.isVisible = current.isVisible
-            point.autoIsVisible = original.isVisible
             point.derivedFrom = record.landmarks.effectiveDerivedSourceIDs(for: current.id)
-            point.autoDerivedFrom = originalLandmarks.effectiveDerivedSourceIDs(for: original.id)
-            point.isMoved = point.derivedFrom == nil
-                && (current.point != original.point || point.originRaw != point.autoOriginRaw)
+            if let original = originalLandmarks.points.first(where: { $0.id == current.id }) {
+                point.hasAutomaticObservation = true
+                point.autoX = original.point.x
+                point.autoY = original.point.y
+                point.autoOriginRaw = (original.origin ?? originalLandmarks.origin).rawValue
+                point.autoConfidence = original.confidence
+                point.autoIsVisible = original.isVisible
+                point.autoDerivedFrom = originalLandmarks.effectiveDerivedSourceIDs(for: original.id)
+                point.isMoved = point.derivedFrom == nil
+                    && (current.point != original.point || point.originRaw != point.autoOriginRaw)
+            } else {
+                // Validation permits only the two explicitly confirmed missing
+                // top-length endpoints. Their init autoX/Y are placeholders;
+                // no automatic observation or error distance can be invented.
+                point.hasAutomaticObservation = false
+                point.autoOriginRaw = nil
+                point.autoConfidence = nil
+                point.autoIsVisible = false
+                point.autoDerivedFrom = nil
+                point.isMoved = true
+            }
             point.photo = photo
             insertionContext.insert(point)
             if !photo.landmarks.contains(where: { $0.id == point.id }) {
@@ -239,10 +249,31 @@ extension GarmentStore {
                 }
         }
         guard validateLandmarks(record.landmarks) else { throw MeasurementImportError.invalidRecord }
+
+        func preservesOriginalLandmarkIDs(_ original: GarmentLandmarkSet) -> Bool {
+            let originalIDs = Set(original.points.map(\.id))
+            let currentIDs = Set(record.landmarks.points.map(\.id))
+            // Existing points may be corrected, but no observation may be dropped.
+            guard originalIDs.isSubset(of: currentIDs) else { return false }
+            let addedIDs = currentIDs.subtracting(originalIDs)
+            guard !addedIDs.isEmpty else { return true }
+            let endpoints = ["neck_center", "hem_center"]
+            guard kind == .top, addedIDs.isSubset(of: Set(endpoints)),
+                  let total = record.definitions.first(where: { $0.id == "top.totalLength" }),
+                  total.landmarkIDs == endpoints, total.projection == nil else { return false }
+            // Restoring even one missing endpoint requires confirming both.
+            return endpoints.allSatisfy { id in
+                record.landmarks.points.contains { point in
+                    point.id == id && point.origin == .manual && point.isVisible
+                        && point.point.isValid && point.confidence == nil && point.derivedFrom == nil
+                }
+            }
+        }
+
         if record.originalAutomaticLandmarks != nil || record.originalAutomaticResult != nil {
             guard let original = record.originalAutomaticLandmarks,
                   let result = record.originalAutomaticResult, validateLandmarks(original),
-                  Set(original.points.map(\.id)) == Set(record.landmarks.points.map(\.id)),
+                  preservesOriginalLandmarkIDs(original),
                   result.sessionID == frame.sessionID, result.frameID == frame.frameID,
                   result.source == frame.source,
                   result.values.map(\.id) == record.definitions.map(\.id),

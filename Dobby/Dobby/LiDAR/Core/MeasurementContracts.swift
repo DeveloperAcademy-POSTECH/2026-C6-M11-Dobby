@@ -153,7 +153,9 @@ nonisolated struct ResolvedLandmark: Codable, Sendable {
     var imagePoint: ImagePoint
     var position: Point3D
     var quality: PointQuality
-    /// Immediate contributors to a spatially derived point, absent for direct depth samples.
+    /// Coordinate contributors to a spatially derived point, or a known model
+    /// midpoint recovered with its own localPlane depth. The sampling method
+    /// distinguishes the two; independently placed direct points omit these IDs.
     var sourceLandmarkIDs: [String]? = nil
 }
 

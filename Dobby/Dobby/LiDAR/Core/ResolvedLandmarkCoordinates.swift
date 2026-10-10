@@ -11,7 +11,10 @@ extension GarmentLandmarkSet {
         for index in output.points.indices {
             let id = output.points[index].id
             guard effectiveDerivedSourceIDs(for: id) != nil else { continue }
-            if let value = resolved.first(where: { $0.id == id && $0.quality.method == .spatialAverage }),
+            if let value = resolved.first(where: {
+                $0.id == id && ($0.quality.method == .spatialAverage
+                    || isRecoveredTopNeckCenter($0, landmark: output.points[index]))
+            }),
                value.imagePoint.isValid {
                 output.points[index].point = value.imagePoint
             } else {
@@ -19,5 +22,45 @@ extension GarmentLandmarkSet {
             }
         }
         return output
+    }
+
+    /// A recovery keeps the model's 2D midpoint and records its own supported
+    /// plane depth. Do not expose arbitrary direct samples as derived overlays.
+    private nonisolated func isRecoveredTopNeckCenter(
+        _ resolved: ResolvedLandmark, landmark: GarmentLandmark
+    ) -> Bool {
+        let sourceIDs = ["neck_left", "neck_right"]
+        guard landmark.id == "neck_center", landmark.derivedFrom == sourceIDs,
+              origin == .model, garmentKind == .top,
+              modelVersion == AutomaticGarmentKind.top.modelVersion,
+              (landmark.origin ?? origin) == .model,
+              landmark.isVisible, landmark.point.isValid,
+              resolved.quality.method == .localPlane,
+              resolved.sourceLandmarkIDs == sourceIDs,
+              resolved.quality.validSamples >= 3,
+              resolved.quality.candidateSamples >= resolved.quality.validSamples,
+              resolved.quality.planeResidualMeters.map({ $0.isFinite && $0 >= 0 }) == true,
+              resolved.position.x.isFinite, resolved.position.y.isFinite,
+              resolved.position.z.isFinite, resolved.position.z > 0,
+              let mask, mask.size.isValid,
+              mask.values.count == mask.size.width * mask.size.height else { return false }
+        let x = Int(landmark.point.x * Double(mask.size.width))
+        let y = Int(landmark.point.y * Double(mask.size.height))
+        guard mask.values[y * mask.size.width + x] == 1 else { return false }
+        let sources = sourceIDs.compactMap { id -> GarmentLandmark? in
+            let matches = points.filter { $0.id == id }
+            return matches.count == 1 ? matches[0] : nil
+        }
+        guard sources.count == 2, sources.allSatisfy({ source in
+            source.derivedFrom == nil && source.point.isValid && source.isVisible
+                && (source.origin ?? origin) == .model
+                && source.confidence.map { $0.isFinite && (0...1).contains($0) } == true
+        }) else { return false }
+        let midpoint = ImagePoint(x: (sources[0].point.x + sources[1].point.x) / 2,
+                                  y: (sources[0].point.y + sources[1].point.y) / 2)
+        return abs(landmark.point.x - midpoint.x) <= 1e-12
+            && abs(landmark.point.y - midpoint.y) <= 1e-12
+            && abs(resolved.imagePoint.x - midpoint.x) <= 1e-12
+            && abs(resolved.imagePoint.y - midpoint.y) <= 1e-12
     }
 }

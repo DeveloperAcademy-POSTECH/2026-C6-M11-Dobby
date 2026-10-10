@@ -20,6 +20,8 @@ struct GarmentMeasurementResultView: View {
     @State private var showAuxiliaryDetails = false
     @State private var detailDefinition: MeasurementDefinition?
     @State private var detailManualReview: ManualMeasurement?
+    @State private var totalLengthCorrection: ManualMeasurement?
+    @State private var detailTotalLengthCorrection: ManualMeasurement?
     @State private var isSaving = false
     @State private var saveError: String?
     @State private var manualReview: ManualMeasurement?
@@ -46,6 +48,11 @@ struct GarmentMeasurementResultView: View {
     private var isSynthetic: Bool { model.snapshot.frame.source == .synthetic }
     private var incompleteCount: Int { model.visibleValues.filter { $0.status == .unavailable }.count }
     private var uncertainCount: Int { model.visibleValues.filter { $0.status == .uncertain }.count }
+    private var totalLengthUnavailable: Bool {
+        model.canCorrectTotalLength && model.visibleValues.contains {
+            $0.id == "top.totalLength" && $0.status == .unavailable
+        }
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -107,6 +114,9 @@ struct GarmentMeasurementResultView: View {
         }
         .sheet(item: $manualReview) { measurement in
             MeasurementDetailView(model: measurement, archive: archive)
+        }
+        .sheet(item: $totalLengthCorrection) { measurement in
+            totalLengthCorrectionSheet(measurement)
         }
         .sheet(isPresented: $showAuxiliaryDetails) { auxiliaryDetailsSheet }
         .alert("저장하지 못했어요", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
@@ -188,8 +198,11 @@ struct GarmentMeasurementResultView: View {
     @ViewBuilder
     private var reviewNotice: some View {
         if incompleteCount > 0 || uncertainCount > 0 {
-            Button { openAuxiliaryDetails() } label: {
-                Label(incompleteCount > 0 ? "\(incompleteCount)개 측정 불가" : "\(uncertainCount)개 확인 필요",
+            Button {
+                if totalLengthUnavailable { openManualReview(for: "top.totalLength") }
+                else { openAuxiliaryDetails() }
+            } label: {
+                Label(totalLengthUnavailable ? "총장 위치 확인" : incompleteCount > 0 ? "\(incompleteCount)개 측정 불가" : "\(uncertainCount)개 확인 필요",
                       systemImage: "exclamationmark.circle")
                     .font(.caption.weight(.semibold)).foregroundStyle(GarmentCaptureStyle.accent)
                     .padding(.horizontal, 10).padding(.vertical, 7)
@@ -222,6 +235,12 @@ struct GarmentMeasurementResultView: View {
         Menu {
             Button("측정 항목 상세", systemImage: "list.bullet.rectangle") { openAuxiliaryDetails() }
                 .accessibilityIdentifier("openGarmentMeasurementDetails")
+            if model.canCorrectTotalLength {
+                Button("총장 위치 직접 지정", systemImage: "hand.point.up.left") {
+                    openManualReview(for: "top.totalLength")
+                }.disabled(model.needsRecalculation)
+                    .accessibilityIdentifier("correctGarmentTotalLength")
+            }
             Button("촬영 사진 확대", systemImage: "arrow.up.left.and.arrow.down.right") { showPhoto = true }
                 .disabled(image == nil)
                 .accessibilityIdentifier("enlargeGarmentPhoto")
@@ -267,6 +286,9 @@ struct GarmentMeasurementResultView: View {
             .sheet(item: $detailManualReview) { measurement in
                 MeasurementDetailView(model: measurement, archive: archive)
             }
+            .sheet(item: $detailTotalLengthCorrection) { measurement in
+                totalLengthCorrectionSheet(measurement)
+            }
         }.tint(GarmentCaptureStyle.accent).preferredColorScheme(.dark)
     }
 
@@ -304,7 +326,7 @@ struct GarmentMeasurementResultView: View {
                     .font(.subheadline.weight(.semibold))
             }.tint(GarmentCaptureStyle.accent)
                 .disabled(isSaving || isEditingPoint || model.needsRecalculation)
-                .accessibilityHint("항목을 고르면 같은 사진에서 두 점을 직접 확인하고 별도의 수동 측정으로 저장할 수 있습니다")
+                .accessibilityHint("총장 위치 지정은 현재 실측 결과에 반영됩니다. 다른 항목의 수동 검증은 별도로 저장됩니다")
                 .accessibilityIdentifier("reviewAllGarmentMeasurementPoints")
             if incompleteCount > 0 {
                 Label("\(incompleteCount)개 항목은 측정하지 못했어요. 상세에서 이유를 확인해 주세요.", systemImage: "exclamationmark.circle")
@@ -334,9 +356,7 @@ struct GarmentMeasurementResultView: View {
                 Text("촬영 시도 기록을 완료하지 못했어요. 측정 결과는 확인을 눌러 따로 저장할 수 있어요.\n\(recordingError)")
                     .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
             }
-            Text(model.definitions.contains(where: { $0.id == "top.totalLength" })
-                 ? "단면과 소매는 두 점 사이 직선거리이며, 총장은 목 좌우 축에 수직인 길이예요. 소매를 곧게 펼치고 측정점을 눈으로 확인해 주세요. 민소매의 소매길이는 사용할 수 없어요."
-                 : "펼친 옷의 두 점 사이 직선거리예요. 주름이나 굽은 봉제선을 따라 잰 길이와 다를 수 있어요.")
+            Text(measurementGuide)
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -348,8 +368,29 @@ struct GarmentMeasurementResultView: View {
 
     private func openManualReview(for definitionID: String) {
         let measurement = model.manualMeasurement(for: definitionID)
-        if showAuxiliaryDetails { detailManualReview = measurement }
+        if definitionID == "top.totalLength", model.canCorrectTotalLength {
+            if showAuxiliaryDetails { detailTotalLengthCorrection = measurement }
+            else { totalLengthCorrection = measurement }
+        } else if showAuxiliaryDetails { detailManualReview = measurement }
         else { manualReview = measurement }
+    }
+
+    private func totalLengthCorrectionSheet(_ measurement: ManualMeasurement) -> some View {
+        GarmentTotalLengthCorrectionView(model: measurement, initialImage: image,
+            failure: model.result.values.first { $0.id == "top.totalLength" }?.failure) { correction in
+                guard !isSaving, !isEditingPoint, !model.needsRecalculation else { return false }
+                return model.applyTotalLengthCorrection(from: correction)
+            }
+    }
+
+    private var measurementGuide: String {
+        guard let total = model.definitions.first(where: { $0.id == "top.totalLength" }) else {
+            return "펼친 옷의 두 점 사이 직선거리예요. 주름이나 굽은 봉제선을 따라 잰 길이와 다를 수 있어요."
+        }
+        let totalGuide = total.projection == nil ? "총장은 목 중앙과 밑단 중앙 사이의 직선거리예요."
+            : "이 이전 기록의 총장은 목 좌우 축에 수직인 길이예요."
+        return "단면과 소매는 두 점 사이 직선거리이며, " + totalGuide
+            + " 소매를 곧게 펼치고 측정점을 눈으로 확인해 주세요. 민소매의 소매길이는 사용할 수 없어요."
     }
 
     private var reviewDefinitions: [MeasurementDefinition] {
@@ -369,14 +410,17 @@ struct GarmentMeasurementResultView: View {
                             Text(failure.message).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Button("이 사진에서 측정점 직접 확인") {
+                    Button(definition.id == "top.totalLength" && model.canCorrectTotalLength
+                           ? "총장 위치 지정하고 다시 측정" : "이 사진에서 측정점 직접 확인") {
                         openManualReview(for: definition.id)
                     }.buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
                         .accessibilityLabel("\(definition.title) 측정점 직접 확인")
                         .accessibilityIdentifier("reviewGarmentMeasurement_\(definition.id)")
                 }
             }
-            Text("두 점을 직접 확인하면 별도의 수동 측정으로 저장돼요. 자동 측정 기록은 그대로 유지돼요.")
+            Text(model.canCorrectTotalLength
+                 ? "총장 위치 지정은 현재 결과에 반영돼요. 다른 항목의 수동 검증은 별도 기록으로 저장돼요."
+                 : "두 점을 직접 확인하면 별도의 수동 측정으로 저장돼요. 자동 측정 기록은 그대로 유지돼요.")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
@@ -488,7 +532,9 @@ private struct GarmentMeasurementItemSheet: View {
                 }
                 Section {
                     Text(definition.id == "top.totalLength"
-                         ? "목 좌우 점을 이은 축에 수직인 총장이에요. 줄자도 옷을 펼친 상태에서 같은 기준으로 비교해 주세요."
+                         ? definition.projection == nil
+                            ? "목 중앙과 밑단 중앙 사이의 직선거리예요. 줄자도 옷을 펼친 상태에서 같은 두 점을 기준으로 비교해 주세요."
+                            : "이 이전 기록은 목 좌우 축에 수직인 총장이에요. 줄자도 같은 기준으로 비교해 주세요."
                          : "사진에 표시된 두 점 사이의 직선거리예요. 줄자도 같은 두 점 사이를 기준으로 비교해 주세요.")
                     Button("이 사진에서 수동점 검증") {
                         manualComparison = model.manualMeasurement(for: definition.id)

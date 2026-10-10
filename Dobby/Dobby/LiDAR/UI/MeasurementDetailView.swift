@@ -52,7 +52,9 @@ struct MeasurementDetailView: View {
                     })) {
                         ForEach(model.availableDefinitions) { Text($0.title).tag($0.id) }
                     }.pickerStyle(.menu).accessibilityIdentifier("measurementDefinition")
-                    Text(GarmentMeasurementCatalog.guide(for: model.definition.id))
+                    Text(model.definition.id == "top.totalLength" && model.definition.projection != nil
+                         ? "목 중앙과 밑단 중앙을 확인하세요. 이 이전 기록은 목 양끝의 3D 가로축에 수직인 총장을 사용합니다."
+                         : GarmentMeasurementCatalog.guide(for: model.definition.id))
                         .font(.caption).foregroundStyle(.secondary)
                     if model.definition.projection != nil {
                         Text("이 총장은 목 양끝의 3D 가로축을 기준으로 계산합니다. 아래에서 두 점을 직접 바꾸면 별도의 수동 직선 측정으로 전환됩니다.")
@@ -261,7 +263,7 @@ struct MeasurementDetailView: View {
     }
 }
 
-private struct MeasurementImageView: View {
+struct MeasurementImageView: View {
     let snapshot: CaptureSnapshot
     let landmarks: GarmentLandmarkSet
     let image: UIImage?

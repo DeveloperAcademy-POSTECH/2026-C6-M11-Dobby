@@ -74,7 +74,7 @@ nonisolated enum GarmentMeasurementCatalog {
         case "length":
             placement = "목 옆 어깨 시작점과 그 바로 아래 밑단에 두 점을 놓으세요. 앞면·뒷면 중 어느 면인지 기록하세요."
         case "top.totalLength":
-            placement = "목 양끝과 밑단 중앙의 인식점을 확인하세요. 목 양끝의 3D 중점에서 밑단까지, 목 양끝을 잇는 가로축 성분을 제외한 길이입니다. 목이 비대칭이거나 가로축이 잘못 인식되면 값도 달라집니다."
+            placement = "목 중앙과 밑단 중앙의 측정점을 확인하세요. 사진에 표시된 두 점 사이의 직선거리입니다. 줄자도 옷을 펼친 상태에서 같은 두 점을 기준으로 비교해 주세요."
         case "top.totalLength.manualStraight":
             placement = "목 중앙과 그 아래 밑단에 두 점을 놓으세요. 자동 총장의 가로축 보정 없이 계산하는 별도의 수동 직선거리입니다."
         case "sleeve", "top.sleeveLengthLeft", "top.sleeveLengthRight":
