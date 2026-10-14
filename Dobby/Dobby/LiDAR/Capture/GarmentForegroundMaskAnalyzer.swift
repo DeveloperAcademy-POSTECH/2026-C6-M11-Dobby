@@ -9,6 +9,7 @@ nonisolated struct GarmentImageRecognition: Sendable {
     var detectionConfidence: Double
     var modelVersion: String
     var garmentKind: AutomaticGarmentKind? = nil
+    var diagnostics: GarmentRecognitionDiagnostics? = nil
 }
 
 nonisolated struct GarmentForegroundRecognition: Sendable {

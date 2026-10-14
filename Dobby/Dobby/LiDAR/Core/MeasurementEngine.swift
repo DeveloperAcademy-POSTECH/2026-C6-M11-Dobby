@@ -5,7 +5,7 @@ import Foundation
 /// Positions use optical coordinates: x right, y down, z forward, all in metres.
 /// `valid` describes input support, not a guaranteed physical error in centimetres.
 nonisolated struct LiDARMeasurementEngine {
-    static let algorithmVersion = "lidar-unprojection-1.2.0"
+    static let algorithmVersion = "lidar-unprojection-1.3.1"
     private let options: MeasurementOptions
 
     init(options: MeasurementOptions = .init()) {
@@ -99,10 +99,33 @@ nonisolated struct LiDARMeasurementEngine {
             return resolution
         }
 
+        func finalPointFailures(for ids: [String]) -> [LandmarkMeasurementFailure] {
+            var pending = ids
+            var visited = Set<String>()
+            var failures: [LandmarkMeasurementFailure] = []
+            var cursor = 0
+            while cursor < pending.count, visited.count < 256 {
+                let id = pending[cursor]
+                cursor += 1
+                guard visited.insert(id).inserted else { continue }
+                // A recovered derived point is successful even when its first
+                // sampling attempt failed. Do not expose those stale failures.
+                guard resolved[id] == nil else { continue }
+                if let failure = pointFailures[id] {
+                    failures.append(.init(landmarkID: id, reason: failure))
+                }
+                if let sources = landmarks.effectiveDerivedSourceIDs(for: id), sources.count <= 64 {
+                    pending.append(contentsOf: sources)
+                }
+            }
+            return failures
+        }
+
         let values = definitions.map { definition -> MeasurementValue in
-            func unavailable(_ failure: MeasurementFailure, points: [ResolvedLandmark] = []) -> MeasurementValue {
+            func unavailable(_ failure: MeasurementFailure, points: [ResolvedLandmark] = [],
+                             failedPoints: [LandmarkMeasurementFailure]? = nil) -> MeasurementValue {
                 .init(id: definition.id, title: definition.title, meters: nil,
-                      status: .unavailable, failure: failure, points: points)
+                      status: .unavailable, failure: failure, points: points, pointFailures: failedPoints)
             }
             if let globalFailure { return unavailable(globalFailure) }
             guard !definition.id.isEmpty, groupedDefinitions[definition.id]?.count == 1,
@@ -124,7 +147,10 @@ nonisolated struct LiDARMeasurementEngine {
                     uncertain = uncertain || value.uncertain
                 }
             }
-            if let firstFailure { return unavailable(firstFailure, points: points) }
+            if let firstFailure {
+                return unavailable(firstFailure, points: points,
+                    failedPoints: finalPointFailures(for: definition.landmarkIDs))
+            }
             if let projection = definition.projection {
                 let axisIDs = projection.referenceAxisLandmarkIDs
                 guard points.count == 2, axisIDs.count == 2,
@@ -139,7 +165,10 @@ nonisolated struct LiDARMeasurementEngine {
                     case .success(let value): axis.append(value)
                     }
                 }
-                if let firstFailure { return unavailable(firstFailure, points: points) }
+                if let firstFailure {
+                    return unavailable(firstFailure, points: points,
+                        failedPoints: finalPointFailures(for: definition.landmarkIDs + axisIDs))
+                }
                 switch projectedEndpoint(start: points[0], end: points[1], axis: axis,
                                          axisIDs: axisIDs, frame: frame) {
                 case .failure(let failure): return unavailable(failure, points: points)
@@ -195,7 +224,10 @@ nonisolated struct LiDARMeasurementEngine {
             confidenceAvailable: qualities.allSatisfy(\.confidenceAvailable),
             depthSpreadMeters: qualities.map(\.depthSpreadMeters).max() ?? 0,
             planeResidualMeters: residuals.count == qualities.count ? residuals.max() : nil,
-            method: .axisProjection
+                           method: .axisProjection,
+                           viewingAngleDegrees: maximumKnown(qualities.map(\.viewingAngleDegrees)),
+                           sampleRadiusPixels: maximumKnown(qualities.map(\.sampleRadiusPixels)),
+                           supportDistancePixels: maximumKnown(qualities.map(\.supportDistancePixels))
         )
         var sourceIDs: [String] = []
         for id in [start.id, end.id] + axisIDs where !sourceIDs.contains(id) { sourceIDs.append(id) }
@@ -253,12 +285,14 @@ nonisolated struct LiDARMeasurementEngine {
     private func resolve(
         _ landmark: GarmentLandmark,
         frame: MeasurementFrame,
-        set: GarmentLandmarkSet
+        set: GarmentLandmarkSet,
+        sampleRadius: Int? = nil
     ) -> Result<PointResolution, MeasurementFailure> {
         let origin = landmark.origin ?? set.origin
         if let failure = validateLandmark(landmark, origin: origin) { return .failure(failure) }
         let target = landmark.point
         let map = frame.depth
+        let radius = sampleRadius ?? options.sampleRadius
         let targetX = target.x * Double(map.size.width)
         let targetY = target.y * Double(map.size.height)
         let centerX = Int(targetX), centerY = Int(targetY)
@@ -272,8 +306,8 @@ nonisolated struct LiDARMeasurementEngine {
         }
         var samples: [DepthSample] = []
         var candidateCount = 0
-        for y in max(0, centerY - options.sampleRadius)...min(map.size.height - 1, centerY + options.sampleRadius) {
-            for x in max(0, centerX - options.sampleRadius)...min(map.size.width - 1, centerX + options.sampleRadius) {
+        for y in max(0, centerY - radius)...min(map.size.height - 1, centerY + radius) {
+            for x in max(0, centerX - radius)...min(map.size.width - 1, centerX + radius) {
                 candidateCount += 1
                 let nx = (Double(x) + 0.5) / Double(map.size.width)
                 let ny = (Double(y) + 0.5) / Double(map.size.height)
@@ -327,25 +361,41 @@ nonisolated struct LiDARMeasurementEngine {
         if options.useLocalPlane, isNearSupport(x: targetX, y: targetY, samples: chosen) {
             plane = fitPlane(samples: chosen, rayX: ray.x, rayY: ray.y, targetX: targetX, targetY: targetY)
         }
-        let z = plane?.depth ?? median(chosen.map(\.z))
+        // A whole one-sided window's median drifts along a sloping surface as
+        // the silhouette changes. Keep a median fallback local to the ray,
+        // retain the spread rejection below, and never label it as a plane fit.
+        let medianSupport = Array(chosen.sorted {
+            let first = square($0.x - targetX) + square($0.y - targetY)
+            let second = square($1.x - targetX) + square($1.y - targetY)
+            if first != second { return first < second }
+            return $0.y == $1.y ? $0.x < $1.x : $0.y < $1.y
+        }.prefix(options.minimumSamples))
+        let z = plane?.depth ?? median(medianSupport.map(\.z))
         let lowSensorConfidence = chosen.contains { ($0.confidence ?? 0) < 2 }
+        let maskAssessment = set.recognitionDiagnostics?.pointAssessments.first { $0.landmarkID == landmark.id }
+        let needsModelReview = origin == .model && (set.recognitionDiagnostics?.requiresReview == true
+            || maskAssessment?.status == .outsideMask)
         let uncertain = map.confidence == nil || lowSensorConfidence || plane == nil || clusters.count > 1
             || (origin == .model && landmark.confidence == nil)
+            || needsModelReview
             // A mask hole may still be inside the sample convex hull. Interpolation can
             // supply an estimate, but cannot prove the landmark belongs to the garment.
             || !targetInsideMask
         let point = ResolvedLandmark(
             id: landmark.id, imagePoint: target,
             position: .init(x: ray.x * z, y: ray.y * z, z: z),
-            quality: .init(validSamples: plane?.sampleCount ?? chosen.count,
+            quality: .init(validSamples: plane?.sampleCount ?? medianSupport.count,
                            candidateSamples: candidateCount,
                            confidenceAvailable: map.confidence != nil,
                            depthSpreadMeters: spread,
                            planeResidualMeters: plane?.residual,
-                           method: plane == nil ? .robustMedian : .localPlane)
+                           method: plane == nil ? .robustMedian : .localPlane,
+                           viewingAngleDegrees: plane?.viewingAngleDegrees,
+                           sampleRadiusPixels: radius,
+                           supportDistancePixels: plane?.supportDistancePixels ?? sqrt(nearestDistance(medianSupport)))
         )
         // A median from spatially distant support is not a substitute for the depth at the landmark.
-        guard nearestDistance(chosen) <= square(Double(options.sampleRadius)) else { return .failure(.insufficientDepth) }
+        guard nearestDistance(chosen) <= square(Double(radius)) else { return .failure(.insufficientDepth) }
         // Excessive spread without a well-supported surface fit cannot supply trustworthy depth.
         if plane == nil && spread > options.maximumDepthSpreadMeters { return .failure(.insufficientDepth) }
         return .success(.init(landmark: point, uncertain: uncertain))
@@ -362,9 +412,9 @@ nonisolated struct LiDARMeasurementEngine {
         return nil
     }
 
-    /// A reliable model midpoint can have supported depth even when one neckline
-    /// boundary has a sensor hole. Sample the midpoint's own camera ray only for
-    /// this known top schema, never to repair missing or untrusted model geometry.
+    /// Recover depth at the same physical neckline sources, then keep the normal
+    /// 3D midpoint definition. The centre must still have its own supported plane.
+    /// No centre plane is extrapolated to distant or curved neckline endpoints.
     private func recoverTopNeckCenterDepth(
         _ landmark: GarmentLandmark, sourceIDs: [String],
         groupedPoints: [String: [GarmentLandmark]], frame: MeasurementFrame, set: GarmentLandmarkSet
@@ -393,13 +443,30 @@ nonisolated struct LiDARMeasurementEngine {
         let x = Int(landmark.point.x * Double(mask.size.width))
         let y = Int(landmark.point.y * Double(mask.size.height))
         guard mask.values[y * mask.size.width + x] == 1,
-              case .success(var sampled) = resolve(landmark, frame: frame, set: set),
+              case .success(let sampled) = resolve(landmark, frame: frame, set: set),
               sampled.landmark.quality.method == .localPlane else { return nil }
-        // The IDs describe the model's 2D coordinate contributors; localPlane
-        // records that depth came from this midpoint, not an average of sources.
-        sampled.landmark.sourceLandmarkIDs = sourceIDs
-        sampled.uncertain = true
-        return sampled
+        let radii = [options.sampleRadius, min(12, options.sampleRadius * 2), min(12, options.sampleRadius * 3)]
+        var recoveredSources: [PointResolution] = []
+        for source in sources {
+            var supported: PointResolution?
+            for radius in Set(radii).sorted() {
+                if case .success(let candidate) = resolve(source, frame: frame, set: set, sampleRadius: radius),
+                   candidate.landmark.quality.method == .localPlane {
+                    supported = candidate
+                    break
+                }
+            }
+            // A larger window still needs spatial support at this exact ray.
+            // A central depth alone cannot establish an unseen endpoint's depth.
+            guard let supported else { return nil }
+            recoveredSources.append(supported)
+        }
+        guard case .success(var recovered) = spatialAverage(landmark, sourceIDs: sourceIDs,
+            sources: recoveredSources, frame: frame, origin: .model) else { return nil }
+        recovered.landmark.quality.method = .recoveredSpatialAverage
+        recovered.landmark.recoverySourcePositions = recoveredSources.map { $0.landmark.position }
+        recovered.uncertain = true
+        return recovered
     }
 
     private func spatialAverage(
@@ -430,7 +497,10 @@ nonisolated struct LiDARMeasurementEngine {
             confidenceAvailable: qualities.allSatisfy(\.confidenceAvailable),
             depthSpreadMeters: qualities.map(\.depthSpreadMeters).max() ?? 0,
             planeResidualMeters: residuals.count == qualities.count ? residuals.max() : nil,
-            method: .spatialAverage
+            method: .spatialAverage,
+            viewingAngleDegrees: maximumKnown(qualities.map(\.viewingAngleDegrees)),
+            sampleRadiusPixels: maximumKnown(qualities.map(\.sampleRadiusPixels)),
+            supportDistancePixels: maximumKnown(qualities.map(\.supportDistancePixels))
         )
         return .success(.init(
             landmark: .init(id: landmark.id, imagePoint: projected, position: position,
@@ -494,7 +564,17 @@ nonisolated struct LiDARMeasurementEngine {
                   depth <= high + options.maximumPlaneResidualMeters else { return nil }
             // Recheck spatial support after residual rejection, which can remove an entire side.
             guard isNearSupport(x: targetX, y: targetY, samples: retained) else { return nil }
-            return .init(depth: depth, residual: rms, sampleCount: retained.count)
+            let normalZ = c - a * rayX - b * rayY
+            let normalLength = hypot(hypot(a, b), normalZ)
+            let rayLength = hypot(hypot(rayX, rayY), 1)
+            guard normalLength.isFinite, normalLength > 0, rayLength.isFinite else { return nil }
+            let cosine = abs((a / normalLength) * (rayX / rayLength)
+                + (b / normalLength) * (rayY / rayLength) + (normalZ / normalLength) / rayLength)
+            guard cosine.isFinite else { return nil }
+            let angle = acos(min(1, max(0, cosine))) * 180 / Double.pi
+            let nearest = retained.map { square($0.x - targetX) + square($0.y - targetY) }.min()!
+            return .init(depth: depth, residual: rms, sampleCount: retained.count,
+                         viewingAngleDegrees: angle, supportDistancePixels: sqrt(nearest))
         }
         return nil
     }
@@ -531,6 +611,11 @@ nonisolated struct LiDARMeasurementEngine {
 
     private func median(_ values: [Double]) -> Double { percentile(values, 0.5) }
 
+    private func maximumKnown<T: Comparable>(_ values: [T?]) -> T? {
+        let known = values.compactMap { $0 }
+        return known.count == values.count ? known.max() : nil
+    }
+
     private func percentile(_ values: [Double], _ fraction: Double) -> Double {
         let sorted = values.sorted()
         let position = fraction * Double(sorted.count - 1)
@@ -566,4 +651,6 @@ nonisolated private struct PlaneEstimate {
     var depth: Double
     var residual: Double
     var sampleCount: Int
+    var viewingAngleDegrees: Double
+    var supportDistancePixels: Double
 }

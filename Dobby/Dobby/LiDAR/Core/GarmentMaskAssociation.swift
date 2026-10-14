@@ -13,6 +13,17 @@ nonisolated enum GarmentMaskAssociationError: Error, LocalizedError, Sendable, E
     }
 }
 
+nonisolated enum LandmarkMaskAssociationStatus: String, Codable, Sendable, Equatable {
+    case associated, outsideMask, notVisible, outOfBounds, derived
+}
+
+/// Segmentation evidence is separate from the pose model's original coordinates
+/// and visibility. A derived point has no independent foreground verdict.
+nonisolated struct LandmarkMaskAssessment: Codable, Sendable, Equatable {
+    var landmarkID: String
+    var status: LandmarkMaskAssociationStatus
+}
+
 nonisolated struct GarmentMaskSelection: Sendable {
     var mask: GarmentMask
     var bounds: NormalizedRect
@@ -21,34 +32,24 @@ nonisolated struct GarmentMaskSelection: Sendable {
     /// Original direct points close enough to this exact foreground for use in
     /// measurement. This does not move a point onto the silhouette boundary.
     var associatedLandmarkIDs: Set<String> = []
+    var policy: GarmentMaskAssociationPolicy = .strict
+    var pointAssessments: [LandmarkMaskAssessment] = []
 
+    /// Kept for callers using the former validation API. Segmentation does not
+    /// establish that an otherwise valid model point is occluded, or alter a
+    /// derived point's contributors. Measurement support is assessed separately.
     func validatedPoints(_ points: [GarmentLandmark]) -> [GarmentLandmark] {
-        var result = points
-        for index in result.indices where result[index].derivedFrom == nil {
-            result[index].isVisible = result[index].isVisible
-                && associatedLandmarkIDs.contains(result[index].id)
-        }
-        // A derived midpoint cannot restore an unconfirmed source point.
-        for _ in result.indices {
-            let visible = Set(result.filter(\.isVisible).map(\.id))
-            var changed = false
-            for index in result.indices {
-                if let sources = result[index].derivedFrom,
-                   result[index].isVisible, !sources.allSatisfy(visible.contains) {
-                    result[index].isVisible = false
-                    changed = true
-                }
-            }
-            if !changed { break }
-        }
-        return result
+        points
     }
 }
 
-nonisolated enum GarmentMaskAssociationPolicy: Sendable {
+nonisolated enum GarmentMaskAssociationPolicy: String, Codable, Sendable, Equatable {
     case strict
     /// Used only after both upright and half-turn strict top attempts fail.
     case partialTop
+    /// Establish only which single foreground the semantic pose refers to.
+    /// Callers must subsequently require anatomical garment-kind evidence.
+    case subject
 }
 
 /// Associates a semantic landmark prediction with one independently segmented
@@ -123,13 +124,24 @@ nonisolated enum GarmentMaskAssociation {
                   Double(matched.count) / Double(eligible.count) >= 0.5 else {
                 throw GarmentMaskAssociationError.unmatchedGarment
             }
+        case .subject:
+            break
         }
         let associated = points.filter {
             $0.derivedFrom == nil && $0.isVisible && $0.point.isValid && isAssociated($0)
         }
+        let assessments = points.map { point -> LandmarkMaskAssessment in
+            let status: LandmarkMaskAssociationStatus
+            if point.derivedFrom != nil { status = .derived }
+            else if !point.isVisible { status = .notVisible }
+            else if !point.point.isValid { status = .outOfBounds }
+            else { status = isAssociated(point) ? .associated : .outsideMask }
+            return .init(landmarkID: point.id, status: status)
+        }
         return .init(mask: mask, bounds: candidate.bounds,
                      matchedLandmarkCount: matched.count, observedLandmarkCount: eligible.count,
-                     associatedLandmarkIDs: Set(associated.map(\.id)))
+                     associatedLandmarkIDs: Set(associated.map(\.id)), policy: policy,
+                     pointAssessments: assessments)
     }
 
     private static func hasStrongTopBodySupport(_ matched: [GarmentLandmark]) -> Bool {

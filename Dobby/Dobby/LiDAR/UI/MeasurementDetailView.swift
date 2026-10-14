@@ -224,6 +224,7 @@ struct MeasurementDetailView: View {
         case .localPlane: "국소 평면"
         case .robustMedian: "주변 중앙값"
         case .spatialAverage: "원본 측정점의 3D 평균"
+        case .recoveredSpatialAverage: "깊이를 복구한 측정점의 3D 평균"
         case .axisProjection: "의류 가로축의 직교 방향"
         }
     }
@@ -244,6 +245,7 @@ struct MeasurementDetailView: View {
                         .background(value.status == .valid ? Color.teal.opacity(0.12) : Color.orange.opacity(0.12), in: Capsule())
                 }
                 if let failure = value.failure { Text(failure.message).font(.subheadline).foregroundStyle(.orange) }
+                MeasurementPointFailureDetails(value: value)
                 if value.status == .uncertain {
                     Text("깊이 또는 측정점 품질을 확인하세요. 이 값은 확정 치수로 사용하기 전에 줄자로 비교해야 합니다.")
                         .font(.caption).foregroundStyle(.orange)

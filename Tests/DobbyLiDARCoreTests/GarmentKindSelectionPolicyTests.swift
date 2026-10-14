@@ -57,15 +57,8 @@ final class GarmentKindSelectionPolicyTests: XCTestCase {
     }
 
     private func evidence(_ kind: AutomaticGarmentKind, _ points: [GarmentLandmark], _ mask: GarmentMask) throws -> GarmentKindEvidence {
-        let selection: GarmentMaskSelection
-        do {
-            selection = try GarmentMaskAssociation.select(masks: [mask], points: points,
-                imageSize: mask.size, policy: .strict)
-        } catch {
-            guard kind == .top else { throw error }
-            selection = try GarmentMaskAssociation.select(masks: [mask], points: points,
-                imageSize: mask.size, policy: .partialTop)
-        }
+        let selection = try GarmentMaskAssociation.select(masks: [mask], points: points,
+            imageSize: mask.size, policy: .subject)
         return GarmentKindSelectionPolicy.evaluate(kind: kind, points: points,
                                                    selection: selection, imageSize: mask.size)
     }
@@ -89,6 +82,86 @@ final class GarmentKindSelectionPolicyTests: XCTestCase {
         let result = try evidence(.top, points, polygon(topPolygon))
         XCTAssertEqual(result.status, .supported, "\(result)")
         XCTAssertEqual(result.metrics["associatedDirectPoints"], 6)
+    }
+
+    func testFourActualBodyAnchorsCanIdentifyTopWithoutInventingSleevePoints() throws {
+        let ids: Set<String> = ["armpit_left", "armpit_right", "hem_left", "hem_right"]
+        let points = topPoints().filter { ids.contains($0.id) }
+        let before = points
+        let result = try evidence(.top, points, polygon(topPolygon))
+        XCTAssertEqual(result.status, .supported, "\(result)")
+        XCTAssertEqual(result.metrics["semanticDirectPoints"], 4)
+        XCTAssertEqual(result.metrics["associatedBodyPoints"], 4)
+        XCTAssertEqual(points.map(\.id), before.map(\.id))
+        XCTAssertEqual(points.map(\.point), before.map(\.point))
+        XCTAssertFalse(points.contains { $0.id.hasPrefix("sleeve_end") })
+    }
+
+    func testZeroPointSixNineAndZeroPointSevenHaveSameIdentityWithIndependentShapeEvidence() throws {
+        for kind in AutomaticGarmentKind.allCases {
+            let mask = kind == .top ? polygon(topPolygon) : bottomMask()
+            let first = kind == .top ? topPoints(confidence: 0.69) : bottomPoints(confidence: 0.69)
+            let second = kind == .top ? topPoints(confidence: 0.70) : bottomPoints(confidence: 0.70)
+            let belowFormerGate = try evidence(kind, first, mask)
+            let atFormerGate = try evidence(kind, second, mask)
+            XCTAssertEqual(belowFormerGate.status, .supported, "\(kind): \(belowFormerGate)")
+            XCTAssertEqual(atFormerGate.status, belowFormerGate.status)
+            XCTAssertEqual(atFormerGate.reasons, belowFormerGate.reasons)
+            XCTAssertEqual(belowFormerGate.metrics["strongDirectPoints"], 0,
+                           "The former 0.7 threshold is diagnostic, not a class requirement.")
+        }
+    }
+
+    func testUndersegmentedBoundaryKeepsRawHemAndBodyIdentityButDoesNotInventDepth() throws {
+        let points = topPoints()
+        var mask = polygon(topPolygon)
+        // The real hem point remains outside the imperfect mask by more than
+        // association tolerance. Other body anchors and sleeve shape identify
+        // the same top; the hole must never be dilated for depth measurement.
+        for y in 124...134 { for x in 55...65 { mask.values[y * size.width + x] = 0 } }
+        let before = mask
+        let selection = try GarmentMaskAssociation.select(masks: [mask], points: points,
+            imageSize: size, policy: .subject)
+        XCTAssertEqual(selection.pointAssessments.first { $0.landmarkID == "hem_left" }?.status, .outsideMask)
+        XCTAssertEqual(selection.validatedPoints(points).map(\.point), points.map(\.point))
+        XCTAssertEqual(selection.validatedPoints(points).map(\.isVisible), points.map(\.isVisible))
+        XCTAssertEqual(GarmentKindSelectionPolicy.evaluate(kind: .top, points: points,
+            selection: selection, imageSize: size).status, .supported)
+        let frame = MeasurementFrame(sessionID: UUID(), frameID: UUID(), timestamp: 1, capturedAt: .now,
+            imageSize: size, intrinsics: .init(fx: 200, fy: 200, cx: 100, cy: 80, referenceSize: size),
+            depth: .init(size: size, values: .init(repeating: 1.2, count: size.width * size.height),
+                         confidence: .init(repeating: 2, count: size.width * size.height)),
+            source: .synthetic, orientation: .up)
+        let landmarks = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID,
+            origin: .model, modelVersion: "top-mask-preservation-test", points: selection.validatedPoints(points), mask: mask)
+        let definition = MeasurementDefinition(id: "top.hemWidth", title: "밑단", landmarkIDs: ["hem_left", "hem_right"])
+        let value = try XCTUnwrap(LiDARMeasurementEngine().measure(frame: frame, landmarks: landmarks,
+            definitions: [definition]).values.first)
+        XCTAssertEqual(value.status, .unavailable)
+        XCTAssertNil(value.meters)
+        XCTAssertEqual(selection.mask, before)
+    }
+
+    func testPartialBodySilhouetteNeedsIndependentSleevesAndRetainsUnknownOrRejectedBands() throws {
+        let points = topPoints()
+        let probes: [(Int, Int)] = [(100, 79), (100, 102), (100, 118), (88, 79), (112, 79), (76, 79), (124, 79)]
+        for (removed, expected) in [(3, GarmentKindEvidenceStatus.supported), (4, .uncertain), (7, .rejected)] {
+            var mask = polygon(topPolygon)
+            for (x, y) in probes.prefix(removed) {
+                for row in (y - 3)...(y + 3) {
+                    for column in (x - 3)...(x + 3) { mask.values[row * size.width + column] = 0 }
+                }
+            }
+            let before = mask
+            let result = try evidence(.top, points, mask)
+            XCTAssertEqual(result.status, expected, "removed \(removed): \(result)")
+            if removed == 3 {
+                XCTAssertEqual(result.reasons, [.partialSilhouette, .pairedSleeveBranches])
+                XCTAssertEqual(result.metrics["torsoForegroundFraction"], 0.8)
+            }
+            XCTAssertEqual(mask, before)
+            XCTAssertEqual(points.map(\.point), topPoints().map(\.point))
+        }
     }
 
     func testHighConfidenceTopPoseInsideGenericRectangleDoesNotProveSleeves() throws {
@@ -153,13 +226,13 @@ final class GarmentKindSelectionPolicyTests: XCTestCase {
         }
     }
 
-    func testWeakOrDerivedBodyAnchorsCannotEstablishAClass() throws {
+    func testConfidenceBelowMeasurementThresholdOrDerivedBodyAnchorsCannotEstablishAClass() throws {
         var points = topPoints()
         for i in points.indices where ["hem_left", "hem_right"].contains(points[i].id) {
-            points[i].confidence = 0.69
+            points[i].confidence = 0.49
         }
-        // The strict object association can still succeed, but this is weak
-        // subject identification evidence and cannot justify automatic selection.
+        // Other observed points can associate the subject, but cannot replace
+        // missing usable direct body anchors with invented geometry.
         let mask = polygon(topPolygon)
         let selection = try GarmentMaskAssociation.select(masks: [mask], points: points, imageSize: size)
         XCTAssertEqual(GarmentKindSelectionPolicy.evaluate(kind: .top, points: points,

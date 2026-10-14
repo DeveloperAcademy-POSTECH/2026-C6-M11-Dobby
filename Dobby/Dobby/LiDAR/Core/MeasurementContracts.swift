@@ -101,6 +101,9 @@ nonisolated struct GarmentLandmarkSet: Codable, Sendable {
     /// Selected from this exact RGB frame, never copied from a live preview.
     /// Optional preserves older archives and non-classifying adapters.
     var garmentKind: AutomaticGarmentKind? = nil
+    /// Independent mask/subject decisions do not erase the model's candidate
+    /// points. Nil keeps older records and manual providers compatible.
+    var recognitionDiagnostics: GarmentRecognitionDiagnostics? = nil
 }
 
 nonisolated struct MeasurementDefinition: Codable, Sendable, Identifiable {
@@ -137,6 +140,8 @@ nonisolated enum MeasurementFailure: String, Error, Codable, Sendable {
 
 nonisolated enum DepthSamplingMethod: String, Codable, Sendable {
     case localPlane, robustMedian, spatialAverage, axisProjection
+    /// Known derived point averaged in 3D after bounded, locally supported depth recovery.
+    case recoveredSpatialAverage
 }
 
 nonisolated struct PointQuality: Codable, Sendable {
@@ -146,6 +151,13 @@ nonisolated struct PointQuality: Codable, Sendable {
     var depthSpreadMeters: Double
     var planeResidualMeters: Double?
     var method: DepthSamplingMethod
+    /// Angle between a supported local surface normal and the point's camera ray.
+    /// Derived points retain the worst contributor angle; nil means unknown, not front-facing.
+    var viewingAngleDegrees: Double? = nil
+    /// Depth-pixel sampling radius, or the largest radius among derived contributors.
+    var sampleRadiusPixels: Int? = nil
+    /// Distance to the nearest retained depth sample, in depth pixels.
+    var supportDistancePixels: Double? = nil
 }
 
 nonisolated struct ResolvedLandmark: Codable, Sendable {
@@ -153,10 +165,13 @@ nonisolated struct ResolvedLandmark: Codable, Sendable {
     var imagePoint: ImagePoint
     var position: Point3D
     var quality: PointQuality
-    /// Coordinate contributors to a spatially derived point, or a known model
-    /// midpoint recovered with its own localPlane depth. The sampling method
-    /// distinguishes the two; independently placed direct points omit these IDs.
+    /// Coordinate contributors to a spatially derived point, including locally
+    /// recovered sources. Older localPlane midpoint records remain readable.
+    /// Independently placed direct points omit these IDs.
     var sourceLandmarkIDs: [String]? = nil
+    /// Two independently supported endpoint positions used by recoveredSpatialAverage.
+    /// Allows archived overlays to verify the recovered midpoint's projection.
+    var recoverySourcePositions: [Point3D]? = nil
 }
 
 nonisolated struct MeasurementValue: Codable, Sendable, Identifiable {
@@ -166,6 +181,9 @@ nonisolated struct MeasurementValue: Codable, Sendable, Identifiable {
     var status: MeasurementStatus
     var failure: MeasurementFailure?
     var points: [ResolvedLandmark]
+    /// Point-specific final failures, including failed derived contributors.
+    /// Older archives retain their existing item-level failure when omitted.
+    var pointFailures: [LandmarkMeasurementFailure]? = nil
 }
 
 nonisolated struct GarmentMeasurementResult: Codable, Sendable {

@@ -15,7 +15,9 @@ nonisolated struct CaptureFrameQuality: Codable, Sendable, Equatable {
     static let maximumAngularSpeed = 12 * Double.pi / 180
 
     var motionKnown: Bool {
-        translationSpeedMetersPerSecond != nil && angularSpeedRadiansPerSecond != nil
+        guard let translationSpeedMetersPerSecond, let angularSpeedRadiansPerSecond else { return false }
+        return translationSpeedMetersPerSecond.isFinite && translationSpeedMetersPerSecond >= 0
+            && angularSpeedRadiansPerSecond.isFinite && angularSpeedRadiansPerSecond >= 0
     }
 
     var isEligible: Bool {
@@ -36,6 +38,11 @@ nonisolated struct CaptureFrameQuality: Codable, Sendable, Equatable {
     }
 
     /// Empirical capture preference, kept explicit for later device validation.
+    /// Depth coverage describes the full image, so a small increase must not
+    /// completely mask camera motion. Discount the depth contribution by at most
+    /// 25% as motion approaches the existing limits. Unknown motion receives no
+    /// stability bonus, but remains eligible so it cannot delay the shutter.
+    /// This is a ranking score, not an uncertainty or centimetre-accuracy bound.
     var score: Double {
         guard isEligible else { return 0 }
         let stability: Double
@@ -43,7 +50,9 @@ nonisolated struct CaptureFrameQuality: Codable, Sendable, Equatable {
             stability = 1 - max(translationSpeedMetersPerSecond / Self.maximumTranslationSpeed,
                                 angularSpeedRadiansPerSecond / Self.maximumAngularSpeed)
         } else { stability = 0 }
-        return 0.55 * validDepthCoverage + 0.35 * (highConfidenceCoverage ?? 0) + 0.10 * stability
+        let depthQuality = 0.55 * validDepthCoverage + 0.35 * (highConfidenceCoverage ?? 0)
+        let motionDepthWeight = 0.75 + 0.25 * stability
+        return depthQuality * motionDepthWeight + 0.10 * stability
     }
 
     static func evaluate(
@@ -81,7 +90,7 @@ nonisolated struct CaptureSelectionSummary: Codable, Sendable, Equatable {
     var selectionWindowSeconds: TimeInterval
     var selectedFrameTimestamp: TimeInterval
     var selectedQuality: CaptureFrameQuality
-    var policyVersion: String = "depth-confidence-motion-v1"
+    var policyVersion: String = "depth-confidence-motion-v2"
 }
 
 /// One bounded shutter selection. The owner stores at most the winning RGB/depth

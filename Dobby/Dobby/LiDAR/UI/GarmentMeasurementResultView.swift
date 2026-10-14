@@ -409,6 +409,7 @@ struct GarmentMeasurementResultView: View {
                         if let failure = value.failure {
                             Text(failure.message).font(.caption).foregroundStyle(.secondary)
                         }
+                        MeasurementPointFailureDetails(value: value)
                     }
                     Button(definition.id == "top.totalLength" && model.canCorrectTotalLength
                            ? "총장 위치 지정하고 다시 측정" : "이 사진에서 측정점 직접 확인") {
@@ -444,6 +445,7 @@ struct GarmentMeasurementResultView: View {
             if value.status != .valid {
                 Text(value.failure?.message ?? "확인 필요 · 줄자로 비교해 주세요")
                     .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
+                MeasurementPointFailureDetails(value: value)
             }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
             .contentShape(Rectangle())
@@ -525,6 +527,7 @@ private struct GarmentMeasurementItemSheet: View {
                         Text(value.status.label)
                             .foregroundStyle(value.status == .valid ? Color.primary : GarmentCaptureStyle.accent)
                         if let failure = value.failure { Text(failure.message).font(.subheadline) }
+                        MeasurementPointFailureDetails(value: value)
                         if value.status == .uncertain {
                             Text("측정점 또는 깊이 품질을 확인한 뒤 줄자로 비교해 주세요.").font(.subheadline)
                         }

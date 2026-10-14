@@ -44,6 +44,9 @@ struct AutomaticMeasurementResultView: View {
                                           definitions: model.definitions, result: model.result)
                     Text("성공한 항목은 유지하고, 미검출·깊이 부족 항목은 사유를 따로 표시합니다.")
                         .font(.caption).foregroundStyle(.secondary)
+                    if let diagnostics = model.landmarks.recognitionDiagnostics {
+                        MeasurementRecognitionDetails(diagnostics: diagnostics)
+                    }
                     ForEach(model.result.values) { value in
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
@@ -54,6 +57,7 @@ struct AutomaticMeasurementResultView: View {
                             }
                             Text(value.status.label).foregroundStyle(value.status == .valid ? .teal : .orange)
                             if let failure = value.failure { Text(failure.message).font(.caption).foregroundStyle(.secondary) }
+                            MeasurementPointFailureDetails(value: value)
                             HStack {
                                 TextField("줄자 기준값", text: Binding(get: { referenceTexts[value.id] ?? "" },
                                     set: { referenceTexts[value.id] = $0; exportedURL = nil }))

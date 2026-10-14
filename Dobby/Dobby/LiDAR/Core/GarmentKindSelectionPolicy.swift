@@ -8,6 +8,7 @@ nonisolated enum GarmentKindEvidenceReason: String, Codable, Sendable {
     case invalidInput, unmatchedForeground, insufficientSemanticSupport
     case implausiblePose, solidTorso, pairedSleeveBranches, separatedLegs
     case unsupportedSilhouette, insufficientSilhouetteEvidence
+    case partialSilhouette
 }
 
 /// Diagnostic evidence, not a class probability. Metrics have physical geometric
@@ -60,47 +61,50 @@ nonisolated enum GarmentKindSelectionPolicy {
             "waist_left", "waist_right", "crotch", "hem_left_outer", "hem_left_inner",
             "hem_right_inner", "hem_right_outer"
         ])
-        let direct = selection.validatedPoints(points).filter {
+        // Raw semantic observations define the pose. Foreground association is
+        // an independent witness, never a reason to erase correct edge points.
+        let direct = points.filter {
             $0.derivedFrom == nil && expected.contains($0.id) && $0.isVisible && $0.point.isValid
                 && $0.confidence.map { $0.isFinite && $0 >= 0.5 && $0 <= 1 } == true
         }
         let anchors = Dictionary(uniqueKeysWithValues: direct.map { ($0.id, $0) })
-        let metrics = ["associatedDirectPoints": Double(direct.count),
+        let associated = Set(direct.filter { selection.associatedLandmarkIDs.contains($0.id) }.map(\.id))
+        let metrics = ["semanticDirectPoints": Double(direct.count),
+                       "associatedDirectPoints": Double(associated.count),
                        "strongDirectPoints": Double(direct.filter { ($0.confidence ?? 0) >= 0.7 }.count)]
         let sampler = MaskSampler(mask: mask)
         switch kind {
-        case .top: return topEvidence(anchors: anchors, sampler: sampler, metrics: metrics)
-        case .bottoms: return bottomEvidence(anchors: anchors, sampler: sampler, metrics: metrics)
+        case .top: return topEvidence(anchors: anchors, associated: associated, sampler: sampler, metrics: metrics)
+        case .bottoms: return bottomEvidence(anchors: anchors, associated: associated, sampler: sampler, metrics: metrics)
         }
     }
 
-    private static func topEvidence(anchors: [String: GarmentLandmark], sampler: MaskSampler,
+    private static func topEvidence(anchors: [String: GarmentLandmark], associated: Set<String>, sampler: MaskSampler,
                                     metrics: [String: Double]) -> GarmentKindEvidence {
         func result(_ status: GarmentKindEvidenceStatus, _ reasons: [GarmentKindEvidenceReason],
                     _ values: [String: Double] = [:]) -> GarmentKindEvidence {
             .init(kind: .top, status: status, reasons: reasons, metrics: metrics.merging(values) { _, new in new })
         }
-        func strong(_ id: String) -> ImagePoint? {
-            guard let value = anchors[id], (value.confidence ?? 0) >= 0.7 else { return nil }
-            return value.point
+        func observed(_ id: String) -> ImagePoint? {
+            anchors[id]?.point
         }
-        // Match the existing partial-top subject policy. Missing sleeve/neck
-        // points may invalidate dimensions, but do not require all eleven points
-        // merely to establish that the independently observed body is a top.
-        guard anchors.count >= 6, metrics["strongDirectPoints", default: 0] >= 4 else {
+        let bodyIDs: Set<String> = ["shoulder_left", "shoulder_right", "armpit_left", "armpit_right",
+                                    "hem_left", "hem_center", "hem_right"]
+        let bodyAssociationCount = associated.intersection(bodyIDs).count
+        guard bodyAssociationCount >= 3 else {
             // A sparse pose may describe isolated corners on an unrelated class.
             // It has no independent class witness and must not veto a supported
             // opposite candidate. A substantial but incomplete pose stays unknown.
             return result(.rejected, [.insufficientSemanticSupport])
         }
-        let hemLeft = strong("hem_left"), hemRight = strong("hem_right")
+        let hemLeft = observed("hem_left"), hemRight = observed("hem_right")
         let lowerCenter: ImagePoint
         if let left = hemLeft, let right = hemRight { lowerCenter = midpoint(left, right) }
-        else if let center = strong("hem_center"), hemLeft != nil || hemRight != nil { lowerCenter = center }
+        else if let center = observed("hem_center"), hemLeft != nil || hemRight != nil { lowerCenter = center }
         else { return result(.uncertain, [.insufficientSemanticSupport]) }
         let upper: (ImagePoint, ImagePoint)?
-        if let left = strong("armpit_left"), let right = strong("armpit_right") { upper = (left, right) }
-        else if let left = strong("shoulder_left"), let right = strong("shoulder_right") { upper = (left, right) }
+        if let left = observed("armpit_left"), let right = observed("armpit_right") { upper = (left, right) }
+        else if let left = observed("shoulder_left"), let right = observed("shoulder_right") { upper = (left, right) }
         else { upper = nil }
         guard let upper, let frame = PoseFrame(upper: upper, lowerCenter: lowerCenter, size: sampler.mask.size) else {
             return result(.uncertain, [.insufficientSemanticSupport])
@@ -156,6 +160,7 @@ nonisolated enum GarmentKindSelectionPolicy {
             if left && right && centerAbsent { lowerSleeveRows += 1 }
         }
         let shapeMetrics = ["torsoForegroundFraction": solid,
+                            "associatedBodyPoints": Double(bodyAssociationCount),
                             "leftSleeveBranchSamples": Double(leftBranches),
                             "rightSleeveBranchSamples": Double(rightBranches),
                             "bodySideGapSamples": Double(bodySideGaps),
@@ -163,29 +168,30 @@ nonisolated enum GarmentKindSelectionPolicy {
         if solid < 0.6 || (bodySideGaps <= 1 && lowerSleeveRows < 2) {
             return result(.rejected, [.unsupportedSilhouette], shapeMetrics)
         }
-        guard solid >= 0.9, leftBranches >= 2, rightBranches >= 2,
+        guard solid >= 0.75, leftBranches >= 2, rightBranches >= 2,
               bodySideGaps >= 4 || lowerSleeveRows >= 2 else {
             return result(.uncertain, [.insufficientSilhouetteEvidence], shapeMetrics)
         }
-        return result(.supported, [.solidTorso, .pairedSleeveBranches], shapeMetrics)
+        return result(.supported, [solid >= 0.9 ? .solidTorso : .partialSilhouette, .pairedSleeveBranches], shapeMetrics)
     }
 
-    private static func bottomEvidence(anchors: [String: GarmentLandmark], sampler: MaskSampler,
+    private static func bottomEvidence(anchors: [String: GarmentLandmark], associated: Set<String>, sampler: MaskSampler,
                                        metrics: [String: Double]) -> GarmentKindEvidence {
         func result(_ status: GarmentKindEvidenceStatus, _ reasons: [GarmentKindEvidenceReason],
                     _ values: [String: Double] = [:]) -> GarmentKindEvidence {
             .init(kind: .bottoms, status: status, reasons: reasons, metrics: metrics.merging(values) { _, new in new })
         }
-        guard anchors.count >= 6, metrics["strongDirectPoints", default: 0] >= 4 else {
+        // Six actual semantic anchors are implied by waist pair + crotch + at
+        // least three hem points. They must not be invented from segmentation.
+        guard anchors.count >= 6, associated.count >= 3 else {
             return result(.rejected, [.insufficientSemanticSupport])
         }
-        func strong(_ id: String) -> ImagePoint? {
-            guard let value = anchors[id], (value.confidence ?? 0) >= 0.7 else { return nil }
-            return value.point
+        func observed(_ id: String) -> ImagePoint? {
+            anchors[id]?.point
         }
         let hems = ["hem_left_outer", "hem_left_inner", "hem_right_inner", "hem_right_outer"].compactMap { anchors[$0]?.point }
-        guard let waistLeft = strong("waist_left"), let waistRight = strong("waist_right"),
-              let crotch = strong("crotch"), hems.count >= 3 else {
+        guard let waistLeft = observed("waist_left"), let waistRight = observed("waist_right"),
+              let crotch = observed("crotch"), hems.count >= 3 else {
             return result(.uncertain, [.insufficientSemanticSupport])
         }
         let hemMean = ImagePoint(x: hems.reduce(0) { $0 + $1.x } / Double(hems.count),

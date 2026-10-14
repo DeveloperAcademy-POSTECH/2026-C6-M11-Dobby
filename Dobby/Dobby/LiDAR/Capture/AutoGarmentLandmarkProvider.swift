@@ -45,6 +45,7 @@ nonisolated struct AutoGarmentClassificationAttempt: Codable, Sendable {
     var route: GarmentClassifierRoute
     var evidence: GarmentKindEvidence?
     var poseError: String?
+    var poseAttempts: [GarmentPoseValidationAttempt]? = nil
 }
 
 /// Scores belong only to the supplied classifier. They are never compared with
@@ -141,7 +142,8 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         let landmarks = GarmentLandmarkSet(sessionID: snapshot.frame.sessionID,
             frameID: snapshot.frame.frameID, origin: .model,
             modelVersion: result.recognition.modelVersion, points: result.recognition.points,
-            mask: result.selection.mask, garmentKind: result.recognition.garmentKind)
+            mask: result.selection.mask, garmentKind: result.recognition.garmentKind,
+            recognitionDiagnostics: result.recognition.diagnostics)
         _ = try measurementDefinitions(for: landmarks)
         return landmarks
     }
@@ -199,6 +201,7 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         var topEvidence: GarmentKindEvidence?, bottomEvidence: GarmentKindEvidence?
         var hadUncertainty = false
         var poseRequests: Int? = 0, foregroundRequests: Int? = 0
+        var poseAttempts: [GarmentPoseValidationAttempt] = []
         for direction in [orientation, GarmentPoseOrientationRecovery.halfTurn(of: orientation)] {
             try Task.checkCancellation()
             let scores = try classify(image, orientation: direction)
@@ -218,12 +221,28 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                 continue
             case .selected(let kind, _, _):
                 let provider = kind == .top ? top : bottoms
-                let result: GarmentForegroundRecognition
+                var result: GarmentForegroundRecognition
                 do {
-                    result = try await provider.recognizeForeground(image, orientation: direction)
+                    // Classification and pose must describe the same direction.
+                    // This outer loop owns the only automatic half-turn retry.
+                    result = try await provider.recognizeForegroundExactly(image, orientation: direction)
                     try Task.checkCancellation()
                     if let count = poseRequests { poseRequests = count + result.poseRequests }
                     if let count = foregroundRequests { foregroundRequests = count + result.foregroundRequests }
+                    attempt.poseAttempts = result.recognition.diagnostics?.poseAttempts
+                    poseAttempts.append(contentsOf: attempt.poseAttempts ?? [])
+                } catch let error as GarmentForegroundValidationFailure {
+                    attempt.evidence = .unmatched(kind: kind)
+                    attempt.poseError = error.diagnosisCode
+                    attempt.poseAttempts = error.attempts
+                    poseAttempts.append(contentsOf: error.attempts)
+                    if kind == .top { topEvidence = attempt.evidence } else { bottomEvidence = attempt.evidence }
+                    if let count = poseRequests { poseRequests = count + error.attempts.count }
+                    if let count = foregroundRequests {
+                        foregroundRequests = count + error.attempts.filter { $0.rawPoints != nil }.count
+                    }
+                    attempts.append(attempt)
+                    continue
                 } catch GarmentModelError.noDetection {
                     attempt.evidence = .unmatched(kind: kind)
                     attempt.poseError = "noDetection"
@@ -255,6 +274,12 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                 if kind == .top { topEvidence = evidence } else { bottomEvidence = evidence }
                 switch evidence.status {
                 case .supported:
+                    result.recognition.diagnostics?.requestedOrientation = orientation
+                    result.recognition.diagnostics?.poseAttempts = poseAttempts
+                    result.recognition.diagnostics?.kindEvidence = evidence
+                    result.recognition.diagnostics?.classifiedCategory = route.category
+                    result.recognition.diagnostics?.classifierConfidence = route.confidence
+                    result.recognition.diagnostics?.classifierScores = scores
                     return .init(decision: .selected(kind), top: topEvidence, bottoms: bottomEvidence,
                                  recognition: result, classificationAttempts: attempts, isUnsupported: false,
                                  poseRequests: poseRequests, foregroundRequests: foregroundRequests)

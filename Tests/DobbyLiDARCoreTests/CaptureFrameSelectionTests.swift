@@ -72,6 +72,54 @@ final class CaptureFrameSelectionTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(selector.finish(requestID: requestID, now: 100.4)).selectedFrameTimestamp, 1)
     }
 
+    func testQuieterFrameWinsOverSmallDepthCoverageIncreaseForTranslationOrRotation() throws {
+        for moving in [quality(1, speed: 0.09), quality(1, angular: 11 * .pi / 180)] {
+            let requestID = UUID()
+            var selector = CaptureFrameSelector(requestID: requestID, startedAt: 100)
+            XCTAssertTrue(selector.consider(moving, requestID: requestID, now: 100))
+            let quieter = quality(1.1, coverage: 0.9, high: 0.85)
+            XCTAssertTrue(selector.consider(quieter, requestID: requestID, now: 100.1))
+            // Improving stability changes only the winner, not the shutter window.
+            XCTAssertEqual(selector.windowEndsAt, 100.35)
+            let summary = try XCTUnwrap(selector.finish(requestID: requestID, now: 100.35))
+            XCTAssertEqual(summary.selectedFrameTimestamp, quieter.timestamp)
+            XCTAssertEqual(summary.waitingDurationSeconds, 0.35, accuracy: 1e-8)
+        }
+    }
+
+    func testSubstantiallyBetterDepthCanStillWinWhenMotionRemainsEligible() throws {
+        let requestID = UUID()
+        var selector = CaptureFrameSelector(requestID: requestID, startedAt: 100)
+        XCTAssertTrue(selector.consider(quality(1, coverage: 0.4, high: 0.3),
+                                        requestID: requestID, now: 100))
+        XCTAssertTrue(selector.consider(quality(1.1, speed: 0.08), requestID: requestID, now: 100.1))
+        XCTAssertEqual(try XCTUnwrap(selector.finish(requestID: requestID, now: 100.35))
+            .selectedFrameTimestamp, 1.1)
+    }
+
+    func testUnknownMotionAloneStillCompletesInExistingWindow() throws {
+        let requestID = UUID()
+        var selector = CaptureFrameSelector(requestID: requestID, startedAt: 100)
+        let unknown = quality(speed: nil, angular: nil)
+        XCTAssertTrue(selector.consider(unknown, requestID: requestID, now: 100))
+        XCTAssertEqual(selector.windowEndsAt, 100.35)
+        let summary = try XCTUnwrap(selector.finish(requestID: requestID, now: 100.35))
+        XCTAssertEqual(summary.selectedFrameTimestamp, unknown.timestamp)
+        XCTAssertFalse(summary.selectedQuality.motionKnown)
+        XCTAssertEqual(summary.waitingDurationSeconds, 0.35, accuracy: 1e-8)
+        XCTAssertEqual(summary.selectionWindowSeconds, 0.35)
+    }
+
+    func testQuieterCandidateAtWindowBoundaryCannotExtendCapture() throws {
+        let requestID = UUID()
+        var selector = CaptureFrameSelector(requestID: requestID, startedAt: 100)
+        let moving = quality(1, speed: 0.09)
+        XCTAssertTrue(selector.consider(moving, requestID: requestID, now: 100))
+        XCTAssertFalse(selector.consider(quality(1.1), requestID: requestID, now: 100.35))
+        XCTAssertEqual(try XCTUnwrap(selector.finish(requestID: requestID, now: 100.35))
+            .selectedFrameTimestamp, moving.timestamp)
+    }
+
     func testTimerCanCompleteWithoutAnotherCameraFrame() throws {
         let requestID = UUID()
         var selector = CaptureFrameSelector(requestID: requestID, startedAt: 100)
@@ -163,9 +211,14 @@ final class CaptureFrameSelectionTests: XCTestCase {
         let unknown = quality(high: nil, speed: nil, angular: nil)
         XCTAssertTrue(unknown.isEligible)
         XCTAssertFalse(unknown.motionKnown)
-        XCTAssertEqual(unknown.score, 0.55, accuracy: 1e-8)
         XCTAssertGreaterThan(quality().score, unknown.score)
         XCTAssertGreaterThan(quality().score, quality(speed: 0.09).score)
+        XCTAssertFalse(quality(speed: nil).motionKnown)
+        XCTAssertFalse(quality(angular: nil).motionKnown)
+        for invalid in [Double.nan, .infinity, -1] {
+            XCTAssertFalse(quality(speed: invalid).motionKnown)
+            XCTAssertFalse(quality(angular: invalid).motionKnown)
+        }
     }
 
     func testDepthSummaryRejectsInvalidDepthAndUsesAllPixelsAsDenominator() {
@@ -211,6 +264,6 @@ final class CaptureFrameSelectionTests: XCTestCase {
         let roundTrip = try JSONDecoder().decode(CaptureSelectionSummary.self, from: JSONEncoder().encode(summary))
         XCTAssertEqual(summary, roundTrip)
         XCTAssertEqual(summary.selectedFrameTimestamp, 1)
-        XCTAssertEqual(summary.policyVersion, "depth-confidence-motion-v1")
+        XCTAssertEqual(summary.policyVersion, "depth-confidence-motion-v2")
     }
 }
