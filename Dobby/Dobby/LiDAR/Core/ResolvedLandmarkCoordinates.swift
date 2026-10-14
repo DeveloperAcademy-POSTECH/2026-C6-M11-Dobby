@@ -24,8 +24,9 @@ extension GarmentLandmarkSet {
         return output
     }
 
-    /// A recovery keeps the model's 2D midpoint and records its own supported
-    /// plane depth. Do not expose arbitrary direct samples as derived overlays.
+    /// New recovery keeps the 3D midpoint and verifies its depth-weighted image
+    /// projection. Legacy centre-plane records retain their original 2D midpoint.
+    /// Do not expose arbitrary direct samples as derived overlays.
     private nonisolated func isRecoveredTopNeckCenter(
         _ resolved: ResolvedLandmark, landmark: GarmentLandmark
     ) -> Bool {
@@ -35,7 +36,7 @@ extension GarmentLandmarkSet {
               modelVersion == AutomaticGarmentKind.top.modelVersion,
               (landmark.origin ?? origin) == .model,
               landmark.isVisible, landmark.point.isValid,
-              resolved.quality.method == .localPlane,
+              [.localPlane, .recoveredSpatialAverage].contains(resolved.quality.method),
               resolved.sourceLandmarkIDs == sourceIDs,
               resolved.quality.validSamples >= 3,
               resolved.quality.candidateSamples >= resolved.quality.validSamples,
@@ -58,9 +59,27 @@ extension GarmentLandmarkSet {
         }) else { return false }
         let midpoint = ImagePoint(x: (sources[0].point.x + sources[1].point.x) / 2,
                                   y: (sources[0].point.y + sources[1].point.y) / 2)
-        return abs(landmark.point.x - midpoint.x) <= 1e-12
-            && abs(landmark.point.y - midpoint.y) <= 1e-12
-            && abs(resolved.imagePoint.x - midpoint.x) <= 1e-12
-            && abs(resolved.imagePoint.y - midpoint.y) <= 1e-12
+        guard abs(landmark.point.x - midpoint.x) <= 1e-12,
+              abs(landmark.point.y - midpoint.y) <= 1e-12 else { return false }
+        if resolved.quality.method == .localPlane {
+            return abs(resolved.imagePoint.x - midpoint.x) <= 1e-12
+                && abs(resolved.imagePoint.y - midpoint.y) <= 1e-12
+        }
+        guard let positions = resolved.recoverySourcePositions, positions.count == 2,
+              positions.allSatisfy({ $0.x.isFinite && $0.y.isFinite && $0.z.isFinite && $0.z > 0 }),
+              resolved.imagePoint.isValid else { return false }
+        let totalDepth = positions[0].z + positions[1].z
+        guard totalDepth.isFinite, totalDepth > 0 else { return false }
+        let leftWeight = positions[0].z / totalDepth, rightWeight = positions[1].z / totalDepth
+        let projected = ImagePoint(x: sources[0].point.x * leftWeight + sources[1].point.x * rightWeight,
+                                   y: sources[0].point.y * leftWeight + sources[1].point.y * rightWeight)
+        let position = Point3D(x: positions[0].x / 2 + positions[1].x / 2,
+                               y: positions[0].y / 2 + positions[1].y / 2,
+                               z: positions[0].z / 2 + positions[1].z / 2)
+        return abs(resolved.imagePoint.x - projected.x) <= 1e-10
+            && abs(resolved.imagePoint.y - projected.y) <= 1e-10
+            && abs(resolved.position.x - position.x) <= 1e-10
+            && abs(resolved.position.y - position.y) <= 1e-10
+            && abs(resolved.position.z - position.z) <= 1e-10
     }
 }

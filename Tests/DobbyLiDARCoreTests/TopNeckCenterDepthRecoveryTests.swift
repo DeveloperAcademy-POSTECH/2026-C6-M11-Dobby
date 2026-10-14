@@ -101,14 +101,19 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
             let total = try total(result)
             XCTAssertEqual(total.status, .uncertain)
             XCTAssertNil(total.failure)
+            XCTAssertTrue((total.pointFailures ?? []).isEmpty,
+                "Successful recovery must not expose the initial neck-depth failure")
             XCTAssertEqual(try XCTUnwrap(total.meters), 0.7, accuracy: 0.00001)
             let center = try XCTUnwrap(total.points.first)
             XCTAssertEqual(center.id, "neck_center")
-            XCTAssertEqual(center.imagePoint, try point("neck_center", in: scene).point)
-            XCTAssertEqual(center.quality.method, .localPlane)
+            XCTAssertEqual(center.imagePoint.x, try point("neck_center", in: scene).point.x, accuracy: 1e-10)
+            XCTAssertEqual(center.imagePoint.y, try point("neck_center", in: scene).point.y, accuracy: 1e-10)
+            XCTAssertEqual(center.quality.method, .recoveredSpatialAverage)
             XCTAssertEqual(center.sourceLandmarkIDs, ["neck_left", "neck_right"])
             XCTAssertGreaterThanOrEqual(center.quality.validSamples, MeasurementOptions().minimumSamples)
             XCTAssertNotNil(center.quality.planeResidualMeters)
+            XCTAssertEqual(center.recoverySourcePositions?.count, 2)
+            XCTAssertEqual(center.quality.sampleRadiusPixels, 6)
             XCTAssertTrue(result.values.dropLast().allSatisfy { $0.status == .valid && $0.meters != nil })
             XCTAssertEqual(result.sessionID, scene.frame.sessionID)
             XCTAssertEqual(result.frameID, scene.frame.frameID)
@@ -118,23 +123,129 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
         }
     }
 
-    func testRecoveredCenterUsesItsOriginalRayAndLocalPlaneOnTiltedDepth() throws {
+    func testRecoveredCenterKeepsNormalThreeDimensionalMidpointOnTiltedDepth() throws {
         var scene = scene(tilted: true)
+        let baseline = try total(measure(scene))
         try removeDepth("neck_left", in: &scene)
         let centerPoint = try point("neck_center", in: scene).point
-        let expectedCenter = physicalPoint(centerPoint, in: scene)
+        let left = physicalPoint(try point("neck_left", in: scene).point, in: scene)
+        let right = physicalPoint(try point("neck_right", in: scene).point, in: scene)
+        let expectedCenter = Point3D(x: (left.x + right.x) / 2, y: (left.y + right.y) / 2, z: (left.z + right.z) / 2)
         let expectedHem = physicalPoint(try point("hem_center", in: scene).point, in: scene)
         let total = try total(measure(scene))
         XCTAssertEqual(total.status, .uncertain)
         XCTAssertEqual(try XCTUnwrap(total.meters), distance(expectedCenter, expectedHem), accuracy: 0.00001)
         let center = try XCTUnwrap(total.points.first)
-        XCTAssertEqual(center.imagePoint, centerPoint)
+        XCTAssertEqual(try XCTUnwrap(total.meters), try XCTUnwrap(baseline.meters), accuracy: 0.00001)
+        XCTAssertEqual(center.imagePoint.x, expectedCenter.x / expectedCenter.z + 0.5, accuracy: 0.00001)
+        XCTAssertEqual(center.imagePoint.y, expectedCenter.y / expectedCenter.z + 0.5, accuracy: 0.00001)
+        XCTAssertGreaterThan(abs(center.imagePoint.x - centerPoint.x), 0.0001)
         XCTAssertEqual(center.position.x, expectedCenter.x, accuracy: 0.00001)
         XCTAssertEqual(center.position.y, expectedCenter.y, accuracy: 0.00001)
         XCTAssertEqual(center.position.z, expectedCenter.z, accuracy: 0.00001)
-        XCTAssertEqual(center.quality.method, .localPlane)
+        XCTAssertEqual(center.quality.method, .recoveredSpatialAverage)
         XCTAssertEqual(total.points.last?.quality.method, .localPlane)
         XCTAssertNil(total.points.last?.sourceLandmarkIDs)
+    }
+
+    func testOneAndBothMissingDepthsPreserveNormalMidpointAcrossOppositeTwoAxisSlopes() throws {
+        for (a, b) in [(0.65, 0.3), (-0.65, 0.3), (0.45, -0.3), (-0.45, -0.3)] {
+            var original = scene()
+            original.inverseDepthX = a
+            original.inverseDepthY = b
+            let size = original.frame.depth.size
+            for y in 0..<size.height {
+                for x in 0..<size.width {
+                    let rx = (Double(x) + 0.5) / Double(size.width) - 0.5
+                    let ry = (Double(y) + 0.5) / Double(size.height) - 0.5
+                    original.frame.depth.values[y * size.width + x] = Float(1 / (a * rx + b * ry + original.inverseDepthConstant))
+                }
+            }
+            let baseline = try total(measure(original))
+            XCTAssertEqual(baseline.status, .valid)
+            for missing in [["neck_left"], ["neck_right"], ["neck_left", "neck_right"]] {
+                var recovered = original
+                for id in missing { try removeDepth(id, in: &recovered) }
+                let value = try total(measure(recovered))
+                XCTAssertEqual(value.status, .uncertain)
+                XCTAssertEqual(try XCTUnwrap(value.meters), try XCTUnwrap(baseline.meters), accuracy: 0.00001)
+                XCTAssertEqual(try XCTUnwrap(value.points.first).imagePoint.x,
+                               try XCTUnwrap(baseline.points.first).imagePoint.x, accuracy: 0.00001)
+                XCTAssertEqual(try XCTUnwrap(value.points.first).imagePoint.y,
+                               try XCTUnwrap(baseline.points.first).imagePoint.y, accuracy: 0.00001)
+            }
+        }
+    }
+
+    func testCentralPlaneDoesNotExtrapolateToNeckEndpointsWithoutTheirOwnSupport() throws {
+        var scene = scene(tilted: true)
+        let originalDepth = scene.frame.depth.values
+        scene.frame.depth.values = .init(repeating: 0, count: originalDepth.count)
+        let size = scene.frame.depth.size
+        for id in ["neck_center", "hem_center"] {
+            let point = try point(id, in: scene).point
+            let x = Int(point.x * Double(size.width)), y = Int(point.y * Double(size.height))
+            for row in (y - 3)...(y + 3) {
+                for column in (x - 3)...(x + 3) {
+                    scene.frame.depth.values[row * size.width + column] = originalDepth[row * size.width + column]
+                }
+            }
+        }
+        let value = try total(measure(scene))
+        XCTAssertEqual(value.status, .unavailable)
+        XCTAssertEqual(value.failure, .insufficientDepth)
+        XCTAssertNil(value.meters)
+    }
+
+    func testRecoveryFitsEachNeckEndpointRatherThanSharingTheCentralClothPlane() throws {
+        var scene = scene()
+        let size = scene.frame.depth.size
+        for y in 0..<size.height {
+            for x in 0..<size.width {
+                let rx = (Double(x) + 0.5) / Double(size.width) - 0.5
+                let ry = (Double(y) + 0.5) / Double(size.height) - 0.5
+                if x < 124 {
+                    scene.frame.depth.values[y * size.width + x] = Float(1 / (1 / 1.2 + 0.4 * (rx + 0.05) + 0.15 * (ry + 0.2)))
+                } else if x > 132 {
+                    scene.frame.depth.values[y * size.width + x] = Float(1 / (1 / 1.6 - 0.3 * (rx - 0.05) + 0.2 * (ry + 0.2)))
+                }
+            }
+        }
+        let baseline = try total(measure(scene))
+        let expected = Point3D(x: (-0.05 * 1.2 + 0.05 * 1.6) / 2,
+                               y: (-0.2 * 1.2 - 0.2 * 1.6) / 2, z: (1.2 + 1.6) / 2)
+        for id in ["neck_left", "neck_right"] { try removeDepth(id, in: &scene) }
+        let value = try total(measure(scene))
+        let center = try XCTUnwrap(value.points.first)
+        XCTAssertEqual(value.status, .uncertain)
+        XCTAssertEqual(try XCTUnwrap(value.meters), try XCTUnwrap(baseline.meters), accuracy: 0.00001)
+        XCTAssertEqual(center.position.x, expected.x, accuracy: 0.00001)
+        XCTAssertEqual(center.position.y, expected.y, accuracy: 0.00001)
+        XCTAssertEqual(center.position.z, expected.z, accuracy: 0.00001)
+        XCTAssertGreaterThan(abs(center.position.x), 0.005, "The central body plane must not replace either neckline surface")
+    }
+
+    func testLegacyCentralPlaneRecoveryArchiveKeepsItsOriginalOverlay() throws {
+        let scene = scene(tilted: true)
+        var legacy = measure(scene)
+        let originalCenter = try point("neck_center", in: scene).point
+        var center = try XCTUnwrap(legacy.values[5].points.first)
+        center.imagePoint = originalCenter
+        center.position = physicalPoint(originalCenter, in: scene)
+        center.quality.method = .localPlane
+        center.quality.viewingAngleDegrees = nil
+        center.quality.sampleRadiusPixels = nil
+        center.quality.supportDistancePixels = nil
+        center.recoverySourcePositions = nil
+        legacy.algorithmVersion = "lidar-unprojection-1.2.0"
+        legacy.values[5].points[0] = center
+        legacy.values[5].status = .uncertain
+        let restored = try JSONDecoder().decode(GarmentMeasurementResult.self, from: JSONEncoder().encode(legacy))
+        XCTAssertNil(restored.values[5].points[0].recoverySourcePositions)
+        let overlay = scene.landmarks.replacingDerivedImagePoints(with: restored)
+        let shown = try XCTUnwrap(overlay.points.first { $0.id == "neck_center" })
+        XCTAssertTrue(shown.isVisible)
+        XCTAssertEqual(shown.point, originalCenter)
     }
 
     func testSupportedNeckSourcesKeepNormalSpatialAverageOnFlatAndTiltedPlanes() throws {
@@ -226,6 +337,7 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
             XCTAssertEqual(total.status, .unavailable)
             XCTAssertEqual(total.failure, expectedFailure)
             XCTAssertNil(total.meters)
+            XCTAssertTrue(total.pointFailures?.contains(.init(landmarkID: "neck_left", reason: expectedFailure)) == true)
         }
     }
 
@@ -253,6 +365,8 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
             XCTAssertEqual(total.status, .unavailable)
             XCTAssertEqual(total.failure, .insufficientDepth)
             XCTAssertNil(total.meters)
+            XCTAssertEqual(total.pointFailures, [.init(landmarkID: "hem_center", reason: .insufficientDepth)],
+                "A recovered neck must not be listed as a final failed contributor")
         }
     }
 
@@ -291,7 +405,7 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
         let restored = try JSONDecoder().decode(SavedMeasurement.self, from: JSONEncoder().encode(record))
         let restoredTotal = try total(restored.result)
         XCTAssertEqual(restoredTotal.status, .uncertain)
-        XCTAssertEqual(restoredTotal.points.first?.quality.method, .localPlane)
+        XCTAssertEqual(restoredTotal.points.first?.quality.method, .recoveredSpatialAverage)
         XCTAssertEqual(restoredTotal.points.first?.sourceLandmarkIDs, ["neck_left", "neck_right"])
         XCTAssertEqual(restored.landmarks.points.first { $0.id == "neck_center" }?.derivedFrom, ["neck_left", "neck_right"])
         XCTAssertEqual(restored.snapshot.frame.depth.values, scene.frame.depth.values)
@@ -305,7 +419,7 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
         let automatic = AutomaticMeasurement(record: restored)
         let center = try XCTUnwrap(automatic.displayLandmarks.points.first { $0.id == "neck_center" })
         XCTAssertTrue(center.isVisible)
-        XCTAssertEqual(center.point, try point("neck_center", in: scene).point)
+        XCTAssertEqual(center.point, try XCTUnwrap(restoredTotal.points.first).imagePoint)
         XCTAssertTrue(automatic.visibleEditableLandmarks.points.contains { $0.id == "neck_center" && $0.isVisible })
         var manual = try XCTUnwrap(automatic.manualMeasurement(for: "top.totalLength"))
         let manualResult = LiDARMeasurementEngine().measure(frame: manual.snapshot.frame,
@@ -313,7 +427,7 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
         XCTAssertTrue(manual.apply(manualResult, for: manual.calculationRevision))
         XCTAssertTrue(manual.displayLandmarks.points.contains { $0.id == "neck_center" && $0.isVisible && $0.point == center.point })
         XCTAssertEqual(manualResult.values.first?.status, .uncertain)
-        XCTAssertEqual(manualResult.values.first?.points.first?.quality.method, .localPlane)
+        XCTAssertEqual(manualResult.values.first?.points.first?.quality.method, .recoveredSpatialAverage)
     }
 
     func testOverlayRecoveryRequiresMatchingFrameAndActualSupportedMidpointProvenance() throws {
@@ -331,6 +445,8 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
             ("wrong source IDs", { $0.values[5].points[0].sourceLandmarkIDs = ["shoulder_left", "neck_right"] }),
             ("unsupported plane", { $0.values[5].points[0].quality.planeResidualMeters = nil }),
             ("no samples", { $0.values[5].points[0].quality.validSamples = 0 }),
+            ("missing recovered source positions", { $0.values[5].points[0].recoverySourcePositions = nil }),
+            ("wrong recovered midpoint", { $0.values[5].points[0].position.x += 0.01 }),
             ("moved center", { $0.values[5].points[0].imagePoint.x += 0.01 })
         ]
         for (name, edit) in cases {

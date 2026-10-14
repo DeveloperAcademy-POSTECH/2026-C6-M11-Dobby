@@ -13,6 +13,33 @@ nonisolated struct BottomPhotoRecognition: Sendable {
     var durationSeconds: Double
 }
 
+/// Exact-orientation automatic recognition retains failed candidates for a
+/// later successful half-turn's diagnostic record. Only existing recoverable
+/// pose/foreground errors are wrapped; clutter, configuration and cancellation
+/// keep their original error identity and cannot be retried through this type.
+nonisolated struct GarmentForegroundValidationFailure: Error, LocalizedError, Sendable,
+    AutomaticMeasurementFailureClassifying {
+    let originalError: any Error
+    let diagnosisCode: String
+    let attempts: [GarmentPoseValidationAttempt]
+
+    init?(_ error: any Error, attempts: [GarmentPoseValidationAttempt]) {
+        let code: String
+        switch error {
+        case BottomLandmarkError.noDetection: code = "noDetection"
+        case GarmentMaskAssociationError.unmatchedGarment: code = "unmatchedForeground"
+        case GarmentMaskAssociationError.noForeground: code = "noForeground"
+        default: return nil
+        }
+        originalError = error
+        diagnosisCode = code
+        self.attempts = attempts
+    }
+
+    var errorDescription: String? { originalError.localizedDescription }
+    var automaticMeasurementFailureCode: AutomaticMeasurementFailureCode { .providerFailure }
+}
+
 nonisolated enum BottomModelError: Error, LocalizedError, AutomaticMeasurementFailureClassifying {
     case missingResources, invalidImage, imageSizeMismatch, incompatibleModel, bufferCreation
 
@@ -31,6 +58,107 @@ nonisolated enum BottomModelError: Error, LocalizedError, AutomaticMeasurementFa
         case .missingResources, .incompatibleModel: .invalidConfiguration
         case .imageSizeMismatch: .frameMismatch
         default: .providerFailure
+        }
+    }
+}
+
+/// One synchronous selection pipeline, shared by the real adapter and injected
+/// fixture tests. Both closures observe the same frozen RGB image; each direction
+/// runs inference/segmentation at most once. Subject retry reuses those masks.
+nonisolated enum GarmentForegroundPoseSelection {
+    static func recognize(
+        orientation: ImageOrientation, allowsHalfTurn: Bool, recordsRecoverableFailures: Bool,
+        imageSize size: PixelSize, schemaKind: AutomaticGarmentKind?, modelVersion: String,
+        infer: (ImageOrientation) throws -> BottomLandmarkPrediction,
+        masks: (ImageOrientation) throws -> [GarmentMask]
+    ) throws -> GarmentForegroundRecognition {
+        var attempts: [GarmentPoseValidationAttempt] = []
+        var observed: [(orientation: ImageOrientation, prediction: BottomLandmarkPrediction,
+                        masks: [GarmentMask], attemptIndex: Int)] = []
+        var poseRequests = 0, foregroundRequests = 0
+        var result: GarmentForegroundRecognition
+        do {
+            result = try GarmentPoseOrientationRecovery.perform(orientation: orientation,
+                allowsHalfTurn: allowsHalfTurn, strictAttempt: { direction in
+                    let index = attempts.count
+                    attempts.append(.init(orientation: direction))
+                    do {
+                        poseRequests += 1
+                        let prediction = try infer(direction)
+                        attempts[index].rawPoints = prediction.points
+                        try Task.checkCancellation()
+                        foregroundRequests += 1
+                        let masks = try masks(direction)
+                        try Task.checkCancellation()
+                        observed.append((direction, prediction, masks, index))
+                        let selection = try GarmentMaskAssociation.select(masks: masks,
+                            points: prediction.points, imageSize: size)
+                        attempts[index].associationPolicy = selection.policy
+                        attempts[index].pointAssessments = selection.pointAssessments
+                        return foregroundResult(prediction: prediction, selection: selection, modelVersion: modelVersion,
+                            requestedOrientation: orientation, selectedOrientation: direction)
+                    } catch {
+                        attempts[index].failure = diagnosticFailure(error)
+                        throw error
+                    }
+                }, subjectAttempt: { direction in
+                    guard let attempt = observed.last(where: { $0.orientation == direction }),
+                          let kind = schemaKind else { return nil }
+                    do {
+                        // Identify a single subject without letting independent
+                        // segmentation erase or replace a viable original pose.
+                        // Anatomical support is still mandatory; three arbitrary
+                        // foreground points alone cannot identify clothing.
+                        let selection = try GarmentMaskAssociation.select(masks: attempt.masks,
+                            points: attempt.prediction.points, imageSize: size, policy: .subject)
+                        let index = attempt.attemptIndex
+                        attempts[index].associationPolicy = selection.policy
+                        attempts[index].pointAssessments = selection.pointAssessments
+                        let evidence = GarmentKindSelectionPolicy.evaluate(kind: kind,
+                            points: attempt.prediction.points, selection: selection, imageSize: size)
+                        guard evidence.status == .supported else {
+                            attempts[index].failure = "unsupportedPoseStructure"
+                            return nil
+                        }
+                        attempts[index].failure = nil
+                        return foregroundResult(prediction: attempt.prediction, selection: selection, modelVersion: modelVersion,
+                            requestedOrientation: orientation, selectedOrientation: direction, kindEvidence: evidence)
+                    } catch GarmentMaskAssociationError.unmatchedGarment {
+                        return nil
+                    }
+                })
+        } catch {
+            if recordsRecoverableFailures,
+               let diagnosed = GarmentForegroundValidationFailure(error, attempts: attempts) {
+                throw diagnosed
+            }
+            throw error
+        }
+        result.recognition.diagnostics?.poseAttempts = attempts
+        result.poseRequests = poseRequests
+        result.foregroundRequests = foregroundRequests
+        return result
+    }
+
+    private static func foregroundResult(
+        prediction: BottomLandmarkPrediction, selection: GarmentMaskSelection, modelVersion: String,
+        requestedOrientation: ImageOrientation, selectedOrientation: ImageOrientation,
+        kindEvidence: GarmentKindEvidence? = nil
+    ) -> GarmentForegroundRecognition {
+        let diagnostics = GarmentRecognitionDiagnostics(requestedOrientation: requestedOrientation,
+            selectedPoseOrientation: selectedOrientation, associationPolicy: selection.policy,
+            rawPoints: prediction.points, pointAssessments: selection.pointAssessments,
+            poseAttempts: [], kindEvidence: kindEvidence)
+        return .init(recognition: .init(points: prediction.points, detectionConfidence: prediction.detectionConfidence,
+                                       modelVersion: modelVersion, diagnostics: diagnostics), selection: selection)
+    }
+
+    private static func diagnosticFailure(_ error: Error) -> String {
+        switch error {
+        case BottomLandmarkError.noDetection: "noDetection"
+        case GarmentMaskAssociationError.unmatchedGarment: "unmatchedForeground"
+        case GarmentMaskAssociationError.noForeground: "noForeground"
+        default: String(reflecting: error)
         }
     }
 }
@@ -119,7 +247,8 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
         let result = try recognizedForeground(cg, orientation: snapshot.frame.orientation)
         try Task.checkCancellation()
         return GarmentLandmarkSet(sessionID: snapshot.frame.sessionID, frameID: snapshot.frame.frameID,
-            origin: .model, modelVersion: modelVersion, points: result.recognition.points, mask: result.selection.mask)
+            origin: .model, modelVersion: modelVersion, points: result.recognition.points, mask: result.selection.mask,
+            recognitionDiagnostics: result.recognition.diagnostics)
     }
 
     func recognizeImage(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentImageRecognition {
@@ -133,6 +262,11 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
     func recognizeForeground(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentForegroundRecognition {
         try Task.checkCancellation()
         return try recognizedForeground(image, orientation: orientation)
+    }
+
+    func recognizeForegroundExactly(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentForegroundRecognition {
+        try Task.checkCancellation()
+        return try recognizedForeground(image, orientation: orientation, allowsOrientationRecovery: false)
     }
 
     /// EXIF orientation (including mirrored photos) is baked in exactly once.
@@ -166,45 +300,24 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
             strictAttempt: { try infer(image, orientation: $0) })
     }
 
-    private func recognizedForeground(_ image: CGImage, orientation: ImageOrientation) throws -> GarmentForegroundRecognition {
-        var attempts: [(prediction: BottomLandmarkPrediction, masks: [GarmentMask])] = []
-        var poseRequests = 0, foregroundRequests = 0
-        let size = PixelSize(width: image.width, height: image.height)
-        var result = try GarmentPoseOrientationRecovery.perform(orientation: orientation,
-            allowsHalfTurn: allowsHalfTurnRecovery, strictAttempt: { direction in
-                poseRequests += 1
-                let prediction = try infer(image, orientation: direction)
-                try Task.checkCancellation()
-                foregroundRequests += 1
-                let masks = try foreground.masks(for: image, orientation: direction)
-                try Task.checkCancellation()
-                attempts.append((prediction, masks))
-                let selection = try GarmentMaskAssociation.select(masks: masks, points: prediction.points, imageSize: size)
-                return foregroundResult(prediction: prediction, selection: selection)
-            }, partialResult: {
-                // Prefer a fully associated half-turn before accepting a partial
-                // upright top. Reuse the exact masks already generated by Vision.
-                for attempt in attempts {
-                    do {
-                        let selection = try GarmentMaskAssociation.select(masks: attempt.masks,
-                            points: attempt.prediction.points, imageSize: size, policy: .partialTop)
-                        return foregroundResult(prediction: attempt.prediction, selection: selection)
-                    } catch GarmentMaskAssociationError.unmatchedGarment {
-                        continue
-                    }
-                }
-                return nil
-            })
-        result.poseRequests = poseRequests
-        result.foregroundRequests = foregroundRequests
-        return result
+    private func recognizedForeground(_ image: CGImage, orientation: ImageOrientation,
+                                     allowsOrientationRecovery: Bool? = nil) throws -> GarmentForegroundRecognition {
+        try GarmentForegroundPoseSelection.recognize(orientation: orientation,
+            allowsHalfTurn: allowsOrientationRecovery ?? allowsHalfTurnRecovery,
+            recordsRecoverableFailures: allowsOrientationRecovery == false,
+            imageSize: .init(width: image.width, height: image.height),
+            schemaKind: canonicalSchemaKind, modelVersion: modelVersion,
+            infer: { try infer(image, orientation: $0) },
+            masks: { try foreground.masks(for: image, orientation: $0) })
     }
 
-    private func foregroundResult(prediction: BottomLandmarkPrediction,
-                                  selection: GarmentMaskSelection) -> GarmentForegroundRecognition {
-        let points = allowsHalfTurnRecovery ? selection.validatedPoints(prediction.points) : prediction.points
-        return .init(recognition: .init(points: points, detectionConfidence: prediction.detectionConfidence,
-                                       modelVersion: modelVersion), selection: selection)
+    private var canonicalSchemaKind: AutomaticGarmentKind? {
+        if schema.name == "top", schema.keypoints == TopLandmarkSchema.expectedKeypoints { return .top }
+        if schema.name == "bottom7", schema.keypoints == [
+            "waist_left", "waist_right", "crotch", "hem_left_outer", "hem_left_inner",
+            "hem_right_inner", "hem_right_outer"
+        ] { return .bottoms }
+        return nil
     }
 
     private func rawImage(_ data: Data) throws -> CGImage {

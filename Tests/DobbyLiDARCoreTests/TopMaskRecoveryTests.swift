@@ -24,7 +24,7 @@ final class TopMaskRecoveryTests: XCTestCase {
                      derivedFrom: ["neck_left", "neck_right"])]
     }
 
-    func testPartialTopKeepsExactMaskButRejectsUnassociatedPointsAndTheirDerivedPoints() throws {
+    func testPartialTopKeepsExactMaskAndPreservesUnassociatedAndDerivedObservations() throws {
         let original = pointsWithThreeOutliers()
         XCTAssertThrowsError(try GarmentMaskAssociation.select(masks: [mask()], points: original, imageSize: size)) {
             XCTAssertEqual($0 as? GarmentMaskAssociationError, .unmatchedGarment)
@@ -37,11 +37,15 @@ final class TopMaskRecoveryTests: XCTestCase {
         XCTAssertEqual(validated.map(\.point), original.map(\.point))
         XCTAssertEqual(validated.map(\.confidence), original.map(\.confidence))
         XCTAssertEqual(validated.map(\.derivedFrom), original.map(\.derivedFrom))
-        XCTAssertEqual(Set(validated.filter { !$0.isVisible }.map(\.id)),
-            Set(["neck_left", "neck_center", "sleeve_end_left", "sleeve_end_right"]))
+        XCTAssertEqual(validated.map(\.isVisible), original.map(\.isVisible))
+        let assessments = Dictionary(uniqueKeysWithValues: selection.pointAssessments.map { ($0.landmarkID, $0.status) })
+        for id in ["neck_left", "sleeve_end_left", "sleeve_end_right"] {
+            XCTAssertEqual(assessments[id], .outsideMask)
+        }
+        XCTAssertEqual(assessments["neck_center"], .derived)
     }
 
-    func testPartialTopOnlyInvalidatesDependentMeasurements() throws {
+    func testPartialTopRetainsRawPointsWhileUnsupportedDepthOnlyInvalidatesDependentMeasurements() throws {
         let selection = try GarmentMaskAssociation.select(masks: [mask()], points: pointsWithThreeOutliers(),
             imageSize: size, policy: .partialTop)
         let frame = MeasurementFrame(sessionID: UUID(), frameID: UUID(), timestamp: 1, capturedAt: .now,
@@ -57,7 +61,7 @@ final class TopMaskRecoveryTests: XCTestCase {
         }
         for id in ["top.totalLength", "top.sleeveLengthLeft", "top.sleeveLengthRight"] {
             XCTAssertEqual(result.values.first { $0.id == id }?.status, .unavailable)
-            XCTAssertEqual(result.values.first { $0.id == id }?.failure, .occludedLandmark)
+            XCTAssertEqual(result.values.first { $0.id == id }?.failure, .insufficientDepth)
         }
     }
 

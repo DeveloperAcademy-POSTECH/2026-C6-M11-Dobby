@@ -125,6 +125,17 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
         catch { throw translated(error) }
     }
 
+    /// Automatic classification owns its bounded orientation retry. Do not run
+    /// a second pose direction behind the classifier's chosen direction.
+    func recognizeForegroundExactly(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentForegroundRecognition {
+        do {
+            var result = try await adapter.recognizeForegroundExactly(image, orientation: orientation)
+            result.recognition.garmentKind = kind
+            return result
+        }
+        catch { throw translated(error) }
+    }
+
     func recognizePhoto(_ data: Data) async throws -> GarmentPhotoRecognition {
         do { return try await adapter.recognizePhoto(data) }
         catch { throw translated(error) }

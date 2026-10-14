@@ -54,6 +54,76 @@ final class GarmentMaskAssociationTests: XCTestCase {
         XCTAssertEqual(result.mask, pants())
     }
 
+    func testSubjectAssociationPreservesPointsAndReportsEveryOriginalMaskAssessment() throws {
+        let mask = pants()
+        let original = points() + [
+            .init(id: "outside", point: .init(x: 0.02, y: 0.95), confidence: 0.9),
+            .init(id: "hidden", point: .init(x: 0.3, y: 0.2), confidence: 0.9, isVisible: false),
+            .init(id: "offImage", point: .init(x: 1, y: 0.5), confidence: 0.9),
+            .init(id: "lowConfidence", point: .init(x: 0.3, y: 0.2), confidence: 0.49),
+            .init(id: "derived", point: .init(x: 0.5, y: 0.2), confidence: 0.9,
+                  derivedFrom: ["waist_left", "waist_right"])
+        ]
+        let selection = try GarmentMaskAssociation.select(masks: [mask], points: original,
+            imageSize: size, policy: .subject)
+        let assessments = Dictionary(uniqueKeysWithValues: selection.pointAssessments.map { ($0.landmarkID, $0.status) })
+        XCTAssertEqual(selection.policy, .subject)
+        XCTAssertEqual(selection.pointAssessments.map(\.landmarkID), original.map(\.id))
+        XCTAssertEqual(assessments["waist_left"], .associated)
+        XCTAssertEqual(assessments["outside"], .outsideMask)
+        XCTAssertEqual(assessments["hidden"], .notVisible)
+        XCTAssertEqual(assessments["offImage"], .outOfBounds)
+        XCTAssertEqual(assessments["lowConfidence"], .associated,
+                       "Mask membership must not replace the separate model confidence.")
+        XCTAssertEqual(assessments["derived"], .derived)
+        XCTAssertEqual(selection.mask, mask)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        XCTAssertEqual(try encoder.encode(selection.validatedPoints(original)), try encoder.encode(original))
+        XCTAssertEqual(try JSONDecoder().decode([LandmarkMaskAssessment].self,
+            from: encoder.encode(selection.pointAssessments)), selection.pointAssessments)
+        XCTAssertEqual(try JSONDecoder().decode(GarmentMaskAssociationPolicy.self,
+            from: encoder.encode(selection.policy)), .subject)
+    }
+
+    func testSubjectAssociationDoesNotRequireSeventyFivePercentOfWholePose() throws {
+        let outliers = (0..<4).map { index in
+            GarmentLandmark(id: "unassociated\(index)", point: .init(x: 0.02, y: 0.92), confidence: 0.9)
+        }
+        let original = points() + outliers
+        XCTAssertThrowsError(try GarmentMaskAssociation.select(masks: [pants()], points: original,
+            imageSize: size, policy: .strict)) {
+            XCTAssertEqual($0 as? GarmentMaskAssociationError, .unmatchedGarment)
+        }
+        let selection = try GarmentMaskAssociation.select(masks: [pants()], points: original,
+            imageSize: size, policy: .subject)
+        XCTAssertEqual(selection.matchedLandmarkCount, 7)
+        XCTAssertEqual(selection.observedLandmarkCount, 11)
+        XCTAssertEqual(selection.validatedPoints(original).map(\.point), original.map(\.point))
+        XCTAssertTrue(selection.validatedPoints(original).allSatisfy(\.isVisible))
+    }
+
+    func testSubjectPolicyStillRejectsMultipleObjectsWeakSemanticSupportAndClusteredPoints() {
+        XCTAssertThrowsError(try GarmentMaskAssociation.select(masks: [pants(), pants()], points: points(),
+            imageSize: size, policy: .subject)) {
+            XCTAssertEqual($0 as? GarmentMaskAssociationError, .multipleForegrounds)
+        }
+        let weak = points().map { point -> GarmentLandmark in
+            var result = point; result.confidence = 0.49; return result
+        }
+        XCTAssertThrowsError(try GarmentMaskAssociation.select(masks: [pants()], points: weak,
+            imageSize: size, policy: .subject)) {
+            XCTAssertEqual($0 as? GarmentMaskAssociationError, .unmatchedGarment)
+        }
+        let clustered = points().map { point -> GarmentLandmark in
+            var result = point; result.point = .init(x: 0.3, y: 0.2); return result
+        }
+        XCTAssertThrowsError(try GarmentMaskAssociation.select(masks: [pants()], points: clustered,
+            imageSize: size, policy: .subject)) {
+            XCTAssertEqual($0 as? GarmentMaskAssociationError, .unmatchedGarment)
+        }
+    }
+
     func testBoundaryMatchingToleranceDoesNotDilateTheMeasurementMask() throws {
         var landmarks = points()
         landmarks[0].point.x = 0.19

@@ -13,6 +13,65 @@ final class GarmentPoseOrientationRecoveryTests: XCTestCase {
         XCTAssertEqual(partialCalls, 0)
     }
 
+    func testViablePrimarySubjectKeepsItsPointsBeforeTryingHalfTurn() throws {
+        let raw = [GarmentLandmark(id: "hem_center", point: .init(x: 0.42, y: 0.81), confidence: 0.91)]
+        var calls: [String] = []
+        let result = try GarmentPoseOrientationRecovery.perform(orientation: .right, allowsHalfTurn: true,
+            strictAttempt: { direction -> [GarmentLandmark] in
+                calls.append("strict.\(direction.rawValue)")
+                throw GarmentMaskAssociationError.unmatchedGarment
+            }, subjectAttempt: { direction in
+                calls.append("subject.\(direction.rawValue)")
+                return raw
+            }, partialResult: { calls.append("legacyPartial"); return [] })
+        XCTAssertEqual(calls, ["strict.right", "subject.right"])
+        XCTAssertEqual(result.map(\.point), raw.map(\.point))
+        XCTAssertEqual(result.map(\.confidence), raw.map(\.confidence))
+        XCTAssertEqual(result.map(\.isVisible), raw.map(\.isVisible))
+    }
+
+    func testExactOrientationCanUseSameOrientationSubjectWithoutRotation() throws {
+        var calls: [String] = []
+        let result = try GarmentPoseOrientationRecovery.perform(orientation: .left, allowsHalfTurn: false,
+            strictAttempt: { direction -> ImageOrientation in
+                calls.append("strict.\(direction.rawValue)")
+                throw GarmentMaskAssociationError.unmatchedGarment
+            }, subjectAttempt: { direction in calls.append("subject.\(direction.rawValue)"); return direction })
+        XCTAssertEqual(result, .left)
+        XCTAssertEqual(calls, ["strict.left", "subject.left"])
+    }
+
+    func testUnusablePrimarySubjectAllowsOnlyOneHalfTurn() throws {
+        var calls: [String] = []
+        let result = try GarmentPoseOrientationRecovery.perform(orientation: .up, allowsHalfTurn: true,
+            strictAttempt: { direction -> String in
+                calls.append("strict.\(direction.rawValue)")
+                throw GarmentMaskAssociationError.unmatchedGarment
+            }, subjectAttempt: { direction in
+                calls.append("subject.\(direction.rawValue)")
+                return direction == .down ? "rotatedSubject" : nil
+            })
+        XCTAssertEqual(result, "rotatedSubject")
+        XCTAssertEqual(calls, ["strict.up", "subject.up", "strict.down", "subject.down"])
+    }
+
+    func testHardFailureAndCancelledSubjectCannotBeBypassedByRotation() {
+        var subjectCalls = 0
+        XCTAssertThrowsError(try GarmentPoseOrientationRecovery.perform(orientation: .up, allowsHalfTurn: true,
+            strictAttempt: { _ -> String in throw GarmentMaskAssociationError.multipleForegrounds },
+            subjectAttempt: { _ in subjectCalls += 1; return "unsafe" })) {
+            XCTAssertEqual($0 as? GarmentMaskAssociationError, .multipleForegrounds)
+        }
+        XCTAssertEqual(subjectCalls, 0)
+        var strictCalls = 0
+        XCTAssertThrowsError(try GarmentPoseOrientationRecovery.perform(orientation: .up, allowsHalfTurn: true,
+            strictAttempt: { _ -> String in strictCalls += 1; throw GarmentMaskAssociationError.unmatchedGarment },
+            subjectAttempt: { _ -> String? in throw CancellationError() })) {
+            XCTAssertTrue($0 is CancellationError)
+        }
+        XCTAssertEqual(strictCalls, 1)
+    }
+
     func testRecoverableFailureTriesExactlyOneHalfTurnBeforePartialCandidates() throws {
         for error in [BottomLandmarkError.noDetection as Error, GarmentMaskAssociationError.unmatchedGarment] {
             var attempts: [ImageOrientation] = []

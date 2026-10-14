@@ -448,7 +448,9 @@ struct GarmentCaptureFlowView: View {
                 + "\n\n다시 촬영하거나 이 사진에서 점을 직접 확인할 수 있어요."
         case .measurement:
             errorTitle = "길이를 계산하지 못했어요"
-            errorMessage = "사진과 측정점을 확보했지만 깊이를 이용한 길이 계산을 마치지 못했어요. 사진에서 점을 확인하거나 거리와 각도를 바꿔 다시 촬영해 주세요."
+            errorMessage = "사진과 측정점은 유지돼요.\n\n"
+                + (failure?.message ?? error.localizedDescription)
+                + "\n\n사진에서 점을 확인하거나 거리와 각도를 바꿔 다시 촬영해 주세요."
         default:
             errorTitle = "사진을 촬영하지 못했어요"
             errorMessage = error.localizedDescription

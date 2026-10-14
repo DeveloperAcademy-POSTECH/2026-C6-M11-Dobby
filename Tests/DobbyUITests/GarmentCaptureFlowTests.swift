@@ -729,13 +729,15 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let actual = Set(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "garmentMeasurementLabel_")).allElementsBoundByIndex.map(\.identifier))
         XCTAssertEqual(actual, Set(selected.map { "garmentMeasurementLabel_" + $0 }), file: file, line: line)
-        let unusedPoints = top ? ["sleeve_end_right", "hem_left", "hem_right"] : ["hem_right_inner", "hem_right_outer"]
+        // The current total-length editor exposes the depth-backed neck centre,
+        // including recovery, rather than its hidden model contributors.
+        let unusedPoints = top ? ["sleeve_end_right", "hem_left", "hem_right", "neck_left", "neck_right"] : ["hem_right_inner", "hem_right_outer"]
         for id in unusedPoints {
             XCTAssertFalse(app.buttons["garmentMeasurementPoint_" + id].exists,
                            "The unused side must not show an editable handle: \(id)", file: file, line: line)
         }
         let selectedPoints = top
-            ? ["sleeve_end_left", "shoulder_right", "hem_center", "neck_left", "neck_right", "armpit_left", "armpit_right"]
+            ? ["sleeve_end_left", "shoulder_right", "hem_center", "neck_center", "armpit_left", "armpit_right"]
             : ["hem_left_inner", "hem_left_outer", "waist_right"]
         for id in selectedPoints {
             XCTAssertTrue(app.buttons["garmentMeasurementPoint_" + id].exists,
