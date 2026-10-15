@@ -34,6 +34,8 @@ struct GarmentCaptureFlowView: View {
     @State private var processingImage: UIImage?
     @State private var errorTitle = "촬영을 완료하지 못했어요"
     @State private var manualRecovery: ManualMeasurement?
+    @State private var previewControls = CameraControlState(sessionID: UUID())
+    @State private var previewFocusVisible = false
 
     init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false,
          onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
@@ -110,6 +112,7 @@ struct GarmentCaptureFlowView: View {
             else { await camera.start() }
         }
         .onChange(of: orientation) { _, value in
+            clearPreviewFocus()
             // Before the snapshot, rotation invalidates an in-flight shutter.
             // Once frozen, inference keeps that photo's original orientation.
             let interruptedCapture = isCapturing && processingSnapshot == nil
@@ -122,10 +125,16 @@ struct GarmentCaptureFlowView: View {
             }
         }
         .onChange(of: scenePhase) { _, value in
-            if value != .active { cancel(); camera.stop(); previewRecognized = false }
+            if value != .active { clearPreviewFocus(); cancel(); camera.stop(); previewRecognized = false }
             else if !isPreview, model == nil { restartCamera() }
         }
-        .onDisappear { cancel(); camera.stop() }
+        .onDisappear { clearPreviewFocus(); cancel(); camera.stop() }
+        .task(id: previewControls.focusRequestID) {
+            guard isPreview, let requestID = previewControls.focusRequestID else { return }
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            guard !Task.isCancelled, previewControls.focusRequestID == requestID else { return }
+            previewFocusVisible = false
+        }
         .task(id: processingSnapshot?.frame.frameID) {
             guard let snapshot = processingSnapshot else { return }
             let image = await SnapshotPresentation.thumbnail(for: snapshot, maximumDimension: 1024)
@@ -167,7 +176,7 @@ struct GarmentCaptureFlowView: View {
                 // composition on phones without displacing the native bars.
                 let topGap: CGFloat = 15
                 let photoHeight = min(geometry.size.width * 560 / 402,
-                    max(180, geometry.size.height - topGap - 138))
+                    max(180, geometry.size.height - topGap - 232))
                 VStack(spacing: 0) {
                     cameraImage.frame(height: photoHeight)
                     captureControls.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -193,20 +202,50 @@ struct GarmentCaptureFlowView: View {
             } else if isPreview, let previewModel, let image = SnapshotPresentation.image(for: previewModel.snapshot) {
                 GeometryReader { geometry in
                     let aspect = SnapshotPresentation.aspectRatio(for: previewModel.snapshot)
-                    let width = max(geometry.size.width, geometry.size.height * aspect)
+                    let factor: CGFloat = previewControls.selectedZoom == .double ? 2 : 1
+                    let width = max(geometry.size.width, geometry.size.height * aspect) * factor
                     let height = width / aspect
+                    let transform = CameraAffineTransform(a: Double(width / geometry.size.width), b: 0, c: 0,
+                        d: Double(height / geometry.size.height),
+                        tx: Double((geometry.size.width - width) / (2 * geometry.size.width)),
+                        ty: Double((geometry.size.height - height) / (2 * geometry.size.height)))
                     ZStack {
-                        Image(uiImage: image).resizable()
-                        if previewRecognized, let mask = previewModel.landmarks.mask {
-                            GarmentSilhouetteOverlay(mask: mask, sourceID: previewModel.snapshot.frame.sessionID,
-                                forceReduceMotion: presentationReduceMotion)
+                        ZStack {
+                            Image(uiImage: image).resizable()
+                            if previewRecognized, let mask = previewModel.landmarks.mask {
+                                GarmentSilhouetteOverlay(mask: mask, sourceID: previewModel.snapshot.frame.sessionID,
+                                    forceReduceMotion: presentationReduceMotion)
+                            }
+                        }
+                        .frame(width: width, height: height)
+                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                        if previewFocusVisible, previewControls.focusStatus == .accepted,
+                           let point = previewControls.focusPoint,
+                           let displayed = CameraPreviewGeometry.displayPoint(sensorPoint: point,
+                             viewportWidth: Double(geometry.size.width), viewportHeight: Double(geometry.size.height),
+                             displayTransform: transform) {
+                            SyntheticCameraFocusIndicator(point: CGPoint(x: displayed.x, y: displayed.y))
                         }
                     }
-                    .frame(width: width, height: height)
-                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                    .contentShape(Rectangle())
+                    .gesture(SpatialTapGesture().onEnded { event in
+                        guard canUseCameraControls,
+                              let point = CameraPreviewGeometry.sensorPoint(
+                                viewPoint: .init(x: Double(event.location.x), y: Double(event.location.y)),
+                                viewportWidth: Double(geometry.size.width), viewportHeight: Double(geometry.size.height),
+                                displayTransform: transform) else { return }
+                        // This deliberately exercises presentation without invoking autofocus hardware.
+                        previewControls.focusPoint = point
+                        previewControls.focusRequestID = UUID()
+                        previewControls.focusStatus = .accepted
+                        previewFocusVisible = true
+                    })
+                    .onChange(of: geometry.size) { _, _ in clearPreviewFocus() }
                 }.clipped()
             } else if !isPreview, camera.isSupported, loadingError == nil {
-                CameraPreview(session: camera.session, readiness: camera.liveReadiness, orientation: $orientation)
+                ZoomedCameraPreview(session: camera.session, readiness: camera.liveReadiness, orientation: $orientation,
+                    controlState: camera.cameraControls,
+                    focusEnabled: canTakePhoto && camera.cameraCapabilities.focusSupported, onFocus: camera.requestFocus)
             } else {
                 Rectangle().fill(.black)
             }
@@ -226,7 +265,7 @@ struct GarmentCaptureFlowView: View {
                     processingProgress.padding(.top, 12)
                 }
                 if isPreview {
-                    Text("화면 미리보기 · 실제 측정 아님")
+                    Text("화면 미리보기 · 합성 카메라 조절 · 실제 측정 아님")
                         .font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 7)
                         .background(.black.opacity(0.65), in: Capsule()).padding(.top, 12)
                         .accessibilityIdentifier("garmentPreviewProvenance")
@@ -279,19 +318,64 @@ struct GarmentCaptureFlowView: View {
     }
 
     private var captureControls: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
+            CameraControlPanel(capabilities: controlCapabilities, state: controlState,
+                isEnabled: canUseCameraControls, errorMessage: isPreview ? nil : camera.controlError,
+                onExposure: adjustExposure, onResetExposure: resetExposure, onZoom: changeZoom)
             GarmentShutterButton(isEnabled: canTakePhoto,
                 isCapturing: isCapturing, action: takePhoto, forceReduceMotion: presentationReduceMotion)
+                .accessibilityHint(isPreview && previewControls.selectedZoom == .double
+                    ? "합성 촬영 결과는 1배에서 확인해요. 1배를 선택하면 촬영할 수 있어요"
+                    : "인식을 기다리지 않고 사진을 촬영한 뒤 옷 종류와 길이를 확인합니다")
             if isPreview, !isCapturing, !previewRecognized {
                 Button("윤곽 미리보기") { previewRecognized = true }
                     .font(.caption).accessibilityIdentifier("previewRecognizeGarment")
             }
-        }.padding(.horizontal, 12).padding(.top, 34)
+        }.padding(.horizontal, 12).padding(.top, 8)
     }
 
-    /// Only camera availability controls the shutter. The captured RGB/depth
-    /// must still pass the model and measurement checks before a result.
+    private var controlCapabilities: CameraControlCapabilities {
+        isPreview ? .init(focusSupported: true, exposureRange: .init(minimum: -2, maximum: 2),
+                          availableZooms: [.standard, .double]) : camera.cameraCapabilities
+    }
+
+    private var controlState: CameraControlState { isPreview ? previewControls : camera.cameraControls }
+
+    private func adjustExposure(_ value: Double) {
+        guard canUseCameraControls else { return }
+        if isPreview, let clamped = controlCapabilities.exposureRange?.clamp(value) {
+            previewControls.requestedExposureBias = clamped
+            previewControls.exposureBias = clamped
+            previewControls.settingsRevision &+= 1
+        } else if !isPreview { camera.setExposureBias(value) }
+    }
+
+    private func resetExposure() {
+        if isPreview { adjustExposure(0) } else { camera.resetExposure() }
+    }
+
+    private func changeZoom(_ zoom: CameraZoom) {
+        guard canUseCameraControls, controlCapabilities.availableZooms.contains(zoom) else { return }
+        clearPreviewFocus()
+        if isPreview {
+            previewControls.selectedZoom = zoom
+            previewControls.settingsRevision &+= 1
+        } else { camera.setZoom(zoom) }
+    }
+
+    private func clearPreviewFocus() {
+        previewFocusVisible = false
+        previewControls.focusPoint = nil
+        previewControls.focusRequestID = nil
+        previewControls.focusStatus = .idle
+    }
+
+    /// The physical shutter depends only on camera availability. The synthetic
+    /// control fixture cannot claim a cropped 2x capture from its fixed 1x inputs.
     private var canTakePhoto: Bool {
+        canUseCameraControls && (!isPreview || previewControls.selectedZoom != .double)
+    }
+    private var canUseCameraControls: Bool {
         guard !isCapturing else { return false }
         if isPreview { return previewModel != nil }
         return service != nil && camera.isRunning && camera.state == .ready
@@ -313,6 +397,7 @@ struct GarmentCaptureFlowView: View {
             default: return "사진과 깊이를 확보하고 있어요. 잠시만 멈춰주세요"
             }
         }
+        if isPreview, previewControls.selectedZoom == .double { return "2× 조절 미리보기 · 합성 촬영은 1×에서 확인해요" }
         if silhouetteVisible { return "윤곽 미리보기 · 촬영 후 측정해요" }
         if canTakePhoto { return "옷이 잘리지 않게 카메라 안에 넣어주세요" }
         if isPreview { return "옷 한 벌 전체가 보이도록 평평하게 펼쳐주세요" }
@@ -356,6 +441,7 @@ struct GarmentCaptureFlowView: View {
 
     private func takePhoto() {
         guard canTakePhoto, !isCapturing else { return }
+        clearPreviewFocus()
         if isPreview, let previewModel { takePreviewPhoto(previewModel); return }
         guard let service else { return }
         let token = UUID()
@@ -493,6 +579,7 @@ struct GarmentCaptureFlowView: View {
 
     private func retake() {
         cancel()
+        clearPreviewFocus()
         model = nil
         recordingError = nil
         previewRecognized = false

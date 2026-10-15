@@ -19,7 +19,10 @@ struct LiDARCameraView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                CameraPreview(session: provider.session, readiness: provider.liveReadiness, orientation: $orientation).ignoresSafeArea()
+                ZoomedCameraPreview(session: provider.session, readiness: provider.liveReadiness, orientation: $orientation,
+                    controlState: provider.cameraControls,
+                    focusEnabled: provider.isRunning && !takingPhoto && provider.cameraCapabilities.focusSupported,
+                    onFocus: provider.requestFocus).ignoresSafeArea()
                 if geometry.size.height < 500 {
                     HStack(spacing: 24) {
                         VStack(spacing: 12) {
@@ -28,7 +31,7 @@ struct LiDARCameraView: View {
                             Spacer(minLength: 0)
                         }.frame(maxWidth: 400)
                         Spacer(minLength: 0)
-                        shutterButton
+                        VStack(spacing: 8) { cameraControlPanel; shutterButton }.frame(width: 180)
                     }.padding(20)
                 } else {
                     VStack(spacing: 16) {
@@ -37,6 +40,7 @@ struct LiDARCameraView: View {
                         Spacer(minLength: 0)
                         Text("소매와 밑단까지 모두 보이게 펼쳐 주세요")
                             .font(.subheadline).padding(12).background(.black.opacity(0.55), in: Capsule())
+                        cameraControlPanel
                         shutterButton
                     }.padding(24)
                 }
@@ -60,8 +64,15 @@ struct LiDARCameraView: View {
                 Image(systemName: "xmark").font(.title3).padding(12).background(.black.opacity(0.5), in: Circle())
             }.accessibilityLabel("촬영 닫기")
             Spacer()
-            Text("LiDAR · 기본 화각").font(.subheadline.bold()).padding(10).background(.black.opacity(0.5), in: Capsule())
+            Text("LiDAR · \(provider.cameraControls.selectedZoom.label)").font(.subheadline.bold()).padding(10).background(.black.opacity(0.5), in: Capsule())
         }
+    }
+
+    private var cameraControlPanel: some View {
+        CameraControlPanel(capabilities: provider.cameraCapabilities, state: provider.cameraControls,
+            isEnabled: provider.isRunning && !takingPhoto, errorMessage: provider.controlError,
+            onExposure: provider.setExposureBias, onResetExposure: provider.resetExposure, onZoom: provider.setZoom)
+            .padding(.horizontal, 8).background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
     }
 
     private var readinessCard: some View {
@@ -156,6 +167,9 @@ struct CameraPreview: UIViewRepresentable {
     let session: ARSession
     let readiness: LiveCaptureReadiness
     @Binding var orientation: ImageOrientation
+    var controlState: CameraControlState? = nil
+    var focusEnabled = false
+    var onFocus: ((ImagePoint) -> Void)? = nil
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView(frame: .zero)
         view.session = session
@@ -163,38 +177,93 @@ struct CameraPreview: UIViewRepresentable {
         view.automaticallyUpdatesLighting = false
         view.preferredFramesPerSecond = 60
         view.onOrientation = { orientation = $0 }
+        view.onFocus = onFocus
+        view.focusEnabled = focusEnabled
+        view.controlState = controlState
         return view
     }
     func updateUIView(_ view: PreviewView, context: Context) {
         view.onOrientation = { orientation = $0 }
         view.readiness = readiness
+        view.onFocus = onFocus
+        view.focusEnabled = focusEnabled
+        view.controlState = controlState
         view.updateOutline()
+        view.updateFocus()
     }
 
     static func dismantleUIView(_ view: PreviewView, coordinator: ()) {
         view.onOrientation = nil
+        view.onFocus = nil
         view.tearDownOutline()
     }
 
     final class PreviewView: ARSCNView {
         var onOrientation: ((ImageOrientation) -> Void)?
+        var onFocus: ((ImagePoint) -> Void)?
+        var focusEnabled = false
+        var controlState: CameraControlState? {
+            didSet {
+                if oldValue?.sessionID != controlState?.sessionID || oldValue?.selectedZoom != controlState?.selectedZoom {
+                    focusRenderer.clear()
+                }
+            }
+        }
         private var lastOrientation: UIInterfaceOrientation?
+        private var lastBoundsSize: CGSize?
         var readiness = LiveCaptureReadiness.waiting
         private let fallbackOutlineEpoch = UUID()
         private lazy var outlineRenderer = GarmentSilhouetteLayerRenderer(containerLayer: layer)
+        private lazy var focusRenderer = CameraFocusIndicatorRenderer(containerView: self)
+        private lazy var focusTap = UITapGestureRecognizer(target: self, action: #selector(focusTapped(_:)))
         private var reduceMotionObserver: NSObjectProtocol?
 
         override init(frame: CGRect, options: [String: Any]? = nil) {
             super.init(frame: frame, options: options)
             clipsToBounds = true
+            focusTap.cancelsTouchesInView = false
+            focusTap.delaysTouchesEnded = false
+            addGestureRecognizer(focusTap)
             reduceMotionObserver = NotificationCenter.default.addObserver(
                 forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
                 object: nil, queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.updateOutline() }
+                Task { @MainActor [weak self] in self?.updateOutline(); self?.updateFocus() }
             }
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        @objc private func focusTapped(_ recognizer: UITapGestureRecognizer) {
+            guard focusEnabled, let frame = session.currentFrame,
+                  let orientation = window?.windowScene?.effectiveGeometry.interfaceOrientation else { return }
+            let location = recognizer.location(in: self)
+            let transform = frame.displayTransform(for: orientation, viewportSize: bounds.size)
+            guard let point = CameraPreviewGeometry.sensorPoint(
+                viewPoint: .init(x: Double(location.x - bounds.minX), y: Double(location.y - bounds.minY)),
+                viewportWidth: Double(bounds.width), viewportHeight: Double(bounds.height),
+                displayTransform: Self.affine(transform)) else { return }
+            onFocus?(point)
+        }
+
+        func updateFocus() {
+            guard focusEnabled, let state = controlState, state.focusStatus == .accepted,
+                  let point = state.focusPoint, let requestID = state.focusRequestID,
+                  let frame = session.currentFrame,
+                  let orientation = window?.windowScene?.effectiveGeometry.interfaceOrientation,
+                  let displayed = CameraPreviewGeometry.displayPoint(sensorPoint: point,
+                    viewportWidth: Double(bounds.width), viewportHeight: Double(bounds.height),
+                    displayTransform: Self.affine(frame.displayTransform(for: orientation, viewportSize: bounds.size))) else {
+                focusRenderer.clear()
+                return
+            }
+            focusRenderer.update(point: CGPoint(x: displayed.x + Double(bounds.minX), y: displayed.y + Double(bounds.minY)),
+                requestID: requestID, reduceMotion: UIAccessibility.isReduceMotionEnabled)
+        }
+
+        private static func affine(_ transform: CGAffineTransform) -> CameraAffineTransform {
+            .init(a: Double(transform.a), b: Double(transform.b), c: Double(transform.c), d: Double(transform.d),
+                  tx: Double(transform.tx), ty: Double(transform.ty))
+        }
 
         func updateOutline() {
             guard let mask = readiness.silhouette,
@@ -223,6 +292,8 @@ struct CameraPreview: UIViewRepresentable {
 
         func tearDownOutline() {
             outlineRenderer.tearDown()
+            focusRenderer.tearDown()
+            removeGestureRecognizer(focusTap)
             if let reduceMotionObserver {
                 NotificationCenter.default.removeObserver(reduceMotionObserver)
                 self.reduceMotionObserver = nil
@@ -231,21 +302,24 @@ struct CameraPreview: UIViewRepresentable {
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            if window == nil { outlineRenderer.clear() }
-            else { updateOutline() }
+            if window == nil { outlineRenderer.clear(); focusRenderer.clear() }
+            else { updateOutline(); updateFocus() }
         }
 
         override func layoutSubviews() {
             super.layoutSubviews()
+            if lastBoundsSize != bounds.size { focusRenderer.clear(); lastBoundsSize = bounds.size }
             guard let value = window?.windowScene?.effectiveGeometry.interfaceOrientation else {
                 outlineRenderer.clear()
+                focusRenderer.clear()
                 return
             }
-            guard value != lastOrientation else { updateOutline(); return }
+            guard value != lastOrientation else { updateOutline(); updateFocus(); return }
             lastOrientation = value
             // A viewport/rotation change must not morph a previous outline into
             // the new coordinate system while fresh recognition is pending.
             outlineRenderer.clear()
+            focusRenderer.clear()
             let mapped = Self.imageOrientation(for: value)
             DispatchQueue.main.async { [weak self] in self?.onOrientation?(mapped) }
         }
