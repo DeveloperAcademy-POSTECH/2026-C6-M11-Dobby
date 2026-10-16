@@ -64,6 +64,9 @@ nonisolated struct CaptureSnapshot: Codable, Sendable {
     /// to improve physical accuracy. Older archives omit both optional fields.
     var smoothedFrame: MeasurementFrame? = nil
     var selectionSummary: CaptureSelectionSummary? = nil
+    /// Optional keeps older archives compatible. These settings never replace
+    /// the actual frame's RGB/depth calibration used by the measurement engine.
+    var cameraSettings: CameraCaptureSettings? = nil
 }
 
 nonisolated enum LandmarkOrigin: String, Codable, Sendable {

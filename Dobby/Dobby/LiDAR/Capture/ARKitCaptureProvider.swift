@@ -83,6 +83,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     @Published private(set) var frameStatus: CaptureFrameStatus?
     @Published private(set) var isRunning = false
     @Published private(set) var liveReadiness = LiveCaptureReadiness.waiting
+    @Published private(set) var cameraCapabilities = CameraControlCapabilities.unavailable
+    @Published private(set) var cameraControls = CameraControlState()
+    @Published private(set) var controlError: String?
 
     var isSupported: Bool {
         ARWorldTrackingConfiguration.isSupported &&
@@ -91,6 +94,12 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
 
     private nonisolated let worker = CaptureWorker()
     private nonisolated let liveAnalyzer = LiveForegroundAnalyzer()
+    private let cameraControlWorker = ARKitCameraControlWorker()
+    private var focusToken: CameraControlRequest?
+    private var exposureToken: CameraControlRequest?
+    private var controlSequence: UInt64 = 0
+    private var controlDeviceAttached = false
+    private var controlAttachmentSessionID: UUID?
     private var resumeTrackingOnNextStart = false
     private var freshnessTask: Task<Void, Never>?
     private var lastCameraTimestamp: TimeInterval?
@@ -110,6 +119,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         guard orientation != imageOrientation else { return }
         imageOrientation = orientation
         liveAnalyzer.setOrientation(orientation)
+        clearFocusIndicator(clearExposureRequest: false)
         resetReadiness()
     }
 
@@ -130,6 +140,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         // being treated as observations from this session.
         let identifier = UUID()
         generation = identifier
+        resetCameraControlConnection()
         permissionRequestInProgress = true
         state = .requestingPermission
         defer {
@@ -156,6 +167,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             configuration.frameSemantics.insert(.smoothedSceneDepth)
         }
         configuration.environmentTexturing = .none
+        configuration.isAutoFocusEnabled = true
         worker.activate(sessionID: identifier)
         liveAnalyzer.reset(sessionID: identifier)
         resetReadiness()
@@ -166,6 +178,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         let runOptions: ARSession.RunOptions = resumeTrackingOnNextStart ? [] : [.resetTracking, .removeExistingAnchors]
         resumeTrackingOnNextStart = false
         session.run(configuration, options: runOptions)
+        cameraControls.sessionID = identifier
+        clearFocusIndicator()
+        await attachCameraControls(sessionID: identifier)
     }
 
     func stop() {
@@ -192,6 +207,127 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         isRunning = false
         state = .idle
         frameStatus = nil
+        resetCameraControlConnection()
+    }
+
+    /// Invalidate both pending UI callbacks and queued hardware commands when
+    /// ARKit loses its camera. Exposure/zoom preferences survive a retake.
+    private func resetCameraControlConnection() {
+        cameraControlWorker.deactivate()
+        cameraCapabilities = .unavailable
+        cameraControls.sessionID = nil
+        cameraControls.requestedExposureBias = cameraControls.exposureBias
+        cameraControls.settingsRevision = 0
+        controlDeviceAttached = false
+        controlAttachmentSessionID = nil
+        clearFocusIndicator()
+        controlError = nil
+    }
+
+    private func clearFocusIndicator(clearExposureRequest: Bool = true) {
+        focusToken = nil
+        if clearExposureRequest { exposureToken = nil }
+        cameraControls.focusPoint = nil
+        cameraControls.focusRequestID = nil
+        cameraControls.focusStatus = .idle
+    }
+
+    private func attachCameraControls(sessionID: UUID) async {
+        guard generation == sessionID, isRunning, controlAttachmentSessionID != sessionID,
+              state != .capturing else { return }
+        controlAttachmentSessionID = sessionID
+        let device = ARWorldTrackingConfiguration.configurableCaptureDeviceForPrimaryCamera
+        let capabilities = await cameraControlWorker.activate(sessionID: sessionID, device: device,
+                                                               exposureBias: cameraControls.exposureBias)
+        guard generation == sessionID, isRunning, controlAttachmentSessionID == sessionID else { return }
+        controlAttachmentSessionID = nil
+        controlDeviceAttached = device != nil
+        cameraCapabilities = capabilities
+        cameraControls.exposureBias = capabilities.exposureRange?.clamp(cameraControls.exposureBias) ?? 0
+        cameraControls.requestedExposureBias = cameraControls.exposureBias
+        updateZoomCapabilities()
+    }
+
+    private func updateZoomCapabilities() {
+        guard let frame = session.currentFrame, let depth = frame.sceneDepth?.depthMap else { return }
+        var zooms: [CameraZoom] = [.standard]
+        if RegisteredCameraCrop.make(
+            imageSize: .init(width: CVPixelBufferGetWidth(frame.capturedImage), height: CVPixelBufferGetHeight(frame.capturedImage)),
+            depthSize: .init(width: CVPixelBufferGetWidth(depth), height: CVPixelBufferGetHeight(depth)), zoomFactor: 2) != nil {
+            zooms.append(.double)
+        }
+        cameraCapabilities.availableZooms = zooms
+        if state != .capturing, !zooms.contains(cameraControls.selectedZoom) {
+            cameraControls.selectedZoom = .standard
+            clearFocusIndicator(clearExposureRequest: false)
+            controlError = "현재 카메라 형식에 맞춰 기본 화각으로 돌아왔어요."
+        }
+    }
+
+    func requestFocus(at point: ImagePoint) {
+        guard isRunning, state != .capturing, let identifier = generation, point.isValid,
+              cameraCapabilities.focusSupported else { return }
+        controlSequence &+= 1
+        let token = CameraControlRequest(sessionID: identifier, requestID: UUID(), revision: controlSequence)
+        focusToken = token
+        cameraControls.focusPoint = point
+        cameraControls.focusRequestID = token.requestID
+        cameraControls.focusStatus = .requested
+        controlError = nil
+        cameraControlWorker.submitFocus(at: point, sessionID: identifier) { [weak self] result in
+            Task { @MainActor [weak self] in
+                guard let self, token.matches(sessionID: generation, requestID: focusToken?.requestID,
+                                               revision: focusToken?.revision ?? 0), isRunning else { return }
+                switch result {
+                case .success(let receipt):
+                    cameraControls.settingsRevision = max(cameraControls.settingsRevision, receipt.revision)
+                    cameraControls.focusStatus = state == .capturing ? .idle : .accepted
+                    liveAnalyzer.invalidateReadiness()
+                    resetReadiness()
+                case .failure(let error):
+                    cameraControls.focusStatus = .failed
+                    if state != .capturing { controlError = error.localizedDescription }
+                }
+            }
+        }
+    }
+
+    func setExposureBias(_ bias: Double) {
+        guard isRunning, state != .capturing, let identifier = generation,
+              let target = cameraCapabilities.exposureRange?.clamp(bias) else { return }
+        controlSequence &+= 1
+        let token = CameraControlRequest(sessionID: identifier, requestID: UUID(), revision: controlSequence)
+        exposureToken = token
+        cameraControls.requestedExposureBias = target
+        controlError = nil
+        cameraControlWorker.submitExposure(target, sessionID: identifier) { [weak self] result in
+            Task { @MainActor [weak self] in
+                guard let self, token.matches(sessionID: generation, requestID: exposureToken?.requestID,
+                                               revision: exposureToken?.revision ?? 0), isRunning else { return }
+                switch result {
+                case .success(let receipt):
+                    cameraControls.exposureBias = receipt.exposureBias
+                    cameraControls.settingsRevision = max(cameraControls.settingsRevision, receipt.revision)
+                    liveAnalyzer.invalidateReadiness()
+                    resetReadiness()
+                case .failure(let error):
+                    cameraControls.requestedExposureBias = cameraControls.exposureBias
+                    if state != .capturing { controlError = error.localizedDescription }
+                }
+            }
+        }
+    }
+
+    func resetExposure() { setExposureBias(0) }
+
+    func setZoom(_ zoom: CameraZoom) {
+        guard isRunning, state != .capturing, cameraCapabilities.availableZooms.contains(zoom),
+              cameraControls.selectedZoom != zoom else { return }
+        cameraControls.selectedZoom = zoom
+        clearFocusIndicator(clearExposureRequest: false)
+        liveAnalyzer.invalidateReadiness()
+        resetReadiness()
+        controlError = nil
     }
 
     func capture(orientation: ImageOrientation) async throws -> CaptureSnapshot {
@@ -200,6 +336,8 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             throw ARKitCaptureError.sessionNotRunning
         }
         guard state != .capturing else { throw ARKitCaptureError.captureInProgress }
+        state = .capturing
+        defer { cameraControlWorker.endCapture(sessionID: identifier) }
         liveAnalyzer.suspend(sessionID: identifier)
         resetReadiness()
         var snapshotCompleted = false
@@ -212,10 +350,15 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
                 resetReadiness()
             }
         }
-        let request = SnapshotRequest(sessionID: identifier, orientation: orientation,
-                                      minimumFrameTimestamp: session.currentFrame?.timestamp)
-        state = .capturing
         do {
+            let receipt = try await cameraControlWorker.beginCapture(sessionID: identifier)
+            try Task.checkCancellation()
+            guard generation == identifier, isRunning else { throw ARKitCaptureError.stopped }
+            let settings = CameraCaptureSettings(settingsRevision: receipt.revision,
+                focusSensorPoint: receipt.focusPoint, requestedExposureBias: cameraControls.requestedExposureBias,
+                acceptedExposureBias: receipt.exposureBias, requestedZoomFactor: cameraControls.selectedZoom.rawValue)
+            let request = SnapshotRequest(sessionID: identifier, orientation: orientation,
+                minimumFrameTimestamp: session.currentFrame?.timestamp, cameraSettings: settings)
             let snapshot = try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
                     request.attach(continuation)
@@ -249,6 +392,10 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         // An RGB preview frame enables the shutter. Snapshot selection still
         // validates synchronized depth and camera quality after the tap.
         if state == .starting { state = .ready }
+        updateZoomCapabilities()
+        if !controlDeviceAttached, controlAttachmentSessionID != update.sessionID, state != .capturing {
+            Task { [weak self] in await self?.attachCameraControls(sessionID: update.sessionID) }
+        }
     }
 
     private func receiveLiveReadiness(sessionID: UUID, readiness: LiveCaptureReadiness) {
@@ -317,6 +464,7 @@ extension ARKitCaptureProvider: ARSessionDelegate {
         Task { @MainActor [weak self] in
             guard let self, generation == identifier else { return }
             isRunning = false
+            resetCameraControlConnection()
             state = .interrupted
             freshnessTask?.cancel()
             resetReadiness()
@@ -342,6 +490,7 @@ extension ARKitCaptureProvider: ARSessionDelegate {
         Task { @MainActor [weak self] in
             guard let self, generation == identifier else { return }
             isRunning = false
+            resetCameraControlConnection()
             state = .failed(error.localizedDescription)
             freshnessTask?.cancel()
             resetReadiness()
@@ -504,8 +653,15 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
     private func consider(_ frame: ARFrame, request: SnapshotRequest, trackingNormal: Bool,
                           translationSpeed: Double?, angularSpeed: Double?) {
         let depth = frame.sceneDepth.flatMap { try? Self.copyDepth($0) }
+        let qualityDepth: DepthMap?
+        if let factor = request.cameraSettings?.requestedZoomFactor, factor > 1, let depth {
+            let image = frame.capturedImage
+            qualityDepth = RegisteredCameraCrop.make(
+                imageSize: .init(width: CVPixelBufferGetWidth(image), height: CVPixelBufferGetHeight(image)),
+                depthSize: depth.size, zoomFactor: factor)?.applying(to: depth)
+        } else { qualityDepth = depth }
         let quality = CaptureFrameQuality.evaluate(
-            depth: depth, timestamp: frame.timestamp, trackingNormal: trackingNormal,
+            depth: qualityDepth, timestamp: frame.timestamp, trackingNormal: trackingNormal,
             translationSpeedMetersPerSecond: translationSpeed, angularSpeedRadiansPerSecond: angularSpeed)
         lock.lock()
         guard pending === request, identifier == request.sessionID, acceptsFrames,
@@ -607,10 +763,10 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
             throw ARKitCaptureError.invalidCalibration
         }
         let sensorImage = CIImage(cvPixelBuffer: image)
-        guard let copiedImage = context.createCGImage(sensorImage,
+        guard var copiedImage = context.createCGImage(sensorImage,
             from: CGRect(x: 0, y: 0, width: imageSize.width, height: imageSize.height),
             format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB(), deferred: false) else { throw ARKitCaptureError.invalidImage }
-        let rawFrame = MeasurementFrame(
+        var rawFrame = MeasurementFrame(
             sessionID: request.sessionID, frameID: UUID(), timestamp: frame.timestamp,
             capturedAt: capturedAt, imageSize: imageSize, intrinsics: calibration,
             depth: depth, source: .sceneDepth, orientation: request.orientation)
@@ -624,13 +780,40 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
             comparison.source = .smoothedSceneDepth
             smoothedFrame = comparison
         }
-        return CopiedCaptureCandidate(frame: rawFrame, smoothedFrame: smoothedFrame, image: copiedImage)
+        var settings = request.cameraSettings
+        settings?.frameExposureDurationSeconds = frame.camera.exposureDuration.isFinite ? frame.camera.exposureDuration : nil
+        settings?.frameExposureOffsetEV = frame.camera.exposureOffset.isFinite ? Double(frame.camera.exposureOffset) : nil
+        if let factor = settings?.requestedZoomFactor, factor > 1 {
+            guard let crop = RegisteredCameraCrop.make(imageSize: imageSize, depthSize: depth.size, zoomFactor: factor),
+                  let croppedDepth = crop.applying(to: rawFrame.depth),
+                  let croppedCalibration = crop.applying(to: rawFrame.intrinsics),
+                  let croppedImage = copiedImage.cropping(to: .init(x: crop.imageOriginX, y: crop.imageOriginY,
+                                                                   width: crop.imageSize.width, height: crop.imageSize.height)) else {
+                throw ARKitCaptureError.invalidCalibration
+            }
+            rawFrame.imageSize = crop.imageSize
+            rawFrame.depth = croppedDepth
+            rawFrame.intrinsics = croppedCalibration
+            copiedImage = croppedImage
+            if var comparison = smoothedFrame {
+                if let comparisonDepth = crop.applying(to: comparison.depth) {
+                    comparison.imageSize = crop.imageSize
+                    comparison.depth = comparisonDepth
+                    comparison.intrinsics = croppedCalibration
+                    smoothedFrame = comparison
+                } else { smoothedFrame = nil }
+            }
+            settings?.crop = crop
+        }
+        return CopiedCaptureCandidate(frame: rawFrame, smoothedFrame: smoothedFrame, image: copiedImage,
+                                      cameraSettings: settings)
     }
 
     private func snapshot(_ candidate: CopiedCaptureCandidate,
                           selectionSummary: CaptureSelectionSummary) throws -> CaptureSnapshot {
         CaptureSnapshot(frame: candidate.frame, imageJPEG: try jpeg(candidate.image),
-                        smoothedFrame: candidate.smoothedFrame, selectionSummary: selectionSummary)
+                        smoothedFrame: candidate.smoothedFrame, selectionSummary: selectionSummary,
+                        cameraSettings: candidate.cameraSettings)
     }
 
     private func jpeg(_ image: CGImage) throws -> Data {
@@ -692,6 +875,7 @@ private nonisolated struct CopiedCaptureCandidate {
     var frame: MeasurementFrame
     var smoothedFrame: MeasurementFrame?
     var image: CGImage
+    var cameraSettings: CameraCaptureSettings?
 }
 
 /// The completion lives independently of the worker so cancellation before
@@ -701,14 +885,17 @@ private nonisolated final class SnapshotRequest: @unchecked Sendable {
     let sessionID: UUID
     let orientation: ImageOrientation
     let minimumFrameTimestamp: TimeInterval?
+    let cameraSettings: CameraCaptureSettings?
     private let lock = NSLock()
     private var continuation: CheckedContinuation<CaptureSnapshot, Error>?
     private var result: Result<CaptureSnapshot, Error>?
 
-    init(sessionID: UUID, orientation: ImageOrientation, minimumFrameTimestamp: TimeInterval?) {
+    init(sessionID: UUID, orientation: ImageOrientation, minimumFrameTimestamp: TimeInterval?,
+         cameraSettings: CameraCaptureSettings? = nil) {
         self.sessionID = sessionID
         self.orientation = orientation
         self.minimumFrameTimestamp = minimumFrameTimestamp
+        self.cameraSettings = cameraSettings
     }
 
     var isFinished: Bool {
