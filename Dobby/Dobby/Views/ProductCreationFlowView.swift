@@ -114,6 +114,24 @@ struct ProductCreationFlowView: View {
     }
 
     private func receiveMeasurement(_ record: SavedMeasurement) async throws {
+        // 같은 결과의 재확인은 사진·선택 순서·카메라 세션을 그대로 이어 간다.
+        if let garment, garment.sourceMeasurementID == record.id,
+           let photoModel, let permission {
+            guard photoModel.input.garmentID == garment.id,
+                  photoModel.input.sessionID == record.snapshot.frame.sessionID,
+                  garment.measurementPhoto?.measurementFrameID == record.snapshot.frame.frameID,
+                  garment.measurementPhoto?.id == photoModel.input.measurement.id else {
+                throw CameraFailure.mismatchedCapture
+            }
+            guard !photoModel.isCapturing, !photoModel.isDeleting else {
+                throw CameraFailure.operationInProgress
+            }
+            // 권한은 설정 앱에서 바뀌었을 수 있으므로 같은 객체에서 다시 확인한다.
+            permission.refresh()
+            path.append(.details)
+            return
+        }
+
         let imported = try GarmentStore.importMeasurement(record, in: context, allowsSynthetic: isFixture)
         let input = try ProductPhotoHandoff.makeInput(for: imported, sessionID: record.snapshot.frame.sessionID)
         let model: ProductPhotoModel
