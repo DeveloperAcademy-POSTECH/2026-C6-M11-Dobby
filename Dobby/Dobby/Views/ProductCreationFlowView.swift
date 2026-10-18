@@ -54,8 +54,12 @@ struct ProductCreationFlowView: View {
                                     .navigationBarBackButtonHidden()
                                     .toolbar {
                                         ToolbarItem(placement: .topBarLeading) {
-                                            Button("닫기", systemImage: "xmark") { Task { await cancelFlow() } }
-                                                .labelStyle(.iconOnly).accessibilityIdentifier("product-flow.cancel")
+                                            Button("실측 결과로 돌아가기", systemImage: "chevron.left") {
+                                                guard path.last == .details else { return }
+                                                path.removeLast()
+                                            }
+                                            .labelStyle(.iconOnly)
+                                            .accessibilityIdentifier("product-flow.backToMeasurement")
                                         }
                                     }
                             case .information:
