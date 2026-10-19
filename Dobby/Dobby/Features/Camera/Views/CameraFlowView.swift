@@ -19,9 +19,6 @@ struct CameraFlowView: View {
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
     @State private var failureMessage: String?
-    @State private var photoToDelete: CapturedAsset?
-    @State private var deletionRequested: UUID?
-    @State private var deletionFailed = false
 
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
@@ -35,37 +32,26 @@ struct CameraFlowView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            DetailPhotoStrip(photos: model.photos, deletingPhotoID: deletionRequested,
-                             isBusy: isPhotoOperationInProgress) { photoToDelete = $0 }
-            CameraPermissionGate(permission: permission) {
-                VStack(spacing: 0) {
-                    preview
-                        .overlay(alignment: .topTrailing) {
-                            Text(previewSource == nil ? "실시간 미리보기" : "샘플 미리보기").font(.caption2)
-                                .padding(6).background(.black.opacity(0.6), in: Capsule()).padding(8)
+        CameraPermissionGate(permission: permission) {
+            preview
+                .overlay(alignment: .bottom) {
+                    VStack(spacing: 0) {
+                        if let failureMessage {
+                            Text(failureMessage).padding().background(.ultraThinMaterial)
+                        } else if model.isCapturing {
+                            ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
                         }
-                        .overlay(alignment: .bottom) {
-                            if let failureMessage {
-                                Text(failureMessage).padding().background(.ultraThinMaterial)
-                            } else if model.isCapturing {
-                                ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
-                            }
-                        }
-                    shutter
-                        .padding(.top, 12)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 124, alignment: .top)
+                        captureControls
+                    }
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(background.ignoresSafeArea())
-        .ignoresSafeArea(edges: .bottom)
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(background, for: .navigationBar)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -73,34 +59,13 @@ struct CameraFlowView: View {
                 NavigationLink {
                     ProductPhotoSelectionView(model: model, onComplete: onComplete)
                 } label: {
-                    Text("완료").font(.body.weight(.semibold)).foregroundStyle(.white)
+                    Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
                 .disabled(isPhotoOperationInProgress)
                 .accessibilityIdentifier("camera.selectPhotos")
             }
-        }
-        .alert("상세 사진을 삭제할까요?", isPresented: Binding(
-            get: { photoToDelete != nil }, set: { if !$0 { photoToDelete = nil } }
-        ), presenting: photoToDelete) { photo in
-            Button("취소", role: .cancel) { photoToDelete = nil }
-            Button("삭제", role: .destructive) { deletionRequested = photo.id }
-        } message: { _ in
-            Text("이 촬영본은 삭제 후 복구할 수 없어요.")
-        }
-        .alert("사진을 삭제하지 못했어요", isPresented: $deletionFailed) {
-            Button("확인", role: .cancel) { }
-        } message: {
-            Text("사진을 유지했어요. 삭제 버튼을 눌러 다시 시도해 주세요.")
-        }
-        .task(id: deletionRequested) {
-            guard let id = deletionRequested else { return }
-            do { try await model.deleteDetail(id) }
-            catch {
-                if !(error is CancellationError), !Task.isCancelled { deletionFailed = true }
-            }
-            deletionRequested = nil
         }
         .task(id: captureRequested) {
             guard captureRequested else { return }
@@ -139,9 +104,7 @@ struct CameraFlowView: View {
 
     private var shutter: some View {
         Button { captureRequested = true } label: {
-            // Figma 내보내기에 포함된 그림자 여백: 왼쪽 18pt, 위 6pt.
-            Image("CameraShutter").resizable().frame(width: 152, height: 118)
-                .offset(x: 12, y: 7).frame(width: 92, height: 92)
+            Image("DetailCaptureShutter").resizable().frame(width: 92, height: 92)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -152,12 +115,43 @@ struct CameraFlowView: View {
         .accessibilityIdentifier("camera.captureDetail")
     }
 
+    private var captureControls: some View {
+        HStack {
+            Spacer(minLength: 16)
+            // 3단계에서 사진 확인 화면을 연결한다. 지금은 최신 촬영본만 표시한다.
+            Button { /* 사진 확인 화면 연결 예정 */ } label: {
+                CameraPhotoView(source: (model.photos.last ?? model.input.measurement).source,
+                                maximumPixelSize: 192)
+                    .frame(width: 48, height: 48).clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(true)
+            .accessibilityLabel("촬영한 사진 보기")
+            .accessibilityIdentifier("camera.openGallery")
+            Spacer(minLength: 16)
+            shutter
+            Spacer(minLength: 16)
+            // 노출·비율 조절은 더보기 구현 단계에서 연결한다.
+            Button { /* 더보기 연결 예정 */ } label: {
+                Image("DetailCaptureMore").resizable().frame(width: 48, height: 48)
+            }
+            .buttonStyle(.plain)
+            .disabled(true)
+            .accessibilityLabel("촬영 옵션 더보기")
+            .accessibilityIdentifier("camera.moreOptions")
+            Spacer(minLength: 16)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 148)
+        .background(.ultraThinMaterial)
+    }
+
     private var canCapture: Bool {
         !isPhotoOperationInProgress && (previewSource != nil || camera?.canCapture == true)
     }
 
     private var isPhotoOperationInProgress: Bool {
-        captureRequested || model.isCapturing || model.isDeleting || deletionRequested != nil || photoToDelete != nil
+        captureRequested || model.isCapturing || model.isDeleting
     }
 }
 
