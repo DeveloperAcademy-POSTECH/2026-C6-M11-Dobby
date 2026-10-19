@@ -81,6 +81,7 @@ struct InfoInputView: View {
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
                 .accessibilityIdentifier("product-info.done")
+                .disabled(!GarmentInputCompletion.hasRequiredInformation(garment))
             }
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
@@ -98,6 +99,7 @@ struct InfoInputView: View {
     }
 
     private func complete() {
+        guard GarmentInputCompletion.hasRequiredInformation(garment) else { return }
         do {
             try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts) {
                 try modelContext.save()
@@ -333,6 +335,12 @@ enum GarmentInputCompletion {
                 return "\(label)에 0보다 큰 숫자를 입력해 주세요. 입력한 정보는 화면에 남아 있어요."
             }
         }
+    }
+
+    static func hasRequiredInformation(_ garment: Garment) -> Bool {
+        let name = garment.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail = garment.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty && !detail.isEmpty && garment.price.map { $0 >= 0 } == true
     }
 
     /// Validate all visible fields before modifying any of them. A failed database save
