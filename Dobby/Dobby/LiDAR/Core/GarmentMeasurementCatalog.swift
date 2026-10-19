@@ -74,11 +74,11 @@ nonisolated enum GarmentMeasurementCatalog {
         case "length":
             placement = "목 옆 어깨 시작점과 그 바로 아래 밑단에 두 점을 놓으세요. 앞면·뒷면 중 어느 면인지 기록하세요."
         case "top.totalLength":
-            placement = "목 중앙과 밑단 중앙의 측정점을 확인하세요. 사진에 표시된 두 점 사이의 직선거리입니다. 줄자도 옷을 펼친 상태에서 같은 두 점을 기준으로 비교해 주세요."
+            placement = "사진에 표시된 총장 시작점과 밑단 중앙을 확인하세요. 새 자동 총장은 목 기준선에 수직으로 올라간 옷 윤곽부터 측정하며, 카라·후드 아래 봉제선을 구별하지 않습니다. 기준이 다르면 두 점을 직접 교정하고 줄자도 같은 두 점으로 비교해 주세요."
         case "top.totalLength.manualStraight":
             placement = "목 중앙과 그 아래 밑단에 두 점을 놓으세요. 자동 총장의 가로축 보정 없이 계산하는 별도의 수동 직선거리입니다."
         case "sleeve", "top.sleeveLengthLeft", "top.sleeveLengthRight":
-            placement = "소매를 곧게 펼쳐 어깨 봉제선 끝과 소맷단에 두 점을 놓으세요. 봉제선을 따라 굽은 길이가 아닌 직선거리입니다."
+            placement = "소매를 곧게 펼쳐 어깨 봉제선 끝과 소매 바깥선·끝단이 만나는 모서리에 두 점을 놓으세요. 봉제선을 따라 굽은 길이가 아닌 직선거리입니다."
         case "waist":
             placement = "허리 양 끝의 같은 높이에 두 점을 놓으세요. 밴딩은 당기지 않은 상태로 재며 단면 너비이지 허리둘레가 아닙니다."
         case "hip":

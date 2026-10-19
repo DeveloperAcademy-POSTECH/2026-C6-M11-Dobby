@@ -55,7 +55,7 @@ final class TopMaskRecoveryTests: XCTestCase {
         let landmarks = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID, origin: .model,
             modelVersion: "top-test", points: selection.validatedPoints(pointsWithThreeOutliers()), mask: selection.mask)
         let result = LiDARMeasurementEngine().measure(frame: frame, landmarks: landmarks,
-            definitions: TopLandmarkSchema.canonicalMeasurementDefinitions)
+            definitions: TopLandmarkSchema.legacyMeasurementDefinitions)
         for id in ["top.shoulderWidth", "top.chestWidth", "top.hemWidth"] {
             XCTAssertEqual(result.values.first { $0.id == id }?.status, .valid)
         }

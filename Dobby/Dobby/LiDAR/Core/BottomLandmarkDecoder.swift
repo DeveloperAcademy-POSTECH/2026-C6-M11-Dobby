@@ -23,6 +23,12 @@ nonisolated enum BottomLandmarkError: LocalizedError, Equatable, Sendable {
 /// The model's channel order and measurement graph come from its accompanying schema.
 /// The graph can change without making the existing manual pants presets an ML contract.
 nonisolated struct BottomLandmarkSchema: Sendable {
+    static let expectedBottom7Keypoints = [
+        "waist_left", "waist_right", "crotch", "hem_left_outer", "hem_left_inner",
+        "hem_right_inner", "hem_right_outer"
+    ]
+    static let expectedBottom8Keypoints = expectedBottom7Keypoints + ["waist_front_center"]
+
     let name: String
     let keypoints: [String]
     let labels: [String: [String]]
@@ -94,12 +100,19 @@ nonisolated struct BottomLandmarkSchema: Sendable {
     static func decode(_ jsonData: Data) throws -> Self { try .init(jsonData: jsonData) }
 
     var measurementDefinitions: [MeasurementDefinition] {
-        skeleton.map { pair in
+        // Top skeleton edges describe a drawable pose, not the six physical
+        // top measurements. Only TopLandmarkSchema defines that measurement set.
+        guard name != "top" else { return [] }
+        let pairs: [[String]]
+        if name == "bottom7" || name == "bottom8" {
+            pairs = Self.measurementPairs(frontWaistCenter: name == "bottom8")
+        } else { pairs = skeleton }
+        return pairs.map { pair in
             let edge = pair.sorted().joined(separator: ".")
             let title: String
             switch edge {
             case "waist_left.waist_right": title = "허리 단면"
-            case "crotch.waist_center": title = "밑위(직선)"
+            case "crotch.waist_center", "crotch.waist_front_center": title = "밑위(직선)"
             case "hem_left_outer.waist_left": title = "왼쪽 총장(직선)"
             case "hem_right_outer.waist_right": title = "오른쪽 총장(직선)"
             case "hem_left_inner.hem_left_outer": title = "왼쪽 밑단 단면"
@@ -112,6 +125,17 @@ nonisolated struct BottomLandmarkSchema: Sendable {
             return .init(id: "bottom.\(edge)", title: title, landmarkIDs: pair)
         }
     }
+
+    /// Keep the established Dobby row order independent of the model skeleton.
+    static func measurementPairs(frontWaistCenter: Bool) -> [[String]] {
+        [
+            ["waist_left", "waist_right"], [frontWaistCenter ? "waist_front_center" : "waist_center", "crotch"],
+            ["waist_left", "hem_left_outer"], ["hem_left_outer", "hem_left_inner"],
+            ["crotch", "hem_left_inner"], ["waist_right", "hem_right_outer"],
+            ["hem_right_outer", "hem_right_inner"], ["crotch", "hem_right_inner"]
+        ]
+    }
+
 }
 
 /// Apply orientation first, then render into these exact integer bounds with RGB 114 padding.

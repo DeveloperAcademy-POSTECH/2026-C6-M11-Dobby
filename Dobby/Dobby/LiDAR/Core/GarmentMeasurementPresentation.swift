@@ -18,7 +18,7 @@ nonisolated enum GarmentMeasurementPresentation {
     static let bottomColumns: [Column] = [
         .init(measurementID: "bottom.hem_left_outer.waist_left", productKey: "totalLengthLeft", title: "총장"),
         .init(measurementID: "bottom.waist_left.waist_right", productKey: "waistWidth", title: "허리"),
-        .init(measurementID: "bottom.crotch.waist_center", productKey: "frontRise", title: "밑위"),
+        .init(measurementID: "bottom.crotch.waist_front_center", productKey: "frontRise", title: "밑위"),
         .init(measurementID: "bottom.hem_left_inner.hem_left_outer", productKey: "hemWidthLeft", title: "밑단")
     ]
 
@@ -46,14 +46,23 @@ nonisolated enum GarmentMeasurementPresentation {
         let columns = topColumns + bottomColumns
         return measurements.enumerated().filter { !hiddenOverlayIDs.contains(id($0.element)) }
             .sorted { left, right in
-                let a = columns.firstIndex { $0.measurementID == id(left.element) } ?? columns.count
-                let b = columns.firstIndex { $0.measurementID == id(right.element) } ?? columns.count
+                let a = columns.firstIndex { $0.measurementID == canonicalID(id(left.element)) } ?? columns.count
+                let b = columns.firstIndex { $0.measurementID == canonicalID(id(right.element)) } ?? columns.count
                 return a == b ? left.offset < right.offset : a < b
             }.map(\.element)
     }
 
     static func overlayTitle(for id: String, fallback: String) -> String {
-        (topColumns + bottomColumns).first { $0.measurementID == id }?.title ?? fallback
+        (topColumns + bottomColumns).first { $0.measurementID == canonicalID(id) }?.title ?? fallback
+    }
+
+    /// Old bottom7 records retain their ID but occupy the same visible rise row.
+    static func canonicalID(_ id: String) -> String {
+        id == "bottom.crotch.waist_center" ? "bottom.crotch.waist_front_center" : id
+    }
+
+    static func isVisibleMeasurementID(_ id: String, kind: AutomaticGarmentKind) -> Bool {
+        (kind == .top ? topColumns : bottomColumns).contains { $0.measurementID == canonicalID(id) }
     }
 
     private struct Pair {

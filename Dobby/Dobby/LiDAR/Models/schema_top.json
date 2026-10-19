@@ -14,39 +14,123 @@
     "hem_right"
   ],
   "labels": {
-    "neck_left": ["목옆 좌", "어깨솔기와 목둘레선이 만나는 곳. 옷의 가장 높은 지점"],
-    "neck_right": ["목옆 우", "반대쪽 같은 지점. 좌우 높이가 같아야 한다"],
-    "shoulder_left": ["어깨끝 좌", "어깨솔기가 소매와 만나 꺾이는 모서리"],
-    "shoulder_right": ["어깨끝 우", "반대쪽 같은 지점"],
-    "armpit_left": ["겨드랑이 좌", "소매 밑선과 몸통 옆선이 만나는 안쪽 꼭짓점"],
-    "armpit_right": ["겨드랑이 우", "반대쪽 같은 지점"],
-    "sleeve_end_left": ["소매끝 좌", "소매 끝단의 가운데. 바깥 모서리가 아니다"],
-    "sleeve_end_right": ["소매끝 우", "반대쪽 같은 지점"],
-    "hem_left": ["밑단 좌", "밑단의 가장 왼쪽 끝 (옆선과 만나는 곳)"],
-    "hem_center": ["밑단 중앙", "밑단에서 가장 아래로 내려온 지점. 곡선이면 가장 낮은 곳"],
-    "hem_right": ["밑단 우", "밑단의 가장 오른쪽 끝"]
+    "neck_left": [
+      "목옆 좌",
+      "어깨솔기와 목둘레선이 만나는 곳. 옷의 가장 높은 지점"
+    ],
+    "neck_right": [
+      "목옆 우",
+      "반대쪽 같은 지점. 좌우 높이가 같아야 한다"
+    ],
+    "shoulder_left": [
+      "어깨끝 좌",
+      "어깨솔기가 소매와 만나 꺾이는 모서리"
+    ],
+    "shoulder_right": [
+      "어깨끝 우",
+      "반대쪽 같은 지점"
+    ],
+    "armpit_left": [
+      "겨드랑이 좌",
+      "소매 밑선과 몸통 옆선이 만나는 안쪽 꼭짓점"
+    ],
+    "armpit_right": [
+      "겨드랑이 우",
+      "반대쪽 같은 지점"
+    ],
+    "sleeve_end_left": [
+      "소매끝 좌",
+      "소매 끝단의 바깥 모서리. 어깨에서 이어지는 소매 바깥선과 끝단이 만나는 지점"
+    ],
+    "sleeve_end_right": [
+      "소매끝 우",
+      "반대쪽 소매 끝단의 바깥 모서리. 어깨에서 이어지는 소매 바깥선과 끝단이 만나는 지점"
+    ],
+    "hem_left": [
+      "밑단 좌",
+      "밑단의 가장 왼쪽 끝 (옆선과 만나는 곳)"
+    ],
+    "hem_center": [
+      "밑단 중앙",
+      "밑단에서 가장 아래로 내려온 지점. 곡선이면 가장 낮은 곳"
+    ],
+    "hem_right": [
+      "밑단 우",
+      "밑단의 가장 오른쪽 끝"
+    ]
   },
   "flip_pairs": [
-    ["neck_left", "neck_right"],
-    ["shoulder_left", "shoulder_right"],
-    ["armpit_left", "armpit_right"],
-    ["sleeve_end_left", "sleeve_end_right"],
-    ["hem_left", "hem_right"]
+    [
+      "neck_left",
+      "neck_right"
+    ],
+    [
+      "shoulder_left",
+      "shoulder_right"
+    ],
+    [
+      "armpit_left",
+      "armpit_right"
+    ],
+    [
+      "sleeve_end_left",
+      "sleeve_end_right"
+    ],
+    [
+      "hem_left",
+      "hem_right"
+    ]
   ],
   "derived": {
-    "neck_center": ["neck_left", "neck_right"]
+    "neck_center": [
+      "neck_left",
+      "neck_right"
+    ]
   },
   "skeleton": [
-    ["neck_left", "neck_right"],
-    ["neck_left", "shoulder_left"],
-    ["neck_right", "shoulder_right"],
-    ["shoulder_left", "sleeve_end_left"],
-    ["shoulder_right", "sleeve_end_right"],
-    ["shoulder_left", "armpit_left"],
-    ["shoulder_right", "armpit_right"],
-    ["armpit_left", "hem_left"],
-    ["armpit_right", "hem_right"],
-    ["hem_left", "hem_center"],
-    ["hem_center", "hem_right"]
+    [
+      "neck_left",
+      "neck_right"
+    ],
+    [
+      "neck_left",
+      "shoulder_left"
+    ],
+    [
+      "neck_right",
+      "shoulder_right"
+    ],
+    [
+      "shoulder_left",
+      "sleeve_end_left"
+    ],
+    [
+      "shoulder_right",
+      "sleeve_end_right"
+    ],
+    [
+      "shoulder_left",
+      "armpit_left"
+    ],
+    [
+      "shoulder_right",
+      "armpit_right"
+    ],
+    [
+      "armpit_left",
+      "hem_left"
+    ],
+    [
+      "armpit_right",
+      "hem_right"
+    ],
+    [
+      "hem_left",
+      "hem_center"
+    ],
+    [
+      "hem_center",
+      "hem_right"
+    ]
   ]
 }

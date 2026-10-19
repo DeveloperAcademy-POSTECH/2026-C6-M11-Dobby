@@ -11,7 +11,7 @@ nonisolated struct GarmentPoseValidationAttempt: Codable, Sendable {
 }
 
 nonisolated struct GarmentRecognitionDiagnostics: Codable, Sendable {
-    var version: String = "garment-validation-1"
+    var version: String = "garment-validation-2"
     var requestedOrientation: ImageOrientation
     var selectedPoseOrientation: ImageOrientation
     var associationPolicy: GarmentMaskAssociationPolicy
@@ -22,6 +22,11 @@ nonisolated struct GarmentRecognitionDiagnostics: Codable, Sendable {
     var classifiedCategory: String? = nil
     var classifierConfidence: Double? = nil
     var classifierScores: [GarmentClassificationScore]? = nil
+    /// Device orientation remains requestedOrientation; selectedPoseOrientation
+    /// contains device plus this correction, already restored to raw RGB once.
+    var orientationPrediction: GarmentOrientationPrediction? = nil
+    var orientationModelVersion: String? = nil
+    var automaticAdjustments: [GarmentAutomaticLandmarkAdjustment]? = nil
 
     /// Subject identification can succeed without every boundary point fitting
     /// an independent silhouette. Retain the result, but do not call it precise.

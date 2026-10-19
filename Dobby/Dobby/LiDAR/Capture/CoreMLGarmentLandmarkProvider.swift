@@ -46,7 +46,7 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
     nonisolated var skeleton: [[String]] { schema.skeleton }
     private let adapter: CoreMLBottomLandmarkProvider
 
-    init(kind: AutomaticGarmentKind, modelURL: URL, schemaData: Data) throws {
+    init(kind: AutomaticGarmentKind, modelURL: URL, schemaData: Data, orientationModelURL: URL? = nil) throws {
         let schema: BottomLandmarkSchema
         let definitions: [MeasurementDefinition]
         do {
@@ -57,7 +57,7 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
                 definitions = top.measurementDefinitions
             case .bottoms:
                 schema = try BottomLandmarkSchema(jsonData: schemaData)
-                guard schema.name == "bottom7", schema.keypoints.count == 7 else {
+                guard schema.name == "bottom8", schema.keypoints == BottomLandmarkSchema.expectedBottom8Keypoints else {
                     throw GarmentModelError.incompatibleModel(kind)
                 }
                 definitions = schema.measurementDefinitions
@@ -71,7 +71,9 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
         self.modelVersion = kind.modelVersion
         self.adapter = CoreMLBottomLandmarkProvider(modelURL: modelURL, schema: schema,
                                                    modelVersion: kind.modelVersion,
-                                                   allowsHalfTurnRecovery: kind == .top)
+                                                   allowsHalfTurnRecovery: false,
+                                                   orientationModelURL: orientationModelURL
+                                                       ?? GarmentOrientationModelProvider.siblingURL(of: modelURL))
     }
 
     func prepare() async throws {
@@ -95,7 +97,8 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
               let schemaURL = bundle.url(forResource: kind.schemaResourceName, withExtension: "json") else {
             throw GarmentModelError.missingResources(kind)
         }
-        return try .init(kind: kind, modelURL: modelURL, schemaData: Data(contentsOf: schemaURL))
+        return try .init(kind: kind, modelURL: modelURL, schemaData: Data(contentsOf: schemaURL),
+                          orientationModelURL: GarmentOrientationModelProvider.resourceURL(in: bundle))
     }
 
     func landmarks(for snapshot: CaptureSnapshot) async throws -> GarmentLandmarkSet {
@@ -125,8 +128,8 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
         catch { throw translated(error) }
     }
 
-    /// Automatic classification owns its bounded orientation retry. Do not run
-    /// a second pose direction behind the classifier's chosen direction.
+    /// The automatic classifier already selected the four-way correction. Do
+    /// not run the orientation model or a half-turn behind that chosen direction.
     func recognizeForegroundExactly(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentForegroundRecognition {
         do {
             var result = try await adapter.recognizeForegroundExactly(image, orientation: orientation)

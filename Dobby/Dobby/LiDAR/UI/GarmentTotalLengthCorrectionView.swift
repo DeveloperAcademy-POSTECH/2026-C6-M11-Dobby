@@ -29,14 +29,19 @@ struct GarmentTotalLengthCorrectionView: View {
     private func isConfirmed(_ index: Int) -> Bool {
         guard model.displayLandmarks.points.indices.contains(index) else { return false }
         let point = model.displayLandmarks.points[index]
-        return point.origin == .manual && point.isVisible && point.point.isValid && point.derivedFrom == nil
+        return point.origin == .manual && point.isVisible && point.point.isValid
+            && point.derivedFrom == nil && point.contourRule == nil
+    }
+
+    private var startTitle: String {
+        model.definition.landmarkIDs.first == "top_length_start" ? "총장 상단" : "목 중앙"
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("사진에서 목 중앙과 밑단 중앙을 차례로 눌러 주세요.")
+                    Text("사진에서 \(startTitle)과 밑단 중앙을 차례로 눌러 주세요.")
                         .font(.headline)
                     Text("같은 사진의 깊이로 총장을 다시 측정하고 현재 실측 결과에 반영해요. 깊이가 부족한 위치는 다시 촬영해야 해요.")
                         .font(.subheadline).foregroundStyle(.secondary)
@@ -44,10 +49,10 @@ struct GarmentTotalLengthCorrectionView: View {
                         Text(failure.message).font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
                     }
                     HStack(spacing: 10) {
-                        endpointButton(index: 0, title: "A · 목 중앙")
+                        endpointButton(index: 0, title: "A · \(startTitle)")
                         endpointButton(index: 1, title: "B · 밑단 중앙")
                     }
-                    Text(activePointIndex == 0 ? "A · 목 중앙 위치를 눌러 주세요" : "B · 밑단 중앙 위치를 눌러 주세요")
+                    Text(activePointIndex == 0 ? "A · \(startTitle) 위치를 눌러 주세요" : "B · 밑단 중앙 위치를 눌러 주세요")
                         .font(.caption.weight(.semibold))
                     MeasurementImageView(snapshot: model.snapshot, landmarks: model.displayLandmarks,
                         image: image, activePointIndex: activePointIndex, placePoint: placePoint)

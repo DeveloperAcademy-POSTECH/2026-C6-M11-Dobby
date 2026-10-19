@@ -12,7 +12,7 @@ nonisolated extension GarmentLandmarkSet {
             if completed.contains(id) { return affected.contains(id) }
             guard !visiting.contains(id), visiting.count < 64,
                   let indices = byID[id], indices.count == 1, let index = indices.first else { return false }
-            guard let sources = effectiveDerivedSourceIDs(for: id) else {
+            guard let sources = calculationSourceIDs(for: id) else {
                 completed.insert(id)
                 return affected.contains(id)
             }
@@ -24,6 +24,17 @@ nonisolated extension GarmentLandmarkSet {
             guard sources.allSatisfy({ byID[$0]?.count == 1 }) else { return false }
             if changed {
                 let parents = sources.compactMap { byID[$0]?.first }.map { output.points[$0] }
+                if output.points[index].contourRule != nil {
+                    // The intersection will be recomputed on the same plane.
+                    // Do not average the parent's image coordinates or replace
+                    // an explicit manual override (whose rule has been cleared).
+                    output.points[index].isVisible = false
+                    output.points[index].confidence = nil
+                    output.points[index].origin = .manual
+                    affected.insert(id)
+                    completed.insert(id)
+                    return true
+                }
                 let count = Double(parents.count)
                 output.points[index].point = .init(x: parents.reduce(0) { $0 + $1.point.x / count },
                                                   y: parents.reduce(0) { $0 + $1.point.y / count })

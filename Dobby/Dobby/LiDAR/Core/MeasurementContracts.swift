@@ -73,6 +73,13 @@ nonisolated enum LandmarkOrigin: String, Codable, Sendable {
     case manual, model, synthetic
 }
 
+/// A contour intersection is not the spatial average described by derivedFrom.
+nonisolated enum GarmentContourRule: String, Codable, Sendable {
+    case neckPerpendicularMaskV1
+
+    var sourceLandmarkIDs: [String] { ["neck_left", "neck_right", "hem_center"] }
+}
+
 nonisolated struct GarmentLandmark: Codable, Sendable, Identifiable {
     var id: String
     var point: ImagePoint
@@ -86,6 +93,8 @@ nonisolated struct GarmentLandmark: Codable, Sendable, Identifiable {
     /// a derivation affected by it, must not claim model confidence at its new
     /// coordinate. Unchanged points retain the original model checks.
     var origin: LandmarkOrigin? = nil
+    /// Evaluated on the frozen garment plane. An explicit manual placement clears it.
+    var contourRule: GarmentContourRule? = nil
 }
 
 nonisolated struct GarmentMask: Codable, Sendable, Equatable {
@@ -139,12 +148,14 @@ nonisolated enum MeasurementFailure: String, Error, Codable, Sendable {
     case frameMismatch, invalidCalibration, invalidDepthMap, invalidMask, invalidOptions
     case invalidDefinition, duplicateLandmark, missingLandmark, outOfBounds
     case insufficientDepth, lowLandmarkConfidence, occludedLandmark
+    case insufficientGarmentPlane, contourIntersectionUnavailable
 }
 
 nonisolated enum DepthSamplingMethod: String, Codable, Sendable {
     case localPlane, robustMedian, spatialAverage, axisProjection
     /// Known derived point averaged in 3D after bounded, locally supported depth recovery.
     case recoveredSpatialAverage
+    case garmentPlane, contourIntersection
 }
 
 nonisolated struct PointQuality: Codable, Sendable {
@@ -161,6 +172,8 @@ nonisolated struct PointQuality: Codable, Sendable {
     var sampleRadiusPixels: Int? = nil
     /// Distance to the nearest retained depth sample, in depth pixels.
     var supportDistancePixels: Double? = nil
+    /// Orthogonal whole-garment statistics, separate from local depth-axis residuals.
+    var garmentPlaneQuality: GarmentPlaneQuality? = nil
 }
 
 nonisolated struct ResolvedLandmark: Codable, Sendable {
@@ -197,6 +210,10 @@ nonisolated struct GarmentMeasurementResult: Codable, Sendable {
     var values: [MeasurementValue]
 }
 
+nonisolated enum MeasurementCalculationMode: String, Codable, Sendable {
+    case legacyLocal, garmentPlane
+}
+
 nonisolated struct MeasurementOptions: Codable, Sendable {
     var sampleRadius = 3
     var minimumSamples = 6
@@ -207,6 +224,11 @@ nonisolated struct MeasurementOptions: Codable, Sendable {
     var maximumPlaneResidualMeters = 0.008
     var maximumDepthSpreadMeters = 0.025
     var useLocalPlane = true
+    /// Missing/null in old JSON retains the original local-depth calculation.
+    /// Unknown non-null values fail Codable decoding rather than changing algorithms.
+    var calculationMode: MeasurementCalculationMode? = nil
+
+    var effectiveCalculationMode: MeasurementCalculationMode { calculationMode ?? .legacyLocal }
 }
 
 /// Implemented by Ichi's model adapter. Return original-image coordinates and preserve IDs.

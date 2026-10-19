@@ -252,12 +252,21 @@ final class AutomaticMeasurementWorkflow {
                 }
                 self?.begin(.measurement, run: run, phase: .measuring)
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
+                var calculationOptions = options
+                // Only new canonical garment captures opt into the new engine.
+                // Archived/mocked legacy schemas and independent A/B keep their
+                // original behavior; the chosen value travels with the result.
+                if calculationOptions.calculationMode == nil,
+                   points.origin == .model, let kind = points.garmentKind,
+                   points.modelVersion == kind.modelVersion {
+                    calculationOptions.calculationMode = .garmentPlane
+                }
                 let result = await pipeline.measure(snapshot: snapshot, landmarks: points,
-                    definitions: resolvedDefinitions, options: options)
+                    definitions: resolvedDefinitions, options: calculationOptions)
                 guard !Task.isCancelled, self?.canContinue(run) == true else { return }
                 let now = ProcessInfo.processInfo.systemUptime
                 let output = AutomaticMeasurementOutput(runID: run.id, snapshot: snapshot,
-                    landmarks: points, result: result, definitions: resolvedDefinitions, options: options,
+                    landmarks: points, result: result, definitions: resolvedDefinitions, options: calculationOptions,
                     timings: run.timings(at: now), startedAt: run.startedAt, finishedAt: .now)
                 self?.finish(run, output: output)
             } catch {

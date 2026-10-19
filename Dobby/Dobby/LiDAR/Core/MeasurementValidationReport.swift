@@ -309,6 +309,7 @@ nonisolated struct MeasurementValidationReportBuilder {
     private var rows: [String: MeasurementValidationSample] = [:]
     private var latestEdits: [String: (savedAt: Date, recordID: UUID)] = [:]
     private var recordsSeen = 0, synthetic = 0, missingModelMetadata = 0, malformed = 0, duplicates = 0
+    private var replayAlgorithmVersions = Set<String>()
 
     mutating func addUnreadableRecord() { recordsSeen += 1; malformed += 1 }
 
@@ -335,8 +336,9 @@ nonisolated struct MeasurementValidationReportBuilder {
             }
             return
         }
-        let output = LiDARMeasurementEngine(options: record.options).measure(
-            frame: frame, landmarks: record.landmarks, definitions: record.definitions)
+        let output = MeasurementCalculator.measure(
+            frame: frame, landmarks: record.landmarks, definitions: record.definitions, options: record.options)
+        replayAlgorithmVersions.insert(output.algorithmVersion)
         guard output.values.count == record.definitions.count else { malformed += 1; return }
         let identity = MeasurementValidationFrameIdentity(record.snapshot)
         let encoder = JSONEncoder()
@@ -408,7 +410,9 @@ nonisolated struct MeasurementValidationReportBuilder {
             pairedUnavailable: pairs.filter { $0.status == .unavailable }.count,
             pairMismatches: pairs.filter { $0.status == .mismatchedInput }.count,
             automatedWithoutManual: automated.count - pairs.count)
-        return .init(samples: samples, groups: groups, pairs: pairs, counts: counts, algorithmVersion: LiDARMeasurementEngine.algorithmVersion)
+        let versions = replayAlgorithmVersions.sorted()
+        let algorithm = versions.isEmpty ? LiDARMeasurementEngine.algorithmVersion : versions.joined(separator: " + ")
+        return .init(samples: samples, groups: groups, pairs: pairs, counts: counts, algorithmVersion: algorithm)
     }
 
     private static func nonempty(_ value: String?) -> String? {

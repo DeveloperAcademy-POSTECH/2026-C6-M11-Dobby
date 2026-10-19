@@ -77,6 +77,21 @@ final class GarmentKindSelectionPolicyTests: XCTestCase {
         XCTAssertEqual(GarmentKindSelectionPolicy.select(top: nil, bottoms: result), .selected(.bottoms))
     }
 
+    func testBottom8RecognizesDirectFrontCenterWithoutMakingItAClassGate() throws {
+        let points = bottomPoints()
+        let front = GarmentLandmark(id: "waist_front_center", point: .init(x: 0.5, y: 0.2), confidence: 0.92)
+        let complete = try evidence(.bottoms, points + [front], bottomMask())
+        XCTAssertEqual(complete.status, .supported)
+        XCTAssertEqual(complete.metrics["semanticDirectPoints"], 8)
+        let missing = try evidence(.bottoms, points, bottomMask())
+        XCTAssertEqual(missing.status, .supported, "Only the rise measurement depends on the eighth point")
+        var uncertainFront = front
+        uncertainFront.confidence = 0.49
+        let partial = try evidence(.bottoms, points + [uncertainFront], bottomMask())
+        XCTAssertEqual(partial.status, .supported)
+        XCTAssertEqual(partial.metrics["semanticDirectPoints"], 7, "Existing 0.5 confidence threshold stays intact")
+    }
+
     func testPartialTopWithoutNeckSleevesOrHemCenterStillClassifiesBody() throws {
         let points = topPoints().filter { ["shoulder_left", "shoulder_right", "armpit_left", "armpit_right", "hem_left", "hem_right"].contains($0.id) }
         let result = try evidence(.top, points, polygon(topPolygon))
