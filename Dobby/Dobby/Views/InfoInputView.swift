@@ -45,9 +45,14 @@ struct InfoInputView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     photoStrip
                     field("제품 명", text: $garment.name,
-                          placeholder: "예: 90s 나이키 자켓", lines: 1...2, identifier: "name")
+                          placeholder: "예: 90s 나이키 자켓", lines: 1...2,
+                          identifier: "name", isRequired: true)
                     field("설명", text: $garment.detail,
-                          placeholder: "연식, 실착 사이즈, 상태를 적어주세요", lines: 5...10, identifier: "detail")
+                          placeholder: "연식, 실착 사이즈, 상태를 적어주세요", lines: 5...10,
+                          identifier: "detail", isRequired: true)
+                    field("가격", text: priceText,
+                          placeholder: "예: 23000", lines: 1...1,
+                          identifier: "price", isRequired: true, keyboardType: .numberPad)
                     field("브랜드", text: $garment.brand,
                           placeholder: "예: 나이키", lines: 1...1, identifier: "brand")
                     sizeTable.id(Self.measurementTableID)
@@ -147,12 +152,30 @@ struct InfoInputView: View {
 
     // MARK: 글자 입력
 
+    private var priceText: Binding<String> {
+        Binding(
+            get: { garment.price.map(String.init) ?? "" },
+            set: { input in
+                let digits = input.filter(\.isNumber)
+                garment.price = digits.isEmpty ? nil : Int(digits)
+            }
+        )
+    }
+
     private func field(_ title: String, text: Binding<String>,
-                       placeholder: String, lines: ClosedRange<Int>, identifier: String) -> some View {
+                       placeholder: String, lines: ClosedRange<Int>, identifier: String,
+                       isRequired: Bool = false, keyboardType: UIKeyboardType = .default) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
+            HStack(spacing: 3) {
+                Text(title)
+                if isRequired {
+                    Text("*").foregroundStyle(.red)
+                }
+            }
+            .font(.headline)
             TextField(placeholder, text: text, axis: .vertical)
                 .accessibilityIdentifier("product-info.\(identifier)")
+                .keyboardType(keyboardType)
                 .lineLimit(lines)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
