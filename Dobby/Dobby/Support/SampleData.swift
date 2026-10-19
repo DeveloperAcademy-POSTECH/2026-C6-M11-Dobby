@@ -55,8 +55,7 @@ enum SampleData {
             predicate: #Predicate { $0.id == exportSampleID }
         )
         if let existing = try context.fetch(descriptor).first {
-            try ensurePlaceholderPhotos(colors: exportSampleItem.colors, for: existing)
-            try context.save()
+            try upgradeExportSampleIfNeeded(existing, in: context)
             return existing
         }
 
@@ -64,6 +63,24 @@ enum SampleData {
         garment.informationCompletedAt = .now
         try context.save()
         return garment
+    }
+
+    /// 예전 버전에서 한 장만 저장된 내보내기 샘플도 앱을 다시 열면 최신 상태로 맞춘다.
+    @MainActor
+    static func refreshExportSampleIfPresent(in context: ModelContext) throws {
+        let descriptor = FetchDescriptor<Garment>(
+            predicate: #Predicate { $0.id == exportSampleID }
+        )
+        guard let existing = try context.fetch(descriptor).first else { return }
+        try upgradeExportSampleIfNeeded(existing, in: context)
+    }
+
+    /// 상세 화면이 이미 열려 있는 경우에도 관계 배열을 직접 갱신해 새 사진이 바로 보이게 한다.
+    @MainActor
+    static func upgradeExportSampleIfNeeded(_ garment: Garment, in context: ModelContext) throws {
+        guard garment.id == exportSampleID else { return }
+        try ensurePlaceholderPhotos(colors: exportSampleItem.colors, for: garment)
+        try context.save()
     }
 
     // MARK: 더미 목록
