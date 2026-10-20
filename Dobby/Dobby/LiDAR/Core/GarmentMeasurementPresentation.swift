@@ -19,6 +19,7 @@ nonisolated enum GarmentMeasurementPresentation {
         .init(measurementID: "bottom.hem_left_outer.waist_left", productKey: "totalLengthLeft", title: "총장"),
         .init(measurementID: "bottom.waist_left.waist_right", productKey: "waistWidth", title: "허리"),
         .init(measurementID: "bottom.crotch.waist_front_center", productKey: "frontRise", title: "밑위"),
+        .init(measurementID: "bottom.thighWidthRight", productKey: "thighWidthRight", title: "허벅지"),
         .init(measurementID: "bottom.hem_left_inner.hem_left_outer", productKey: "hemWidthLeft", title: "밑단")
     ]
 

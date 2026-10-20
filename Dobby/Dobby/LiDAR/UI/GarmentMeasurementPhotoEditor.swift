@@ -129,8 +129,8 @@ struct GarmentMeasurementPhotoEditor: View {
                 context.stroke(path, with: .color(.black.opacity(0.5)), lineWidth: 3)
                 context.stroke(path, with: .color(.white.opacity(0.95)),
                     style: .init(lineWidth: 1.5, lineCap: .round, dash: [4, 5]))
-                // Spatially derived and projected endpoints remain indicators,
-                // never draggable substitutes for their physical source points.
+                // Endpoint indicators accompany the measurement line; editable
+                // physical and contour handles are drawn separately above it.
                 for endpoint in [item.start, item.end] {
                     let marker = Path(ellipseIn: CGRect(x: endpoint.x - 3, y: endpoint.y - 3, width: 6, height: 6))
                     context.fill(marker, with: .color(.white))
@@ -410,6 +410,7 @@ enum GarmentPointName {
         case "neck_center": "목 중앙점"
         case "top_length_start": "총장 상단점"
         case "waist_front_center": "앞허리 중앙점"
+        case "thigh_right": "오른쪽 허벅지점"
         case "neck_left": "왼쪽 목점"
         case "neck_right": "오른쪽 목점"
         case "shoulder_left": "왼쪽 어깨점"
