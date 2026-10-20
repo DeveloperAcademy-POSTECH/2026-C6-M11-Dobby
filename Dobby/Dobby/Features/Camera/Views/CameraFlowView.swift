@@ -11,6 +11,7 @@ import AVFoundation
 /// 상세 촬영 Hi-Fi 화면. 기본은 실제 영상이며 Canvas에서만 샘플 이미지를 주입한다.
 /// 상위 NavigationStack에 삽입하며 화면 이동 중 같은 Model을 유지한다.
 struct CameraFlowView: View {
+    @Environment(\.scenePhase) private var scenePhase
     let model: ProductPhotoModel
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
@@ -21,6 +22,7 @@ struct CameraFlowView: View {
     @State private var failureMessage: String?
     @State private var isCaptureGuidePresented = false
     @State private var isGalleryPresented = false
+    @State private var isMoreOptionsPresented = false
 
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
@@ -36,6 +38,16 @@ struct CameraFlowView: View {
     var body: some View {
         CameraPermissionGate(permission: permission) {
             preview
+                .overlay {
+                    if isMoreOptionsPresented {
+                        Button { isMoreOptionsPresented = false } label: {
+                            Color.clear.contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
+                        .accessibilityIdentifier("camera.dismissOptions")
+                    }
+                }
                 .overlay(alignment: .bottom) {
                     VStack(spacing: 0) {
                         if let failureMessage {
@@ -43,7 +55,11 @@ struct CameraFlowView: View {
                         } else if model.isCapturing {
                             ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
                         }
-                        captureControls
+                        if isMoreOptionsPresented {
+                            DetailCaptureOptionsView { isMoreOptionsPresented = false }
+                        } else {
+                            captureControls
+                        }
                     }
                 }
                 .ignoresSafeArea()
@@ -100,10 +116,19 @@ struct CameraFlowView: View {
             captureRequested = false
         }
         .onChange(of: permission.status) { _, status in
-            if status != .authorized { captureRequested = false }
+            if status != .authorized {
+                captureRequested = false
+                isMoreOptionsPresented = false
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { isMoreOptionsPresented = false }
         }
         // 화면 이탈은 요청만 취소한다. 사진과 선택 결과는 초기화하지 않는다.
-        .onDisappear { captureRequested = false }
+        .onDisappear {
+            captureRequested = false
+            isMoreOptionsPresented = false
+        }
     }
 
     @ViewBuilder
@@ -145,12 +170,11 @@ struct CameraFlowView: View {
             Spacer(minLength: 16)
             shutter
             Spacer(minLength: 16)
-            // 노출·비율 조절은 더보기 구현 단계에서 연결한다.
-            Button { /* 더보기 연결 예정 */ } label: {
+            Button { isMoreOptionsPresented = true } label: {
                 Image("DetailCaptureMore").resizable().frame(width: 48, height: 48)
             }
             .buttonStyle(.plain)
-            .disabled(true)
+            .disabled(isPhotoOperationInProgress)
             .accessibilityLabel("촬영 옵션 더보기")
             .accessibilityIdentifier("camera.moreOptions")
             Spacer(minLength: 16)
