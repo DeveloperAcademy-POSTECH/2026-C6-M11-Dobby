@@ -1,4 +1,5 @@
 import CoreImage
+import CoreVideo
 import XCTest
 @testable import Dobby
 
@@ -38,8 +39,11 @@ final class AutoGarmentProviderTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
 
-        XCTAssertEqual(evaluation.classificationAttempts.map(\.orientation), [.up, .down],
-            "Rejected frames must be evaluated in both original and half-turn orientations")
+        let orientation = try XCTUnwrap(evaluation.orientationPrediction)
+        XCTAssertEqual(evaluation.classificationAttempts.map(\.orientation), [
+            GarmentOrientationTransform.composed(device: .up, correction: orientation.correction)
+        ], "The four-way top-1 correction owns the only classifier/pose orientation")
+        XCTAssertEqual(Set(orientation.probabilities.keys), Set([0, 90, 180, 270]))
         let expectedLabels = Set(GarmentClassificationCategory.allCases.map(\.rawValue))
         XCTAssertEqual(expectedLabels.count, 15)
         for attempt in evaluation.classificationAttempts {
@@ -51,6 +55,31 @@ final class AutoGarmentProviderTests: XCTestCase {
         XCTAssertNil(evaluation.recognition, "A full neutral image must never become a garment silhouette")
         XCTAssertEqual(evaluation.poseRequests, 0, "Classifier rejection must avoid running either pose model")
         XCTAssertEqual(evaluation.foregroundRequests, 0, "A rejected frame must not enter garment foreground association")
+    }
+
+    func testBundledOrientationModelAndExactRGB224InputInIOSRuntime() throws {
+        let url = try GarmentOrientationModelProvider.resourceURL(in: .main)
+        XCTAssertEqual(url.pathExtension, "mlmodelc")
+        let worker = GarmentOrientationModelProvider(modelURL: url)
+        let image = try neutralImage()
+        let prediction = try worker.classify(image, deviceOrientation: .right)
+        XCTAssertEqual(Set(prediction.probabilities.keys), Set([0, 90, 180, 270]))
+        XCTAssertEqual(prediction.probabilities.values.reduce(0, +), 1, accuracy: 0.02)
+    }
+
+    func testOrientationPreprocessorKeepsExactRGBBytesAndOddPadding() throws {
+        let black = CIImage(color: CIColor(red: 0, green: 0, blue: 0))
+            .cropped(to: CGRect(x: 0, y: 0, width: 64, height: 3))
+        let image = try XCTUnwrap(CIContext().createCGImage(black, from: black.extent))
+        let buffer = try GarmentOrientationModelProvider.pixelBuffer(image)
+        XCTAssertEqual(CVPixelBufferLockBaseAddress(buffer, .readOnly), kCVReturnSuccess)
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        let bytes = try XCTUnwrap(CVPixelBufferGetBaseAddress(buffer)).assumingMemoryBound(to: UInt8.self)
+        let stride = CVPixelBufferGetBytesPerRow(buffer)
+        for y in [0, 105, 106, 116, 117, 223] {
+            let expected: UInt8 = (106..<117).contains(y) ? 0 : 114
+            for channel in 0..<3 { XCTAssertEqual(bytes[y * stride + 112 * 4 + channel], expected) }
+        }
     }
 
     func testBundledPoseModelsPrepareInIOSRuntime() async throws {

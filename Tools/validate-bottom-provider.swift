@@ -3,9 +3,10 @@
 // xcrun swiftc -parse-as-library Dobby/Dobby/LiDAR/Core/*.swift \
 //   Dobby/Dobby/LiDAR/Capture/CoreMLBottomLandmarkProvider.swift \
 //   Dobby/Dobby/LiDAR/Capture/GarmentForegroundMaskAnalyzer.swift \
+//   Dobby/Dobby/LiDAR/Capture/GarmentOrientationModelProvider.swift \
 //   Tools/validate-bottom-provider.swift -o /tmp/validate-bottom-provider
 // /tmp/validate-bottom-provider <BottomLandmarks.mlpackage|mlmodelc> \
-//   <schema_bottom7.json> <photo> [photo ...] [--output /tmp/provider-report.json]
+//   <schema_bottom8.json> <photo> [photo ...] [--output /tmp/provider-report.json]
 // Photos are local files. No network, PyTorch/pickle loading, or device installation.
 // The frame-adapter check uses empty synthetic depth and NEVER computes centimetres.
 

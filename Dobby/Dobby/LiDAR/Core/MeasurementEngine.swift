@@ -235,7 +235,9 @@ nonisolated struct LiDARMeasurementEngine {
                               quality: quality, sourceLandmarkIDs: sourceIDs))
     }
 
-    private func validate(frame: MeasurementFrame, landmarks: GarmentLandmarkSet) -> MeasurementFailure? {
+    // Shared input contracts: representative-plane measurement changes depth
+    // support, not frame identity, calibration or point confidence validation.
+    func validate(frame: MeasurementFrame, landmarks: GarmentLandmarkSet) -> MeasurementFailure? {
         guard frame.sessionID == landmarks.sessionID, frame.frameID == landmarks.frameID else { return .frameMismatch }
         guard (1...12).contains(options.sampleRadius),
               options.minimumSamples >= 3,
@@ -401,7 +403,7 @@ nonisolated struct LiDARMeasurementEngine {
         return .success(.init(landmark: point, uncertain: uncertain))
     }
 
-    private func validateLandmark(_ landmark: GarmentLandmark, origin: LandmarkOrigin) -> MeasurementFailure? {
+    func validateLandmark(_ landmark: GarmentLandmark, origin: LandmarkOrigin) -> MeasurementFailure? {
         guard landmark.point.isValid else { return .outOfBounds }
         guard landmark.isVisible else { return .occludedLandmark }
         if let confidence = landmark.confidence {
@@ -422,7 +424,7 @@ nonisolated struct LiDARMeasurementEngine {
         guard landmark.id == "neck_center", sourceIDs == ["neck_left", "neck_right"],
               landmark.derivedFrom == sourceIDs,
               set.origin == .model, set.garmentKind == .top,
-              set.modelVersion == AutomaticGarmentKind.top.modelVersion,
+              [AutomaticGarmentKind.legacyTopModelVersion, AutomaticGarmentKind.top.modelVersion].contains(where: { $0 == set.modelVersion }),
               (landmark.origin ?? set.origin) == .model,
               let mask = set.mask, landmark.point.isValid else { return nil }
         let sources = sourceIDs.compactMap { id -> GarmentLandmark? in

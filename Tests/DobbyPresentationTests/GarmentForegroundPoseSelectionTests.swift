@@ -67,6 +67,81 @@ final class GarmentForegroundPoseSelectionTests: XCTestCase {
         XCTAssertEqual(actual.map(\.derivedFrom), expected.map(\.derivedFrom), file: file, line: line)
     }
 
+    /// This raster fixture has exactly one outside boundary point: hem_right
+    /// lies on the excluded right edge. The nearest foreground pixel center is
+    /// (139.5, 129.5), within the 3% bound; every other raw point stays unchanged.
+    private func assertTopCalculation(_ actual: [GarmentLandmark], _ raw: [GarmentLandmark],
+                                      file: StaticString = #filePath, line: UInt = #line) {
+        var expected = raw
+        for index in expected.indices where expected[index].id == "hem_right" {
+            expected[index].point = .init(x: 139.5 / 200, y: 129.5 / 160)
+        }
+        assertUnchanged(actual, expected, file: file, line: line)
+        XCTAssertEqual(actual.map(\.origin), raw.map(\.origin), file: file, line: line)
+    }
+
+    func testCurrentTopForegroundAssemblyIncludesContourRequestWithOnlyElevenRawPredictions() throws {
+        let raw = topPoints(), mask = topMask()
+        let result = try GarmentForegroundPoseSelection.recognize(orientation: .up,
+            allowsHalfTurn: false, recordsRecoverableFailures: true, imageSize: size,
+            schemaKind: .top, modelVersion: AutomaticGarmentKind.top.modelVersion,
+            infer: { _ in self.predict(raw) }, masks: { _ in [mask] })
+        let diagnostics = try XCTUnwrap(result.recognition.diagnostics)
+        assertUnchanged(diagnostics.rawPoints, raw)
+        XCTAssertEqual(diagnostics.rawPoints.count, 11)
+        XCTAssertEqual(diagnostics.pointAssessments.count, 11)
+        XCTAssertEqual(result.recognition.points.count, 12)
+        let contour = try XCTUnwrap(result.recognition.points.first { $0.id == "top_length_start" })
+        XCTAssertEqual(contour.contourRule, .neckPerpendicularMaskV1)
+        XCTAssertNil(contour.derivedFrom, "A contour intersection is never a 3D parent average")
+        XCTAssertNil(contour.confidence, "A contour request must not claim an extra model confidence")
+        XCTAssertFalse(contour.isVisible, "The engine must resolve the intersection before displaying it")
+        XCTAssertEqual(diagnostics.automaticAdjustments?.map(\.landmarkID), ["hem_right"])
+        assertTopCalculation(result.recognition.points.filter { $0.id != "top_length_start" }, raw)
+        XCTAssertEqual(TopLandmarkSchema.canonicalMeasurementDefinitions.first { $0.id == "top.totalLength" }?.landmarkIDs,
+                       ["top_length_start", "hem_center"])
+        // Exercise the exact recognition output as the plane engine receives it,
+        // rather than rebuilding a corrected set with the schema helper in test.
+        let sessionID = UUID(), frameID = UUID()
+        let frame = MeasurementFrame(sessionID: sessionID, frameID: frameID, timestamp: 1, capturedAt: .distantPast,
+            imageSize: size, intrinsics: .init(fx: 200, fy: 200, cx: 100, cy: 80, referenceSize: size),
+            depth: .init(size: size, values: [Float](repeating: 1.2, count: size.width * size.height),
+                         confidence: [UInt8](repeating: 2, count: size.width * size.height)),
+            source: .synthetic, orientation: .up)
+        let landmarks = GarmentLandmarkSet(sessionID: sessionID, frameID: frameID, origin: .model,
+            modelVersion: result.recognition.modelVersion, points: result.recognition.points,
+            mask: result.selection.mask, garmentKind: .top, recognitionDiagnostics: diagnostics)
+        let measured = GarmentPlaneMeasurementEngine().measure(frame: frame, landmarks: landmarks,
+            definitions: TopLandmarkSchema.canonicalMeasurementDefinitions)
+        let total = try XCTUnwrap(measured.values.first { $0.id == "top.totalLength" })
+        XCTAssertGreaterThan(try XCTUnwrap(total.meters), 0, "Production recognition output must resolve total length")
+    }
+
+    func testRawAssociationRejectionCannotBeRescuedByOutlineSnap() throws {
+        let raster = PixelSize(width: 200, height: 100)
+        var values = [UInt8](repeating: 0, count: 20_000)
+        for y in 20..<80 { for x in 40..<160 { values[y * 200 + x] = 1 } }
+        let mask = GarmentMask(size: raster, values: values)
+        let raw = [(36.5, 30.5), (36.5, 50.5), (36.5, 70.5),
+                   (163.5, 30.5), (163.5, 50.5), (163.5, 70.5)].enumerated().map {
+            GarmentLandmark(id: "point_\($0.offset)", point: .init(x: $0.element.0 / 200, y: $0.element.1 / 100),
+                            confidence: 0.9)
+        }
+        // The fixture could pass association if someone incorrectly moved the
+        // candidates first. Production must retain the original rejection.
+        let moved = try GarmentOutlineSnap.apply(points: raw, mask: mask, imageSize: raster)
+        XCTAssertNoThrow(try GarmentMaskAssociation.select(masks: [mask], points: moved.points, imageSize: raster))
+        XCTAssertThrowsError(try GarmentForegroundPoseSelection.recognize(orientation: .up,
+            allowsHalfTurn: false, recordsRecoverableFailures: true, imageSize: raster,
+            schemaKind: nil, modelVersion: "fixture",
+            infer: { _ in .init(points: raw, detectionConfidence: 0.9) }, masks: { _ in [mask] })) { error in
+                let failure = error as? GarmentForegroundValidationFailure
+                XCTAssertEqual(failure?.diagnosisCode, "unmatchedForeground")
+                XCTAssertEqual(failure?.attempts.count, 1)
+                XCTAssertEqual(failure?.attempts.first?.rawPoints?.map(\.point), raw.map(\.point))
+            }
+    }
+
     func testStrictSuccessKeepsOriginalDirectionAndRawCandidates() throws {
         let raw = topPoints(), mask = topMask()
         var inferDirections: [ImageOrientation] = [], maskDirections: [ImageOrientation] = []
@@ -77,12 +152,14 @@ final class GarmentForegroundPoseSelectionTests: XCTestCase {
             masks: { maskDirections.append($0); return [mask] })
         XCTAssertEqual(inferDirections, [.right])
         XCTAssertEqual(maskDirections, [.right])
-        assertUnchanged(result.recognition.points, raw)
+        assertTopCalculation(result.recognition.points, raw)
         XCTAssertEqual(result.selection.mask, mask)
         let diagnostics = try XCTUnwrap(result.recognition.diagnostics)
         XCTAssertEqual(diagnostics.requestedOrientation, .right)
         XCTAssertEqual(diagnostics.selectedPoseOrientation, .right)
         XCTAssertEqual(diagnostics.associationPolicy, .strict)
+        assertUnchanged(diagnostics.rawPoints, raw)
+        XCTAssertEqual(diagnostics.automaticAdjustments?.map(\.landmarkID), ["hem_right"])
         XCTAssertFalse(diagnostics.requiresReview)
     }
 
@@ -98,7 +175,7 @@ final class GarmentForegroundPoseSelectionTests: XCTestCase {
         XCTAssertEqual(maskDirections, [.up])
         XCTAssertEqual(result.poseRequests, 1)
         XCTAssertEqual(result.foregroundRequests, 1)
-        assertUnchanged(result.recognition.points, raw)
+        assertTopCalculation(result.recognition.points, raw)
         XCTAssertEqual(result.selection.mask, mask)
         let diagnostics = try XCTUnwrap(result.recognition.diagnostics)
         assertUnchanged(diagnostics.rawPoints, raw)
@@ -135,10 +212,12 @@ final class GarmentForegroundPoseSelectionTests: XCTestCase {
         XCTAssertEqual(directions, [.up, .down])
         XCTAssertEqual(result.poseRequests, 2)
         XCTAssertEqual(result.foregroundRequests, 2)
-        assertUnchanged(result.recognition.points, rotated)
+        assertTopCalculation(result.recognition.points, rotated)
         let diagnostics = try XCTUnwrap(result.recognition.diagnostics)
         XCTAssertEqual(diagnostics.requestedOrientation, .up)
         XCTAssertEqual(diagnostics.selectedPoseOrientation, .down)
+        assertUnchanged(diagnostics.rawPoints, rotated)
+        XCTAssertEqual(diagnostics.automaticAdjustments?.map(\.landmarkID), ["hem_right"])
         XCTAssertEqual(diagnostics.poseAttempts.map(\.orientation), [.up, .down])
         assertUnchanged(try XCTUnwrap(diagnostics.poseAttempts.first?.rawPoints), original)
         XCTAssertEqual(diagnostics.poseAttempts.first?.failure, "unmatchedForeground")

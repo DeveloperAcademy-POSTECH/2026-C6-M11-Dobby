@@ -10,7 +10,7 @@ final class TopMeasurementLifecycleTests: XCTestCase {
             depth: .init(size: size, values: .init(repeating: 1, count: 40_000),
                          confidence: .init(repeating: 2, count: 40_000)), source: .synthetic, orientation: .up)
         let landmarks = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID,
-            origin: .model, modelVersion: "top11-ec1e6b054d59", points: [
+            origin: .model, modelVersion: AutomaticGarmentKind.legacyTopModelVersion, points: [
                 .init(id: "neck_left", point: .init(x: 0.35, y: 0.25), confidence: 1),
                 .init(id: "neck_right", point: .init(x: 0.65, y: 0.25), confidence: 1),
                 .init(id: "neck_center", point: .init(x: 0.5, y: 0.25), confidence: 1,

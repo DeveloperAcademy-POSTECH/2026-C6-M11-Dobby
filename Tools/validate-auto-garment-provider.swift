@@ -4,6 +4,7 @@
 //   Dobby/Dobby/LiDAR/Capture/CoreMLBottomLandmarkProvider.swift \
 //   Dobby/Dobby/LiDAR/Capture/CoreMLGarmentLandmarkProvider.swift \
 //   Dobby/Dobby/LiDAR/Capture/GarmentForegroundMaskAnalyzer.swift \
+//   Dobby/Dobby/LiDAR/Capture/GarmentOrientationModelProvider.swift \
 //   Dobby/Dobby/LiDAR/Capture/AutoGarmentLandmarkProvider.swift \
 //   Tools/validate-auto-garment-provider.swift -o /tmp/validate-auto-garment-provider
 // /tmp/validate-auto-garment-provider <models-directory> <manifest.json> <report.json>
@@ -75,7 +76,7 @@ private struct Report: Codable {
             schemaData: Data(contentsOf: directory.appendingPathComponent("schema_top.json")))
         let bottoms = try CoreMLGarmentLandmarkProvider(kind: .bottoms,
             modelURL: directory.appendingPathComponent("BottomLandmarks.mlpackage"),
-            schemaData: Data(contentsOf: directory.appendingPathComponent("schema_bottom7.json")))
+            schemaData: Data(contentsOf: directory.appendingPathComponent("schema_bottom8.json")))
         let provider = try AutoGarmentLandmarkProvider(top: top, bottoms: bottoms,
             classifierModelURL: directory.appendingPathComponent("clothes_image_detection.mlpackage"))
         let preparation = ContinuousClock.now

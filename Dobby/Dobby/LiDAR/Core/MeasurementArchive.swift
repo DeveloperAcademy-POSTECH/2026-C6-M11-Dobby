@@ -184,12 +184,12 @@ actor MeasurementPipeline {
 
     func measure(snapshot: CaptureSnapshot, landmarks: GarmentLandmarkSet,
                  definitions: [MeasurementDefinition], options: MeasurementOptions) -> GarmentMeasurementResult {
-        LiDARMeasurementEngine(options: options).measure(frame: snapshot.frame, landmarks: landmarks, definitions: definitions)
+        MeasurementCalculator.measure(frame: snapshot.frame, landmarks: landmarks, definitions: definitions, options: options)
     }
 
     func measure(snapshot: CaptureSnapshot, provider: any GarmentLandmarkProviding,
                  definitions: [MeasurementDefinition], options: MeasurementOptions = .init()) async throws -> GarmentMeasurementResult {
         let landmarks = try await detectLandmarks(snapshot: snapshot, provider: provider)
-        return LiDARMeasurementEngine(options: options).measure(frame: snapshot.frame, landmarks: landmarks, definitions: definitions)
+        return MeasurementCalculator.measure(frame: snapshot.frame, landmarks: landmarks, definitions: definitions, options: options)
     }
 }

@@ -134,6 +134,8 @@ nonisolated struct ManualMeasurement: Identifiable, Sendable {
     @discardableResult
     mutating func apply(_ output: GarmentMeasurementResult, for revision: UUID) -> Bool {
         guard revision == calculationRevision,
+              options.effectiveCalculationMode != .garmentPlane
+                || output.algorithmVersion == MeasurementCalculator.algorithmVersion(for: options),
               output.sessionID == snapshot.frame.sessionID,
               output.frameID == snapshot.frame.frameID,
               output.source == snapshot.frame.source,

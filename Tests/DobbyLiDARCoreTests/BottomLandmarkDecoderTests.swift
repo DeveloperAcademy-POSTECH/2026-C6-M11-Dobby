@@ -73,6 +73,54 @@ final class BottomLandmarkDecoderTests: XCTestCase {
         XCTAssertEqual(bundled.measurementDefinitions.map(\.id), expected.measurementDefinitions.map(\.id))
     }
 
+    func testBundledBottom8UsesDirectFrontCenterAndPreservesDobbyMeasurementOrder() throws {
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let schema = try BottomLandmarkSchema(jsonData: Data(contentsOf:
+            repository.appendingPathComponent("Dobby/Dobby/LiDAR/Models/schema_bottom8.json")))
+        XCTAssertEqual(schema.name, "bottom8")
+        XCTAssertEqual(schema.keypoints, BottomLandmarkSchema.expectedBottom8Keypoints)
+        XCTAssertEqual(schema.derivedOrder, ["waist_center"])
+        let legacy = try self.schema().measurementDefinitions
+        let definitions = schema.measurementDefinitions
+        XCTAssertEqual(definitions.map(\.id), legacy.enumerated().map { index, definition in
+            index == 1 ? "bottom.crotch.waist_front_center" : definition.id
+        })
+        XCTAssertEqual(definitions[1].landmarkIDs, ["waist_front_center", "crotch"])
+        var values = tensor()
+        values.append([330]); values.append([140]); values.append([0.81])
+        let geometry = try geometry()
+        let decoded = try BottomLandmarkDecoder(schema: schema).decode(shape: [1, 29, 1], geometry: geometry) { values[$0][$1] }
+        let front = try XCTUnwrap(decoded.points.first { $0.id == "waist_front_center" })
+        let middle = try XCTUnwrap(decoded.points.first { $0.id == "waist_center" })
+        XCTAssertEqual(front.point, .init(x: 330 / 640.0, y: 140 / 640.0))
+        XCTAssertNil(front.derivedFrom)
+        XCTAssertNotEqual(front.point, middle.point)
+        XCTAssertEqual(middle.derivedFrom, ["waist_left", "waist_right"])
+        XCTAssertThrowsError(try BottomLandmarkDecoder(schema: schema).decode(shape: [1, 26, 1], geometry: geometry) { values[$0][$1] })
+    }
+
+    func testMissingEighthDirectPointDoesNotFallbackToWaistMidpoint() throws {
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let schema = try BottomLandmarkSchema(jsonData: Data(contentsOf:
+            repository.appendingPathComponent("Dobby/Dobby/LiDAR/Models/schema_bottom8.json")))
+        var values = tensor()
+        values.append([-1]); values.append([140]); values.append([0.91])
+        let decoded = try BottomLandmarkDecoder(schema: schema).decode(shape: [1, 29, 1], geometry: geometry()) { values[$0][$1] }
+        XCTAssertFalse(decoded.points.contains { $0.id == "waist_front_center" })
+        XCTAssertTrue(decoded.points.contains { $0.id == "waist_center" })
+        let frame = SyntheticFixtures.scene().frame
+        let set = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID,
+            origin: .model, modelVersion: AutomaticGarmentKind.bottoms.modelVersion,
+            points: decoded.points, mask: nil, garmentKind: .bottoms)
+        let result = LiDARMeasurementEngine().measure(frame: frame, landmarks: set, definitions: schema.measurementDefinitions)
+        XCTAssertEqual(result.values[1].id, "bottom.crotch.waist_front_center")
+        XCTAssertEqual(result.values[1].failure, .missingLandmark)
+        XCTAssertNil(result.values[1].meters)
+        XCTAssertTrue(result.values.enumerated().filter { $0.offset != 1 }.allSatisfy { $0.element.meters != nil })
+    }
+
     func testMeasurementIDStableWhenSkeletonOrderingAndDirectionChanges() throws {
         var changed = document
         let original = try schema().measurementDefinitions
