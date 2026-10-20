@@ -72,7 +72,8 @@ extension GarmentStore {
                 $0.isFinite && $0 > 0 ? $0 * 100 : nil
             }
             let measured = MeasuredValue(key: key, label: value.title, displayOrder: index,
-                                         valueCm: usableMeters.map { $0 * 100 } ?? 0, autoValueCm: originalCm)
+                valueCm: usableMeters.map { StoredMeasurementValue.centimeters($0 * 100) } ?? 0,
+                autoValueCm: originalCm)
             measured.sourceStatusRaw = value.status.rawValue
             measured.garment = garment
             insertionContext.insert(measured)

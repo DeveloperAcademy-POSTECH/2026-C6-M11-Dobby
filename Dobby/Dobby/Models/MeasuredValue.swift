@@ -8,6 +8,20 @@
 import Foundation
 import SwiftData
 
+nonisolated enum StoredMeasurementValue {
+    /// Product measurements are persisted in centimetres with one decimal place.
+    /// Keep measurement calculations and automatic source values at full precision.
+    static func centimeters(_ value: Double) -> Double {
+        guard value.isFinite else { return value }
+        return (value * 10).rounded(.towardZero) / 10
+    }
+
+    static func text(_ value: Double) -> String {
+        centimeters(value).formatted(.number.locale(Locale(identifier: "en_US_POSIX"))
+            .grouping(.never).precision(.fractionLength(0...1)))
+    }
+}
+
 @Model
 final class MeasuredValue {
     @Attribute(.unique) var id: UUID

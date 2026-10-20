@@ -91,8 +91,8 @@ enum GarmentStore {
 extension GarmentStore {
     /// 실측이 끝난 직후 상품 한 벌을 만든다.
     ///
-    /// `valueCm`과 `autoValueCm`을 같은 값으로 시작시킨다. 이후 사용자가 고치면 `valueCm`만
-    /// 움직이고 `autoValueCm`은 모델이 처음 말한 값으로 남아, 둘의 차이가 그대로 오차 기록이 된다.
+    /// 상품에 저장하는 `valueCm`만 소수 첫째 자리까지 버린다. `autoValueCm`은 모델이 처음 말한
+    /// 정밀도를 보존해, 이후 사용자가 고쳤을 때 둘의 차이를 오차 기록으로 사용할 수 있게 한다.
     @discardableResult
     static func makeGarment(category: String, group: GarmentGroup,
                             measurements: [(key: String, label: String, cm: Double)],
@@ -106,7 +106,7 @@ extension GarmentStore {
         for (index, item) in measurements.enumerated() {
             garment.measurements.append(
                 MeasuredValue(key: item.key, label: item.label, displayOrder: index,
-                            valueCm: item.cm, autoValueCm: item.cm)
+                    valueCm: StoredMeasurementValue.centimeters(item.cm), autoValueCm: item.cm)
             )
         }
 

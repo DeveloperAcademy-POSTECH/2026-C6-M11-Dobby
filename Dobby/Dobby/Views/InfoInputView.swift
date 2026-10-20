@@ -332,14 +332,22 @@ enum GarmentInputCompletion {
         for value in measurements {
             GarmentMeasurementInputText.commitDraft(for: value, drafts: &drafts)
         }
+        let valuesBeforeStorage = garment.measurements.map { ($0, $0.valueCm) }
+        for value in garment.measurements where value.valueCm.isFinite && value.valueCm > 0 {
+            value.valueCm = StoredMeasurementValue.centimeters(value.valueCm)
+        }
         garment.syncFilterFields()
         let previousCompletion = garment.informationCompletedAt
         garment.informationCompletedAt = .now
         do {
             try persist()
         } catch {
-            // Keep the user's edits for retry, while a failed save must not
-            // promote a draft to a completed product in the current context.
+            // Truncation belongs to successful persistence. Keep the user's
+            // full input available for a retry when storage fails.
+            for (value, previousValue) in valuesBeforeStorage {
+                value.valueCm = previousValue
+            }
+            garment.syncFilterFields()
             garment.informationCompletedAt = previousCompletion
             throw error
         }

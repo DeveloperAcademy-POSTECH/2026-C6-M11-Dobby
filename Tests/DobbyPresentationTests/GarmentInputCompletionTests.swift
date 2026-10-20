@@ -24,24 +24,37 @@ struct GarmentInputCompletionTests {
         try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { saves += 1 }
         #expect(saves == 1 && drafts.isEmpty)
         #expect(garment.informationCompletedAt != nil)
-        #expect(length.valueCm == 67.25123 && length.autoValueCm == 68.12345 && length.isEdited)
-        #expect(chest.valueCm == 55.25 && !chest.isEdited)
-        #expect(garment.lengthCm == 67.25123 && garment.chestCm == 55.25)
+        #expect(length.valueCm == 67.2 && length.autoValueCm == 68.12345 && length.isEdited)
+        #expect(chest.valueCm == 55.2 && !chest.isEdited)
+        #expect(garment.lengthCm == 67.2 && garment.chestCm == 55.2)
         let export = ExportProduct(garment: garment, loadPhoto: { _ in nil })
         #expect(export.copyMeasurements.map(\.id) == ["chestWidth", "totalLength"])
-        #expect(export.fruits.length == "67.25123")
-        #expect(export.fruits.measurements == "가슴 55.25 cm\n총장 67.25123 cm")
+        #expect(export.fruits.length == "67.2")
+        #expect(export.fruits.measurements == "가슴 55.2 cm\n총장 67.2 cm")
+    }
+
+    @Test func successfulSaveTruncatesFromSecondDecimalWithoutRounding() throws {
+        let fixtures: [(input: String, stored: Double)] = [
+            ("45.95", 45.9), ("45.99", 45.9), ("45.01", 45), ("45.0", 45)
+        ]
+        for fixture in fixtures {
+            let (garment, length, _) = product()
+            var drafts = [length.id: fixture.input]
+            try GarmentInputCompletion.save(garment: garment, drafts: &drafts) {}
+            #expect(length.valueCm == fixture.stored)
+            #expect(length.autoValueCm == 68.12345)
+        }
     }
 
     @Test func completedDraftKeepsTypedTextAndIgnoresLateIdenticalBindingWrites() throws {
-        let fixtures = [(text: "67.25", cm: 67.25), (text: "67.25123", cm: 67.25123)]
+        let fixtures = ["67.25", "67.25123"]
         for fixture in fixtures {
             let (garment, length, chest) = product()
             var input = GarmentMeasurementInputState()
-            input.setText(fixture.text, for: length)
+            input.setText(fixture, for: length)
             try GarmentInputCompletion.save(garment: garment, drafts: &input.drafts) {}
             #expect(input.drafts.isEmpty && GarmentMeasurementInputText.format(length.valueCm) == "67")
-            #expect(input.text(for: length) == fixture.text)
+            #expect(input.text(for: length) == fixture)
             for _ in 0..<3 {
                 // TextField can write its displayed value again while keyboard
                 // and navigation change. It must remain the original typed text.
@@ -49,9 +62,9 @@ struct GarmentInputCompletionTests {
                 #expect(input.drafts.isEmpty)
                 try GarmentInputCompletion.save(garment: garment, drafts: &input.drafts) {}
             }
-            #expect(length.valueCm == fixture.cm && length.autoValueCm == 68.12345)
-            #expect(chest.valueCm == 55.25 && !chest.isEdited)
-            #expect(ExportProduct(garment: garment, loadPhoto: { _ in nil }).fruits.length == fixture.text)
+            #expect(length.valueCm == 67.2 && length.autoValueCm == 68.12345)
+            #expect(chest.valueCm == 55.2 && !chest.isEdited)
+            #expect(ExportProduct(garment: garment, loadPhoto: { _ in nil }).fruits.length == "67.2")
         }
     }
 
@@ -65,7 +78,7 @@ struct GarmentInputCompletionTests {
         input.setText(rounded, for: length)
         #expect(input.drafts.isEmpty)
         try GarmentInputCompletion.save(garment: garment, drafts: &input.drafts) {}
-        #expect(length.valueCm == 61.2491 && !length.isEdited)
+        #expect(length.valueCm == 61.2 && !length.isEdited)
 
         input.setText("", for: length)
         input.setText(rounded, for: length)
@@ -128,7 +141,7 @@ struct GarmentInputCompletionTests {
         #expect(drafts.isEmpty)
         var retrySaves = 0
         try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { retrySaves += 1 }
-        #expect(retrySaves == 1 && length.valueCm == 67.25123)
+        #expect(retrySaves == 1 && length.valueCm == 67.2)
         #expect(garment.informationCompletedAt != nil)
 
         let previousCompletion = garment.informationCompletedAt
@@ -152,11 +165,11 @@ struct GarmentInputCompletionTests {
         try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { try context.save() }
         let reader = ModelContext(container)
         let saved = try #require(reader.fetch(FetchDescriptor<Garment>()).first)
-        #expect(saved.name == "직접 입력한 자켓" && saved.lengthCm == 61.5123)
-        #expect(saved.measurement("totalLength")?.valueCm == 61.5123)
+        #expect(saved.name == "직접 입력한 자켓" && saved.lengthCm == 61.5)
+        #expect(saved.measurement("totalLength")?.valueCm == 61.5)
         #expect(saved.measurement("totalLength")?.autoValueCm == 68.12345)
         #expect(saved.measurement("totalLength")?.isEdited == true)
-        #expect(saved.measurement("chestWidth")?.valueCm == 55.25)
+        #expect(saved.measurement("chestWidth")?.valueCm == 55.2)
         #expect(saved.informationCompletedAt == garment.informationCompletedAt)
     }
 
@@ -193,7 +206,7 @@ struct GarmentInputCompletionTests {
         var drafts = [right.id: "63.5123456789"]
         try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { try context.save() }
         #expect(drafts.isEmpty && garment.informationCompletedAt != nil)
-        #expect(right.valueCm == 63.5123456789 && right.autoValueCm == 62.5 && right.isEdited)
+        #expect(right.valueCm == 63.5 && right.autoValueCm == 62.5 && right.isEdited)
         #expect(left.valueCm == 0 && left.autoValueCm == 61.125 && !left.isEdited)
         #expect(garment.sleeveCm == right.valueCm)
         let reader = ModelContext(container)
@@ -201,12 +214,12 @@ struct GarmentInputCompletionTests {
         #expect(saved.orderedMeasurements.count == 2 && saved.visibleMeasurements.count == 1)
         #expect(saved.measurement("sleeveLengthLeft")?.valueCm == 0)
         #expect(saved.measurement("sleeveLengthLeft")?.label == "왼쪽 소매")
-        #expect(saved.measurement("sleeveLengthRight")?.valueCm == 63.5123456789)
+        #expect(saved.measurement("sleeveLengthRight")?.valueCm == 63.5)
         #expect(saved.measurement("sleeveLengthRight")?.label == "오른쪽 소매")
-        #expect(saved.sleeveCm == 63.5123456789)
+        #expect(saved.sleeveCm == 63.5)
         let exported = ExportProduct(garment: saved, loadPhoto: { _ in nil })
         #expect(exported.copyMeasurements.map(\.id) == ["sleeveLengthRight"])
-        #expect(exported.copyMeasurements.first?.value == "63.5123456789")
+        #expect(exported.copyMeasurements.first?.value == "63.5")
     }
 
     @Test func usableLeftCanCompleteWhileInvalidRightOriginalRemainsStored() throws {
@@ -223,7 +236,7 @@ struct GarmentInputCompletionTests {
         #expect(garment.visibleMeasurements.map(\.key) == ["totalLengthLeft"])
         #expect(garment.lengthCm == left.valueCm)
         #expect(right.valueCm == -1 && right.autoValueCm == 102 && !right.isEdited)
-        #expect(left.valueCm == 101.25123 && !left.isEdited)
+        #expect(left.valueCm == 101.2 && !left.isEdited)
     }
 
     @Test func whenNeitherSideIsUsableDisplayedLeftStillRequiresCorrection() {
