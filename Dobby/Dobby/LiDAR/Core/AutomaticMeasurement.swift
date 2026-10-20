@@ -78,6 +78,8 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     @discardableResult
     mutating func apply(_ updated: GarmentMeasurementResult, for revision: UUID) -> Bool {
         guard revision == calculationRevision,
+              options.effectiveCalculationMode != .garmentPlane
+                || updated.algorithmVersion == MeasurementCalculator.algorithmVersion(for: options),
               updated.sessionID == snapshot.frame.sessionID,
               updated.frameID == snapshot.frame.frameID,
               updated.source == snapshot.frame.source,
@@ -139,23 +141,29 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         while cursor < pending.count && required.count <= 200 {
             let id = pending[cursor]
             cursor += 1
-            for sourceID in current.effectiveDerivedSourceIDs(for: id) ?? [] where required.insert(sourceID).inserted {
+            for sourceID in current.calculationSourceIDs(for: id) ?? [] where required.insert(sourceID).inserted {
                 pending.append(sourceID)
             }
         }
         var visible = editableLandmarks
         visible.points = visible.points.filter { required.contains($0.id) }
-        if allowsNeckCenterEditing, required.contains("neck_center"),
-           var center = current.points.first(where: { $0.id == "neck_center" }) {
+        if let startID = editableTotalLengthStartID, required.contains(startID),
+           var center = current.points.first(where: { $0.id == startID }) {
             // Start at the depth-backed midpoint when available; keep the raw
             // midpoint editable even when the automatic measurement failed.
             if let displayed = displayLandmarks.points.first(where: {
-                $0.id == "neck_center" && $0.isVisible && $0.point.isValid
+                $0.id == startID && $0.isVisible && $0.point.isValid
             }) {
                 center.point = displayed.point
+                center.isVisible = true
+            } else if center.contourRule != nil {
+                // A contour placeholder uses the hem as a non-measuring hint.
+                // It must never appear there as a successfully found top point.
+                center.isVisible = false
+            } else {
+                center.isVisible = center.point.isValid
             }
-            center.isVisible = center.point.isValid
-            visible.points.removeAll { ["neck_left", "neck_right", "neck_center"].contains($0.id) }
+            visible.points.removeAll { ["neck_left", "neck_right", "neck_center", "top_length_start"].contains($0.id) }
             visible.points.append(center)
         }
         return visible
@@ -166,12 +174,18 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     var editableLandmarks: GarmentLandmarkSet {
         let current = calculationLandmarks
         var editable = current
-        editable.points = current.points.filter { current.effectiveDerivedSourceIDs(for: $0.id) == nil }
+        editable.points = current.points.filter {
+            current.effectiveDerivedSourceIDs(for: $0.id) == nil && $0.contourRule == nil
+        }
         return editable
     }
 
     private var allowsNeckCenterEditing: Bool {
         definitions.contains { $0.id == "top.totalLength" && $0.landmarkIDs.contains("neck_center") }
+    }
+
+    private var editableTotalLengthStartID: String? {
+        canCorrectTotalLength ? definitions.first(where: { $0.id == "top.totalLength" })?.landmarkIDs.first : nil
     }
 
     var calculationLandmarks: GarmentLandmarkSet { adjustedLandmarks ?? landmarks }
@@ -182,7 +196,8 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         guard let adjustedLandmarks else { return [] }
         return Set(adjustedLandmarks.points.filter { point in
             guard point.origin == .manual,
-                  adjustedLandmarks.effectiveDerivedSourceIDs(for: point.id) == nil else { return false }
+                  adjustedLandmarks.effectiveDerivedSourceIDs(for: point.id) == nil,
+                  point.contourRule == nil else { return false }
             let original = landmarks.points.first { $0.id == point.id }
             return original?.origin != .manual || original?.point != point.point
         }.map(\.id))
@@ -193,7 +208,7 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     var canCorrectTotalLength: Bool {
         let matches = definitions.filter { $0.id == "top.totalLength" }
         return matches.count == 1
-            && matches[0].landmarkIDs == ["neck_center", "hem_center"]
+            && [["neck_center", "hem_center"], ["top_length_start", "hem_center"]].contains(matches[0].landmarkIDs)
             && matches[0].projection == nil
     }
 
@@ -204,7 +219,8 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     /// original depth, mask, options and unaffected model observations.
     @discardableResult
     mutating func applyTotalLengthCorrection(from manual: ManualMeasurement) -> Bool {
-        let ids = ["neck_center", "hem_center"]
+        guard canCorrectTotalLength,
+              let ids = definitions.first(where: { $0.id == "top.totalLength" })?.landmarkIDs else { return false }
         let frame = snapshot.frame
         let correctedFrame = manual.snapshot.frame
         guard canCorrectTotalLength,
@@ -219,7 +235,7 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
               Set(manual.landmarks.points.map(\.id)) == Set(ids),
               manual.landmarks.points.allSatisfy({
                   $0.origin == .manual && $0.isVisible && $0.point.isValid
-                      && $0.derivedFrom == nil && $0.confidence == nil
+                      && $0.derivedFrom == nil && $0.contourRule == nil && $0.confidence == nil
               }) else { return false }
 
         var updated = calculationLandmarks
@@ -236,7 +252,7 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
             if let index = updated.points.firstIndex(where: { $0.id == id }) {
                 let previous = updated.points[index]
                 changed = changed || previous.point != corrected.point || previous.origin != .manual
-                    || !previous.isVisible || previous.derivedFrom != nil || previous.confidence != nil
+                    || !previous.isVisible || previous.derivedFrom != nil || previous.contourRule != nil || previous.confidence != nil
                 updated.points[index] = corrected
             } else {
                 updated.points.append(corrected)
@@ -260,13 +276,14 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
               updated.sessionID == snapshot.frame.sessionID,
               updated.frameID == snapshot.frame.frameID,
               let index = updated.points.firstIndex(where: { $0.id == id }),
-              updated.effectiveDerivedSourceIDs(for: id) == nil
-                || (id == "neck_center" && allowsNeckCenterEditing) else { return false }
+              (updated.effectiveDerivedSourceIDs(for: id) == nil && updated.points[index].contourRule == nil)
+                || id == editableTotalLengthStartID else { return false }
         if updated.points[index].origin == .manual, updated.points[index].point == originalPoint { return false }
         // An explicitly placed neck center samples its own depth instead of
         // being recomputed from the two hidden model neck points.
-        if id == "neck_center", allowsNeckCenterEditing {
+        if id == editableTotalLengthStartID {
             updated.points[index].derivedFrom = nil
+            updated.points[index].contourRule = nil
         }
         updated.points[index].point = originalPoint
         updated.points[index].isVisible = true
@@ -312,7 +329,7 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         while cursor < pending.count && required.count <= 128 {
             let id = pending[cursor]
             cursor += 1
-            for sourceID in current.effectiveDerivedSourceIDs(for: id) ?? [] where required.insert(sourceID).inserted {
+            for sourceID in current.calculationSourceIDs(for: id) ?? [] where required.insert(sourceID).inserted {
                 pending.append(sourceID)
             }
         }

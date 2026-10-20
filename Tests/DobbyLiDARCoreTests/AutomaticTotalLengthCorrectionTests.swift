@@ -20,7 +20,7 @@ final class AutomaticTotalLengthCorrectionTests: XCTestCase {
         }
         var landmarks = scene.landmarks
         landmarks.origin = .model
-        landmarks.modelVersion = AutomaticGarmentKind.top.modelVersion
+        landmarks.modelVersion = AutomaticGarmentKind.legacyTopModelVersion
         landmarks.garmentKind = .top
         landmarks.points += [
             .init(id: "neck_left", point: .init(x: 0.4, y: 0.25), confidence: 0.9),

@@ -126,7 +126,9 @@ enum GarmentCapturePreview {
             MeasurementDefinition(id: "bottom." + [$0.0, $0.1].sorted().joined(separator: "."),
                                   title: $0.2, landmarkIDs: [$0.0, $0.1])
         }
-        let definitions = kind == .top ? TopLandmarkSchema.canonicalMeasurementDefinitions : bottomDefinitions
+        // Version-1 synthetic rehearsals retain their original neck midpoint;
+        // they are not evidence for the new contour/representative-plane path.
+        let definitions = kind == .top ? TopLandmarkSchema.legacyMeasurementDefinitions : bottomDefinitions
         let landmarks = GarmentLandmarkSet(sessionID: sessionID, frameID: frameID, origin: .synthetic,
             modelVersion: isDesignReference ? "garment-ui-design-reference-synthetic-v1"
                 : kind == .top ? "garment-ui-top-preview-v1" : "garment-ui-preview-v1", points: points, mask: mask,

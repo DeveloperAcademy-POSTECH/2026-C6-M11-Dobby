@@ -57,10 +57,8 @@ nonisolated enum GarmentKindSelectionPolicy {
               Set(points.map(\.id)).count == points.count else {
             return .init(kind: kind, status: .uncertain, reasons: [.invalidInput])
         }
-        let expected = Set(kind == .top ? TopLandmarkSchema.expectedKeypoints : [
-            "waist_left", "waist_right", "crotch", "hem_left_outer", "hem_left_inner",
-            "hem_right_inner", "hem_right_outer"
-        ])
+        let expected = Set(kind == .top ? TopLandmarkSchema.expectedKeypoints
+            : BottomLandmarkSchema.expectedBottom8Keypoints)
         // Raw semantic observations define the pose. Foreground association is
         // an independent witness, never a reason to erase correct edge points.
         let direct = points.filter {

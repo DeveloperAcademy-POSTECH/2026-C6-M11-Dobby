@@ -116,6 +116,11 @@ struct ContentView: View {
                 Button("확인", role: .cancel) { linkError = nil }
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
+#if DEBUG
+        .task {
+            try? SampleData.refreshExportSampleIfPresent(in: context)
+        }
+#endif
     }
 
 #if DEBUG
@@ -175,6 +180,7 @@ struct ContentView: View {
 }
 
 struct ProductSavedDetailView: View {
+    @Environment(\.modelContext) private var context
     @Bindable var garment: Garment
     let controller: CopyActivityController
     let onLibrary: () -> Void
@@ -231,6 +237,11 @@ struct ProductSavedDetailView: View {
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)
         }
+#if DEBUG
+        .task {
+            try? SampleData.upgradeExportSampleIfNeeded(garment, in: context)
+        }
+#endif
     }
 
     private func openExport() {

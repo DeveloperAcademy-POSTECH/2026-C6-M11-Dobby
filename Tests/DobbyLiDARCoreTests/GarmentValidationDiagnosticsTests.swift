@@ -183,7 +183,7 @@ final class GarmentValidationDiagnosticsTests: XCTestCase {
                   derivedFrom: ["neck_left", "neck_right"])
         ]
         scene.landmarks.points = points
-        scene.landmarks.modelVersion = AutomaticGarmentKind.top.modelVersion
+        scene.landmarks.modelVersion = AutomaticGarmentKind.legacyTopModelVersion
         scene.landmarks.garmentKind = .top
         scene.landmarks.recognitionDiagnostics = nil
         for centerX in [40, 60] {

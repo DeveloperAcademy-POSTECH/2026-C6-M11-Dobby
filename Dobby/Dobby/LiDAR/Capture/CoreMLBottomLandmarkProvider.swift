@@ -95,8 +95,8 @@ nonisolated enum GarmentForegroundPoseSelection {
                             points: prediction.points, imageSize: size)
                         attempts[index].associationPolicy = selection.policy
                         attempts[index].pointAssessments = selection.pointAssessments
-                        return foregroundResult(prediction: prediction, selection: selection, modelVersion: modelVersion,
-                            requestedOrientation: orientation, selectedOrientation: direction)
+                        return try foregroundResult(prediction: prediction, selection: selection, modelVersion: modelVersion,
+                            requestedOrientation: orientation, selectedOrientation: direction, imageSize: size, schemaKind: schemaKind)
                     } catch {
                         attempts[index].failure = diagnosticFailure(error)
                         throw error
@@ -121,8 +121,9 @@ nonisolated enum GarmentForegroundPoseSelection {
                             return nil
                         }
                         attempts[index].failure = nil
-                        return foregroundResult(prediction: attempt.prediction, selection: selection, modelVersion: modelVersion,
-                            requestedOrientation: orientation, selectedOrientation: direction, kindEvidence: evidence)
+                        return try foregroundResult(prediction: attempt.prediction, selection: selection, modelVersion: modelVersion,
+                            requestedOrientation: orientation, selectedOrientation: direction, imageSize: size, schemaKind: schemaKind,
+                            kindEvidence: evidence)
                     } catch GarmentMaskAssociationError.unmatchedGarment {
                         return nil
                     }
@@ -142,14 +143,21 @@ nonisolated enum GarmentForegroundPoseSelection {
 
     private static func foregroundResult(
         prediction: BottomLandmarkPrediction, selection: GarmentMaskSelection, modelVersion: String,
-        requestedOrientation: ImageOrientation, selectedOrientation: ImageOrientation,
-        kindEvidence: GarmentKindEvidence? = nil
-    ) -> GarmentForegroundRecognition {
+        requestedOrientation: ImageOrientation, selectedOrientation: ImageOrientation, imageSize: PixelSize,
+        schemaKind: AutomaticGarmentKind?, kindEvidence: GarmentKindEvidence? = nil
+    ) throws -> GarmentForegroundRecognition {
+        let snapped = try GarmentOutlineSnap.apply(points: prediction.points, mask: selection.mask,
+            imageSize: imageSize)
+        // A contour request is calculation metadata, not a twelfth prediction.
+        // Add it only after the original model candidate has passed association;
+        // diagnostics and anatomical validation keep the untouched raw outputs.
+        let calculationPoints = schemaKind == .top && modelVersion == AutomaticGarmentKind.top.modelVersion
+            ? TopLandmarkSchema.calculationPoints(snapped.points) : snapped.points
         let diagnostics = GarmentRecognitionDiagnostics(requestedOrientation: requestedOrientation,
             selectedPoseOrientation: selectedOrientation, associationPolicy: selection.policy,
             rawPoints: prediction.points, pointAssessments: selection.pointAssessments,
-            poseAttempts: [], kindEvidence: kindEvidence)
-        return .init(recognition: .init(points: prediction.points, detectionConfidence: prediction.detectionConfidence,
+            poseAttempts: [], kindEvidence: kindEvidence, automaticAdjustments: snapped.adjustments)
+        return .init(recognition: .init(points: calculationPoints, detectionConfidence: prediction.detectionConfidence,
                                        modelVersion: modelVersion, diagnostics: diagnostics), selection: selection)
     }
 
@@ -170,6 +178,7 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
     nonisolated let modelVersion: String
     private let modelURL: URL
     private let allowsHalfTurnRecovery: Bool
+    private let orientationProvider: GarmentOrientationModelProvider?
     private var model: MLModel?
     private var hasPrepared = false
     private var hasPreparedForeground = false
@@ -177,11 +186,12 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
     private let foreground = GarmentForegroundMaskAnalyzer()
 
     init(modelURL: URL, schema: BottomLandmarkSchema, modelVersion: String = "bottom7-976144d4d652",
-         allowsHalfTurnRecovery: Bool = false) {
+         allowsHalfTurnRecovery: Bool = false, orientationModelURL: URL? = nil) {
         self.modelURL = modelURL
         self.schema = schema
         self.modelVersion = modelVersion
         self.allowsHalfTurnRecovery = allowsHalfTurnRecovery
+        self.orientationProvider = orientationModelURL.map { .init(modelURL: $0) }
     }
 
     /// Load and exercise the model before live recognition starts. The actor
@@ -190,6 +200,7 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
         try preparePoseModel()
         guard !hasPreparedForeground else { return }
         let image = try neutralImage()
+        _ = try orientationProvider?.classify(image, deviceOrientation: .up)
         do { _ = try foreground.masks(for: image) }
         catch GarmentMaskAssociationError.noForeground {}
         try Task.checkCancellation()
@@ -229,11 +240,13 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
     nonisolated static func bundled(in bundle: Bundle = .main) throws -> CoreMLBottomLandmarkProvider {
         guard let modelURL = bundle.url(forResource: "BottomLandmarks", withExtension: "mlmodelc")
                 ?? bundle.url(forResource: "BottomLandmarks", withExtension: "mlpackage"),
-              let schemaURL = bundle.url(forResource: "schema_bottom7", withExtension: "json") else {
+              let schemaURL = bundle.url(forResource: "schema_bottom8", withExtension: "json") else {
             throw BottomModelError.missingResources
         }
         return try CoreMLBottomLandmarkProvider(modelURL: modelURL,
-            schema: BottomLandmarkSchema(jsonData: Data(contentsOf: schemaURL)))
+            schema: BottomLandmarkSchema(jsonData: Data(contentsOf: schemaURL)),
+            modelVersion: AutomaticGarmentKind.bottoms.modelVersion,
+            orientationModelURL: GarmentOrientationModelProvider.resourceURL(in: bundle))
     }
 
     func landmarks(for snapshot: CaptureSnapshot) async throws -> GarmentLandmarkSet {
@@ -255,7 +268,7 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
         try Task.checkCancellation()
         let prediction = try recognizedPoints(image, orientation: orientation)
         try Task.checkCancellation()
-        return .init(points: prediction.points, detectionConfidence: prediction.detectionConfidence,
+        return .init(points: calculationPoints(prediction.points), detectionConfidence: prediction.detectionConfidence,
                      modelVersion: modelVersion)
     }
 
@@ -289,34 +302,54 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
         }
         let elapsed = start.duration(to: .now).components
         return .init(imageJPEG: jpeg, imageSize: .init(width: upright.width, height: upright.height),
-            points: prediction.points, detectionConfidence: prediction.detectionConfidence,
+            points: calculationPoints(prediction.points), detectionConfidence: prediction.detectionConfidence,
             modelVersion: modelVersion,
             durationSeconds: Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18)
     }
 
     private func recognizedPoints(_ image: CGImage, orientation: ImageOrientation) throws -> BottomLandmarkPrediction {
-        try GarmentPoseOrientationRecovery.perform(orientation: orientation,
+        if let orientationProvider {
+            let prediction = try orientationProvider.classify(image, deviceOrientation: orientation)
+            let composed = GarmentOrientationTransform.composed(device: orientation, correction: prediction.correction)
+            return try infer(image, orientation: composed)
+        }
+        return try GarmentPoseOrientationRecovery.perform(orientation: orientation,
             allowsHalfTurn: allowsHalfTurnRecovery,
             strictAttempt: { try infer(image, orientation: $0) })
     }
 
     private func recognizedForeground(_ image: CGImage, orientation: ImageOrientation,
                                      allowsOrientationRecovery: Bool? = nil) throws -> GarmentForegroundRecognition {
-        try GarmentForegroundPoseSelection.recognize(orientation: orientation,
-            allowsHalfTurn: allowsOrientationRecovery ?? allowsHalfTurnRecovery,
+        let prediction = allowsOrientationRecovery == false ? nil
+            : try orientationProvider?.classify(image, deviceOrientation: orientation)
+        let composed = prediction.map { GarmentOrientationTransform.composed(device: orientation, correction: $0.correction) }
+            ?? orientation
+        var result = try GarmentForegroundPoseSelection.recognize(orientation: composed,
+            allowsHalfTurn: prediction == nil && (allowsOrientationRecovery ?? allowsHalfTurnRecovery),
             recordsRecoverableFailures: allowsOrientationRecovery == false,
             imageSize: .init(width: image.width, height: image.height),
             schemaKind: canonicalSchemaKind, modelVersion: modelVersion,
             infer: { try infer(image, orientation: $0) },
             masks: { try foreground.masks(for: image, orientation: $0) })
+        result.recognition.diagnostics?.requestedOrientation = orientation
+        result.recognition.diagnostics?.orientationPrediction = prediction
+        if prediction != nil { result.recognition.diagnostics?.orientationModelVersion = GarmentOrientationModelProvider.modelVersion }
+        return result
+    }
+
+    /// Photo-only previews have no depth, so keep this request invisible until
+    /// a frozen-frame measurement engine can resolve the actual intersection.
+    private func calculationPoints(_ points: [GarmentLandmark]) -> [GarmentLandmark] {
+        canonicalSchemaKind == .top && modelVersion == AutomaticGarmentKind.top.modelVersion
+            ? TopLandmarkSchema.calculationPoints(points) : points
     }
 
     private var canonicalSchemaKind: AutomaticGarmentKind? {
         if schema.name == "top", schema.keypoints == TopLandmarkSchema.expectedKeypoints { return .top }
-        if schema.name == "bottom7", schema.keypoints == [
-            "waist_left", "waist_right", "crotch", "hem_left_outer", "hem_left_inner",
-            "hem_right_inner", "hem_right_outer"
-        ] { return .bottoms }
+        if schema.name == "bottom8", schema.keypoints == BottomLandmarkSchema.expectedBottom8Keypoints { return .bottoms }
+        // Explicit legacy adapters remain valid for recorded test fixtures; a
+        // newly bundled model always uses the strict bottom8 resource contract.
+        if schema.name == "bottom7", schema.keypoints == BottomLandmarkSchema.expectedBottom7Keypoints { return .bottoms }
         return nil
     }
 

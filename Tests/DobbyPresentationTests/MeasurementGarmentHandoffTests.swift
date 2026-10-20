@@ -24,7 +24,7 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
     }
 
     private func fixture(_ kind: AutomaticGarmentKind = .top,
-                         orientation: ImageOrientation = .up, corrected: Bool = false) throws -> SavedMeasurement {
+                         orientation: ImageOrientation = .up, corrected: Bool = false, legacy: Bool = false) throws -> SavedMeasurement {
         var frame = SyntheticFixtures.scene().frame
         frame.orientation = orientation
         let format = UIGraphicsImageRendererFormat()
@@ -37,9 +37,9 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
                 UIColor.systemOrange.setFill()
                 renderer.fill(CGRect(x: 120, y: 70, width: 220, height: 320))
             }
-        let schemaURL = try XCTUnwrap(Bundle.main.url(forResource: kind.schemaResourceName, withExtension: "json"))
+        let schemaURL = try XCTUnwrap(Bundle.main.url(forResource: legacy && kind == .bottoms ? "schema_bottom7" : kind.schemaResourceName, withExtension: "json"))
         let schema = try BottomLandmarkSchema(jsonData: Data(contentsOf: schemaURL))
-        let definitions = kind == .top ? TopLandmarkSchema.canonicalMeasurementDefinitions : schema.measurementDefinitions
+        let definitions = kind == .top ? (legacy ? TopLandmarkSchema.legacyMeasurementDefinitions : TopLandmarkSchema.canonicalMeasurementDefinitions) : schema.measurementDefinitions
         var points = schema.keypoints.enumerated().map { index, name in
             GarmentLandmark(id: name, point: .init(x: 0.15 + Double(index % 4) * 0.15,
                                                   y: 0.1 + Double(index / 4) * 0.2),
@@ -52,8 +52,9 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
                                         y: parents.map(\.point.y).reduce(0, +) / Double(parents.count))
             points.append(GarmentLandmark(id: name, point: coordinate, confidence: 0.94, derivedFrom: sources))
         }
+        if kind == .top && !legacy { points = TopLandmarkSchema.calculationPoints(points) }
         let original = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID,
-            origin: .model, modelVersion: kind.modelVersion, points: points,
+            origin: .model, modelVersion: legacy ? kind.legacyModelVersion : kind.modelVersion, points: points,
             mask: nil, garmentKind: kind)
         let meters = kind == .top ? [0.48, 0.60, 0.50, 0.62, 0.61, 0.6725]
                                  : [0.43, 0.28, 1.0225, 0.22, 0.76, 1.0125, 0.215, 0.75]
@@ -125,7 +126,7 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         let reader = ModelContext(container)
         let fetched = try XCTUnwrap(reader.fetch(FetchDescriptor<Garment>()).first)
         XCTAssertEqual(fetched.orderedMeasurements.count, 6)
-        XCTAssertEqual(fetched.measurementPhoto?.landmarks.count, 12)
+        XCTAssertEqual(fetched.measurementPhoto?.landmarks.count, 13)
         XCTAssertEqual(fetched.measurement("chestWidth")?.garment?.id, record.id)
         XCTAssertEqual(fetched.measurementPhoto?.landmark("armpit_left")?.photo?.garment?.id, record.id)
         XCTAssertEqual(fetched.measurementPhoto?.landmark("armpit_left")?.autoX, original.point.x)
@@ -153,6 +154,248 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         XCTAssertEqual(garment.measurementPhoto?.landmark("waist_center")?.derivedFrom,
                        ["waist_left", "waist_right"])
         XCTAssertNil(garment.measurement("thighWidth"), "Bottom7 has no validated thigh observation")
+    }
+
+    func testLegacyVersionsKeepTheirOriginalPointAndMeasurementContracts() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for kind in AutomaticGarmentKind.allCases {
+            var record = try fixture(kind, legacy: true)
+            if kind == .top {
+                record.definitions = TopLandmarkSchema.legacyProjectedMeasurementDefinitions
+            }
+            let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+                photosDirectory: directory, allowsSynthetic: true)
+            XCTAssertEqual(stored.measurementPhoto?.measurementModelVersion, kind.legacyModelVersion)
+            XCTAssertEqual(stored.measurementPhoto?.landmarks.count, kind == .top ? 12 : 8)
+            XCTAssertNil(stored.measurementPhoto?.landmark("top_length_start"))
+            XCTAssertNil(stored.measurementPhoto?.landmark("waist_front_center"))
+            XCTAssertNotNil(stored.measurement(kind == .top ? "totalLength" : "frontRise"))
+        }
+    }
+
+    func testNewRiseMissingEighthPointKeepsEditableBlankWithoutSubstitutingMidpoint() throws {
+        var record = try fixture(.bottoms)
+        record.landmarks.points.removeAll { $0.id == "waist_front_center" }
+        record.result.values[1].meters = nil
+        record.result.values[1].status = .unavailable
+        record.result.values[1].failure = .missingLandmark
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let rise = try XCTUnwrap(stored.measurement("frontRise"))
+        XCTAssertEqual(rise.valueCm, 0)
+        XCTAssertNil(rise.autoValueCm)
+        XCTAssertEqual(rise.sourceStatusRaw, "unavailable")
+        XCTAssertEqual(stored.visibleMeasurements.map(\.key), ["totalLengthLeft", "waistWidth", "frontRise", "hemWidthLeft"])
+        XCTAssertNotNil(stored.measurementPhoto?.landmark("waist_center"))
+        XCTAssertNil(stored.measurementPhoto?.landmark("waist_front_center"))
+    }
+
+    func testNewTotalLengthManualRestorationAndAutomaticBaselineStaySeparate() throws {
+        var record = try fixture(.top)
+        let original = record.landmarks
+        record.originalAutomaticLandmarks = original
+        record.originalAutomaticResult = record.result
+        record.originalAutomaticLandmarks?.points.removeAll { $0.id == "top_length_start" }
+        record.originalAutomaticResult?.values[5].meters = nil
+        record.originalAutomaticResult?.values[5].status = .unavailable
+        record.originalAutomaticResult?.values[5].failure = .missingLandmark
+        for (id, y) in [("top_length_start", 0.2), ("hem_center", 0.8)] {
+            let index = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == id })
+            record.landmarks.points[index] = .init(id: id, point: .init(x: 0.5, y: y),
+                confidence: nil, isVisible: true, origin: .manual)
+        }
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        XCTAssertEqual(stored.measurementPhoto?.landmark("top_length_start")?.hasAutomaticObservation, false)
+        XCTAssertEqual(stored.measurementPhoto?.landmark("top_length_start")?.originRaw, "manual")
+        XCTAssertNil(stored.measurement("totalLength")?.autoValueCm)
+        XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+    }
+
+    /// Fabricated calculated points verify the import boundary independently
+    /// of the model and plane solver; they make no physical-accuracy claim.
+    private func putResolvedContour(_ coordinate: ImagePoint, in result: inout GarmentMeasurementResult) throws {
+        let index = try XCTUnwrap(result.values.firstIndex { $0.id == "top.totalLength" })
+        result.values[index].points = [.init(id: "top_length_start", imagePoint: coordinate,
+            position: .init(x: coordinate.x, y: coordinate.y, z: 1),
+            quality: .init(validSamples: 70, candidateSamples: 80, confidenceAvailable: true,
+                depthSpreadMeters: 0, planeResidualMeters: nil, method: .contourIntersection),
+            sourceLandmarkIDs: ["neck_left", "neck_right", "hem_center"])]
+    }
+
+    private func recordBytes(_ record: SavedMeasurement) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return try encoder.encode(record)
+    }
+
+    func testAutomaticContourPersistsResolvedIntersectionAndResetsToThatSameCoordinate() throws {
+        var record = try fixture(.top)
+        let raw = try XCTUnwrap(record.landmarks.points.first { $0.id == "top_length_start" })
+        XCTAssertFalse(raw.isVisible)
+        let intersection = ImagePoint(x: 0.45, y: 0.14)
+        XCTAssertNotEqual(raw.point, intersection)
+        try putResolvedContour(intersection, in: &record.result)
+        let originalBytes = try recordBytes(record)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("top_length_start"))
+        XCTAssertEqual(point.x, intersection.x)
+        XCTAssertEqual(point.y, intersection.y)
+        XCTAssertEqual(point.autoX, intersection.x)
+        XCTAssertEqual(point.autoY, intersection.y)
+        XCTAssertEqual(point.isVisible, true)
+        XCTAssertEqual(point.autoIsVisible, true)
+        XCTAssertEqual(point.hasAutomaticObservation, true)
+        XCTAssertFalse(point.isMoved)
+        XCTAssertNil(point.derivedFrom, "Contour dependence must not be stored as a spatial mean")
+        XCTAssertNil(point.autoDerivedFrom)
+        point.move(toX: 0.51, y: 0.2)
+        point.resetToAuto()
+        XCTAssertEqual(point.x, intersection.x)
+        XCTAssertEqual(point.y, intersection.y)
+        XCTAssertEqual(point.isVisible, true)
+        XCTAssertFalse(point.isMoved)
+        XCTAssertEqual(try recordBytes(record), originalBytes, "Product import never rewrites raw placeholder evidence")
+    }
+
+    func testRecomputedContourAfterParentEditCanSaveWithoutBecomingADirectOverride() throws {
+        var record = try fixture(.top)
+        let automaticPoint = ImagePoint(x: 0.45, y: 0.14)
+        let revisedPoint = ImagePoint(x: 0.46, y: 0.13)
+        try putResolvedContour(automaticPoint, in: &record.result)
+        record.originalAutomaticLandmarks = record.landmarks
+        record.originalAutomaticResult = record.result
+        let parent = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "neck_left" })
+        record.landmarks.points[parent].point.x += 0.01
+        record.landmarks.points[parent].origin = .manual
+        record.landmarks.points[parent].confidence = nil
+        record.landmarks = record.landmarks.refreshingDerivations(affectedBy: ["neck_left"])
+        try putResolvedContour(revisedPoint, in: &record.result)
+        let contour = try XCTUnwrap(record.landmarks.points.first { $0.id == "top_length_start" })
+        XCTAssertEqual(contour.origin, .manual)
+        XCTAssertEqual(contour.contourRule, .neckPerpendicularMaskV1)
+        XCTAssertNil(contour.derivedFrom)
+        let originalBytes = try recordBytes(record)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("top_length_start"))
+        XCTAssertEqual(point.x, revisedPoint.x)
+        XCTAssertEqual(point.y, revisedPoint.y)
+        XCTAssertEqual(point.autoX, automaticPoint.x)
+        XCTAssertEqual(point.autoY, automaticPoint.y)
+        XCTAssertEqual(point.originRaw, "manual")
+        XCTAssertFalse(point.isMoved, "A recomputed intersection is not a directly edited observation")
+        XCTAssertEqual(point.movedDistance, 0)
+        XCTAssertNil(point.derivedFrom)
+        XCTAssertNil(point.autoDerivedFrom)
+        point.resetToAuto()
+        XCTAssertEqual(point.x, automaticPoint.x)
+        XCTAssertEqual(point.y, automaticPoint.y)
+        XCTAssertEqual(point.originRaw, "model")
+        XCTAssertEqual(point.isVisible, true)
+        XCTAssertEqual(try recordBytes(record), originalBytes)
+    }
+
+    func testManualContourOverrideKeepsDirectPositionAndOriginalResolvedAutomaticReset() throws {
+        var record = try fixture(.top)
+        let automaticPoint = ImagePoint(x: 0.45, y: 0.14)
+        let manualPoint = ImagePoint(x: 0.47, y: 0.2)
+        try putResolvedContour(automaticPoint, in: &record.result)
+        record.originalAutomaticLandmarks = record.landmarks
+        record.originalAutomaticResult = record.result
+        let index = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "top_length_start" })
+        record.landmarks.points[index] = .init(id: "top_length_start", point: manualPoint,
+            confidence: nil, isVisible: true, origin: .manual)
+        // No current contour result exists after a direct override; its source
+        // coordinate is the explicit manual point, never an old automatic hint.
+        record.result.values[5].points = []
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("top_length_start"))
+        XCTAssertEqual(point.x, manualPoint.x)
+        XCTAssertEqual(point.y, manualPoint.y)
+        XCTAssertEqual(point.autoX, automaticPoint.x)
+        XCTAssertEqual(point.autoY, automaticPoint.y)
+        XCTAssertEqual(point.isVisible, true)
+        XCTAssertEqual(point.hasAutomaticObservation, true)
+        XCTAssertTrue(point.isMoved)
+        point.resetToAuto()
+        XCTAssertEqual(point.x, automaticPoint.x)
+        XCTAssertEqual(point.y, automaticPoint.y)
+        XCTAssertEqual(point.isVisible, true)
+        XCTAssertFalse(point.isMoved)
+    }
+
+    func testUnresolvedContourDoesNotInventAutomaticResetCoordinate() throws {
+        var record = try fixture(.top)
+        record.originalAutomaticLandmarks = record.landmarks
+        record.originalAutomaticResult = record.result
+        record.originalAutomaticResult?.values[5].meters = nil
+        record.originalAutomaticResult?.values[5].status = .unavailable
+        record.originalAutomaticResult?.values[5].failure = .missingLandmark
+        let index = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "top_length_start" })
+        let manualPoint = ImagePoint(x: 0.47, y: 0.2)
+        record.landmarks.points[index] = .init(id: "top_length_start", point: manualPoint,
+            confidence: nil, isVisible: true, origin: .manual)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("top_length_start"))
+        XCTAssertEqual(point.hasAutomaticObservation, false)
+        XCTAssertTrue(point.isMoved)
+        XCTAssertEqual(point.movedDistance, 0)
+        point.resetToAuto()
+        XCTAssertEqual(point.x, manualPoint.x)
+        XCTAssertEqual(point.y, manualPoint.y)
+        XCTAssertEqual(point.isVisible, true)
+    }
+
+    func testModelVersionPointAndDefinitionMixesAreRejected() throws {
+        let current = try fixture(.top)
+        let old = try fixture(.top, legacy: true)
+        var invalid: [SavedMeasurement] = []
+        var modified = current
+        modified.landmarks.modelVersion = AutomaticGarmentKind.legacyTopModelVersion
+        invalid.append(modified)
+        modified = old
+        modified.landmarks.modelVersion = AutomaticGarmentKind.top.modelVersion
+        invalid.append(modified)
+        modified = current
+        modified.definitions = TopLandmarkSchema.legacyMeasurementDefinitions
+        invalid.append(modified)
+        modified = current
+        let index = try XCTUnwrap(modified.landmarks.points.firstIndex { $0.id == "top_length_start" })
+        modified.landmarks.points[index].contourRule = nil
+        invalid.append(modified)
+        modified = current
+        modified.landmarks.points[index].derivedFrom = ["neck_left", "neck_right", "hem_center"]
+        invalid.append(modified)
+        var bottom = try fixture(.bottoms)
+        bottom.landmarks.modelVersion = AutomaticGarmentKind.legacyBottomModelVersion
+        invalid.append(bottom)
+        bottom = try fixture(.bottoms, legacy: true)
+        bottom.landmarks.modelVersion = AutomaticGarmentKind.bottoms.modelVersion
+        invalid.append(bottom)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for record in invalid {
+            XCTAssertThrowsError(try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+                photosDirectory: directory, allowsSynthetic: true))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
     }
 
     func testPartialMeasurementsRemainPartialAndUncertainStatusIsNotUpgraded() throws {

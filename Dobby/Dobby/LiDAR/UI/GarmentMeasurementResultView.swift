@@ -387,8 +387,10 @@ struct GarmentMeasurementResultView: View {
         guard let total = model.definitions.first(where: { $0.id == "top.totalLength" }) else {
             return "펼친 옷의 두 점 사이 직선거리예요. 주름이나 굽은 봉제선을 따라 잰 길이와 다를 수 있어요."
         }
-        let totalGuide = total.projection == nil ? "총장은 목 중앙과 밑단 중앙 사이의 직선거리예요."
-            : "이 이전 기록의 총장은 목 좌우 축에 수직인 길이예요."
+        let totalGuide = total.landmarkIDs.first == "top_length_start"
+            ? "총장은 옷 윤곽의 상단과 밑단 중앙 사이의 거리예요. 카라가 높은 옷은 상단 위치를 확인해 주세요."
+            : total.projection == nil ? "총장은 목 중앙과 밑단 중앙 사이의 직선거리예요."
+                : "이 이전 기록의 총장은 목 좌우 축에 수직인 길이예요."
         return "단면과 소매는 두 점 사이 직선거리이며, " + totalGuide
             + " 소매를 곧게 펼치고 측정점을 눈으로 확인해 주세요. 민소매의 소매길이는 사용할 수 없어요."
     }
@@ -500,7 +502,7 @@ enum GarmentMeasurementText {
         let fallback: String
         switch definition.id {
         case "bottom.waist_left.waist_right": fallback = "허리"
-        case "bottom.crotch.waist_center": fallback = "밑위"
+        case "bottom.crotch.waist_center", "bottom.crotch.waist_front_center": fallback = "밑위"
         case "top.shoulderWidth": fallback = "어깨"
         case "top.chestWidth": fallback = "가슴"
         case "top.hemWidth": fallback = "밑단"
@@ -535,7 +537,9 @@ private struct GarmentMeasurementItemSheet: View {
                 }
                 Section {
                     Text(definition.id == "top.totalLength"
-                         ? definition.projection == nil
+                         ? definition.landmarkIDs.first == "top_length_start"
+                            ? "총장 상단과 밑단 중앙 사이의 거리예요. 자동 상단은 옷 윤곽을 기준으로 잡으므로, 카라가 높은 옷은 위치를 확인해 주세요. 줄자도 같은 두 점을 기준으로 비교해 주세요."
+                            : definition.projection == nil
                             ? "목 중앙과 밑단 중앙 사이의 직선거리예요. 줄자도 옷을 펼친 상태에서 같은 두 점을 기준으로 비교해 주세요."
                             : "이 이전 기록은 목 좌우 축에 수직인 총장이에요. 줄자도 같은 기준으로 비교해 주세요."
                          : "사진에 표시된 두 점 사이의 직선거리예요. 줄자도 같은 두 점 사이를 기준으로 비교해 주세요.")

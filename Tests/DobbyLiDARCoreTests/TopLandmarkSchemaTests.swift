@@ -49,7 +49,7 @@ final class TopLandmarkSchemaTests: XCTestCase {
         XCTAssertEqual(definitions.map(\.landmarkIDs), [
             ["shoulder_left", "shoulder_right"], ["armpit_left", "armpit_right"],
             ["hem_left", "hem_right"], ["shoulder_left", "sleeve_end_left"],
-            ["shoulder_right", "sleeve_end_right"], ["neck_center", "hem_center"]
+            ["shoulder_right", "sleeve_end_right"], ["top_length_start", "hem_center"]
         ])
         XCTAssertTrue(definitions.allSatisfy { $0.projection == nil },
                       "Current top measurements keep their physical endpoints and use straight distances")
@@ -57,6 +57,27 @@ final class TopLandmarkSchemaTests: XCTestCase {
         XCTAssertTrue(definitions[3].title.contains("직선"))
         XCTAssertTrue(definitions[4].title.contains("직선"))
         XCTAssertFalse(definitions.flatMap(\.landmarkIDs).contains("armpitLeft"))
+    }
+
+    func testCurrentAndLegacyLengthContractsStayDistinctAndContourIsNotAModelChannel() throws {
+        XCTAssertEqual(TopLandmarkSchema.canonicalMeasurementDefinitions.last?.landmarkIDs, ["top_length_start", "hem_center"])
+        XCTAssertEqual(TopLandmarkSchema.legacyMeasurementDefinitions.last?.landmarkIDs, ["neck_center", "hem_center"])
+        XCTAssertEqual(TopLandmarkSchema.legacyProjectedMeasurementDefinitions.last?.projection?.referenceAxisLandmarkIDs,
+                       ["neck_left", "neck_right"])
+        XCTAssertEqual(try schema().decoderSchema.measurementDefinitions.count, 0,
+                       "The drawable top skeleton must not produce bottom measurements")
+        let decoded = try decode(tensor())
+        let calculation = TopLandmarkSchema.calculationPoints(decoded.points)
+        XCTAssertEqual(decoded.points.count, 12)
+        XCTAssertEqual(TopLandmarkSchema.expectedKeypoints.count, 11)
+        let start = try XCTUnwrap(calculation.first { $0.id == "top_length_start" })
+        XCTAssertEqual(start.contourRule, .neckPerpendicularMaskV1)
+        XCTAssertNil(start.derivedFrom)
+        XCTAssertNil(start.confidence)
+        XCTAssertFalse(start.isVisible)
+        XCTAssertEqual(TopLandmarkSchema.calculationPoints(calculation).count, calculation.count)
+        let restored = try JSONDecoder().decode([GarmentLandmark].self, from: JSONEncoder().encode(calculation))
+        XCTAssertEqual(restored.last?.contourRule, .neckPerpendicularMaskV1)
     }
 
     func testSchemaRejectsWrongNameChannelOrderAndNeckDerivation() throws {

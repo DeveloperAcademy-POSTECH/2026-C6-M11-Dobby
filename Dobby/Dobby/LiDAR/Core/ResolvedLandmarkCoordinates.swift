@@ -10,13 +10,16 @@ extension GarmentLandmarkSet {
         let resolved = matching ? (result?.values.flatMap(\.points) ?? []) : []
         for index in output.points.indices {
             let id = output.points[index].id
-            guard effectiveDerivedSourceIDs(for: id) != nil else { continue }
+            let contour = output.points[index].contourRule != nil
+            guard contour || effectiveDerivedSourceIDs(for: id) != nil else { continue }
             if let value = resolved.first(where: {
-                $0.id == id && ($0.quality.method == .spatialAverage
+                $0.id == id && ((contour && $0.quality.method == .contourIntersection)
+                    || (!contour && $0.quality.method == .spatialAverage)
                     || isRecoveredTopNeckCenter($0, landmark: output.points[index]))
             }),
                value.imagePoint.isValid {
                 output.points[index].point = value.imagePoint
+                output.points[index].isVisible = true
             } else {
                 output.points[index].isVisible = false
             }
@@ -33,7 +36,7 @@ extension GarmentLandmarkSet {
         let sourceIDs = ["neck_left", "neck_right"]
         guard landmark.id == "neck_center", landmark.derivedFrom == sourceIDs,
               origin == .model, garmentKind == .top,
-              modelVersion == AutomaticGarmentKind.top.modelVersion,
+              modelVersion == AutomaticGarmentKind.legacyTopModelVersion,
               (landmark.origin ?? origin) == .model,
               landmark.isVisible, landmark.point.isValid,
               [.localPlane, .recoveredSpatialAverage].contains(resolved.quality.method),

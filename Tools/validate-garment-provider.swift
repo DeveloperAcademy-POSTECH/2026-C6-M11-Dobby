@@ -3,6 +3,7 @@
 //   Dobby/Dobby/LiDAR/Capture/CoreMLBottomLandmarkProvider.swift \
 //   Dobby/Dobby/LiDAR/Capture/CoreMLGarmentLandmarkProvider.swift \
 //   Dobby/Dobby/LiDAR/Capture/GarmentForegroundMaskAnalyzer.swift \
+//   Dobby/Dobby/LiDAR/Capture/GarmentOrientationModelProvider.swift \
 //   Tools/validate-garment-provider.swift -o /tmp/validate-garment-provider
 // /tmp/validate-garment-provider --kind top --model <TopLandmarks.mlpackage> \
 //   --schema <schema_top.json> --report <report.json> \

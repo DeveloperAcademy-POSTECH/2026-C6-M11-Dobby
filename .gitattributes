@@ -1,1 +1,2 @@
 Dobby/Dobby/LiDAR/Models/clothes_image_detection.mlpackage/Data/com.apple.CoreML/weights/weight.bin filter=lfs diff=lfs merge=lfs -text
+*.mlmodel binary

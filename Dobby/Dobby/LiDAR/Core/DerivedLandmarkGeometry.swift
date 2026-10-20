@@ -1,6 +1,13 @@
 import Foundation
 
 nonisolated extension GarmentLandmarkSet {
+    /// Dependencies include contour rules without changing derivedFrom's 3D-average meaning.
+    func calculationSourceIDs(for id: String) -> [String]? {
+        let matches = points.filter { $0.id == id }
+        guard matches.count == 1, let point = matches.first else { return nil }
+        return point.contourRule?.sourceLandmarkIDs ?? effectiveDerivedSourceIDs(for: id)
+    }
+
     /// Returns the declared 3D derivation, including invalid empty arrays so the
     /// measurement engine can reject them instead of sampling a display hint.
     func effectiveDerivedSourceIDs(for id: String) -> [String]? {

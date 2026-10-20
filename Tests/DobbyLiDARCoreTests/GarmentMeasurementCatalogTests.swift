@@ -67,13 +67,13 @@ final class GarmentMeasurementCatalogTests: XCTestCase {
         XCTAssertTrue(unknownGuide.contains("아닙니다"))
     }
 
-    func testCurrentTopTotalLengthGuideMatchesItsStraightPhysicalEndpoints() {
+    func testCurrentTopTotalLengthGuideDescribesContourLimitAndManualCorrection() {
         let guide = GarmentMeasurementCatalog.guide(for: "top.totalLength")
-        XCTAssertTrue(guide.contains("목 중앙"))
+        XCTAssertTrue(guide.contains("총장 시작점"))
         XCTAssertTrue(guide.contains("밑단 중앙"))
-        XCTAssertTrue(guide.contains("직선거리"))
-        XCTAssertFalse(guide.contains("가로축"))
-        XCTAssertFalse(guide.contains("수직"))
+        XCTAssertTrue(guide.contains("목 기준선에 수직"))
+        XCTAssertTrue(guide.contains("카라·후드 아래 봉제선을 구별하지 않습니다"))
+        XCTAssertTrue(guide.contains("직접 교정"))
     }
 
     func testCategoryMetadataRoundTripsForSavedRecords() throws {
