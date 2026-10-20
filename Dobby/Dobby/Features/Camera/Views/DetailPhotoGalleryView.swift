@@ -5,14 +5,36 @@ import SwiftUI
 struct DetailPhotoGalleryView: View {
     let model: ProductPhotoModel
     @Environment(\.dismiss) private var dismiss
-    @State private var focusedID: UUID
+    @State private var focusedID: String
     @State private var pendingDeletion: CapturedAsset?
     @State private var deletionID: UUID?
     @State private var failureMessage: String?
 
     init(model: ProductPhotoModel) {
         self.model = model
-        _focusedID = State(initialValue: (model.photos.last ?? model.input.measurement).id)
+        _focusedID = State(initialValue: (model.photos.last ?? model.input.measurement).id.uuidString)
+    }
+
+    private struct Item: Identifiable {
+        let photo: CapturedAsset
+        var annotated = false
+        var id: String { photo.id.uuidString + (annotated ? "-measurement" : "") }
+        var label: String { annotated ? "실측값 표시 사진" : photo.purpose == .measurement ? "실측 원본 사진" : "상세 사진" }
+    }
+
+    private var items: [Item] {
+        [Item(photo: model.input.measurement)]
+        + (model.measurementRecord == nil ? [] : [Item(photo: model.input.measurement, annotated: true)])
+        + model.detailPhotos.map { Item(photo: $0) }
+    }
+
+    @ViewBuilder private func photoView(_ item: Item, thumbnail: Bool = false) -> some View {
+        if item.annotated, let record = model.measurementRecord {
+            MeasurementGalleryPhotoView(record: record, isThumbnail: thumbnail)
+        } else {
+            CameraPhotoView(source: item.photo.source, maximumPixelSize: thumbnail ? 192 : 1600,
+                            contentMode: thumbnail ? .fill : .fit)
+        }
     }
 
     var body: some View {
@@ -23,16 +45,16 @@ struct DetailPhotoGalleryView: View {
                 Spacer().frame(height: min(max(0, geometry.size.height - height - 112),
                     max(0, 171 * geometry.size.width / 402 - geometry.frame(in: .global).minY)))
                 TabView(selection: $focusedID) {
-                    ForEach(model.photos) { photo in
-                        CameraPhotoView(source: photo.source, contentMode: .fit)
-                            .tag(photo.id)
-                            .accessibilityLabel(photo.purpose == .measurement ? "실측 사진" : "상세 사진")
+                    ForEach(items) { item in
+                        photoView(item)
+                            .tag(item.id)
+                            .accessibilityLabel(item.label)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .frame(height: height)
                 .accessibilityIdentifier("camera.galleryPager")
-                .accessibilityValue("\((model.photos.firstIndex { $0.id == focusedID } ?? 0) + 1) / \(model.photos.count)")
+                .accessibilityValue("\((items.firstIndex { $0.id == focusedID } ?? 0) + 1) / \(items.count)")
                 thumbnailStrip(width: geometry.size.width).padding(.top, 35)
                 Spacer(minLength: 0)
             }
@@ -63,10 +85,10 @@ struct DetailPhotoGalleryView: View {
         .task(id: deletionID) {
             guard let id = deletionID else { return }
             defer { deletionID = nil }
-            let index = model.photos.firstIndex { $0.id == id } ?? 0
+            let index = items.firstIndex { $0.id == id.uuidString } ?? 0
             do {
                 try await model.deleteDetail(id)
-                if focusedID == id { focusedID = model.photos[min(index, model.photos.count - 1)].id }
+                if focusedID == id.uuidString { focusedID = items[min(index, items.count - 1)].id }
             } catch {
                 if !(error is CancellationError) { failureMessage = "사진은 그대로 유지돼요. 삭제 버튼을 눌러 다시 시도해 주세요." }
             }
@@ -77,8 +99,8 @@ struct DetailPhotoGalleryView: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Array(model.photos.enumerated()), id: \.element.id) { index, photo in
-                        thumbnail(photo, index: index)
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        thumbnail(item, index: index)
                     }
                 }
                 .padding(.horizontal, max(0, width / 2 - 28))
@@ -89,18 +111,20 @@ struct DetailPhotoGalleryView: View {
         .accessibilityIdentifier("camera.galleryStrip")
     }
 
-    private func thumbnail(_ photo: CapturedAsset, index: Int) -> some View {
-        let width: CGFloat = focusedID == photo.id ? 56 : 36
+    private func thumbnail(_ item: Item, index: Int) -> some View {
+        let photo = item.photo
+        let detailNumber = index - (model.measurementRecord == nil ? 0 : 1)
+        let width: CGFloat = focusedID == item.id ? 56 : 36
         return ZStack(alignment: .topLeading) {
-            Button { focusedID = photo.id } label: {
-                CameraPhotoView(source: photo.source, maximumPixelSize: 192)
+            Button { focusedID = item.id } label: {
+                photoView(item, thumbnail: true).accessibilityHidden(true)
                     .frame(width: width, height: 55).clipShape(RoundedRectangle(cornerRadius: 8))
                     .frame(minWidth: 44, alignment: .leading).contentShape(Rectangle())
             }
             .buttonStyle(.plain).offset(y: 22)
-            .id("photo-\(photo.id)")
-            .accessibilityLabel(photo.purpose == .measurement ? "실측 사진, 삭제 불가" : "상세 사진 \(index)")
-            .accessibilityValue(focusedID == photo.id ? "현재 보는 사진" : "")
+            .id("photo-\(item.id)")
+            .accessibilityLabel(item.label + (photo.purpose == .measurement ? ", 삭제 불가" : " \(detailNumber)"))
+            .accessibilityValue(focusedID == item.id ? "현재 보는 사진" : "")
             .accessibilityIdentifier("camera.galleryThumbnail.\(index)")
             if photo.purpose == .detail {
                 Button { pendingDeletion = photo } label: {
@@ -111,7 +135,7 @@ struct DetailPhotoGalleryView: View {
                         .frame(width: 44, height: 44).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).offset(x: width - 22)
-                .accessibilityLabel("상세 사진 \(index) 삭제")
+                .accessibilityLabel("상세 사진 \(detailNumber) 삭제")
                 .accessibilityIdentifier("camera.galleryDelete.\(index)")
             }
         }

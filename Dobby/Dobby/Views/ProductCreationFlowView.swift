@@ -140,20 +140,20 @@ struct ProductCreationFlowView: View {
             model = try ProductPhotoModel(input: input,
                 captureProvider: ProductPhotoFixtureCaptureProvider(seed: input.measurement.source,
                     directory: ProductAppStorage.fixtureDirectory?.appending(path: "detail-captures")),
-                initialSelectedPhotoIDs: [input.measurement.id])
+                initialSelectedPhotoIDs: [input.measurement.id], measurementRecord: record)
             permission = CameraPermission(authorizer: MockCameraAuthorization())
             camera = nil
         } else {
             let session = CameraPreviewSession()
             model = try ProductPhotoModel(input: input, captureProvider: session,
-                initialSelectedPhotoIDs: [input.measurement.id])
+                initialSelectedPhotoIDs: [input.measurement.id], measurementRecord: record)
             camera = session
             permission = CameraPermission(authorizer: SystemCameraAuthorization())
         }
 #else
         let session = CameraPreviewSession()
         model = try ProductPhotoModel(input: input, captureProvider: session,
-            initialSelectedPhotoIDs: [input.measurement.id])
+            initialSelectedPhotoIDs: [input.measurement.id], measurementRecord: record)
         camera = session
         permission = CameraPermission(authorizer: SystemCameraAuthorization())
 #endif

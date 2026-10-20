@@ -13,6 +13,8 @@ import Observation
 @Observable
 final class ProductPhotoModel {
     let input: ProductPhotoInput
+    // 이전 화면의 확정 결과를 열람용으로 보관한다. 측정 계산·수정은 소유하지 않는다.
+    let measurementRecord: SavedMeasurement?
     private(set) var detailPhotos: [CapturedAsset] = []
     private(set) var selectedPhotoIDs: [UUID] = []
     private(set) var isCapturing = false
@@ -46,7 +48,7 @@ final class ProductPhotoModel {
     }
 
     init(input: ProductPhotoInput, captureProvider: any CaptureProviding,
-         initialSelectedPhotoIDs: [UUID] = []) throws {
+         initialSelectedPhotoIDs: [UUID] = [], measurementRecord: SavedMeasurement? = nil) throws {
         guard input.measurement.purpose == .measurement,
               input.measurement.sessionID == input.sessionID,
               input.measurement.garmentID == input.garmentID,
@@ -55,6 +57,12 @@ final class ProductPhotoModel {
             throw CameraFailure.mismatchedCapture
         }
         self.input = input
+        if let measurementRecord {
+            guard measurementRecord.snapshot.frame.sessionID == input.sessionID else {
+                throw CameraFailure.mismatchedCapture
+            }
+        }
+        self.measurementRecord = measurementRecord
         self.captureProvider = captureProvider
         selectedPhotoIDs = initialSelectedPhotoIDs
     }
