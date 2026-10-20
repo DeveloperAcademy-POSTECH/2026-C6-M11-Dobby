@@ -28,7 +28,7 @@ struct ExportProductHandoffTests {
         #expect(product.fruits.measurements == "총장 65 cm\n가슴 단면 53.25 cm")
         #expect(product.fruits.length == "65")
         #expect(product.fruits.waist.isEmpty && product.fruits.thigh.isEmpty)
-        #expect(product.instagram == product.fruits)
+        #expect(product.instagram.measurements == "총장 65cm\n가슴 단면 53.2cm")
         garment.name = "이후 수정"
         #expect(product.name == "수정한 제품명")
     }
@@ -99,7 +99,9 @@ struct ExportProductHandoffTests {
         #expect(product.copyMeasurements.first { $0.id == "sleeveLengthLeft" }?.title == "소매길이")
         #expect(product.copyMeasurements.first { $0.id == "sleeveLengthLeft" }?.value == "62.25123456789")
         #expect(!product.fruits.measurements.contains("오른쪽") && !product.fruits.measurements.contains("왼쪽"))
-        #expect(product.instagram == product.fruits)
+        #expect(product.instagram.measurements == [
+            "어깨 45.1cm", "가슴 55.2cm", "밑단 51.2cm", "소매길이 62.2cm", "총장 68.2cm"
+        ].joined(separator: "\n"))
         #expect(garment.orderedMeasurements.count == 6 && garment.visibleMeasurements.count == 5)
         for (value, definition) in zip(garment.orderedMeasurements, definitions) {
             #expect(value.label == definition.1)
@@ -206,5 +208,20 @@ struct ExportProductHandoffTests {
         #expect(Double(product.copyMeasurements[3].value) == large.valueCm)
         #expect(converted.valueCm == 0.6125 * 100 && converted.autoValueCm == 0.6125 * 100)
         #expect(typed.valueCm == 67.25123456789 && !typed.isEdited)
+    }
+
+    @Test func instagramMeasurementsTruncateAndOmitZeroDecimal() {
+        let garment = Garment(category: "Jacket", group: .top)
+        garment.measurements = [
+            MeasuredValue(key: "a", label: "A", displayOrder: 0, valueCm: 45.95, autoValueCm: nil),
+            MeasuredValue(key: "b", label: "B", displayOrder: 1, valueCm: 45.99, autoValueCm: nil),
+            MeasuredValue(key: "c", label: "C", displayOrder: 2, valueCm: 45.01, autoValueCm: nil),
+            MeasuredValue(key: "d", label: "D", displayOrder: 3, valueCm: 45, autoValueCm: nil)
+        ]
+
+        let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+
+        #expect(product.instagram.measurements == "A 45.9cm\nB 45.9cm\nC 45cm\nD 45cm")
+        #expect(garment.measurements.map(\.valueCm) == [45.95, 45.99, 45.01, 45])
     }
 }
