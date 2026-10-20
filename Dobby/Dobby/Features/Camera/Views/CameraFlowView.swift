@@ -20,6 +20,7 @@ struct CameraFlowView: View {
     @State private var captureRequested = false
     @State private var failureMessage: String?
     @State private var isCaptureGuidePresented = false
+    @State private var isGalleryPresented = false
 
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
@@ -77,6 +78,9 @@ struct CameraFlowView: View {
             .interactiveDismissDisabled()
         }
         .onChange(of: permission.status, initial: true) { _, _ in updateCaptureGuide() }
+        .fullScreenCover(isPresented: $isGalleryPresented) {
+            NavigationStack { DetailPhotoGalleryView(model: model) }
+        }
         .onChange(of: camera?.canCapture, initial: true) { _, _ in updateCaptureGuide() }
         .task(id: captureRequested) {
             guard captureRequested else { return }
@@ -129,14 +133,13 @@ struct CameraFlowView: View {
     private var captureControls: some View {
         HStack {
             Spacer(minLength: 16)
-            // 3단계에서 사진 확인 화면을 연결한다. 지금은 최신 촬영본만 표시한다.
-            Button { /* 사진 확인 화면 연결 예정 */ } label: {
+            Button { isGalleryPresented = true } label: {
                 CameraPhotoView(source: (model.photos.last ?? model.input.measurement).source,
                                 maximumPixelSize: 192)
                     .frame(width: 48, height: 48).clipShape(Circle())
             }
             .buttonStyle(.plain)
-            .disabled(true)
+            .disabled(isPhotoOperationInProgress)
             .accessibilityLabel("촬영한 사진 보기")
             .accessibilityIdentifier("camera.openGallery")
             Spacer(minLength: 16)
