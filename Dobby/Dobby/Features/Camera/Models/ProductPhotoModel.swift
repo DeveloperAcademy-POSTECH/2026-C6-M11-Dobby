@@ -17,6 +17,8 @@ final class ProductPhotoModel {
     private(set) var selectedPhotoIDs: [UUID] = []
     private(set) var isCapturing = false
     private(set) var isDeleting = false
+    // 같은 사진 초안으로 재진입할 때 안내를 반복하지 않는다. 앱 전체 영구 설정은 아니다.
+    private(set) var hasAcknowledgedCaptureGuide = false
     private var isDiscardingDetails = false
     @ObservationIgnored private var deletionTask: Task<Void, Error>?
     @ObservationIgnored private let captureProvider: any CaptureProviding
@@ -55,6 +57,10 @@ final class ProductPhotoModel {
         self.input = input
         self.captureProvider = captureProvider
         selectedPhotoIDs = initialSelectedPhotoIDs
+    }
+
+    func acknowledgeCaptureGuide() {
+        hasAcknowledgedCaptureGuide = true
     }
 
     func captureDetail() async throws {

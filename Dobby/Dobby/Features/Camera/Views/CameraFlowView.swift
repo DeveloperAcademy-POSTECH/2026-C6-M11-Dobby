@@ -19,6 +19,7 @@ struct CameraFlowView: View {
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
     @State private var failureMessage: String?
+    @State private var isCaptureGuidePresented = false
 
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
@@ -67,6 +68,16 @@ struct CameraFlowView: View {
                 .accessibilityIdentifier("camera.selectPhotos")
             }
         }
+        .fullScreenCover(isPresented: $isCaptureGuidePresented) {
+            DetailCaptureGuideView {
+                model.acknowledgeCaptureGuide()
+                setCaptureGuidePresented(false)
+            }
+            .presentationBackground(.clear)
+            .interactiveDismissDisabled()
+        }
+        .onChange(of: permission.status, initial: true) { _, _ in updateCaptureGuide() }
+        .onChange(of: camera?.canCapture, initial: true) { _, _ in updateCaptureGuide() }
         .task(id: captureRequested) {
             guard captureRequested else { return }
             failureMessage = nil
@@ -148,6 +159,21 @@ struct CameraFlowView: View {
 
     private var canCapture: Bool {
         !isPhotoOperationInProgress && (previewSource != nil || camera?.canCapture == true)
+    }
+
+    private func updateCaptureGuide() {
+        if permission.status != .authorized {
+            setCaptureGuidePresented(false)
+        } else if !model.hasAcknowledgedCaptureGuide,
+                  previewSource != nil || camera?.canCapture == true {
+            setCaptureGuidePresented(true)
+        }
+    }
+
+    private func setCaptureGuidePresented(_ presented: Bool) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { isCaptureGuidePresented = presented }
     }
 
     private var isPhotoOperationInProgress: Bool {
