@@ -1,7 +1,9 @@
 const SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
 const APP_CALLBACK = "dobby-copy://instagram/oauth";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-const MAX_BODY_BYTES = 12 * 1024 * 1024;
+const MAX_IMAGE_COUNT = 10;
+const MAX_TOTAL_IMAGE_BYTES = 40 * 1024 * 1024;
+const MAX_BODY_BYTES = 64 * 1024 * 1024;
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 class Failure extends Error {
   constructor(message, status = 400, code = undefined) { super(message); this.status = status; this.code = code; }
@@ -44,6 +46,49 @@ async function upstream(url, options = {}) {
   return data;
 }
 function authorized(token) { return { Authorization: `Bearer ${token}` }; }
+function decodeImages(body) {
+  const encoded = Array.isArray(body.imagesBase64)
+    ? body.imagesBase64
+    : typeof body.imageBase64 === "string" ? [body.imageBase64] : [];
+  if (encoded.length === 0) throw new Failure("게시할 사진이 필요합니다.");
+  if (encoded.length > MAX_IMAGE_COUNT) throw new Failure("Instagram에는 사진을 최대 10장까지 게시할 수 있습니다.");
+  let totalBytes = 0;
+  const images = encoded.map(value => {
+    if (typeof value !== "string" || value.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4) {
+      throw new Failure("사진 용량을 확인해 주세요.", 413);
+    }
+    let bytes;
+    try { bytes = Uint8Array.from(atob(value), c => c.charCodeAt(0)); }
+    catch { throw new Failure("사진 형식이 올바르지 않습니다."); }
+    if (bytes.length < 3 || bytes.length > MAX_IMAGE_BYTES
+        || bytes[0] !== 255 || bytes[1] !== 216 || bytes[2] !== 255) {
+      throw new Failure("JPEG 사진이 필요합니다.");
+    }
+    totalBytes += bytes.length;
+    if (totalBytes > MAX_TOTAL_IMAGE_BYTES) throw new Failure("사진 전체 용량이 너무 큽니다.", 413);
+    return bytes;
+  });
+  return { encoded, images };
+}
+async function createContainer(env, connection, parameters) {
+  const media = await upstream(graphURL(env, `${connection.account.id}/media`), {
+    method: "POST", headers: authorized(connection.token), body: new URLSearchParams(parameters)
+  });
+  if (!media.id) throw new Failure("게시 컨테이너를 확인할 수 없습니다.", 502);
+  return String(media.id);
+}
+async function waitUntilReady(env, token, containerID) {
+  const check = graphURL(env, containerID); check.searchParams.set("fields", "status_code");
+  let status;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    status = await upstream(check, { headers: authorized(token) });
+    if (status.status_code !== "IN_PROGRESS") break;
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  if (status?.status_code !== "FINISHED") {
+    throw new Failure("사진 처리가 완료되지 않았습니다. 잠시 후 다시 시도해 주세요.", 409);
+  }
+}
 async function readBody(request) {
   if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) throw new Failure("사진 용량이 너무 큽니다.", 413);
   const reader = request.body?.getReader();
@@ -174,36 +219,43 @@ export class InstagramConnection {
       if (body.accountID !== connection.account.id) throw new Failure("연결된 계정이 변경되었습니다. 다시 확인해 주세요.", 409);
       if (typeof body.caption !== "string" || !body.caption.trim() || body.caption.length > 2200) throw new Failure("게시물 내용은 1~2,200자로 입력해 주세요.");
       if (typeof body.requestID !== "string" || !/^[a-f0-9-]{36}$/i.test(body.requestID)) throw new Failure("게시 요청 식별자가 필요합니다.");
+      const { encoded, images } = decodeImages(body);
       const publicationKey = `publication:${body.requestID}`;
-      const fingerprint = await hash(JSON.stringify([body.accountID, body.caption, body.imageBase64]));
+      const fingerprint = await hash(JSON.stringify([body.accountID, body.caption, encoded]));
       const previous = await storage.get(publicationKey);
       if (previous?.requestID === body.requestID) {
         if (previous.fingerprint !== fingerprint) throw new Failure("이전 게시 요청과 내용이 다릅니다. 결과를 확인하고 화면을 다시 열어 주세요.", 409);
         if (previous.result) return json(previous.result);
         throw new Failure("이미 처리한 요청입니다. Instagram에서 게시 결과를 확인해 주세요.", 409);
       }
-      if (typeof body.imageBase64 !== "string" || body.imageBase64.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4) throw new Failure("사진 용량을 확인해 주세요.", 413);
-      let bytes;
-      try { bytes = Uint8Array.from(atob(body.imageBase64), c => c.charCodeAt(0)); } catch { throw new Failure("사진 형식이 올바르지 않습니다."); }
-      if (bytes.length < 3 || bytes.length > MAX_IMAGE_BYTES || bytes[0] !== 255 || bytes[1] !== 216 || bytes[2] !== 255) throw new Failure("JPEG 사진이 필요합니다.");
-      const key = `${randomToken()}.jpg`;
-      await env.INSTAGRAM_MEDIA.put(key, bytes, { expirationTtl: 3600 });
+      const keys = images.map(() => `${randomToken()}.jpg`);
+      await Promise.all(keys.map((key, index) => env.INSTAGRAM_MEDIA.put(key, images[index], { expirationTtl: 3600 })));
       // Mark before any publish-side effects; retrying this ID must not create another post.
       await storage.put(publicationKey, { requestID: body.requestID, fingerprint });
       let publishing = false;
       try {
-      const media = await upstream(graphURL(env, `${connection.account.id}/media`), { method: "POST", headers: authorized(connection.token), body: new URLSearchParams({ image_url: `${origin(env)}/media/${key}`, caption: body.caption.trim() }) });
-      if (!media.id) throw new Failure("게시 컨테이너를 확인할 수 없습니다.", 502);
-      const check = graphURL(env, media.id); check.searchParams.set("fields", "status_code");
-      let status;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        status = await upstream(check, { headers: authorized(connection.token) });
-        if (status.status_code !== "IN_PROGRESS") break;
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      const imageURLs = keys.map(key => `${origin(env)}/media/${key}`);
+      let publishContainerID;
+      if (imageURLs.length === 1) {
+        publishContainerID = await createContainer(env, connection, {
+          image_url: imageURLs[0], caption: body.caption.trim()
+        });
+        await waitUntilReady(env, connection.token, publishContainerID);
+      } else {
+        const childIDs = [];
+        for (const imageURL of imageURLs) {
+          childIDs.push(await createContainer(env, connection, {
+            image_url: imageURL, is_carousel_item: "true"
+          }));
+        }
+        await Promise.all(childIDs.map(id => waitUntilReady(env, connection.token, id)));
+        publishContainerID = await createContainer(env, connection, {
+          media_type: "CAROUSEL", children: childIDs.join(","), caption: body.caption.trim()
+        });
+        await waitUntilReady(env, connection.token, publishContainerID);
       }
-      if (status.status_code !== "FINISHED") throw new Failure("사진 처리가 완료되지 않았습니다. 잠시 후 다시 시도해 주세요.", 409);
       publishing = true;
-      const published = await upstream(graphURL(env, `${connection.account.id}/media_publish`), { method: "POST", headers: authorized(connection.token), body: new URLSearchParams({ creation_id: media.id }) });
+      const published = await upstream(graphURL(env, `${connection.account.id}/media_publish`), { method: "POST", headers: authorized(connection.token), body: new URLSearchParams({ creation_id: publishContainerID }) });
       if (!published.id) throw new Failure("게시 결과를 확인하지 못했습니다. Instagram에서 확인해 주세요.", 502);
       const result = { published: true, mediaID: String(published.id), username: connection.account.username };
       await storage.put(publicationKey, { requestID: body.requestID, fingerprint, result });

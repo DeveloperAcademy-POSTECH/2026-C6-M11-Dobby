@@ -30,9 +30,9 @@ final class AutomaticLandmarkAdjustmentTests: XCTestCase {
                   derivedFrom: ["neck_left", "neck_right"])
         ]
         let landmarks = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID, origin: .model,
-            modelVersion: AutomaticGarmentKind.top.modelVersion, points: points,
+            modelVersion: AutomaticGarmentKind.legacyTopModelVersion, points: points,
             mask: .init(size: size, values: .init(repeating: 1, count: values.count)), garmentKind: .top)
-        let definitions = TopLandmarkSchema.canonicalMeasurementDefinitions.map { definition in
+        let definitions = TopLandmarkSchema.legacyMeasurementDefinitions.map { definition in
             var result = definition
             if legacyProjection, result.id == "top.totalLength" {
                 result.projection = .init(referenceAxisLandmarkIDs: ["neck_left", "neck_right"])
@@ -161,7 +161,7 @@ final class AutomaticLandmarkAdjustmentTests: XCTestCase {
 
     func testLegacyWaistMidpointRemainsDerivedAfterDirectWaistCorrection() throws {
         var record = try model().makeRecord()
-        record.landmarks.modelVersion = AutomaticGarmentKind.bottoms.modelVersion
+        record.landmarks.modelVersion = AutomaticGarmentKind.legacyBottomModelVersion
         record.landmarks.garmentKind = .bottoms
         record.landmarks.points = [
             .init(id: "waist_left", point: .init(x: 0.3, y: 0.2), confidence: 1),

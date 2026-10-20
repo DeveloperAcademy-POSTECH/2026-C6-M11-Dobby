@@ -7,7 +7,7 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
     private struct Scene {
         var frame: MeasurementFrame
         var landmarks: GarmentLandmarkSet
-        var definitions = TopLandmarkSchema.canonicalMeasurementDefinitions
+        var definitions = TopLandmarkSchema.legacyMeasurementDefinitions
         var inverseDepthX = 0.0
         var inverseDepthY = 0.0
         var inverseDepthConstant = 1.0 / 1.4
@@ -43,7 +43,7 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
         var maskValues = [UInt8](repeating: 0, count: depths.count)
         for y in 20..<236 { for x in 20..<236 { maskValues[y * depthSize.width + x] = 1 } }
         return .init(frame: frame, landmarks: .init(sessionID: frame.sessionID, frameID: frame.frameID,
-            origin: .model, modelVersion: AutomaticGarmentKind.top.modelVersion, points: points,
+            origin: .model, modelVersion: AutomaticGarmentKind.legacyTopModelVersion, points: points,
             mask: .init(size: depthSize, values: maskValues), garmentKind: .top),
             inverseDepthX: a, inverseDepthY: b, inverseDepthConstant: c)
     }

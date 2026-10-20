@@ -456,9 +456,9 @@ final class GarmentCaptureFlowTests: XCTestCase {
         app.navigationBars["촬영 사진"].buttons["닫기"].tap()
         XCTAssertTrue(waist.waitForExistence(timeout: 5))
         waist.tap()
-        XCTAssertTrue(app.navigationBars["허리 단면"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["허리"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "별도 기록")).firstMatch.exists)
-        app.navigationBars["허리 단면"].buttons["닫기"].tap()
+        app.navigationBars["허리"].buttons["닫기"].tap()
 
         let retake = app.buttons["retakeGarmentMeasurement"]
         XCTAssertTrue(retake.waitForExistence(timeout: 5))

@@ -114,12 +114,13 @@ final class ProductCreationFlowTests: XCTestCase {
         reveal(shoulder, in: app)
         let topTable = app.scrollViews["product-info.measurements"]
         XCTAssertTrue(topTable.exists)
-        for key in ["totalLength", "shoulderWidth", "chestWidth", "sleeveLengthLeft", "hemWidth"] {
+        for key in ["totalLength", "shoulderWidth", "chestWidth", "sleeveLengthLeft"] {
             let cell = app.textFields["product-info.measurement." + key]
-            XCTAssertTrue(cell.isHittable, "All five selected columns must fit without horizontal scrolling: " + key)
+            XCTAssertTrue(cell.isHittable, "All four selected columns must fit without horizontal scrolling: " + key)
             XCTAssertTrue(topTable.frame.insetBy(dx: -1, dy: -1).contains(cell.frame), key)
         }
-        attachScreenshot(app, name: "flow-top-five-columns-fit-current-main-table")
+        XCTAssertFalse(app.textFields["product-info.measurement.hemWidth"].exists)
+        attachScreenshot(app, name: "flow-top-four-columns-fit-current-main-table")
 
         // Native Back must keep an unfinished measurement edit in this same
         // draft while the selected photo originals remain available.
@@ -141,7 +142,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(invalidValue.waitForExistence(timeout: 5))
         let validationMessage = invalidValue.staticTexts.matching(NSPredicate(
             format: "label CONTAINS %@ AND label CONTAINS %@ AND label CONTAINS %@",
-            "어깨너비", "0보다 큰 숫자", "입력한 정보는 화면에 남아 있어요")).firstMatch
+            "어깨에", "0보다 큰 숫자", "입력한 정보는 화면에 남아 있어요")).firstMatch
         XCTAssertTrue(validationMessage.exists)
         attachScreenshot(app, name: "flow-top-invalid-measurement-save-guidance")
         invalidValue.buttons["확인"].tap()
@@ -176,20 +177,18 @@ final class ProductCreationFlowTests: XCTestCase {
         reveal(fruitsOverlay, in: app)
         fruitsOverlay.tap()
         XCTAssertTrue(app.otherElements["export.fruits.overlay"].waitForExistence(timeout: 5))
-        let guideSheet = app.descendants(matching: .any)["export.fruits.overlay.sheet"]
-        let guidePrompt = app.descendants(matching: .any)["export.fruits.overlay.prompt"]
-        XCTAssertTrue(guideSheet.waitForExistence(timeout: 5))
-        XCTAssertTrue(guidePrompt.waitForExistence(timeout: 5))
-        XCTAssertEqual(guideSheet.frame.minX, app.frame.minX + 6, accuracy: 3)
-        XCTAssertEqual(guideSheet.frame.maxX, app.frame.maxX - 6, accuracy: 3)
-        XCTAssertEqual(guideSheet.frame.maxY, app.frame.maxY - 6, accuracy: 3)
-        let statusBar = app.statusBars.firstMatch
-        XCTAssertTrue(statusBar.exists)
-        XCTAssertGreaterThanOrEqual(guidePrompt.frame.minY, statusBar.frame.maxY + 19)
+        // SwiftUI exposes the overlay container identifier on both the glass
+        // card and prompt. Verify its actionable controls for this lifecycle
+        // test rather than relying on non-exposed layout wrapper identifiers.
+        let guideOpen = app.buttons["export.fruits.overlay.open"]
+        let guideClose = app.buttons["export.fruits.overlay.close"]
+        XCTAssertTrue(guideOpen.waitForExistence(timeout: 5))
+        XCTAssertTrue(guideOpen.isHittable)
+        XCTAssertTrue(guideClose.isHittable)
         XCTAssertTrue(app.navigationBars["내보내기"].exists)
         XCTAssertTrue(app.staticTexts["다이나믹 아일랜드를\n꾹 눌러보세요"].exists)
         attachScreenshot(app, name: "flow-top-export-dynamic-island-guide-b-overlay")
-        app.buttons["export.fruits.overlay.close"].tap()
+        guideClose.tap()
         XCTAssertFalse(app.otherElements["export.fruits.overlay"].waitForExistence(timeout: 1))
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 5))
         app.buttons["export.close"].tap()
@@ -255,7 +254,7 @@ final class ProductCreationFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testBottomFiveValuesMeasurementOnlySelectionAndEmptyCopyHomeUseRealProductFlow() throws {
+    func testBottomFourValuesMeasurementOnlySelectionAndEmptyCopyHomeUseRealProductFlow() throws {
         continueAfterFailure = false
         let token = UUID().uuidString
         let name = "Flow bottom " + String(token.prefix(8))
@@ -301,21 +300,22 @@ final class ProductCreationFlowTests: XCTestCase {
         replaceText(in: field("name", app: app), with: name, app: app)
         let first = app.textFields["product-info.measurement.waistWidth"]
         reveal(first, in: app)
-        let expected = Set(["waistWidth", "frontRise", "totalLengthLeft", "hemWidthLeft", "inseamLeft"])
+        let expected = Set(["waistWidth", "frontRise", "totalLengthLeft", "hemWidthLeft"])
         let table = app.scrollViews["product-info.measurements"]
         XCTAssertTrue(table.exists)
         for key in expected {
             let cell = app.textFields["product-info.measurement." + key]
-            XCTAssertTrue(cell.isHittable, "The fifth field must remain visible while scrolling is disabled: " + key)
+            XCTAssertTrue(cell.isHittable, "All selected fields must remain visible while scrolling is disabled: " + key)
             XCTAssertTrue(table.frame.insetBy(dx: -1, dy: -1).contains(cell.frame), key)
         }
-        let lastField = app.textFields["product-info.measurement.inseamLeft"]
+        XCTAssertFalse(app.textFields["product-info.measurement.inseamLeft"].exists)
+        let lastField = app.textFields["product-info.measurement.hemWidthLeft"]
         replaceText(in: lastField, with: "123.456789", app: app)
         XCTAssertEqual(lastField.value as? String, "123.456789")
         XCTAssertTrue(table.frame.insetBy(dx: -1, dy: -1).contains(lastField.frame),
-                      "A long decimal input must scroll inside its field without pushing the fifth column out of the table")
+                      "A long decimal input must scroll inside its field without pushing the last column out of the table")
         assertFocusedMeasurementVisible(lastField, in: app)
-        attachScreenshot(app, name: "flow-bottom-five-columns-fit-long-decimal-input")
+        attachScreenshot(app, name: "flow-bottom-four-columns-fit-long-decimal-input")
         var seen: Set<String> = []
         for _ in 0..<9 {
             for element in app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.measurement.")).allElementsBoundByIndex {
@@ -337,11 +337,11 @@ final class ProductCreationFlowTests: XCTestCase {
             reveal(value, in: app)
             XCTAssertTrue(value.exists, key)
         }
-        for key in ["totalLengthRight", "hemWidthRight", "inseamRight"] {
+        for key in ["totalLengthRight", "hemWidthRight", "inseamLeft", "inseamRight"] {
             XCTAssertFalse(app.descendants(matching: .any)["library.measurement.\(key)"].firstMatch.exists,
                            "The saved product must present only the selected side")
         }
-        attachScreenshot(app, name: "flow-bottom-library-five-measurements")
+        attachScreenshot(app, name: "flow-bottom-library-four-measurements")
     }
 
     @MainActor

@@ -16,6 +16,20 @@ final class PreparedMeasurementCaptureTests: XCTestCase {
         scene.landmarks.origin = .model
         scene.landmarks.modelVersion = kind.modelVersion
         scene.landmarks.garmentKind = kind
+        // Current automatic captures use an interior garment mask and the
+        // representative-plane sampling convention (integer depth pixel rays).
+        // Keep the old local-engine SyntheticFixtures contract untouched.
+        let depthSize = scene.frame.depth.size
+        var mask = [UInt8](repeating: 0, count: depthSize.width * depthSize.height)
+        for y in 0..<depthSize.height { for x in 0..<depthSize.width {
+            let rayX = (Double(x) * Double(scene.frame.imageSize.width) / Double(depthSize.width)
+                        - scene.frame.intrinsics.cx) / scene.frame.intrinsics.fx
+            scene.frame.depth.values[y * depthSize.width + x] = Float(1.15 / (1 - tan(25 * .pi / 180) * rayX))
+            if x >= 10 && x < depthSize.width - 10 && y >= 10 && y < depthSize.height - 10 {
+                mask[y * depthSize.width + x] = 1
+            }
+        } }
+        scene.landmarks.mask = .init(size: depthSize, values: mask)
         return .init(snapshot: .init(frame: scene.frame, imageJPEG: Data([1, 2, 3])),
                      landmarks: scene.landmarks)
     }

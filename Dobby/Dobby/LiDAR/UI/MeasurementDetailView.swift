@@ -226,6 +226,8 @@ struct MeasurementDetailView: View {
         case .spatialAverage: "원본 측정점의 3D 평균"
         case .recoveredSpatialAverage: "깊이를 복구한 측정점의 3D 평균"
         case .axisProjection: "의류 가로축의 직교 방향"
+        case .garmentPlane: "옷 대표 평면"
+        case .contourIntersection: "대표 평면의 총장 윤곽 교점"
         }
     }
 
@@ -259,6 +261,11 @@ struct MeasurementDetailView: View {
                     }.font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     Text("\(samplingLabel(point.quality.method)) · 신뢰도 \(point.quality.confidenceAvailable ? "수신" : "없음")" + (point.quality.planeResidualMeters.map { String(format: " · 평면 잔차 %.1f mm", $0 * 1000) } ?? ""))
                         .font(.caption2).foregroundStyle(.secondary)
+                    if let plane = point.quality.garmentPlaneQuality {
+                        Text(String(format: "대표 평면 직교 RMS %.1f mm · 지지 표본 %d/%d",
+                                    plane.orthogonalRMSMeters * 1000, plane.inlierCount, plane.candidateCount))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
             }
         }.labCard()
@@ -331,6 +338,8 @@ extension MeasurementFailure {
         case .insufficientDepth: "이 점 주변에 사용할 수 있는 깊이가 부족합니다. 점과 옷의 경계를 확인해 주세요."
         case .lowLandmarkConfidence: "ML이 측정점 위치를 충분히 확신하지 못했습니다."
         case .occludedLandmark: "측정점을 지정하거나 가려진 부분이 보이도록 촬영해 주세요."
+        case .insufficientGarmentPlane: "옷 전체를 대표할 깊이 평면을 확인하지 못했어요. 옷을 평평하게 펼치고 전체가 보이도록 다시 촬영해 주세요."
+        case .contourIntersectionUnavailable: "총장 상단의 옷 경계를 확인하지 못했어요. 이 사진에서 총장 위치를 직접 확인할 수 있어요."
         }
     }
 }

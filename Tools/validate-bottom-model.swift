@@ -150,14 +150,15 @@ do {
             var output: [String: Any] = ["shape": shape, "strides": array.strides.map(\.intValue), "count": array.count,
                                          "nonFiniteCount": nonFinite, "minimum": minimum.isFinite ? minimum : NSNull(),
                                          "maximum": maximum.isFinite ? maximum : NSNull()]
-            if shape == [1, 26, 8_400] {
+            if shape == [1, 26, 8_400] || shape == [1, 29, 8_400] {
                 func value(_ channel: Int, _ anchor: Int) -> Double { array[[0, NSNumber(value: channel), NSNumber(value: anchor)]].doubleValue }
                 let best = (0 ..< shape[2]).max { value(4, $0) < value(4, $1) }!
                 output["bestAnchor"] = best
                 output["objectConfidence"] = value(4, best)
                 output["passesProvidedObjectThreshold025"] = value(4, best) >= 0.25
                 output["boxCXCYWH"] = (0 ..< 4).map { value($0, best) }
-                output["keypointsXYConfidence"] = (0 ..< 7).map { index in (0 ..< 3).map { value(5 + index * 3 + $0, best) } }
+                let pointCount = (shape[1] - 5) / 3
+                output["keypointsXYConfidence"] = (0 ..< pointCount).map { index in (0 ..< 3).map { value(5 + index * 3 + $0, best) } }
             }
             outputs[name] = output
         }

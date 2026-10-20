@@ -1,0 +1,101 @@
+{
+  "name": "bottom8",
+  "keypoints": [
+    "waist_left",
+    "waist_right",
+    "crotch",
+    "hem_left_outer",
+    "hem_left_inner",
+    "hem_right_inner",
+    "hem_right_outer",
+    "waist_front_center"
+  ],
+  "labels": {
+    "waist_left": [
+      "허리 좌",
+      "허리밴드 위쪽 왼쪽 끝"
+    ],
+    "waist_right": [
+      "허리 우",
+      "허리밴드 위쪽 오른쪽 끝"
+    ],
+    "crotch": [
+      "밑위",
+      "가랑이가 갈라지는 지점"
+    ],
+    "hem_left_outer": [
+      "왼밑단 바깥",
+      "왼쪽 다리 밑단의 바깥쪽 모서리"
+    ],
+    "hem_left_inner": [
+      "왼밑단 안쪽",
+      "왼쪽 다리 밑단의 안쪽 모서리"
+    ],
+    "hem_right_inner": [
+      "오른밑단 안쪽",
+      "오른쪽 다리 밑단의 안쪽 모서리 (가랑이 쪽)"
+    ],
+    "hem_right_outer": [
+      "오른밑단 바깥",
+      "오른쪽 다리 밑단의 바깥쪽 모서리"
+    ],
+    "waist_front_center": [
+      "허리 앞중앙",
+      "허리밴드 윗선의 앞쪽 가운데"
+    ]
+  },
+  "flip_pairs": [
+    [
+      "waist_left",
+      "waist_right"
+    ],
+    [
+      "hem_left_outer",
+      "hem_right_outer"
+    ],
+    [
+      "hem_left_inner",
+      "hem_right_inner"
+    ]
+  ],
+  "derived": {
+    "waist_center": [
+      "waist_left",
+      "waist_right"
+    ]
+  },
+  "skeleton": [
+    [
+      "waist_left",
+      "waist_right"
+    ],
+    [
+      "waist_left",
+      "hem_left_outer"
+    ],
+    [
+      "hem_left_outer",
+      "hem_left_inner"
+    ],
+    [
+      "crotch",
+      "hem_left_inner"
+    ],
+    [
+      "waist_right",
+      "hem_right_outer"
+    ],
+    [
+      "hem_right_outer",
+      "hem_right_inner"
+    ],
+    [
+      "crotch",
+      "hem_right_inner"
+    ],
+    [
+      "waist_front_center",
+      "crotch"
+    ]
+  ]
+}

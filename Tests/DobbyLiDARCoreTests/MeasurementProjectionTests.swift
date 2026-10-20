@@ -65,9 +65,9 @@ final class MeasurementProjectionTests: XCTestCase {
             tensor[7 + 3 * index] = 0.99
         }
         let prediction = try BottomLandmarkDecoder(schema: schema.decoderSchema).decode(shape: [1, 38, 1], geometry: geometry) { channel, _ in tensor[channel] }
-        // Projection is an archived opt-in contract, independent of the current
-        // canonical top schema whose total length is a straight segment.
-        var definitions = schema.measurementDefinitions
+        // Projection is an archived opt-in contract. Preserve its original
+        // neck midpoint instead of using the new contour-total definition.
+        var definitions = TopLandmarkSchema.legacyMeasurementDefinitions
         definitions[5].projection = .init(referenceAxisLandmarkIDs: ["neck_left", "neck_right"])
         return .init(frame: frame, landmarks: .init(sessionID: frame.sessionID, frameID: frame.frameID,
             origin: .model, modelVersion: "analytic-perfect-top-keypoints", points: prediction.points, mask: nil),

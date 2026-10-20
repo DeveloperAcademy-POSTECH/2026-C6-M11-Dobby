@@ -408,6 +408,8 @@ enum GarmentPointName {
     static func title(_ id: String) -> String {
         switch id {
         case "neck_center": "목 중앙점"
+        case "top_length_start": "총장 상단점"
+        case "waist_front_center": "앞허리 중앙점"
         case "neck_left": "왼쪽 목점"
         case "neck_right": "오른쪽 목점"
         case "shoulder_left": "왼쪽 어깨점"

@@ -24,7 +24,7 @@ function setup() {
     method, headers: { "X-Dobby-App-Key": key, Authorization: `Bearer ${owner}`, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body)
   }), env);
-  return { env, call, objects };
+  return { env, call, objects, media };
 }
 function mockMeta(t, handler) {
   t.mock.method(globalThis, "fetch", async (url, options) => {
@@ -48,6 +48,11 @@ function successMeta(url) {
   throw Error(`Unexpected test URL ${url.pathname}`);
 }
 const payload = () => ({ accountID: "123", caption: "테스트", imageBase64: "/9j/AA==", requestID: crypto.randomUUID() });
+const carouselPayload = count => ({
+  accountID: "123", caption: "캐러셀 테스트",
+  imagesBase64: Array.from({ length: count }, (_, index) => index % 2 ? "/9j/AQ==" : "/9j/AA=="),
+  requestID: crypto.randomUUID()
+});
 
 test("protected routes reject missing/wrong app and installation credentials", async () => {
   const { call } = setup();
@@ -106,6 +111,95 @@ test("publish checks account ownership and deduplicates successful requests", as
   assert.equal((await call("/publish", "POST", body)).status, 200);
   assert.equal(publications, 1);
   assert.equal((await call("/publish", "POST", { ...body, caption: "changed" })).status, 409);
+});
+test("multiple images create ordered carousel children and publish only the parent", async t => {
+  const children = [], imageURLs = [];
+  let parentCreated = false, publishedCreationID;
+  mockMeta(t, (url, options) => {
+    if (!url.pathname.endsWith("/media") && !url.pathname.endsWith("/media_publish")
+        && !url.pathname.includes("/child-") && !url.pathname.endsWith("/carousel")) {
+      return successMeta(url);
+    }
+    const parameters = new URLSearchParams(options?.body);
+    if (url.pathname.endsWith("/media_publish")) {
+      publishedCreationID = parameters.get("creation_id");
+      return { id: "published-carousel" };
+    }
+    if (url.pathname.includes("/child-") || url.pathname.endsWith("/carousel")) {
+      return { status_code: "FINISHED" };
+    }
+    if (parameters.get("media_type") === "CAROUSEL") {
+      parentCreated = true;
+      assert.equal(parameters.get("children"), "child-1,child-2");
+      assert.equal(parameters.get("caption"), "캐러셀 테스트");
+      return { id: "carousel" };
+    }
+    const id = `child-${children.length + 1}`;
+    children.push(id);
+    imageURLs.push(parameters.get("image_url"));
+    assert.equal(parameters.get("is_carousel_item"), "true");
+    assert.equal(parameters.has("caption"), false);
+    return { id };
+  });
+  const { call, media } = setup(); await login(call);
+  const response = await call("/publish", "POST", carouselPayload(2));
+  assert.equal(response.status, 200);
+  assert.deepEqual(children, ["child-1", "child-2"]);
+  assert.equal(new Set(imageURLs).size, 2);
+  assert.equal(media.size, 2);
+  assert.equal(parentCreated, true);
+  assert.equal(publishedCreationID, "carousel");
+});
+test("carousel validation rejects too many or invalid images before creating media", async t => {
+  let mediaCreations = 0;
+  mockMeta(t, url => {
+    if (url.pathname.endsWith("/media")) mediaCreations++;
+    return successMeta(url);
+  });
+  const { call } = setup(); await login(call);
+  assert.equal((await call("/publish", "POST", carouselPayload(11))).status, 400);
+  const invalid = carouselPayload(2); invalid.imagesBase64[1] = "bad";
+  assert.equal((await call("/publish", "POST", invalid)).status, 400);
+  assert.equal(mediaCreations, 0);
+});
+test("failed carousel child processing prevents parent creation and publication", async t => {
+  let childCount = 0, parentCreations = 0, publications = 0;
+  mockMeta(t, (url, options) => {
+    if (!url.pathname.endsWith("/media") && !url.pathname.endsWith("/media_publish")
+        && !url.pathname.includes("/child-")) return successMeta(url);
+    if (url.pathname.endsWith("/media_publish")) { publications++; return { id: "unexpected" }; }
+    if (url.pathname.includes("/child-")) {
+      return { status_code: url.pathname.endsWith("/child-2") ? "ERROR" : "FINISHED" };
+    }
+    const parameters = new URLSearchParams(options?.body);
+    if (parameters.get("media_type") === "CAROUSEL") { parentCreations++; return { id: "carousel" }; }
+    childCount++;
+    return { id: `child-${childCount}` };
+  });
+  const { call } = setup(); await login(call);
+  assert.equal((await call("/publish", "POST", carouselPayload(2))).status, 409);
+  assert.equal(childCount, 2);
+  assert.equal(parentCreations, 0);
+  assert.equal(publications, 0);
+});
+test("carousel image order is part of duplicate request protection", async t => {
+  let childCount = 0;
+  mockMeta(t, (url, options) => {
+    if (!url.pathname.endsWith("/media") && !url.pathname.endsWith("/media_publish")
+        && !url.pathname.includes("/child-") && !url.pathname.endsWith("/carousel")) {
+      return successMeta(url);
+    }
+    if (url.pathname.endsWith("/media_publish")) return { id: "published" };
+    if (url.pathname.includes("/child-") || url.pathname.endsWith("/carousel")) return { status_code: "FINISHED" };
+    const parameters = new URLSearchParams(options?.body);
+    if (parameters.get("media_type") === "CAROUSEL") return { id: "carousel" };
+    childCount++;
+    return { id: `child-${childCount}` };
+  });
+  const { call } = setup(); await login(call);
+  const body = carouselPayload(2);
+  assert.equal((await call("/publish", "POST", body)).status, 200);
+  assert.equal((await call("/publish", "POST", { ...body, imagesBase64: [...body.imagesBase64].reverse() })).status, 409);
 });
 test("uncertain publish failure cannot be retried with the same request ID", async t => {
   let publications = 0;
