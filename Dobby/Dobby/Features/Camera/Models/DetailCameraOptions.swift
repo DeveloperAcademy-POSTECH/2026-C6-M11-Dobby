@@ -1,7 +1,7 @@
 // Created by mason on 10/21/26.
 import Observation
 
-/// UI와 독립적인 촬영 옵션 Model. 하드웨어 연결은 다음 단계에서 주입한다.
+/// UI와 독립적인 촬영 옵션 Model. 실제 제어기 또는 목을 주입한다.
 @MainActor @Observable
 final class DetailCameraOptions {
     private(set) var capabilities = DetailCameraCapabilities()
@@ -34,17 +34,15 @@ final class DetailCameraOptions {
             let result = try await controller.capabilities()
             guard revision == token, !Task.isCancelled else { return }
             capabilities = result
+            if let bias = result.exposureBias, result.exposure?.clamped(bias) == bias {
+                appliedExposure = bias
+            }
         } catch {
             guard revision == token, !Task.isCancelled else { return }
             failure = (error as? DetailCameraControlFailure) ?? .deviceFailure
         }
     }
     func apply(_ request: DetailCameraControlRequest) async {
-        revision += 1
-        let token = revision
-        requested = request
-        failure = nil
-        isApplying = false
         let range: DetailCameraControlRange?
         let value: Double
         switch request {
@@ -61,6 +59,10 @@ final class DetailCameraOptions {
         case .exposure: limitedRequest = .exposure(limited)
         case .zoom: limitedRequest = .zoom(limited)
         }
+        revision += 1
+        let token = revision
+        requested = request
+        failure = nil
         isApplying = true
         defer { if revision == token { isApplying = false } }
         do {
@@ -78,4 +80,5 @@ final class DetailCameraOptions {
             failure = (error as? DetailCameraControlFailure) ?? .deviceFailure
         }
     }
+    func resetExposure() async { await apply(.exposure(0)) }
 }

@@ -18,6 +18,7 @@ nonisolated struct DetailCameraControlRange: Equatable, Sendable {
 nonisolated struct DetailCameraCapabilities: Equatable, Sendable {
     var exposure: DetailCameraControlRange?
     var zoom: DetailCameraControlRange?
+    var exposureBias: Double?
 }
 nonisolated enum DetailPhotoAspectRatio: String, CaseIterable, Sendable {
     case fourThree = "4:3", sixteenNine = "16:9", square = "1:1"
@@ -26,7 +27,7 @@ nonisolated enum DetailCameraControlRequest: Equatable, Sendable {
     case exposure(Double), zoom(Double)
 }
 nonisolated enum DetailCameraControlFailure: Error, Equatable, Sendable {
-    case unsupported, invalidValue, unavailable, deviceFailure
+    case unsupported, invalidValue, unavailable, deviceFailure, operationInProgress
 }
 nonisolated protocol DetailCameraControlling: Sendable {
     func capabilities() async throws -> DetailCameraCapabilities

@@ -28,6 +28,9 @@ final class DetailCameraOptionsTests: XCTestCase {
         let task = Task { await subject.apply(.exposure(3)) }
         await driver.waitForRequest()
         XCTAssertTrue(subject.isApplying)
+        await subject.apply(.exposure(.nan))
+        XCTAssertEqual(subject.failure, .invalidValue)
+        XCTAssertTrue(subject.isApplying, "잘못된 입력이 진행 중인 정상 요청을 해제하면 안 됩니다.")
         XCTAssertEqual(subject.requested, .exposure(3))
         let received = await driver.received
         XCTAssertEqual(received, .exposure(1))
