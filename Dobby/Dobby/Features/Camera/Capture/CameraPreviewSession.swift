@@ -19,11 +19,16 @@ final class CameraPreviewSession: CaptureProviding {
 
     private(set) var state: State = .stopped
     private(set) var isCapturing = false
+    let options: DetailCameraOptions
     @ObservationIgnored private let driver = CameraPreviewDriver()
     @ObservationIgnored private let store = CameraPhotoStore()
     @ObservationIgnored var rotationAngle: CGFloat = 90
     @ObservationIgnored private var wantsRunning = false
     @ObservationIgnored private var revision = 0
+
+    init(optionController: any DetailCameraControlling = UnavailableDetailCameraControls()) {
+        options = DetailCameraOptions(controller: optionController)
+    }
 
     // View에는 프리뷰 레이어 연결만 허용한다. 구성·시작·중지는 driver가 직렬 처리한다.
     var session: AVCaptureSession { driver.session }
@@ -70,10 +75,12 @@ final class CameraPreviewSession: CaptureProviding {
         guard wantsRunning else { return }
         revision += 1
         state = .unavailable(message)
+        options.invalidate()
         driver.cancelCapture()
     }
 
     private func updateSession() {
+        options.invalidate()
         revision += 1
         let request = revision
         state = wantsRunning ? .starting : .stopped
@@ -81,6 +88,7 @@ final class CameraPreviewSession: CaptureProviding {
             Task { @MainActor [weak self] in
                 guard let self, self.revision == request else { return }
                 self.state = result
+                if result == .running { await self.options.refreshCapabilities() }
             }
         }
     }
