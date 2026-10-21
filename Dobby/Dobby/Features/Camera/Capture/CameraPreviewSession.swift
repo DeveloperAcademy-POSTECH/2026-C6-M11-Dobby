@@ -22,6 +22,7 @@ final class CameraPreviewSession: CaptureProviding {
     let options: DetailCameraOptions
     @ObservationIgnored private let driver = CameraPreviewDriver()
     @ObservationIgnored private let store = CameraPhotoStore()
+    @ObservationIgnored private let processor = DetailPhotoProcessor()
     @ObservationIgnored var rotationAngle: CGFloat = 90
     @ObservationIgnored private var wantsRunning = false
     @ObservationIgnored private var revision = 0
@@ -42,10 +43,14 @@ final class CameraPreviewSession: CaptureProviding {
         defer { isCapturing = false }
         let request = revision
         let capturedAt = Date()
+        let aspectRatio = options.photoAspectRatio
         let data = try await driver.capture(rotationAngle: rotationAngle)
         try Task.checkCancellation()
         guard wantsRunning, revision == request else { throw CancellationError() }
-        let asset = try await store.save(data, sessionID: sessionID, garmentID: garmentID, capturedAt: capturedAt)
+        let processed = try await processor.process(data, aspectRatio: aspectRatio)
+        try Task.checkCancellation()
+        guard wantsRunning, revision == request else { throw CancellationError() }
+        let asset = try await store.save(processed, sessionID: sessionID, garmentID: garmentID, capturedAt: capturedAt)
         do {
             try Task.checkCancellation()
             guard wantsRunning, revision == request else { throw CancellationError() }
