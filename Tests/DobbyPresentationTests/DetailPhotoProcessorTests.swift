@@ -5,6 +5,7 @@ import ImageIO
 import XCTest
 @testable import Dobby
 
+@MainActor
 final class DetailPhotoProcessorTests: XCTestCase {
     private let colors: [[UInt8]] = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 0, 255]]
     private func photo(orientation: Int = 1) throws -> Data {
@@ -99,5 +100,55 @@ final class DetailPhotoProcessorTests: XCTestCase {
             XCTFail("저장소가 파일이면 저장에 실패해야 합니다.")
         } catch { XCTAssertEqual(error as? CameraFailure, .saveFailed) }
         XCTAssertEqual(try Data(contentsOf: blocked), Data([7]))
+    }
+
+    func testUnspecifiedRatioSurvivesStorageWithoutChangingOriginal() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = try photo(orientation: 6)
+        let output = try await DetailPhotoProcessor().process(original, aspectRatio: nil)
+        let asset = try await CameraPhotoStore(directory: root).save(output,
+            sessionID: UUID(), garmentID: UUID(), capturedAt: .now)
+        guard case let .localFile(url, metadata) = asset.source else { return XCTFail("저장 파일 없음") }
+        XCTAssertEqual(try Data(contentsOf: url), original)
+        XCTAssertEqual(metadata.pixelWidth, 80)
+        XCTAssertEqual(metadata.pixelHeight, 48)
+        XCTAssertEqual(metadata.orientation, .right)
+    }
+
+    func testCancelledOrInvalidSaveDoesNotCreateDirectory() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CameraPhotoStore(directory: root), data = try photo()
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await store.save(data, sessionID: UUID(), garmentID: UUID(), capturedAt: .now)
+        }
+        do { _ = try await task.value; XCTFail("취소된 저장이 완료됐습니다.") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        do {
+            _ = try await store.save(Data([0, 1]), sessionID: UUID(), garmentID: UUID(), capturedAt: .now)
+            XCTFail("손상된 입력이 저장됐습니다.")
+        } catch { XCTAssertEqual(error as? CameraFailure, .saveFailed) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
+    }
+
+    func testDiscardRejectsMeasurementAndForeignAssetAndIsRepeatable() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CameraPhotoStore(directory: root)
+        let original = try photo()
+        let asset = try await store.save(original, sessionID: UUID(), garmentID: UUID(), capturedAt: .now)
+        guard case let .localFile(url, _) = asset.source else { return XCTFail("저장 파일 없음") }
+        for (purpose, session) in [(CapturedAsset.Purpose.measurement, asset.sessionID), (.detail, UUID())] {
+            let protected = CapturedAsset(id: asset.id, sessionID: session, garmentID: asset.garmentID,
+                purpose: purpose, capturedAt: asset.capturedAt, source: asset.source)
+            do { try await store.discardUncommitted(protected); XCTFail("보호된 사진이 삭제됐습니다.") }
+            catch { XCTAssertEqual(error as? CameraFailure, .saveFailed) }
+            XCTAssertEqual(try Data(contentsOf: url), original)
+        }
+        try await store.discardUncommitted(asset)
+        try await store.discardUncommitted(asset)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 }
