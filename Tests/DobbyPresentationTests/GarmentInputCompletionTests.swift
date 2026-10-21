@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct GarmentInputCompletionTests {
     private func product() -> (Garment, MeasuredValue, MeasuredValue) {
-        let garment = Garment(category: "Jacket", group: .top, name: "직접 입력한 자켓")
+        let garment = Garment(category: "Jacket", group: .top, name: "직접 입력한 자켓", detail: "제품 설명", price: 40000)
         let length = MeasuredValue(key: "totalLength", label: "총장", displayOrder: 1,
                                    valueCm: 68.12345, autoValueCm: 68.12345)
         let chest = MeasuredValue(key: "chestWidth", label: "가슴", displayOrder: 0,
@@ -15,6 +15,40 @@ struct GarmentInputCompletionTests {
         length.garment = garment
         chest.garment = garment
         return (garment, length, chest)
+    }
+
+    @Test func requiredInformationPreventsSavingWithoutConsumingMeasurementDrafts() {
+        let (garment, length, _) = product()
+        let cases: [(String, String, Int?)] = [
+            (" ", "설명", 40000), ("자켓", "\n", 40000),
+            ("자켓", "설명", nil), ("자켓", "설명", 0), ("자켓", "설명", -1)
+        ]
+        for (name, detail, price) in cases {
+            garment.name = name
+            garment.detail = detail
+            garment.price = price
+            var drafts = [length.id: "72.5"]
+            var saves = 0
+            #expect(!GarmentInformationValidation.isValid(garment))
+            do {
+                try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { saves += 1 }
+                Issue.record("Invalid required information must block saving")
+            } catch {
+                #expect(saves == 0)
+                #expect(drafts[length.id] == "72.5")
+                #expect(garment.informationCompletedAt == nil)
+            }
+        }
+    }
+
+    @Test func optionalBrandDoesNotBlockCompletionAndPriceIsExported() throws {
+        let (garment, _, _) = product()
+        garment.brand = ""
+        var drafts: [UUID: String] = [:]
+        #expect(GarmentInformationValidation.isValid(garment))
+        try GarmentInputCompletion.save(garment: garment, drafts: &drafts) {}
+        #expect(garment.price == 40000)
+        #expect(ExportProduct(garment: garment, loadPhoto: { _ in nil }).fruits.price == "40000")
     }
 
     @Test func doneConsumesFocusedDraftOnceAndPreservesAutomaticOriginal() throws {
@@ -179,7 +213,7 @@ struct GarmentInputCompletionTests {
             configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let context = ModelContext(container)
         context.autosaveEnabled = false
-        let garment = Garment(category: "Jacket", group: .top)
+        let garment = Garment(category: "Jacket", group: .top, name: "자켓", detail: "제품 설명", price: 40000)
         let left = MeasuredValue(key: "sleeveLengthLeft", label: "왼쪽 소매", displayOrder: 0,
                                  valueCm: 0, autoValueCm: 61.125)
         let right = MeasuredValue(key: "sleeveLengthRight", label: "오른쪽 소매", displayOrder: 1,
@@ -210,7 +244,7 @@ struct GarmentInputCompletionTests {
     }
 
     @Test func usableLeftCanCompleteWhileInvalidRightOriginalRemainsStored() throws {
-        let garment = Garment(category: "Jeans", group: .pants)
+        let garment = Garment(category: "Jeans", group: .pants, name: "바지", detail: "제품 설명", price: 40000)
         let left = MeasuredValue(key: "totalLengthLeft", label: "왼쪽 총장", displayOrder: 0,
                                  valueCm: 101.25123, autoValueCm: 101.5)
         let right = MeasuredValue(key: "totalLengthRight", label: "오른쪽 총장", displayOrder: 1,
@@ -227,7 +261,7 @@ struct GarmentInputCompletionTests {
     }
 
     @Test func whenNeitherSideIsUsableDisplayedLeftStillRequiresCorrection() {
-        let garment = Garment(category: "Jacket", group: .top)
+        let garment = Garment(category: "Jacket", group: .top, name: "자켓", detail: "제품 설명", price: 40000)
         let left = MeasuredValue(key: "sleeveLengthLeft", label: "왼쪽 소매", displayOrder: 0,
                                  valueCm: 0, autoValueCm: 61)
         let right = MeasuredValue(key: "sleeveLengthRight", label: "오른쪽 소매", displayOrder: 1,

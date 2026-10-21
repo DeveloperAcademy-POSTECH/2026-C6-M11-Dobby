@@ -22,11 +22,7 @@ struct InfoInputView: View {
     private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
     @State private var saveError: String?
     @FocusState private var focusedMeasurementID: UUID?
-    private static let measurementTableID = "product-info.measurement-table"
-    /// 표의 테두리와 칸 사이 선. 같은 선이므로 한 곳에서 정한다.
-    private static let tableLine = Color(white: 0.93)
-    /// 이보다 많으면 고르게 나누지 않고 가로로 민다.
-    private static let evenlyFittingColumns = 5
+    static let measurementTableID = "product-info.measurement-table"
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
          onComplete: ((Garment) -> Void)? = nil) {
@@ -42,18 +38,10 @@ struct InfoInputView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    photoStrip
-                    field("제품 명", text: $garment.name,
-                          placeholder: "예: 90s 나이키 자켓", lines: 1...2, identifier: "name")
-                    field("설명", text: $garment.detail,
-                          placeholder: "연식, 실착 사이즈, 상태를 적어주세요", lines: 5...10, identifier: "detail")
-                    field("브랜드", text: $garment.brand,
-                          placeholder: "예: 나이키", lines: 1...1, identifier: "brand")
-                    sizeTable.id(Self.measurementTableID)
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
+                ProductInformationFields(garment: garment, measurementInput: measurementInput,
+                    focus: $focusedMeasurementID)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: focusedMeasurementID) { _, _ in
@@ -65,18 +53,29 @@ struct InfoInputView: View {
                 revealMeasurements(using: proxy)
             }
         }
+        .background(ProductInformationStyle.background)
         .navigationTitle("제품 정보 입력")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .tint(.primary)
         .onDisappear { focusedMeasurementID = nil }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("완료", action: complete)
-                .fontWeight(.semibold)
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.small)
+                Button(action: complete) {
+                    Text("완료")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 61, height: 44)
+                        .background(GarmentInformationValidation.isValid(garment)
+                            ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
+                            in: Capsule())
+                }
+                .disabled(!GarmentInformationValidation.isValid(garment))
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
         .sheet(item: $exportProduct) { product in
@@ -122,138 +121,6 @@ struct InfoInputView: View {
         }
     }
 
-    // MARK: 제품 사진
-
-    private var photoStrip: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("제품 사진").font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(garment.productPhotos) { photo in
-                        thumbnail(photo)
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-            // 사진이 화면 가장자리까지 이어져 보이도록 바깥 여백을 상쇄한다.
-            .padding(.horizontal, -20)
-        }
-    }
-
-    private func thumbnail(_ photo: GarmentPhoto) -> some View {
-        StoredProductPhotoView(photo: photo, maximumPixelSize: 320)
-            .frame(width: 92, height: 108).clipped()
-    }
-
-    // MARK: 글자 입력
-
-    private func field(_ title: String, text: Binding<String>,
-                       placeholder: String, lines: ClosedRange<Int>, identifier: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
-            TextField(placeholder, text: text, axis: .vertical)
-                .accessibilityIdentifier("product-info.\(identifier)")
-                .lineLimit(lines)
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
-        }
-    }
-
-    // MARK: 실측 사이즈
-
-    /// 한쪽씩 선택한 실측 항목을 가로로 늘어놓고, 좁은 화면에서는 가로로 스크롤한다.
-    private var sizeTable: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("실측 사이즈").font(.headline)
-            let uncertain = garment.visibleMeasurements.filter {
-                $0.sourceStatusRaw == MeasurementStatus.uncertain.rawValue && !$0.isEdited
-            }
-            if !uncertain.isEmpty {
-                Label("\(uncertain.map(\.displayLabel).joined(separator: ", ")): 자동 측정값을 확인해 주세요.",
-                      systemImage: "exclamationmark.circle")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("product-info.measurement-warning")
-            }
-            // 선택한 항목이 다섯 개 이하이면 실제 표 너비에 고르게 배치한다.
-            // 더 많은 항목은 최소 칸 너비를 유지하면서 가로로 스크롤한다.
-            let columns = garment.visibleMeasurements
-            let fitsEvenly = columns.count <= Self.evenlyFittingColumns
-            let scrollWidth = CGFloat(columns.count) * 84 + CGFloat(max(0, columns.count - 1))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(Array(columns.enumerated()), id: \.element.id) { index, value in
-                        if index > 0 {
-                            VStack(spacing: 0) {
-                                Color(white: 0.95).frame(height: 44)
-                                Rectangle().fill(Self.tableLine)
-                            }.frame(width: 1)
-                        }
-                        SizeColumn(value: value, text: Binding(
-                            get: { measurementInput.wrappedValue.text(for: value) },
-                            set: { measurementInput.wrappedValue.setText($0, for: value) }
-                        ), focus: $focusedMeasurementID, isCompact: fitsEvenly)
-                        .frame(maxWidth: fitsEvenly ? .infinity : nil)
-                    }
-                }
-                .containerRelativeFrame(.horizontal) { width, _ in
-                    fitsEvenly ? width : max(width, scrollWidth)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .scrollDisabled(fitsEvenly)
-            .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16).stroke(Self.tableLine, lineWidth: 1)
-            }
-            .accessibilityIdentifier("product-info.measurements")
-        }
-    }
-}
-
-// MARK: - 치수 한 칸
-
-/// 위에 항목 이름, 아래에 값. 값을 누르면 바로 고칠 수 있다.
-///
-/// 목업에는 연필이 없지만 편집은 남겨 두었다. 눌러서 고치는 것이 화면을 더 늘리지 않으면서
-/// 숫자가 틀렸을 때 바로 손볼 수 있는 길이기 때문이다.
-private struct SizeColumn: View {
-    @Bindable var value: MeasuredValue
-
-    @Binding var text: String
-    let focus: FocusState<UUID?>.Binding
-    let isCompact: Bool
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text(value.displayLabel)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color(white: 0.32))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(Color(white: 0.95))
-
-            HStack(alignment: .firstTextBaseline, spacing: 1) {
-                TextField("", text: $text)
-                    .accessibilityLabel("\(value.displayLabel) 센티미터")
-                    .accessibilityIdentifier("product-info.measurement.\(value.key)")
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.center)
-                    .focused(focus, equals: value.id)
-                    .frame(width: min(58, max(24, CGFloat(text.count) * 10 + 6)))
-                    .monospacedDigit()
-                Text("cm")
-            }
-            .font(.body)
-            .frame(maxWidth: .infinity)
-            .frame(height: 64)
-        }
-        .frame(minWidth: isCompact ? 0 : 84)
-    }
 }
 
 /// The visible text outlives its dirty draft. Clearing a consumed draft must not
@@ -303,9 +170,12 @@ enum GarmentMeasurementInputText {
 enum GarmentInputCompletion {
     nonisolated enum ValidationError: LocalizedError, Sendable {
         case invalidMeasurement(String)
+        case missingInformation(String)
 
         var errorDescription: String? {
             switch self {
+            case .missingInformation(let label):
+                return "\(label)을(를) 올바르게 입력해 주세요."
             case .invalidMeasurement(let label):
                 return "\(label)에 0보다 큰 숫자를 입력해 주세요. 입력한 정보는 화면에 남아 있어요."
             }
@@ -318,6 +188,7 @@ enum GarmentInputCompletion {
                      persist: () throws -> Void) throws {
         // Hidden bilateral evidence stays untouched. An invalid hidden left
         // observation must not block editing and saving the usable right one.
+        try GarmentInformationValidation.validate(garment)
         let measurements = garment.visibleMeasurements
         for value in measurements {
             let entered = drafts[value.id].flatMap { GarmentMeasurementInputText.parsed($0) }
