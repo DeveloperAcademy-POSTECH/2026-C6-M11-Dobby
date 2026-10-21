@@ -7,13 +7,24 @@
 
 import SwiftUI
 
-/// 5단계는 메뉴 표시만 제공한다. 노출·비율 조작과 카메라 적용은 후속 단계다.
+/// 노출은 실제 옵션 Model에 연결하며 비율 조작은 다음 단계에서 제공한다.
 struct DetailCaptureOptionsView: View {
+    var options: DetailCameraOptions? = nil
     let onClose: () -> Void
+    @State private var showsExposure = false
 
     var body: some View {
+        if showsExposure, let options {
+            DetailExposureView(options: options) { showsExposure = false }
+        } else {
+            menu
+        }
+    }
+
+    private var menu: some View {
         HStack(spacing: 24) {
-            option("노출", identifier: "camera.exposureOption") {
+            option("노출", identifier: "camera.exposureOption", enabled: options?.capabilities.exposure != nil,
+                   action: { showsExposure = true }) {
                 Image(systemName: "plusminus").font(.title2)
             }
             option("비율", identifier: "camera.aspectRatioOption") {
@@ -47,8 +58,9 @@ struct DetailCaptureOptionsView: View {
     }
 
     private func option<Icon: View>(_ title: String, identifier: String,
+                                    enabled: Bool = false, action: @escaping () -> Void = {},
                                     @ViewBuilder icon: () -> Icon) -> some View {
-        Button { /* 노출·비율 조절은 후속 단계에서 연결한다. */ } label: {
+        Button(action: action) {
             VStack(spacing: 8) {
                 icon()
                     .frame(width: 48, height: 48)
@@ -58,10 +70,10 @@ struct DetailCaptureOptionsView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .disabled(true)
+        .foregroundStyle(enabled ? .primary : .secondary)
+        .disabled(!enabled)
         .accessibilityLabel(title)
-        .accessibilityValue(title == "비율" ? "4:3, 조절 준비 중" : "조절 준비 중")
+        .accessibilityValue(title == "비율" ? "4:3, 조절 준비 중" : enabled ? "조절 가능" : "카메라 준비 후 사용 가능")
         .accessibilityIdentifier(identifier)
     }
 }

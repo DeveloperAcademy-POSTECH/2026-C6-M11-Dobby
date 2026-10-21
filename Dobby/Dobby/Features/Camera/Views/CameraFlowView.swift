@@ -56,7 +56,7 @@ struct CameraFlowView: View {
                             ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
                         }
                         if isMoreOptionsPresented {
-                            DetailCaptureOptionsView { isMoreOptionsPresented = false }
+                            DetailCaptureOptionsView(options: camera?.options) { isMoreOptionsPresented = false }
                         } else {
                             captureControls
                         }

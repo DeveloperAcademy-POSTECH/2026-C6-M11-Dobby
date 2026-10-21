@@ -14,11 +14,16 @@ final class DetailCameraOptions {
     var photoAspectRatio: DetailPhotoAspectRatio?
     @ObservationIgnored private let controller: any DetailCameraControlling
     @ObservationIgnored private var revision = 0
+    @ObservationIgnored private var exposureTask: Task<Void, Never>?
+    @ObservationIgnored private var queuedExposure: Double?
 
     init(controller: any DetailCameraControlling = UnavailableDetailCameraControls()) {
         self.controller = controller
     }
     func invalidate() {
+        exposureTask?.cancel()
+        exposureTask = nil
+        queuedExposure = nil
         revision += 1
         capabilities = .init()
         requested = nil
@@ -81,4 +86,18 @@ final class DetailCameraOptions {
         }
     }
     func resetExposure() async { await apply(.exposure(0)) }
+
+    /// 드래그 중에는 최신 값만 대기시킨다. 패널을 닫아도 마지막 요청은 적용한다.
+    func requestExposure(_ value: Double) {
+        guard let limited = capabilities.exposure?.clamped(value) else { return }
+        queuedExposure = limited
+        guard exposureTask == nil else { return }
+        exposureTask = Task {
+            while !Task.isCancelled, let next = queuedExposure {
+                queuedExposure = nil
+                await apply(.exposure(next))
+            }
+            if !Task.isCancelled { exposureTask = nil }
+        }
+    }
 }

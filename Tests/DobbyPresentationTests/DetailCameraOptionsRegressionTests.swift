@@ -4,6 +4,26 @@ import XCTest
 
 @MainActor
 final class DetailCameraOptionsRegressionTests: XCTestCase {
+    func testDragCoalescesWaitingValuesAndInvalidationClearsQueue() async {
+        let first = expectation(description: "first"), latest = expectation(description: "latest")
+        let driver = SuspendedExposureControls(started: [first, latest])
+        let model = DetailCameraOptions(controller: driver)
+        await model.refreshCapabilities()
+        model.requestExposure(0.25)
+        await fulfillment(of: [first], timeout: 2)
+        model.requestExposure(0.5)
+        model.requestExposure(1)
+        await driver.finish(0.25, returning: 0.25)
+        await fulfillment(of: [latest], timeout: 2)
+        let received = await driver.received
+        XCTAssertEqual(received, [0.25, 1])
+        model.requestExposure(-1)
+        model.invalidate()
+        await driver.finish(1, returning: 1)
+        XCTAssertNil(model.appliedExposure)
+        XCTAssertFalse(model.isApplying)
+    }
+
     func testOlderExposureCompletionCannotReplaceLatestRequest() async {
         let first = expectation(description: "first"), second = expectation(description: "second")
         let driver = SuspendedExposureControls(started: [first, second])
@@ -60,6 +80,7 @@ final class DetailCameraOptionsRegressionTests: XCTestCase {
 }
 
 private actor SuspendedExposureControls: DetailCameraControlling {
+    private(set) var received: [Double] = []
     private var started: [XCTestExpectation]
     private var pending: [Double: CheckedContinuation<Double, Error>] = [:]
     init(started: [XCTestExpectation]) { self.started = started }
@@ -69,6 +90,7 @@ private actor SuspendedExposureControls: DetailCameraControlling {
     func apply(_ request: DetailCameraControlRequest) async throws -> Double {
         guard case .exposure(let value) = request else { throw DetailCameraControlFailure.unsupported }
         return try await withCheckedThrowingContinuation {
+            received.append(value)
             pending[value] = $0
             started.removeFirst().fulfill()
         }
