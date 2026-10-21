@@ -393,6 +393,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Dobby/QuickCopyInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = chak;
 				INFOPLIST_KEY_NSCameraUsageDescription = "옷 사진과 LiDAR 깊이를 함께 촬영하여 실제 길이를 측정합니다.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "같은 네트워크의 네이버 커머스API 테스트 서버에 연결합니다.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -439,6 +440,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Dobby/QuickCopyInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = chak;
+				"INFOPLIST_KEY_CFBundleDisplayName[sdk=iphoneos*]" = chak;
 				INFOPLIST_KEY_NSCameraUsageDescription = "옷 사진과 LiDAR 깊이를 함께 촬영하여 실제 길이를 측정합니다.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "같은 네트워크의 네이버 커머스API 테스트 서버에 연결합니다.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
