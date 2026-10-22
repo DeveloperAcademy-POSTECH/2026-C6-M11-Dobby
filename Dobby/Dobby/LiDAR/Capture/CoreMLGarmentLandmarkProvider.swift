@@ -60,7 +60,7 @@ actor CoreMLGarmentLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecog
                 guard schema.name == "bottom8", schema.keypoints == BottomLandmarkSchema.expectedBottom8Keypoints else {
                     throw GarmentModelError.incompatibleModel(kind)
                 }
-                definitions = schema.measurementDefinitions
+                definitions = schema.currentMeasurementDefinitions
             }
         } catch {
             throw GarmentModelError.incompatibleModel(kind)

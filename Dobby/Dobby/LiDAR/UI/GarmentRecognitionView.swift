@@ -131,9 +131,10 @@ struct GarmentRecognitionView: View {
 
     private func label(for id: String) -> String {
         let derivedName = id == "waist_center" ? "허리 중앙" : id == "neck_center" ? "목 중앙"
-            : id == "top_length_start" ? "총장 상단" : id
+            : id == "top_length_start" ? "총장 상단" : id == "thigh_right" ? "오른쪽 허벅지" : id
         let name = provider.labels[id]?.first ?? derivedName
         if id == "top_length_start" { return "\(name) · 옷 윤곽에서 계산" }
+        if id == "thigh_right" { return "\(name) · LiDAR 평면에서 계산" }
         return ["waist_center", "neck_center"].contains(id) ? "\(name) · 양 끝점에서 계산" : name
     }
 

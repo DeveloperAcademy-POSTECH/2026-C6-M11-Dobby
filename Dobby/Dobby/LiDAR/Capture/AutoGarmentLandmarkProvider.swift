@@ -127,7 +127,8 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         }
         let provider = kind == .top ? top : bottoms
         let identifiers = Set(landmarks.points.map(\.id))
-        let known = Set(provider.schema.keypoints + provider.schema.derivedOrder + (kind == .top ? ["top_length_start"] : []))
+        let calculationIDs = kind == .top ? ["top_length_start"] : ["thigh_right"]
+        let known = Set(provider.schema.keypoints + provider.schema.derivedOrder + calculationIDs)
         guard landmarks.modelVersion == provider.modelVersion,
               !identifiers.isEmpty,
               identifiers.count == landmarks.points.count,

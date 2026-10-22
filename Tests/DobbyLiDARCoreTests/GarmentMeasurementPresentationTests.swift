@@ -118,8 +118,9 @@ final class GarmentMeasurementPresentationTests: XCTestCase {
         for top in [true, false] {
             let session = model(top: top)
             let columns = top ? GarmentMeasurementPresentation.topColumns : GarmentMeasurementPresentation.bottomColumns
-            let rows = columns.reversed().map { column in
-                Item(id: column.productKey, cm: session.result.values.first { $0.id == column.measurementID }!.meters! * 100)
+            let rows = columns.reversed().compactMap { column -> Item? in
+                guard let meters = session.result.values.first(where: { $0.id == column.measurementID })?.meters else { return nil }
+                return Item(id: column.productKey, cm: meters * 100)
             }
             let shown = GarmentMeasurementPresentation.productMeasurements(rows, isTop: top, key: { $0.id })
             XCTAssertEqual(shown.map(\.cm), session.visibleValues.map { $0.meters! * 100 })
@@ -141,6 +142,54 @@ final class GarmentMeasurementPresentationTests: XCTestCase {
             XCTAssertEqual(GarmentMeasurementPresentation.overlayTitle(for: id, fallback: "original"), "밑위")
             XCTAssertTrue(GarmentMeasurementPresentation.isVisibleMeasurementID(id, kind: .bottoms))
         }
+    }
+
+    func testCurrentThighJoinsFifthColumnWithoutChangingLegacyDefinitionSets() throws {
+        let legacy = model(top: false)
+        let definition = BottomLandmarkSchema.thighWidthRightDefinition
+        var record = try legacy.makeRecord()
+        record.definitions.append(definition)
+        record.landmarks.points.append(.init(id: "thigh_right", point: .init(x: 0.5, y: 0.45),
+            confidence: nil, isVisible: false, contourRule: .waistParallelRightThighMaskV1))
+        record.result.values.append(.init(id: definition.id, title: definition.title, meters: 0.32125,
+            status: .valid, failure: nil, points: []))
+        let current = AutomaticMeasurement(record: record)
+        XCTAssertEqual(current.visibleValues.map(\.title), ["총장", "허리", "밑위", "허벅지", "밑단"])
+        XCTAssertEqual(current.visibleDefinitions.map(\.id), [
+            "bottom.hem_left_outer.waist_left", "bottom.waist_left.waist_right",
+            "bottom.crotch.waist_front_center", "bottom.thighWidthRight", "bottom.hem_left_inner.hem_left_outer"
+        ])
+        XCTAssertEqual(current.visibleValues.first { $0.id == definition.id }?.meters, 0.32125)
+        XCTAssertTrue(Set(current.visibleEditableLandmarks.points.map(\.id))
+            .isSuperset(of: ["waist_left", "waist_right", "crotch"]))
+        XCTAssertEqual(legacy.visibleValues.count, 4)
+        XCTAssertEqual(legacy.definitions.count, 8)
+        XCTAssertFalse(legacy.landmarks.points.contains { $0.id == "thigh_right" })
+
+        record.result.values[record.result.values.count - 1].meters = nil
+        record.result.values[record.result.values.count - 1].status = .unavailable
+        record.result.values[record.result.values.count - 1].failure = .contourIntersectionUnavailable
+        let failed = AutomaticMeasurement(record: record)
+        XCTAssertEqual(failed.visibleValues.count, 5, "Failed thigh remains reviewable without replacing another measurement")
+        XCTAssertNil(failed.visibleValues.first { $0.id == definition.id }?.meters)
+        XCTAssertEqual(failed.visibleValues.filter { $0.status == .unavailable }.map(\.id), [definition.id])
+    }
+
+    func testProductThighUsesAcceptedRightValueBetweenRiseAndHem() {
+        struct Item { let id: String; let cm: Double }
+        let rows = [Item(id: "hemWidthLeft", cm: 21), .init(id: "thighWidthLeft", cm: 99),
+                    .init(id: "frontRise", cm: 28), .init(id: "thighWidthRight", cm: 32.125),
+                    .init(id: "totalLengthLeft", cm: 102), .init(id: "waistWidth", cm: 43)]
+        let shown = GarmentMeasurementPresentation.productMeasurements(rows, isTop: false, key: { $0.id })
+        XCTAssertEqual(shown.map(\.id), ["totalLengthLeft", "waistWidth", "frontRise", "thighWidthRight", "hemWidthLeft"])
+        XCTAssertEqual(shown.map(\.cm), [102, 43, 28, 32.125, 21])
+        XCTAssertEqual(shown.map { GarmentMeasurementPresentation.productTitle(for: $0.id, fallback: "") },
+                       ["총장", "허리", "밑위", "허벅지", "밑단"])
+        XCTAssertTrue(GarmentMeasurementPresentation.isVisibleMeasurementID("bottom.thighWidthRight", kind: .bottoms))
+        XCTAssertFalse(GarmentMeasurementPresentation.isVisibleMeasurementID("bottom.thighWidthRight", kind: .top))
+        XCTAssertEqual(GarmentMeasurementPresentation.productMeasurements(
+            rows.filter { $0.id != "thighWidthRight" }, isTop: false, key: { $0.id }).count, 4,
+            "A historical product without this measurement must not gain a left fallback or placeholder")
     }
 
     func testProductSideSelectionPreservesOrderPrecisionAndUnknownFields() {

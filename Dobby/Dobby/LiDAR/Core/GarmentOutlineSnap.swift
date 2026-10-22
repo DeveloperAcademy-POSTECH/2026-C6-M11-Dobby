@@ -18,6 +18,12 @@ nonisolated struct GarmentOutlineSnapResult: Sendable {
 /// Only call AFTER raw candidate/subject validation. Never expands the depth
 /// mask, repairs rejected candidates or marks an automatic move as `.manual`.
 nonisolated enum GarmentOutlineSnap {
+    /// These semantic IDs belong only to the bottom pose schema. The larger
+    /// bound applies to every bottom garment, without a subtype classifier.
+    private static let bottomHemIDs: Set<String> = [
+        "hem_left_outer", "hem_left_inner", "hem_right_inner", "hem_right_outer"
+    ]
+
     static func apply(points: [GarmentLandmark], mask: GarmentMask,
                       imageSize: PixelSize) throws -> GarmentOutlineSnapResult {
         guard imageSize.isValid, mask.size.isValid,
@@ -34,7 +40,6 @@ nonisolated enum GarmentOutlineSnap {
         // All distances share mask pixel units. Convert only the recorded
         // distance to the original RGB units, so rectangular images stay metric.
         let diagonal = hypot(Double(maxX - minX + 1), Double(maxY - minY + 1))
-        let limit = diagonal * 0.03
         let imageScale = Double(imageSize.width) / Double(mask.size.width)
         var output = points
         var adjustments: [GarmentAutomaticLandmarkAdjustment] = []
@@ -43,6 +48,8 @@ nonisolated enum GarmentOutlineSnap {
             let landmark = points[index]
             guard landmark.derivedFrom == nil, landmark.contourRule == nil,
                   landmark.origin != .manual, landmark.isVisible, landmark.point.isValid else { continue }
+            let isBottomHem = bottomHemIDs.contains(landmark.id)
+            let limit = diagonal * (isBottomHem ? 0.05 : 0.03)
             let px = landmark.point.x * Double(mask.size.width)
             let py = landmark.point.y * Double(mask.size.height)
             let containingX = Int(floor(px)), containingY = Int(floor(py))
@@ -66,7 +73,8 @@ nonisolated enum GarmentOutlineSnap {
             output[index].point = adjusted
             changedIDs.insert(landmark.id)
             adjustments.append(.init(landmarkID: landmark.id, originalPoint: landmark.point,
-                adjustedPoint: adjusted, distancePixels: best.distance * imageScale, limitPixels: limit * imageScale))
+                adjustedPoint: adjusted, distancePixels: best.distance * imageScale, limitPixels: limit * imageScale,
+                method: isBottomHem ? "mask-nearest-5pct-v1" : "mask-nearest-3pct-v1"))
         }
         // Refresh only the 2D display hint of genuine model averages. The engine
         // still resolves these in 3D and preserves the original confidence/origin.
