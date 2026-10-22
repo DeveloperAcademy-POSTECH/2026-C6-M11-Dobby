@@ -12,21 +12,27 @@ nonisolated struct GarmentPlaneMeasurementEngine {
     func measure(frame: MeasurementFrame, landmarks: GarmentLandmarkSet,
                  definitions: [MeasurementDefinition]) -> GarmentMeasurementResult {
         let validator = LiDARMeasurementEngine(options: options)
-        var globalFailure = validator.validate(frame: frame, landmarks: landmarks)
+        var globalError = validator.validationFailure(frame: frame, landmarks: landmarks)
         var plane: GarmentPlane?
-        if globalFailure == nil {
+        if globalError == nil {
             if let mask = landmarks.mask {
                 do {
-                    plane = try GarmentPlaneGeometry.fit(frame: frame, mask: mask,
+                    plane = try GarmentPlaneGeometry.fitDetailed(frame: frame, mask: mask,
                         uprightOrientation: landmarks.recognitionDiagnostics?.selectedPoseOrientation ?? frame.orientation)
-                } catch let failure as MeasurementFailure { globalFailure = failure }
-                catch { globalFailure = .insufficientGarmentPlane }
-            } else { globalFailure = .invalidMask }
+                } catch let error as ContextualMeasurementError { globalError = error }
+                catch let failure as MeasurementFailure {
+                    globalError = .init(failure: failure, context: .init(stage: .garmentPlane, reason: .unknown, scope: .capture))
+                } catch {
+                    globalError = .init(failure: .insufficientGarmentPlane, context: .init(stage: .garmentPlane, reason: .unknown, scope: .capture))
+                }
+            } else {
+                globalError = .init(failure: .invalidMask, context: .init(stage: .input, reason: .missingMask, scope: .capture))
+            }
         }
         let groupedPoints = Dictionary(grouping: landmarks.points, by: \.id)
         let groupedDefinitions = Dictionary(grouping: definitions, by: \.id)
         var resolved: [String: ResolvedLandmark] = [:]
-        var failures: [String: MeasurementFailure] = [:]
+        var failures: [String: ResolutionError] = [:]
         var uncertainIDs = Set<String>()
 
         func quality(_ position: Point3D, method: DepthSamplingMethod) -> PointQuality {
@@ -42,15 +48,20 @@ nonisolated struct GarmentPlaneMeasurementEngine {
         }
         func resolve(_ id: String, visiting: inout Set<String>) -> Result<ResolvedLandmark, ResolutionError> {
             if let point = resolved[id] { return .success(point) }
-            if let failure = failures[id] { return .failure(.init(reason: failure)) }
-            guard !visiting.contains(id) else { failures[id] = .invalidDefinition; return .failure(.init(reason: .invalidDefinition)) }
+            if let failure = failures[id] { return .failure(failure) }
+            guard !visiting.contains(id) else {
+                let error = ResolutionError(reason: .invalidDefinition, context: .landmark(.dependencyCycle, ids: [id], recovery: .retry))
+                failures[id] = error; return .failure(error)
+            }
             // Do not cache traversal-depth failure against an otherwise valid ID.
-            guard visiting.count < 64 else { return .failure(.init(reason: .invalidDefinition, canCache: false)) }
+            guard visiting.count < 64 else { return .failure(.init(reason: .invalidDefinition, canCache: false, context: .landmark(.dependencyLimit, ids: [id], recovery: .retry))) }
             guard let candidates = groupedPoints[id], !candidates.isEmpty else {
-                failures[id] = .missingLandmark; return .failure(.init(reason: .missingLandmark))
+                let error = ResolutionError(reason: .missingLandmark, context: .landmark(.missingPoint, ids: [id]))
+                failures[id] = error; return .failure(error)
             }
             guard candidates.count == 1 else {
-                failures[id] = .duplicateLandmark; return .failure(.init(reason: .duplicateLandmark))
+                let error = ResolutionError(reason: .duplicateLandmark, context: .landmark(.duplicatePoint, ids: [id]))
+                failures[id] = error; return .failure(error)
             }
             let landmark = candidates[0]
             let resolution: Result<ResolvedLandmark, ResolutionError>
@@ -59,10 +70,10 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                 // visibility. Resolve its actual 1/2/10 contributors first.
                 if landmark.contourRule == nil,
                    let failure = validator.validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
-                    resolution = .failure(.init(reason: failure))
+                    resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
                 } else if sources.count < 2 || sources.count > 64 || sources.contains(where: \.isEmpty)
                     || Set(sources).count != sources.count || (landmark.contourRule != nil && landmark.derivedFrom != nil) {
-                    resolution = .failure(.init(reason: .invalidDefinition))
+                    resolution = .failure(.init(reason: .invalidDefinition, context: .landmark(.invalidDerivation, ids: [id], recovery: .retry)))
                 } else {
                     visiting.insert(id)
                     var contributors: [ResolvedLandmark] = [], firstFailure: ResolutionError?
@@ -81,7 +92,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                                 guard rule == .neckPerpendicularMaskV1, id == "top_length_start",
                                       sources == TopContourLength.sourceLandmarkIDs, let mask = landmarks.mask,
                                       contributors.count == 3 else { throw MeasurementFailure.invalidDefinition }
-                                position = try TopContourLength.start(neckLeft: contributors[0].position,
+                                position = try TopContourLength.startDetailed(neckLeft: contributors[0].position,
                                     neckRight: contributors[1].position, hem: contributors[2].position,
                                     mask: mask, frame: frame, plane: plane!)
                                 method = .contourIntersection
@@ -94,19 +105,26 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                             guard let imagePoint = GarmentPlaneGeometry.project(position, frame: frame) else { throw MeasurementFailure.outOfBounds }
                             resolution = .success(.init(id: id, imagePoint: imagePoint, position: position,
                                 quality: quality(position, method: method), sourceLandmarkIDs: sources))
-                        } catch let failure as MeasurementFailure { resolution = .failure(.init(reason: failure)) }
-                        catch { resolution = .failure(.init(reason: .invalidDefinition)) }
+                        } catch let error as ContextualMeasurementError {
+                            resolution = .failure(.init(reason: error.failure, context: error.context.affecting([id])))
+                        } catch let failure as MeasurementFailure {
+                            resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
+                        }
+                        catch { resolution = .failure(.init(reason: .invalidDefinition, context: .landmark(.invalidDerivation, ids: [id], recovery: .retry))) }
                     }
                 }
             } else if let failure = validator.validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
-                resolution = .failure(.init(reason: failure))
+                resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
             } else {
                 do {
-                    let position = try GarmentPlaneGeometry.intersection(point: landmark.point, frame: frame, plane: plane!)
+                    let position = try GarmentPlaneGeometry.intersectionDetailed(point: landmark.point, frame: frame, plane: plane!)
                     resolution = .success(.init(id: id, imagePoint: landmark.point, position: position,
                                                quality: quality(position, method: .garmentPlane)))
-                } catch let failure as MeasurementFailure { resolution = .failure(.init(reason: failure)) }
-                catch { resolution = .failure(.init(reason: .insufficientGarmentPlane)) }
+                } catch let error as ContextualMeasurementError {
+                    resolution = .failure(.init(reason: error.failure, context: error.context.affecting([id])))
+                } catch let failure as MeasurementFailure {
+                    resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
+                } catch { resolution = .failure(.init(reason: .insufficientGarmentPlane)) }
             }
             switch resolution {
             case .success(let point):
@@ -121,7 +139,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                     if landmark.confidence == nil || landmarks.recognitionDiagnostics?.requiresReview == true
                         || assessment?.status == .outsideMask { uncertainIDs.insert(id) }
                 }
-            case .failure(let error): if error.canCache { failures[id] = error.reason }
+            case .failure(let error): if error.canCache { failures[id] = error }
             }
             return resolution
         }
@@ -130,7 +148,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
             while cursor < pending.count, visited.count < 256 {
                 let id = pending[cursor]; cursor += 1
                 guard visited.insert(id).inserted, resolved[id] == nil else { continue }
-                if let failure = failures[id] { result.append(.init(landmarkID: id, reason: failure)) }
+                if let failure = failures[id] { result.append(.init(landmarkID: id, reason: failure.reason, context: failure.context)) }
                 if let candidates = groupedPoints[id], candidates.count == 1,
                    let sources = sourceIDs(candidates[0]), sources.count <= 64 { pending.append(contentsOf: sources) }
             }
@@ -138,23 +156,30 @@ nonisolated struct GarmentPlaneMeasurementEngine {
         }
 
         let values = definitions.map { definition -> MeasurementValue in
+            var attemptContexts: [MeasurementFailureContext] = []
             func unavailable(_ reason: MeasurementFailure, points: [ResolvedLandmark] = [],
-                             failedIDs: [String]? = nil) -> MeasurementValue {
-                .init(id: definition.id, title: definition.title, meters: nil, status: .unavailable,
-                      failure: reason, points: points, pointFailures: failedIDs.map(pointFailures))
+                             failedIDs: [String]? = nil, context: MeasurementFailureContext? = nil) -> MeasurementValue {
+                let failedPoints = failedIDs.map(pointFailures)
+                let contexts = ([context].compactMap { $0 } + attemptContexts + (failedPoints ?? []).compactMap(\.context))
+                    .reduce(into: [MeasurementFailureContext]()) { if !$0.contains($1) { $0.append($1) } }
+                return .init(id: definition.id, title: definition.title, meters: nil, status: .unavailable,
+                      failure: reason, points: points, pointFailures: failedPoints,
+                      failureContexts: contexts.isEmpty ? nil : contexts)
             }
-            if let globalFailure { return unavailable(globalFailure) }
+            if let globalError { return unavailable(globalError.failure, context: globalError.context) }
             guard !definition.id.isEmpty, groupedDefinitions[definition.id]?.count == 1,
                   (2...64).contains(definition.landmarkIDs.count),
                   definition.landmarkIDs.allSatisfy({ !$0.isEmpty }),
                   zip(definition.landmarkIDs, definition.landmarkIDs.dropFirst()).allSatisfy({ $0 != $1 })
-            else { return unavailable(.invalidDefinition) }
+            else { return unavailable(.invalidDefinition, context: .init(stage: .calculation, reason: groupedDefinitions[definition.id]?.count != 1 ? .duplicateDefinition : .invalidDefinition, recovery: .retry)) }
             var points: [ResolvedLandmark] = [], failure: MeasurementFailure?
             for id in definition.landmarkIDs {
                 var visiting = Set<String>()
                 switch resolve(id, visiting: &visiting) {
                 case .success(let point): points.append(point)
-                case .failure(let error): if failure == nil { failure = error.reason }
+                case .failure(let error):
+                    if let context = error.context { attemptContexts.append(context) }
+                    if failure == nil { failure = error.reason }
                 }
             }
             if let failure { return unavailable(failure, points: points, failedIDs: definition.landmarkIDs) }
@@ -164,25 +189,27 @@ nonisolated struct GarmentPlaneMeasurementEngine {
             if let projection = definition.projection {
                 let axisIDs = projection.referenceAxisLandmarkIDs
                 guard points.count == 2, axisIDs.count == 2, axisIDs.allSatisfy({ !$0.isEmpty }), axisIDs[0] != axisIDs[1]
-                else { return unavailable(.invalidDefinition, points: points) }
+                else { return unavailable(.invalidDefinition, points: points, context: .init(stage: .calculation, reason: .invalidProjection, affectedLandmarkIDs: axisIDs, recovery: .retry)) }
                 var axis: [ResolvedLandmark] = []
                 for id in axisIDs {
                     var visiting = Set<String>()
                     switch resolve(id, visiting: &visiting) {
                     case .success(let point): axis.append(point)
-                    case .failure(let error): if failure == nil { failure = error.reason }
+                    case .failure(let error):
+                        if let context = error.context { attemptContexts.append(context) }
+                        if failure == nil { failure = error.reason }
                     }
                 }
                 if let failure { return unavailable(failure, points: points, failedIDs: definition.landmarkIDs + axisIDs) }
                 uncertain = uncertain || axisIDs.contains(where: uncertainIDs.contains)
                 let vector = GarmentPlaneGeometry.subtract(axis[1].position, axis[0].position)
                 let magnitude = GarmentPlaneGeometry.length(vector)
-                guard magnitude.isFinite, magnitude > 0.000001 else { return unavailable(.invalidDefinition, points: points) }
+                guard magnitude.isFinite, magnitude > 0.000001 else { return unavailable(.invalidDefinition, points: points, context: .init(stage: .calculation, reason: .degenerateAxis, affectedLandmarkIDs: axisIDs, recovery: .editPoints)) }
                 let unit = GarmentPlaneGeometry.scale(vector, 1 / magnitude)
                 let delta = GarmentPlaneGeometry.subtract(points[1].position, points[0].position)
                 let position = GarmentPlaneGeometry.subtract(points[1].position,
                     GarmentPlaneGeometry.scale(unit, GarmentPlaneGeometry.dot(delta, unit)))
-                guard let imagePoint = GarmentPlaneGeometry.project(position, frame: frame) else { return unavailable(.outOfBounds, points: points) }
+                guard let imagePoint = GarmentPlaneGeometry.project(position, frame: frame) else { return unavailable(.outOfBounds, points: points, context: .init(stage: .calculation, reason: .projectionOutsideImage, affectedLandmarkIDs: definition.landmarkIDs, recovery: .editPoints)) }
                 points[1] = .init(id: points[1].id, imagePoint: imagePoint, position: position,
                     quality: quality(position, method: .axisProjection),
                     sourceLandmarkIDs: Array(Set(definition.landmarkIDs + axisIDs)).sorted())
@@ -190,7 +217,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
             let meters = zip(points, points.dropFirst()).reduce(0.0) {
                 $0 + GarmentPlaneGeometry.length(GarmentPlaneGeometry.subtract($1.0.position, $1.1.position))
             }
-            guard meters.isFinite, meters > 0 else { return unavailable(.invalidDefinition, points: points) }
+            guard meters.isFinite, meters > 0 else { return unavailable(.invalidDefinition, points: points, context: .init(stage: .calculation, reason: meters.isFinite ? .zeroLength : .nonFiniteLength, affectedLandmarkIDs: definition.landmarkIDs, recovery: .editPoints)) }
             return .init(id: definition.id, title: definition.title, meters: meters,
                          status: uncertain ? .uncertain : .valid, failure: nil, points: points)
         }
@@ -201,5 +228,6 @@ nonisolated struct GarmentPlaneMeasurementEngine {
     private struct ResolutionError: Error {
         var reason: MeasurementFailure
         var canCache = true
+        var context: MeasurementFailureContext? = nil
     }
 }

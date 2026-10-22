@@ -337,7 +337,7 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
             XCTAssertEqual(total.status, .unavailable)
             XCTAssertEqual(total.failure, expectedFailure)
             XCTAssertNil(total.meters)
-            XCTAssertTrue(total.pointFailures?.contains(.init(landmarkID: "neck_left", reason: expectedFailure)) == true)
+            XCTAssertTrue(total.pointFailures?.contains(where: { $0.landmarkID == "neck_left" && $0.reason == expectedFailure }) == true)
         }
     }
 
@@ -365,8 +365,10 @@ final class TopNeckCenterDepthRecoveryTests: XCTestCase {
             XCTAssertEqual(total.status, .unavailable)
             XCTAssertEqual(total.failure, .insufficientDepth)
             XCTAssertNil(total.meters)
-            XCTAssertEqual(total.pointFailures, [.init(landmarkID: "hem_center", reason: .insufficientDepth)],
+            XCTAssertEqual(total.pointFailures?.map(\.landmarkID), ["hem_center"],
                 "A recovered neck must not be listed as a final failed contributor")
+            XCTAssertEqual(total.pointFailures?.map(\.reason), [.insufficientDepth])
+            XCTAssertEqual(total.pointFailures?.first?.context?.reason, .noDepthSamples)
         }
     }
 

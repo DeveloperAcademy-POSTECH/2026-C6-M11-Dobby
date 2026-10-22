@@ -17,11 +17,11 @@ nonisolated struct LiDARMeasurementEngine {
         landmarks: GarmentLandmarkSet,
         definitions: [MeasurementDefinition]
     ) -> GarmentMeasurementResult {
-        let globalFailure = validate(frame: frame, landmarks: landmarks)
+        let globalError = validationFailure(frame: frame, landmarks: landmarks)
         let groupedPoints = Dictionary(grouping: landmarks.points, by: \.id)
         let groupedDefinitions = Dictionary(grouping: definitions, by: \.id)
         var resolved: [String: PointResolution] = [:]
-        var pointFailures: [String: MeasurementFailure] = [:]
+        var pointFailures: [String: PointResolutionError] = [:]
         // Older records with projected definitions retain their original dependency
         // behavior. Recovery belongs only to the current straight top total length.
         let allowsTopNeckDepthRecovery = definitions.contains {
@@ -33,32 +33,36 @@ nonisolated struct LiDARMeasurementEngine {
         // measurements that depend on it, not unrelated direct measurements.
         func resolveID(_ id: String, visiting: inout Set<String>) -> Result<PointResolution, PointResolutionError> {
             if let value = resolved[id] { return .success(value) }
-            if let failure = pointFailures[id] { return .failure(.init(reason: failure)) }
+            if let failure = pointFailures[id] { return .failure(failure) }
             guard !visiting.contains(id) else {
-                pointFailures[id] = .invalidDefinition
-                return .failure(.init(reason: .invalidDefinition))
+                let error = PointResolutionError(reason: .invalidDefinition, context: .init(stage: .landmark,
+                    reason: .dependencyCycle, scope: .landmark, affectedLandmarkIDs: [id], recovery: .retry))
+                pointFailures[id] = error
+                return .failure(error)
             }
             // This limit belongs to the current traversal, not to the requested
             // landmark. Do not poison a later, shallower request with its failure.
             guard visiting.count < 64 else {
-                return .failure(.init(reason: .invalidDefinition, canCache: false))
+                return .failure(.init(reason: .invalidDefinition, canCache: false, context: .init(stage: .landmark, reason: .dependencyLimit, scope: .landmark, affectedLandmarkIDs: [id], recovery: .retry)))
             }
             guard let candidates = groupedPoints[id], !candidates.isEmpty else {
-                pointFailures[id] = .missingLandmark
-                return .failure(.init(reason: .missingLandmark))
+                let error = PointResolutionError(reason: .missingLandmark, context: .landmark(.missingPoint, ids: [id]))
+                pointFailures[id] = error
+                return .failure(error)
             }
             guard candidates.count == 1 else {
-                pointFailures[id] = .duplicateLandmark
-                return .failure(.init(reason: .duplicateLandmark))
+                let error = PointResolutionError(reason: .duplicateLandmark, context: .landmark(.duplicatePoint, ids: [id]))
+                pointFailures[id] = error
+                return .failure(error)
             }
             let landmark = candidates[0]
             let resolution: Result<PointResolution, PointResolutionError>
             if let sourceIDs = landmarks.effectiveDerivedSourceIDs(for: id) {
                 if let failure = validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
-                    resolution = .failure(.init(reason: failure))
+                    resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
                 } else if sourceIDs.count < 2 || sourceIDs.count > 64
                     || sourceIDs.contains(where: { $0.isEmpty }) || Set(sourceIDs).count != sourceIDs.count {
-                    resolution = .failure(.init(reason: .invalidDefinition))
+                    resolution = .failure(.init(reason: .invalidDefinition, context: .landmark(.invalidDerivation, ids: [id], recovery: .retry)))
                 } else {
                     visiting.insert(id)
                     var sources: [PointResolution] = []
@@ -85,16 +89,16 @@ nonisolated struct LiDARMeasurementEngine {
                     } else {
                         resolution = spatialAverage(landmark, sourceIDs: sourceIDs, sources: sources,
                                                     frame: frame, origin: landmark.origin ?? landmarks.origin)
-                            .mapError { .init(reason: $0) }
+                            .mapError { .init(reason: $0, context: .landmark($0.landmarkFailureReason, ids: [id])) }
                     }
                 }
             } else {
-                resolution = resolve(landmark, frame: frame, set: landmarks).mapError { .init(reason: $0) }
+                resolution = resolve(landmark, frame: frame, set: landmarks)
             }
             switch resolution {
             case .success(let value): resolved[id] = value
             case .failure(let error):
-                if error.canCache { pointFailures[id] = error.reason }
+                if error.canCache { pointFailures[id] = error }
             }
             return resolution
         }
@@ -112,7 +116,7 @@ nonisolated struct LiDARMeasurementEngine {
                 // sampling attempt failed. Do not expose those stale failures.
                 guard resolved[id] == nil else { continue }
                 if let failure = pointFailures[id] {
-                    failures.append(.init(landmarkID: id, reason: failure))
+                    failures.append(.init(landmarkID: id, reason: failure.reason, context: failure.context))
                 }
                 if let sources = landmarks.effectiveDerivedSourceIDs(for: id), sources.count <= 64 {
                     pending.append(contentsOf: sources)
@@ -122,17 +126,22 @@ nonisolated struct LiDARMeasurementEngine {
         }
 
         let values = definitions.map { definition -> MeasurementValue in
+            var attemptContexts: [MeasurementFailureContext] = []
             func unavailable(_ failure: MeasurementFailure, points: [ResolvedLandmark] = [],
-                             failedPoints: [LandmarkMeasurementFailure]? = nil) -> MeasurementValue {
-                .init(id: definition.id, title: definition.title, meters: nil,
-                      status: .unavailable, failure: failure, points: points, pointFailures: failedPoints)
+                             failedPoints: [LandmarkMeasurementFailure]? = nil,
+                             context: MeasurementFailureContext? = nil) -> MeasurementValue {
+                let contexts = ([context].compactMap { $0 } + attemptContexts + (failedPoints ?? []).compactMap(\.context))
+                    .reduce(into: [MeasurementFailureContext]()) { if !$0.contains($1) { $0.append($1) } }
+                return .init(id: definition.id, title: definition.title, meters: nil,
+                      status: .unavailable, failure: failure, points: points, pointFailures: failedPoints,
+                      failureContexts: contexts.isEmpty ? nil : contexts)
             }
-            if let globalFailure { return unavailable(globalFailure) }
+            if let globalError { return unavailable(globalError.failure, context: globalError.context) }
             guard !definition.id.isEmpty, groupedDefinitions[definition.id]?.count == 1,
                   definition.landmarkIDs.count >= 2, definition.landmarkIDs.count <= 64,
                   definition.landmarkIDs.allSatisfy({ !$0.isEmpty }),
                   zip(definition.landmarkIDs, definition.landmarkIDs.dropFirst()).allSatisfy({ $0 != $1 })
-            else { return unavailable(.invalidDefinition) }
+            else { return unavailable(.invalidDefinition, context: .init(stage: .calculation, reason: groupedDefinitions[definition.id]?.count != 1 ? .duplicateDefinition : .invalidDefinition, recovery: .retry)) }
 
             var points: [ResolvedLandmark] = []
             var uncertain = false
@@ -141,6 +150,7 @@ nonisolated struct LiDARMeasurementEngine {
                 var visiting: Set<String> = []
                 switch resolveID(id, visiting: &visiting) {
                 case .failure(let error):
+                    if let context = error.context { attemptContexts.append(context) }
                     if firstFailure == nil { firstFailure = error.reason }
                 case .success(let value):
                     points.append(value.landmark)
@@ -155,12 +165,13 @@ nonisolated struct LiDARMeasurementEngine {
                 let axisIDs = projection.referenceAxisLandmarkIDs
                 guard points.count == 2, axisIDs.count == 2,
                       axisIDs.allSatisfy({ !$0.isEmpty }), axisIDs[0] != axisIDs[1]
-                else { return unavailable(.invalidDefinition, points: points) }
+                else { return unavailable(.invalidDefinition, points: points, context: .init(stage: .calculation, reason: .invalidProjection, affectedLandmarkIDs: axisIDs, recovery: .retry)) }
                 var axis: [PointResolution] = []
                 for id in axisIDs {
                     var visiting: Set<String> = []
                     switch resolveID(id, visiting: &visiting) {
                     case .failure(let error):
+                        if let context = error.context { attemptContexts.append(context) }
                         if firstFailure == nil { firstFailure = error.reason }
                     case .success(let value): axis.append(value)
                     }
@@ -171,7 +182,11 @@ nonisolated struct LiDARMeasurementEngine {
                 }
                 switch projectedEndpoint(start: points[0], end: points[1], axis: axis,
                                          axisIDs: axisIDs, frame: frame) {
-                case .failure(let failure): return unavailable(failure, points: points)
+                case .failure(let failure):
+                    let reason: MeasurementFailureReason = failure == .invalidDefinition ? .degenerateAxis
+                        : (failure == .outOfBounds ? .projectionOutsideImage : .invalidCalibration)
+                    return unavailable(failure, points: points, context: .init(stage: .calculation,
+                        reason: reason, affectedLandmarkIDs: axisIDs, recovery: failure == .invalidDefinition ? .editPoints : .retake))
                 case .success(let end):
                     points[1] = end
                     uncertain = uncertain || axis.contains(where: \.uncertain)
@@ -183,7 +198,7 @@ nonisolated struct LiDARMeasurementEngine {
                 // distances that would otherwise overflow or underflow along an axis.
                 return sum + hypot(hypot(a.x - b.x, a.y - b.y), a.z - b.z)
             }
-            guard meters.isFinite, meters > 0 else { return unavailable(.invalidDefinition, points: points) }
+            guard meters.isFinite, meters > 0 else { return unavailable(.invalidDefinition, points: points, context: .init(stage: .calculation, reason: meters.isFinite ? .zeroLength : .nonFiniteLength, affectedLandmarkIDs: definition.landmarkIDs, recovery: .editPoints)) }
             return .init(id: definition.id, title: definition.title, meters: meters,
                          status: uncertain ? .uncertain : .valid, failure: nil, points: points)
         }
@@ -238,7 +253,15 @@ nonisolated struct LiDARMeasurementEngine {
     // Shared input contracts: representative-plane measurement changes depth
     // support, not frame identity, calibration or point confidence validation.
     func validate(frame: MeasurementFrame, landmarks: GarmentLandmarkSet) -> MeasurementFailure? {
-        guard frame.sessionID == landmarks.sessionID, frame.frameID == landmarks.frameID else { return .frameMismatch }
+        validationFailure(frame: frame, landmarks: landmarks)?.failure
+    }
+
+    func validationFailure(frame: MeasurementFrame, landmarks: GarmentLandmarkSet) -> ContextualMeasurementError? {
+        func failure(_ failure: MeasurementFailure, _ reason: MeasurementFailureReason) -> ContextualMeasurementError {
+            .init(failure: failure, context: .init(stage: .input, reason: reason, scope: .capture,
+                recovery: failure == .invalidOptions ? .retry : .retake))
+        }
+        guard frame.sessionID == landmarks.sessionID, frame.frameID == landmarks.frameID else { return failure(.frameMismatch, .frameIdentityMismatch) }
         guard (1...12).contains(options.sampleRadius),
               options.minimumSamples >= 3,
               options.minimumSamples <= square(2 * options.sampleRadius + 1),
@@ -248,7 +271,7 @@ nonisolated struct LiDARMeasurementEngine {
               options.minimumModelConfidence.isFinite, (0...1).contains(options.minimumModelConfidence),
               options.maximumPlaneResidualMeters.isFinite, options.maximumPlaneResidualMeters > 0,
               options.maximumDepthSpreadMeters.isFinite, options.maximumDepthSpreadMeters > 0
-        else { return .invalidOptions }
+        else { return failure(.invalidOptions, .invalidOptions) }
         let k = frame.intrinsics
         guard frame.imageSize.isValid, k.referenceSize == frame.imageSize,
               frame.timestamp.isFinite,
@@ -256,7 +279,7 @@ nonisolated struct LiDARMeasurementEngine {
               k.fx > 0, k.fy > 0,
               k.cx >= 0, k.cx < Double(frame.imageSize.width),
               k.cy >= 0, k.cy < Double(frame.imageSize.height)
-        else { return .invalidCalibration }
+        else { return failure(.invalidCalibration, .invalidCalibration) }
         // Finite positive intrinsics alone do not guarantee representable camera rays.
         // Reject corrupted calibration before it can put infinities in a saved result.
         let extremeRays = [
@@ -264,18 +287,18 @@ nonisolated struct LiDARMeasurementEngine {
             -k.cy / k.fy, (Double(frame.imageSize.height) - k.cy) / k.fy
         ]
         guard extremeRays.allSatisfy({ ($0 * options.maximumDepthMeters).isFinite })
-        else { return .invalidCalibration }
+        else { return failure(.invalidCalibration, .invalidCalibration) }
         let depth = frame.depth
         guard depth.size.isValid, sameAspect(depth.size, frame.imageSize),
               depth.values.count == depth.size.width * depth.size.height
-        else { return .invalidDepthMap }
+        else { return failure(.invalidDepthMap, .malformedDepth) }
         if let confidence = depth.confidence {
-            guard confidence.count == depth.values.count, confidence.allSatisfy({ $0 <= 2 }) else { return .invalidDepthMap }
+            guard confidence.count == depth.values.count, confidence.allSatisfy({ $0 <= 2 }) else { return failure(.invalidDepthMap, .malformedConfidence) }
         }
         if let mask = landmarks.mask {
             guard mask.size.isValid, sameAspect(mask.size, frame.imageSize),
                   mask.values.count == mask.size.width * mask.size.height,
-                  mask.values.allSatisfy({ $0 <= 1 }) else { return .invalidMask }
+                  mask.values.allSatisfy({ $0 <= 1 }) else { return failure(.invalidMask, .malformedMask) }
         }
         return nil
     }
@@ -289,9 +312,13 @@ nonisolated struct LiDARMeasurementEngine {
         frame: MeasurementFrame,
         set: GarmentLandmarkSet,
         sampleRadius: Int? = nil
-    ) -> Result<PointResolution, MeasurementFailure> {
+    ) -> Result<PointResolution, PointResolutionError> {
+        func failure(_ reason: MeasurementFailureReason, evidence: [String: Double]? = nil) -> Result<PointResolution, PointResolutionError> {
+            .failure(.init(reason: .insufficientDepth, context: .init(stage: .depth, reason: reason,
+                scope: .landmark, affectedLandmarkIDs: [landmark.id], evidence: evidence)))
+        }
         let origin = landmark.origin ?? set.origin
-        if let failure = validateLandmark(landmark, origin: origin) { return .failure(failure) }
+        if let failure = validateLandmark(landmark, origin: origin) { return .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [landmark.id]))) }
         let target = landmark.point
         let map = frame.depth
         let radius = sampleRadius ?? options.sampleRadius
@@ -307,7 +334,7 @@ nonisolated struct LiDARMeasurementEngine {
             targetInsideMask = true
         }
         var samples: [DepthSample] = []
-        var candidateCount = 0
+        var candidateCount = 0, maskEligibleCount = 0, finiteDepthCount = 0, inRangeDepthCount = 0
         for y in max(0, centerY - radius)...min(map.size.height - 1, centerY + radius) {
             for x in max(0, centerX - radius)...min(map.size.width - 1, centerX + radius) {
                 candidateCount += 1
@@ -318,9 +345,12 @@ nonisolated struct LiDARMeasurementEngine {
                     let my = min(mask.size.height - 1, Int(ny * Double(mask.size.height)))
                     if mask.values[my * mask.size.width + mx] == 0 { continue }
                 }
+                maskEligibleCount += 1
                 let index = y * map.size.width + x
                 let z = Double(map.values[index])
+                if z.isFinite && z > 0 { finiteDepthCount += 1 }
                 guard z.isFinite, z >= options.minimumDepthMeters, z <= options.maximumDepthMeters else { continue }
+                inRangeDepthCount += 1
                 let confidence = map.confidence?[index]
                 if let confidence, confidence < options.minimumSensorConfidence { continue }
                 let ray = cameraRay(.init(x: nx, y: ny), frame: frame)
@@ -328,7 +358,15 @@ nonisolated struct LiDARMeasurementEngine {
                                      rayX: ray.x, rayY: ray.y, z: z, confidence: confidence))
             }
         }
-        guard samples.count >= options.minimumSamples else { return .failure(.insufficientDepth) }
+        guard samples.count >= options.minimumSamples else {
+            let reason: MeasurementFailureReason
+            if maskEligibleCount == 0 || finiteDepthCount == 0 { reason = .noDepthSamples }
+            else if inRangeDepthCount == 0 { reason = .depthOutsideSupportedRange }
+            else if inRangeDepthCount >= options.minimumSamples { reason = .lowSensorConfidence }
+            else { reason = .tooFewDepthSamples }
+            return failure(reason, evidence: ["samples": Double(samples.count), "required": Double(options.minimumSamples),
+                "maskEligible": Double(maskEligibleCount), "inRange": Double(inRangeDepthCount)])
+        }
 
         // Separate depth surfaces before fitting; a plane must never bridge garment and background.
         let sorted = samples.sorted { $0.z < $1.z }
@@ -342,7 +380,7 @@ nonisolated struct LiDARMeasurementEngine {
             }
         }
         let supported = clusters.filter { $0.count >= options.minimumSamples }
-        guard !supported.isEmpty else { return .failure(.insufficientDepth) }
+        guard !supported.isEmpty else { return failure(.noSupportedDepthCluster, evidence: ["clusters": Double(clusters.count), "required": Double(options.minimumSamples)]) }
         func nearestDistance(_ cluster: [DepthSample]) -> Double {
             cluster.map { square($0.x - targetX) + square($0.y - targetY) }.min() ?? .infinity
         }
@@ -356,7 +394,7 @@ nonisolated struct LiDARMeasurementEngine {
         let mad = median(chosen.map { abs($0.z - centerDepth) })
         let cutoff = max(0.004, 3.5 * 1.4826 * mad)
         chosen = chosen.filter { abs($0.z - centerDepth) <= cutoff }
-        guard chosen.count >= options.minimumSamples else { return .failure(.insufficientDepth) }
+        guard chosen.count >= options.minimumSamples else { return failure(.depthOutlierRejection, evidence: ["samples": Double(chosen.count), "required": Double(options.minimumSamples)]) }
         let ray = cameraRay(target, frame: frame)
         let spread = percentile(chosen.map(\.z), 0.9) - percentile(chosen.map(\.z), 0.1)
         var plane: PlaneEstimate?
@@ -397,9 +435,9 @@ nonisolated struct LiDARMeasurementEngine {
                            supportDistancePixels: plane?.supportDistancePixels ?? sqrt(nearestDistance(medianSupport)))
         )
         // A median from spatially distant support is not a substitute for the depth at the landmark.
-        guard nearestDistance(chosen) <= square(Double(radius)) else { return .failure(.insufficientDepth) }
+        guard nearestDistance(chosen) <= square(Double(radius)) else { return failure(.depthSupportTooFar, evidence: ["distancePixels": sqrt(nearestDistance(chosen)), "maximum": Double(radius)]) }
         // Excessive spread without a well-supported surface fit cannot supply trustworthy depth.
-        if plane == nil && spread > options.maximumDepthSpreadMeters { return .failure(.insufficientDepth) }
+        if plane == nil && spread > options.maximumDepthSpreadMeters { return failure(.excessiveDepthSpread, evidence: ["spreadMeters": spread, "maximum": options.maximumDepthSpreadMeters]) }
         return .success(.init(landmark: point, uncertain: uncertain))
     }
 
@@ -633,6 +671,7 @@ nonisolated struct LiDARMeasurementEngine {
 nonisolated private struct PointResolutionError: Error {
     var reason: MeasurementFailure
     var canCache = true
+    var context: MeasurementFailureContext? = nil
 }
 
 nonisolated private struct PointResolution {

@@ -10,9 +10,11 @@ struct GarmentTotalLengthCorrectionView: View {
     @State private var applyFailed = false
     @Environment(\.dismiss) private var dismiss
     let failure: MeasurementFailure?
+    let failureFeedback: MeasurementFailureFeedback?
     let onApply: (ManualMeasurement) -> Bool
 
     init(model: ManualMeasurement, initialImage: UIImage?, failure: MeasurementFailure?,
+         failureFeedback: MeasurementFailureFeedback? = nil,
          onApply: @escaping (ManualMeasurement) -> Bool) {
         // Display previous positions, but require both points to be confirmed
         // in this draft even when the current result was already corrected.
@@ -23,6 +25,7 @@ struct GarmentTotalLengthCorrectionView: View {
             definition: model.definition, options: model.options, testContext: model.testContext))
         _image = State(initialValue: initialImage)
         self.failure = failure
+        self.failureFeedback = failureFeedback
         self.onApply = onApply
     }
 
@@ -45,7 +48,9 @@ struct GarmentTotalLengthCorrectionView: View {
                         .font(.headline)
                     Text("같은 사진의 깊이로 총장을 다시 측정하고 현재 실측 결과에 반영해요. 깊이가 부족한 위치는 다시 촬영해야 해요.")
                         .font(.subheadline).foregroundStyle(.secondary)
-                    if let failure {
+                    if let failureFeedback {
+                        Text(failureFeedback.reason).font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
+                    } else if let failure {
                         Text(failure.message).font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
                     }
                     HStack(spacing: 10) {

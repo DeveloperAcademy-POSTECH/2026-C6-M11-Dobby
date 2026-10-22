@@ -217,7 +217,9 @@ final class GarmentPlaneIntegrationTests: XCTestCase {
         XCTAssertNotNil(result.values[0].meters)
         XCTAssertNil(result.values[1].meters)
         XCTAssertEqual(result.values[1].failure, .lowLandmarkConfidence)
-        XCTAssertEqual(result.values[1].pointFailures, [.init(landmarkID: "C", reason: .lowLandmarkConfidence)])
+        XCTAssertEqual(result.values[1].pointFailures?.map(\.landmarkID), ["C"])
+        XCTAssertEqual(result.values[1].pointFailures?.map(\.reason), [.lowLandmarkConfidence])
+        XCTAssertEqual(result.values[1].pointFailures?.first?.context?.reason, .lowModelConfidence)
         scene.landmarks.points[2].origin = .manual
         XCTAssertNotNil(measure(scene, definitions: definitions).values[1].meters)
     }

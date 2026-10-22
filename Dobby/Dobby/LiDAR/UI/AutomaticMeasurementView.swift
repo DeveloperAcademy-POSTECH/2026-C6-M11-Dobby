@@ -52,12 +52,12 @@ struct AutomaticMeasurementResultView: View {
                             HStack {
                                 Text(value.title).font(.headline)
                                 Spacer()
-                                Text(value.meters.map { MeasurementDisplayText.centimeters($0 * 100) + " cm" } ?? "측정 불가")
+                                Text(GarmentMeasurementText.value(value))
                                     .font(.title3.monospacedDigit()).accessibilityIdentifier("automaticValue_\(value.id)")
                             }
-                            Text(value.status.label).foregroundStyle(value.status == .valid ? .teal : .orange)
-                            if let failure = value.failure { Text(failure.message).font(.caption).foregroundStyle(.secondary) }
-                            MeasurementPointFailureDetails(value: value)
+                            Text(value.hasUsableMeasurement ? "계산 완료" : "측정 불가")
+                                .foregroundStyle(value.hasUsableMeasurement ? .teal : .orange)
+                            MeasurementFailureFeedbackView(value: value)
                             HStack {
                                 TextField("줄자 기준값", text: Binding(get: { referenceTexts[value.id] ?? "" },
                                     set: { referenceTexts[value.id] = $0; exportedURL = nil }))

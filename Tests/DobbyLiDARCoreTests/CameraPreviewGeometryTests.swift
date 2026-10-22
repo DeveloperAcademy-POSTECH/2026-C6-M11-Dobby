@@ -5,6 +5,40 @@ import XCTest
 /// Analytic normalized transforms stand in for ARKit displayTransform. These
 /// tests do not establish the physical capture device's focus response.
 final class CameraPreviewGeometryTests: XCTestCase {
+    func testExposureHandleStaysInsideVisibleTwoTimesCropAtAllEdges() throws {
+        // A 780x1400 child is centered inside a 390x700 clipped parent.
+        // Its right visible edge is 585, not the child bounds' right edge 780.
+        let origin = ImagePoint(x: 195, y: 350)
+        let right = try XCTUnwrap(CameraPreviewGeometry.exposureHandleCenter(
+            focusPoint: .init(x: 580, y: 700), viewportOrigin: origin, viewportWidth: 390, viewportHeight: 700))
+        XCTAssertEqual(right, .init(x: 526, y: 700))
+        for point in [ImagePoint(x: 195, y: 350), .init(x: 585, y: 350),
+                      .init(x: 195, y: 1050), .init(x: 585, y: 1050)] {
+            let center = try XCTUnwrap(CameraPreviewGeometry.exposureHandleCenter(
+                focusPoint: point, viewportOrigin: origin, viewportWidth: 390, viewportHeight: 700))
+            XCTAssertGreaterThanOrEqual(center.x - 10, 199)
+            XCTAssertLessThanOrEqual(center.x + 10, 581)
+            XCTAssertGreaterThanOrEqual(center.y - 10, 354)
+            XCTAssertLessThanOrEqual(center.y + 10, 1046)
+        }
+        XCTAssertNil(CameraPreviewGeometry.exposureHandleCenter(focusPoint: .init(x: 600, y: 700),
+            viewportOrigin: origin, viewportWidth: 390, viewportHeight: 700))
+        XCTAssertNil(CameraPreviewGeometry.exposureHandleCenter(focusPoint: .init(x: 194, y: 700),
+            viewportOrigin: origin, viewportWidth: 390, viewportHeight: 700))
+    }
+
+    func testExposureHandleLayoutDoesNotMoveTheSensorFocusPointAndRejectsInvalidViewports() throws {
+        let focus = ImagePoint(x: 300, y: 200)
+        let sun = CameraPreviewGeometry.exposureHandleCenter(focusPoint: focus,
+            viewportOrigin: .init(x: 0, y: 0), viewportWidth: 390, viewportHeight: 700)
+        XCTAssertEqual(sun, .init(x: 354, y: 200))
+        XCTAssertEqual(focus, .init(x: 300, y: 200))
+        for width in [0.0, 20, .nan, .infinity] {
+            XCTAssertNil(CameraPreviewGeometry.exposureHandleCenter(focusPoint: focus,
+                viewportOrigin: .init(x: 0, y: 0), viewportWidth: width, viewportHeight: 700))
+        }
+    }
+
     private let rotations: [CameraAffineTransform] = [
         .identity,
         .init(a: 0, b: 1, c: -1, d: 0, tx: 1, ty: 0),

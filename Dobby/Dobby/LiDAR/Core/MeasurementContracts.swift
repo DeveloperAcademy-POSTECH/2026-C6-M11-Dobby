@@ -200,6 +200,8 @@ nonisolated struct MeasurementValue: Codable, Sendable, Identifiable {
     /// Point-specific final failures, including failed derived contributors.
     /// Older archives retain their existing item-level failure when omitted.
     var pointFailures: [LandmarkMeasurementFailure]? = nil
+    /// Optional evidence from the exact failing guards. Missing in older archives.
+    var failureContexts: [MeasurementFailureContext]? = nil
 }
 
 nonisolated struct GarmentMeasurementResult: Codable, Sendable {

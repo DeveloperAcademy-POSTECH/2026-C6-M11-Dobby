@@ -161,10 +161,6 @@ struct GarmentMeasurementPhotoEditor: View {
                 Text(drag != nil || isRecalculating ? "…" : visibleMeasurementValue(item.value))
                     .font(.system(size: labelFontSize, weight: .regular))
                     .monospacedDigit().fixedSize(horizontal: true, vertical: false)
-                if item.value.status == .uncertain {
-                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(GarmentCaptureStyle.accent)
-                        .frame(width: labelFontSize)
-                }
             }.font(.system(size: labelFontSize, weight: .regular)).foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.65), radius: 0.75, y: 0.5)
                 .lineLimit(1).padding(.horizontal, 6)
@@ -173,7 +169,7 @@ struct GarmentMeasurementPhotoEditor: View {
                 .frame(height: max(44, item.labelSize.height))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
-            .accessibilityLabel("\(item.definition.title), \(drag != nil || isRecalculating ? "재계산 중" : GarmentMeasurementText.value(item.value)), \(item.value.status.label)")
+            .accessibilityLabel("\(item.definition.title), \(drag != nil || isRecalculating ? "재계산 중" : GarmentMeasurementText.value(item.value))")
             .accessibilityHint("측정 항목 상세 보기")
             .accessibilityIdentifier("garmentMeasurementLabel_\(item.id)")
     }
@@ -302,7 +298,7 @@ struct GarmentMeasurementPhotoEditor: View {
         let items: [Annotation] = definitions.compactMap { definition in
             guard definition.landmarkIDs.count == 2,
                   let value = values.first(where: { $0.id == definition.id }),
-                  value.status != .unavailable, let meters = value.meters, meters.isFinite, meters > 0,
+                  value.hasUsableMeasurement,
                   value.points.count == 2, value.points.allSatisfy({ $0.imagePoint.isValid }) else { return nil }
             let start = screenPoint(value.points[0].imagePoint, size: size)
             let end = screenPoint(value.points[1].imagePoint, size: size)
@@ -314,7 +310,7 @@ struct GarmentMeasurementPhotoEditor: View {
                 .size(withAttributes: [.font: titleFont]).width
             let valueWidth = (visibleMeasurementValue(value) as NSString)
                 .size(withAttributes: [.font: valueFont]).width
-            let width = ceil(titleWidth + valueWidth + 15 + (value.status == .uncertain ? labelFontSize + 3 : 0)) + 2
+            let width = ceil(titleWidth + valueWidth + 15) + 2
             let labelSize = CGSize(width: min(max(60, width), size.width - 8), height: labelHeight)
             return .init(definition: definition, value: value, start: start, end: end,
                 labelCenter: nil, labelSize: labelSize, isCallout: false)
