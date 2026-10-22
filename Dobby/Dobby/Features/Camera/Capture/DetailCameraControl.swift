@@ -22,6 +22,16 @@ nonisolated struct DetailCameraCapabilities: Equatable, Sendable {
 }
 nonisolated enum DetailPhotoAspectRatio: String, CaseIterable, Sendable {
     case fourThree = "4:3", sixteenNine = "16:9", square = "1:1"
+
+    func previewRatio(isLandscape: Bool) -> Double {
+        let ratio: Double
+        switch self {
+        case .fourThree: ratio = 4.0 / 3
+        case .sixteenNine: ratio = 16.0 / 9
+        case .square: ratio = 1
+        }
+        return isLandscape ? ratio : 1 / ratio
+    }
 }
 nonisolated enum DetailCameraControlRequest: Equatable, Sendable {
     case exposure(Double), zoom(Double)

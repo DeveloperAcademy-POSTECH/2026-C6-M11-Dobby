@@ -4,14 +4,25 @@ import XCTest
 
 @MainActor
 final class DetailCameraOptionsTests: XCTestCase {
-    func testUnsupportedDefaultsDoNotInventAppliedValuesOrCrop() async {
+    func testDefaultRatioIsFourThreeWithoutInventingDeviceValues() async {
         let model = DetailCameraOptions()
         await model.refreshCapabilities()
         await model.apply(.exposure(1))
         XCTAssertEqual(model.failure, .unsupported)
         XCTAssertNil(model.appliedExposure)
         XCTAssertNil(model.appliedZoom)
-        XCTAssertNil(model.photoAspectRatio)
+        XCTAssertEqual(model.photoAspectRatio, .fourThree)
+    }
+    func testPreviewRatioMatchesSavedCropInBothOrientations() throws {
+        for ratio in DetailPhotoAspectRatio.allCases {
+            for landscape in [false, true] {
+                let crop = try XCTUnwrap(DetailPhotoCropGeometry(
+                    pixelWidth: 4032, pixelHeight: 3024,
+                    orientation: landscape ? .up : .right, aspectRatio: ratio))
+                XCTAssertEqual(ratio.previewRatio(isLandscape: landscape),
+                               crop.outputPixelSize.width / crop.outputPixelSize.height, accuracy: 0.0001)
+            }
+        }
     }
     func testLimitsRejectInvalidRangesAndValues() {
         XCTAssertNil(DetailCameraControlRange(minimum: .nan, maximum: 2))

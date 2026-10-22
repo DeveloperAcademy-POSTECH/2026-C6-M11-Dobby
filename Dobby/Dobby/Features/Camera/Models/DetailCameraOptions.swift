@@ -10,8 +10,8 @@ final class DetailCameraOptions {
     private(set) var appliedZoom: Double?
     private(set) var failure: DetailCameraControlFailure?
     private(set) var isApplying = false
-    // nil은 기존 원본 저장 유지. 비율 UI와 프리뷰를 함께 연결할 때 지정한다.
-    var photoAspectRatio: DetailPhotoAspectRatio?
+    // 프리뷰와 저장 크롭이 공유하는 사용자 선택. 세션 재시작에도 유지한다.
+    var photoAspectRatio: DetailPhotoAspectRatio = .fourThree
     @ObservationIgnored private let controller: any DetailCameraControlling
     @ObservationIgnored private var revision = 0
     @ObservationIgnored private var exposureTask: Task<Void, Never>?

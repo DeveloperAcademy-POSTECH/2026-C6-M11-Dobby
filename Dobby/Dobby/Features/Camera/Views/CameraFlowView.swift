@@ -37,7 +37,7 @@ struct CameraFlowView: View {
 
     var body: some View {
         CameraPermissionGate(permission: permission) {
-            preview
+            ratioPreview
                 .overlay {
                     if isMoreOptionsPresented {
                         Button { isMoreOptionsPresented = false } label: {
@@ -129,6 +129,19 @@ struct CameraFlowView: View {
             captureRequested = false
             isMoreOptionsPresented = false
         }
+    }
+
+    private var ratioPreview: some View {
+        GeometryReader { geometry in
+            let ratio = (camera?.options.photoAspectRatio ?? .fourThree)
+                .previewRatio(isLandscape: geometry.size.width > geometry.size.height)
+            let width = min(geometry.size.width, geometry.size.height * ratio)
+            preview
+                .frame(width: width, height: width / ratio)
+                .clipped()
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+        }
+        .background(Color(.systemBackground))
     }
 
     @ViewBuilder
