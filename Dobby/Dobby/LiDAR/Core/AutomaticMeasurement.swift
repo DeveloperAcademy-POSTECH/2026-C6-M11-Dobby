@@ -174,13 +174,16 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         return visible
     }
 
-    /// Raw direct points are the drag targets. A derived midpoint or projected
-    /// length annotation never replaces the actual physical source coordinate.
+    /// Direct points retain their original coordinates. The right thigh contour
+    /// becomes a drag target only at its successfully resolved image position;
+    /// its invisible crotch hint must never masquerade as a found endpoint.
     var editableLandmarks: GarmentLandmarkSet {
         let current = calculationLandmarks
-        var editable = current
-        editable.points = current.points.filter {
-            current.effectiveDerivedSourceIDs(for: $0.id) == nil && $0.contourRule == nil
+        var editable = current.replacingDerivedImagePoints(with: needsRecalculation ? nil : result)
+        editable.points = editable.points.filter {
+            current.effectiveDerivedSourceIDs(for: $0.id) == nil
+                && ($0.contourRule == nil || ($0.id == editableThighPointID
+                    && $0.contourRule == .waistParallelRightThighMaskV1))
         }
         return editable
     }
@@ -191,6 +194,13 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
 
     private var editableTotalLengthStartID: String? {
         canCorrectTotalLength ? definitions.first(where: { $0.id == "top.totalLength" })?.landmarkIDs.first : nil
+    }
+
+    private var editableThighPointID: String? {
+        let matches = definitions.filter { $0.id == "bottom.thighWidthRight" }
+        guard matches.count == 1, matches[0].landmarkIDs == ["crotch", "thigh_right"],
+              matches[0].projection == nil else { return nil }
+        return "thigh_right"
     }
 
     var calculationLandmarks: GarmentLandmarkSet { adjustedLandmarks ?? landmarks }
@@ -282,11 +292,13 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
               updated.frameID == snapshot.frame.frameID,
               let index = updated.points.firstIndex(where: { $0.id == id }),
               (updated.effectiveDerivedSourceIDs(for: id) == nil && updated.points[index].contourRule == nil)
-                || id == editableTotalLengthStartID else { return false }
+                || id == editableTotalLengthStartID
+                || (id == editableThighPointID && updated.points[index].contourRule == .waistParallelRightThighMaskV1)
+              else { return false }
         if updated.points[index].origin == .manual, updated.points[index].point == originalPoint { return false }
-        // An explicitly placed neck center samples its own depth instead of
-        // being recomputed from the two hidden model neck points.
-        if id == editableTotalLengthStartID {
+        // An explicitly placed contour endpoint becomes a direct manual ray on
+        // the same garment plane. Later parent edits must not move it again.
+        if id == editableTotalLengthStartID || id == editableThighPointID {
             updated.points[index].derivedFrom = nil
             updated.points[index].contourRule = nil
         }

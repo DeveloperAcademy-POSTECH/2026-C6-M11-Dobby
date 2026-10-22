@@ -67,7 +67,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
             let resolution: Result<ResolvedLandmark, ResolutionError>
             if let sources = sourceIDs(landmark) {
                 // Contour placeholders have no independent model prediction or
-                // visibility. Resolve its actual 1/2/10 contributors first.
+                // visibility. Resolve its actual model contributors first.
                 if landmark.contourRule == nil,
                    let failure = validator.validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
                     resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
@@ -89,12 +89,20 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                         do {
                             let position: Point3D, method: DepthSamplingMethod
                             if let rule = landmark.contourRule {
-                                guard rule == .neckPerpendicularMaskV1, id == "top_length_start",
-                                      sources == TopContourLength.sourceLandmarkIDs, let mask = landmarks.mask,
+                                guard sources == rule.sourceLandmarkIDs, let mask = landmarks.mask,
                                       contributors.count == 3 else { throw MeasurementFailure.invalidDefinition }
-                                position = try TopContourLength.startDetailed(neckLeft: contributors[0].position,
-                                    neckRight: contributors[1].position, hem: contributors[2].position,
-                                    mask: mask, frame: frame, plane: plane!)
+                                switch rule {
+                                case .neckPerpendicularMaskV1:
+                                    guard id == "top_length_start" else { throw MeasurementFailure.invalidDefinition }
+                                    position = try TopContourLength.startDetailed(neckLeft: contributors[0].position,
+                                        neckRight: contributors[1].position, hem: contributors[2].position,
+                                        mask: mask, frame: frame, plane: plane!)
+                                case .waistParallelRightThighMaskV1:
+                                    guard id == "thigh_right" else { throw MeasurementFailure.invalidDefinition }
+                                    position = try BottomThighContour.right(waistLeft: contributors[0].position,
+                                        waistRight: contributors[1].position, crotch: contributors[2].position,
+                                        mask: mask, frame: frame)
+                                }
                                 method = .contourIntersection
                             } else {
                                 position = GarmentPlaneGeometry.scale(contributors.reduce(.init(x: 0, y: 0, z: 0)) {

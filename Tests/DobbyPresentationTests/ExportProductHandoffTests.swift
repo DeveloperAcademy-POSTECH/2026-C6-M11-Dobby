@@ -42,6 +42,62 @@ struct ExportProductHandoffTests {
         #expect(product.imageData == nil && product.displayPhotos.isEmpty)
     }
 
+    @Test func currentLiDARBottomExportsAndCopiesFiveAcceptedMeasurementsInPresentationOrder() {
+        let garment = Garment(category: "바지", group: .pants)
+        garment.sourceMeasurementID = UUID()
+        let values: [(String, Double)] = [
+            ("hemWidthLeft", 21.125), ("thighWidthRight", 32.1256), ("inseamRight", 76),
+            ("waistWidth", 43.25), ("frontRise", 28.5), ("totalLengthLeft", 102.25)
+        ]
+        garment.measurements = values.enumerated().map { index, entry in
+            let value = MeasuredValue(key: entry.0, label: "원본 표기", displayOrder: index,
+                                      valueCm: entry.1, autoValueCm: entry.1 - 1)
+            value.garment = garment
+            return value
+        }
+        let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+        #expect(product.copyMeasurements.map(\.id) == [
+            "totalLengthLeft", "waistWidth", "frontRise", "thighWidthRight", "hemWidthLeft"
+        ])
+        #expect(product.copyMeasurements.map(\.title) == ["총장", "허리", "밑위", "허벅지", "밑단"])
+        #expect(product.fruits.thigh == "32.1256")
+        #expect(product.fruits.measurements == "총장 102.25 cm\n허리 43.25 cm\n밑위 28.5 cm\n허벅지 32.1256 cm\n밑단 21.125 cm")
+        #expect(product.instagram == product.fruits)
+        #expect(garment.measurements.count == 6)
+        #expect(garment.measurement("thighWidthRight")?.label == "원본 표기")
+        #expect(abs((garment.measurement("thighWidthRight")?.autoValueCm ?? .nan) - 31.1256) < 1e-10)
+        garment.measurement("thighWidthRight")?.update(to: 33.75)
+        let edited = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+        #expect(edited.fruits.thigh == "33.75")
+        #expect(edited.copyMeasurements.first { $0.id == "thighWidthRight" }?.value == "33.75")
+        #expect(product.fruits.thigh == "32.1256", "An existing copy snapshot keeps its accepted value")
+    }
+
+    @Test func failedOrLegacyLiDARThighNeverAddsAnExportPlaceholderOrOtherSide() {
+        let garment = Garment(category: "바지", group: .pants)
+        garment.sourceMeasurementID = UUID()
+        let values: [(String, Double)] = [
+            ("totalLengthLeft", 102), ("waistWidth", 43), ("frontRise", 28),
+            ("thighWidthRight", 0), ("thighWidthLeft", 99), ("hemWidthLeft", 22)
+        ]
+        garment.measurements = values.enumerated().map { index, entry in
+            let value = MeasuredValue(key: entry.0, label: "원본 표기", displayOrder: index,
+                                      valueCm: entry.1, autoValueCm: nil)
+            value.garment = garment
+            return value
+        }
+        let failed = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+        #expect(garment.visibleMeasurements.count == 5)
+        #expect(failed.copyMeasurements.map(\.title) == ["총장", "허리", "밑위", "밑단"])
+        #expect(failed.fruits.thigh.isEmpty)
+        #expect(!failed.fruits.measurements.contains("허벅지"))
+        garment.measurements.removeAll { $0.key == "thighWidthRight" || $0.key == "thighWidthLeft" }
+        let legacy = ExportProduct(garment: garment, loadPhoto: { _ in nil })
+        #expect(garment.visibleMeasurements.count == 4)
+        #expect(legacy.copyMeasurements.map(\.id) == failed.copyMeasurements.map(\.id))
+        #expect(legacy.fruits.thigh.isEmpty)
+    }
+
     @Test func photoOrderAndRepresentativeArePreservedWithMissingFiles() {
         let garment = Garment(category: "T-shirt", group: .top)
         let first = GarmentPhoto(fileName: "first.jpg", role: .detail, order: 0)

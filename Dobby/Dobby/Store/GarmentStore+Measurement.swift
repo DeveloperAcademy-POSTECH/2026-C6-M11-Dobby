@@ -191,6 +191,7 @@ extension GarmentStore {
         "bottom.waist_left.waist_right": "waistWidth",
         "bottom.crotch.waist_center": "frontRise",
         "bottom.crotch.waist_front_center": "frontRise",
+        "bottom.thighWidthRight": "thighWidthRight",
         "bottom.hem_left_outer.waist_left": "totalLengthLeft",
         "bottom.hem_left_inner.hem_left_outer": "hemWidthLeft",
         "bottom.crotch.hem_left_inner": "inseamLeft",
@@ -217,15 +218,20 @@ extension GarmentStore {
             && record.landmarks.origin == .synthetic && record.landmarks.modelVersion == expectedPreviewVersion
         let isCurrentModel = record.landmarks.modelVersion == kind.modelVersion
         let isLegacyModel = record.landmarks.modelVersion == kind.legacyModelVersion
-        guard isSyntheticPreview || (record.landmarks.origin == .model && (isCurrentModel || isLegacyModel)) else {
+        let isLegacyBottom8 = kind == .bottoms
+            && record.landmarks.modelVersion == AutomaticGarmentKind.legacyBottom8ModelVersion
+        guard isSyntheticPreview || (record.landmarks.origin == .model
+            && (isCurrentModel || isLegacyModel || isLegacyBottom8)) else {
             throw MeasurementImportError.invalidRecord
         }
         let expected: [MeasurementDefinition]
         let physicalPointNames: [String]
         let derived: [String: [String]]
         let usesContourLength: Bool
+        let usesContourThigh: Bool
         switch kind {
         case .top:
+            usesContourThigh = false
             // Preview records predate the contour contract. They do not grant
             // arbitrary production model/definition combinations.
             usesContourLength = isCurrentModel && !isSyntheticPreview
@@ -240,12 +246,13 @@ extension GarmentStore {
             derived = ["neck_center": ["neck_left", "neck_right"]]
         case .bottoms:
             usesContourLength = false
-            let usesFrontCenter = isCurrentModel && !isSyntheticPreview
+            usesContourThigh = isCurrentModel && !isSyntheticPreview
+            let usesFrontCenter = (isCurrentModel || isLegacyBottom8) && !isSyntheticPreview
             expected = BottomLandmarkSchema.measurementPairs(frontWaistCenter: usesFrontCenter).map {
                 MeasurementDefinition(id: "bottom." + $0.sorted().joined(separator: "."), title: "", landmarkIDs: $0)
-            }
-            physicalPointNames = usesFrontCenter ? BottomLandmarkSchema.expectedBottom8Keypoints
-                : BottomLandmarkSchema.expectedBottom7Keypoints
+            } + (usesContourThigh ? [BottomLandmarkSchema.thighWidthRightDefinition] : [])
+            physicalPointNames = (usesFrontCenter ? BottomLandmarkSchema.expectedBottom8Keypoints
+                : BottomLandmarkSchema.expectedBottom7Keypoints) + (usesContourThigh ? ["thigh_right"] : [])
             derived = ["waist_center": ["waist_left", "waist_right"]]
         }
         guard Set(record.definitions.map(\.id)) == Set(expected.map(\.id)),
@@ -256,16 +263,23 @@ extension GarmentStore {
               }) else { throw MeasurementImportError.invalidRecord }
 
         func validContourRule(_ point: GarmentLandmark) -> Bool {
+            let expectedRule: GarmentContourRule?
+            if usesContourLength && point.id == "top_length_start" {
+                expectedRule = .neckPerpendicularMaskV1
+            } else if usesContourThigh && point.id == "thigh_right" {
+                expectedRule = .waistParallelRightThighMaskV1
+            } else {
+                expectedRule = nil
+            }
             if let rule = point.contourRule {
-                return usesContourLength && point.id == "top_length_start"
-                    && rule == .neckPerpendicularMaskV1 && point.derivedFrom == nil
-                    // A manually moved neck/hem parent makes the recomputed
+                return rule == expectedRule && point.derivedFrom == nil
+                    // A manually moved physical parent makes the recomputed
                     // intersection manual-derived, not a direct user override.
                     && point.origin != .synthetic && point.confidence == nil
             }
-            // A computed start has an explicit contour rule; only a confirmed
+            // A computed intersection has an explicit rule; only a confirmed
             // manual override may replace it with a direct point.
-            if usesContourLength && point.id == "top_length_start" {
+            if expectedRule != nil {
                 return point.origin == .manual && point.derivedFrom == nil
                     && point.confidence == nil && point.isVisible
             }
@@ -295,10 +309,20 @@ extension GarmentStore {
             guard originalIDs.isSubset(of: currentIDs) else { return false }
             let addedIDs = currentIDs.subtracting(originalIDs)
             guard !addedIDs.isEmpty else { return true }
-            let endpoints = usesContourLength ? ["top_length_start", "hem_center"] : ["neck_center", "hem_center"]
-            guard kind == .top, addedIDs.isSubset(of: Set(endpoints)),
-                  let total = record.definitions.first(where: { $0.id == "top.totalLength" }),
-                  total.landmarkIDs == endpoints, total.projection == nil else { return false }
+            let endpoints: [String]
+            let definitionID: String
+            if kind == .top {
+                endpoints = usesContourLength ? ["top_length_start", "hem_center"] : ["neck_center", "hem_center"]
+                definitionID = "top.totalLength"
+            } else if usesContourThigh {
+                endpoints = BottomLandmarkSchema.thighWidthRightDefinition.landmarkIDs
+                definitionID = BottomLandmarkSchema.thighWidthRightDefinition.id
+            } else {
+                return false
+            }
+            guard addedIDs.isSubset(of: Set(endpoints)),
+                  let definition = record.definitions.first(where: { $0.id == definitionID }),
+                  definition.landmarkIDs == endpoints, definition.projection == nil else { return false }
             // Restoring even one missing endpoint requires confirming both.
             return endpoints.allSatisfy { id in
                 record.landmarks.points.contains { point in

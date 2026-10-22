@@ -37,6 +37,7 @@ enum InstagramIntegrationError: LocalizedError {
 
 @MainActor
 final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let maximumImageCount = 10
     private static let logger = Logger(subsystem: "com.dobby.instagram", category: "Publishing")
     private let session: URLSession
     private var authenticationSession: ASWebAuthenticationSession?
@@ -99,13 +100,20 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
         preconditionFailure("Instagram 로그인 창을 표시할 활성 화면이 없습니다.")
     }
 
-    func publish(image: Data, caption: String, accountID: String, requestID: String) async throws -> InstagramPublishResult {
+    func publish(images: [Data], caption: String, accountID: String, requestID: String) async throws -> InstagramPublishResult {
         let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf16.count <= 2200 else {
             throw InstagramIntegrationError.message("게시물 내용은 1~2,200자 이내로 입력해 주세요.")
         }
-        let jpeg = try Self.prepareImage(image)
-        let body = try JSONEncoder().encode(Payload(caption: text, imageBase64: jpeg.base64EncodedString(), accountID: accountID, requestID: requestID))
+        guard !images.isEmpty else {
+            throw InstagramIntegrationError.message("게시할 사진이 필요합니다.")
+        }
+        guard images.count <= Self.maximumImageCount else {
+            throw InstagramIntegrationError.message("Instagram에는 사진을 최대 10장까지 게시할 수 있습니다.")
+        }
+        let jpegs = try Self.prepareImages(images)
+        let body = try JSONEncoder().encode(Payload(caption: text,
+            imagesBase64: jpegs.map { $0.base64EncodedString() }, accountID: accountID, requestID: requestID))
         let result: InstagramPublishResult = try await send(path: "publish", body: body)
         guard result.published else { throw InstagramIntegrationError.message("게시 완료를 확인하지 못했습니다. Instagram에서 확인 후 다시 시도해 주세요.") }
         return result
@@ -116,7 +124,38 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
         guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else {
             throw InstagramIntegrationError.message("사진을 읽을 수 없습니다.")
         }
-        let ratio = min(max(image.size.width / image.size.height, 0.8), 1.91)
+        let ratio = boundedRatio(for: image)
+        return try prepareImage(image, ratio: ratio)
+    }
+
+    /// Instagram crops carousel items to the first item's ratio, so render every image on one canvas ratio.
+    static func prepareImages(_ data: [Data]) throws -> [Data] {
+        guard let firstData = data.first, let firstImage = UIImage(data: firstData),
+              firstImage.size.width > 0, firstImage.size.height > 0 else {
+            throw InstagramIntegrationError.message("사진을 읽을 수 없습니다.")
+        }
+        let ratio = boundedRatio(for: firstImage)
+        return try data.map { item in
+            guard let image = UIImage(data: item), image.size.width > 0, image.size.height > 0 else {
+                throw InstagramIntegrationError.message("사진을 읽을 수 없습니다.")
+            }
+            return try prepareImage(image, ratio: ratio)
+        }
+    }
+
+    static func publishingOrder(_ images: [Data], selectedIndex: Int) -> [Data] {
+        guard images.indices.contains(selectedIndex) else { return images }
+        var ordered = images
+        let selected = ordered.remove(at: selectedIndex)
+        ordered.insert(selected, at: 0)
+        return ordered
+    }
+
+    private static func boundedRatio(for image: UIImage) -> CGFloat {
+        min(max(image.size.width / image.size.height, 0.8), 1.91)
+    }
+
+    private static func prepareImage(_ image: UIImage, ratio: CGFloat) throws -> Data {
         let canvas = CGSize(width: 1080, height: 1080 / ratio)
         let scale = min(canvas.width / image.size.width, canvas.height / image.size.height)
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
@@ -135,7 +174,7 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
         return jpeg
     }
 
-    private struct Payload: Encodable { let caption: String; let imageBase64: String; let accountID: String; let requestID: String }
+    private struct Payload: Encodable { let caption: String; let imagesBase64: [String]; let accountID: String; let requestID: String }
     private struct LoginStart: Decodable { let authorizationURL: String; let attempt: String }
     private struct DisconnectResult: Decodable { let disconnected: Bool }
 

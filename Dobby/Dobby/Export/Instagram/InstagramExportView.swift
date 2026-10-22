@@ -239,7 +239,8 @@ struct InstagramExportView: View {
     }
 
     private func publish() async {
-        guard let photo = selectedPhoto, let expected = account else { return }
+        guard selectedPhoto != nil, let expected = account else { return }
+        let photos = InstagramIntegrationClient.publishingOrder(product.displayPhotos, selectedIndex: photoIndex)
         busy = true
         defer { busy = false }
         do {
@@ -249,7 +250,8 @@ struct InstagramExportView: View {
                 message = "연결 계정이 변경되었습니다. 게시할 계정을 다시 확인해 주세요."
                 return
             }
-            let result = try await client.publish(image: photo, caption: caption, accountID: expected.id, requestID: requestID)
+            let result = try await client.publish(images: photos, caption: caption,
+                                                  accountID: expected.id, requestID: requestID)
             published = true
             message = "@\(result.username)에 게시했습니다.\n게시물 ID: \(result.mediaID)"
         } catch { message = error.localizedDescription }

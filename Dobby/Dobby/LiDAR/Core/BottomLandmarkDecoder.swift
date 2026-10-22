@@ -126,6 +126,30 @@ nonisolated struct BottomLandmarkSchema: Sendable {
         }
     }
 
+    static let thighWidthRightDefinition = MeasurementDefinition(
+        id: "bottom.thighWidthRight", title: "허벅지 단면",
+        landmarkIDs: ["crotch", "thigh_right"])
+
+    /// Opt in only for new bottom8 captures. Archived bottom7/bottom8 definitions
+    /// keep their original eight measurements via `measurementDefinitions`.
+    var currentMeasurementDefinitions: [MeasurementDefinition] {
+        name == "bottom8" ? measurementDefinitions + [Self.thighWidthRightDefinition] : measurementDefinitions
+    }
+
+    /// This is a contour request, not a ninth model output or a spatial average.
+    /// Preserve existing points, including an explicit manual override, unchanged.
+    func calculationPoints(_ points: [GarmentLandmark]) -> [GarmentLandmark] {
+        name == "bottom8" ? Self.addingRightThighCalculationPoint(to: points) : points
+    }
+
+    /// For the current bottom8 adapter after its model/schema contract is checked.
+    static func addingRightThighCalculationPoint(to points: [GarmentLandmark]) -> [GarmentLandmark] {
+        guard !points.contains(where: { $0.id == "thigh_right" }) else { return points }
+        let hint = points.first(where: { $0.id == "crotch" })?.point ?? .init(x: 0.5, y: 0.5)
+        return points + [.init(id: "thigh_right", point: hint, confidence: nil,
+                              isVisible: false, contourRule: .waistParallelRightThighMaskV1)]
+    }
+
     /// Keep the established Dobby row order independent of the model skeleton.
     static func measurementPairs(frontWaistCenter: Bool) -> [[String]] {
         [
