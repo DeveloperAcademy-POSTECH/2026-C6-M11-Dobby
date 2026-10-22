@@ -73,7 +73,8 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
             return .unavailable("카메라 권한을 확인해 주세요.")
         }
         if session.inputs.isEmpty {
-            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            let types: [AVCaptureDevice.DeviceType] = [.builtInTripleCamera, .builtInDualWideCamera, .builtInWideAngleCamera]
+            guard let device = types.compactMap({ AVCaptureDevice.default($0, for: .video, position: .back) }).first else {
                 return .unavailable("후면 카메라를 사용할 수 없어요. 실기기에서 확인해 주세요.")
             }
             do {
@@ -91,6 +92,12 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
                 }
                 session.addOutput(output)
                 output.maxPhotoQualityPrioritization = .balanced
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                guard let initialZoom = zoomRange(device)?.clamped(1) else {
+                    throw DetailCameraControlFailure.unsupported
+                }
+                device.videoZoomFactor = CGFloat(initialZoom) / device.displayVideoZoomFactorMultiplier
             } catch {
                 return .unavailable("카메라를 준비하지 못했어요. 다시 시도해 주세요.")
             }
@@ -107,8 +114,9 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
             queue.async { [self] in
                 do {
                     let device = try exposureDevice()
-                    continuation.resume(returning: .init(exposure: exposureRange(device),
-                        exposureBias: Double(device.exposureTargetBias)))
+                    continuation.resume(returning: .init(exposure: exposureRange(device), zoom: zoomRange(device),
+                        exposureBias: Double(device.exposureTargetBias),
+                        zoomFactor: Double(device.videoZoomFactor * device.displayVideoZoomFactorMultiplier)))
                 } catch { continuation.resume(throwing: error) }
             }
         }
@@ -119,6 +127,21 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
         let applied: Double = try await withCheckedThrowingContinuation { continuation in
             queue.async { [self] in
                 do {
+                    if case .zoom(let factor) = request {
+                        guard pending.isEmpty, !exposureCompletion.isPending else {
+                            throw DetailCameraControlFailure.operationInProgress
+                        }
+                        let device = try exposureDevice()
+                        guard factor.isFinite, factor > 0 else { throw DetailCameraControlFailure.invalidValue }
+                        try device.lockForConfiguration()
+                        defer { device.unlockForConfiguration() }
+                        guard let value = zoomRange(device)?.clamped(factor) else {
+                            throw DetailCameraControlFailure.unsupported
+                        }
+                        device.videoZoomFactor = CGFloat(value) / device.displayVideoZoomFactorMultiplier
+                        continuation.resume(returning: Double(device.videoZoomFactor * device.displayVideoZoomFactorMultiplier))
+                        return
+                    }
                     guard case .exposure(let bias) = request else { throw DetailCameraControlFailure.unsupported }
                     guard bias.isFinite else { throw DetailCameraControlFailure.invalidValue }
                     guard pending.isEmpty else { throw DetailCameraControlFailure.operationInProgress }
@@ -160,5 +183,12 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
     private func exposureRange(_ device: AVCaptureDevice) -> DetailCameraControlRange? {
         guard device.isExposureModeSupported(.continuousAutoExposure) else { return nil }
         return .init(minimum: Double(device.minExposureTargetBias), maximum: Double(device.maxExposureTargetBias))
+    }
+
+    private func zoomRange(_ device: AVCaptureDevice) -> DetailCameraControlRange? {
+        let multiplier = Double(device.displayVideoZoomFactorMultiplier)
+        guard multiplier.isFinite, multiplier > 0 else { return nil }
+        return .init(minimum: max(0.5, Double(device.minAvailableVideoZoomFactor) * multiplier),
+                     maximum: min(2, Double(device.maxAvailableVideoZoomFactor) * multiplier))
     }
 }

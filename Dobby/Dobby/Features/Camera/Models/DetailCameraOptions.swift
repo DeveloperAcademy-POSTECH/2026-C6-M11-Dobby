@@ -14,16 +14,16 @@ final class DetailCameraOptions {
     var photoAspectRatio: DetailPhotoAspectRatio = .fourThree
     @ObservationIgnored private let controller: any DetailCameraControlling
     @ObservationIgnored private var revision = 0
-    @ObservationIgnored private var exposureTask: Task<Void, Never>?
-    @ObservationIgnored private var queuedExposure: Double?
+    @ObservationIgnored private var controlTask: Task<Void, Never>?
+    @ObservationIgnored private var queuedControls: [DetailCameraControlRequest] = []
 
     init(controller: any DetailCameraControlling = UnavailableDetailCameraControls()) {
         self.controller = controller
     }
     func invalidate() {
-        exposureTask?.cancel()
-        exposureTask = nil
-        queuedExposure = nil
+        controlTask?.cancel()
+        controlTask = nil
+        queuedControls.removeAll()
         revision += 1
         capabilities = .init()
         requested = nil
@@ -41,6 +41,9 @@ final class DetailCameraOptions {
             capabilities = result
             if let bias = result.exposureBias, result.exposure?.clamped(bias) == bias {
                 appliedExposure = bias
+            }
+            if let factor = result.zoomFactor, factor > 0, result.zoom?.clamped(factor) == factor {
+                appliedZoom = factor
             }
         } catch {
             guard revision == token, !Task.isCancelled else { return }
@@ -90,14 +93,28 @@ final class DetailCameraOptions {
     /// 드래그 중에는 최신 값만 대기시킨다. 패널을 닫아도 마지막 요청은 적용한다.
     func requestExposure(_ value: Double) {
         guard let limited = capabilities.exposure?.clamped(value) else { return }
-        queuedExposure = limited
-        guard exposureTask == nil else { return }
-        exposureTask = Task {
-            while !Task.isCancelled, let next = queuedExposure {
-                queuedExposure = nil
-                await apply(.exposure(next))
+        enqueue(.exposure(limited))
+    }
+    func requestZoom(_ value: Double) {
+        guard value > 0, let limited = capabilities.zoom?.clamped(value) else { return }
+        enqueue(.zoom(limited))
+    }
+    private func enqueue(_ request: DetailCameraControlRequest) {
+        // 노출과 줌은 각각 마지막 요청을 보존해 메뉴 전환 중 서로 덮어쓰지 않는다.
+        queuedControls.removeAll {
+            switch ($0, request) {
+            case (.exposure, .exposure), (.zoom, .zoom): true
+            default: false
             }
-            if !Task.isCancelled { exposureTask = nil }
+        }
+        queuedControls.append(request)
+        guard controlTask == nil else { return }
+        controlTask = Task {
+            while !Task.isCancelled, !queuedControls.isEmpty {
+                let next = queuedControls.removeFirst()
+                await apply(next)
+            }
+            if !Task.isCancelled { controlTask = nil }
         }
     }
 }

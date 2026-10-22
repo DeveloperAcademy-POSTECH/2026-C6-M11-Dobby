@@ -4,6 +4,31 @@ import XCTest
 
 @MainActor
 final class DetailCameraOptionsTests: XCTestCase {
+    func testZoomStopsBounceAndSkipUnsupportedUltraWide() {
+        for (minimum, expected) in [(0.5, [2.0, 1, 0.5, 1, 2]), (1.0, [2.0, 1, 2, 1, 2])] {
+            var stops = DetailZoomStops()
+            var value = 1.0
+            for target in expected {
+                value = stops.next(from: value, range: .init(minimum: minimum, maximum: 2)!)
+                XCTAssertEqual(value, target)
+            }
+        }
+    }
+    func testZoomClampsAndRestoresDeviceValueAfterRestart() async {
+        let driver = DeferredDetailControls()
+        let model = DetailCameraOptions(controller: driver)
+        await model.refreshCapabilities()
+        let task = Task { await model.apply(.zoom(4)) }
+        await driver.waitForRequest()
+        let received = await driver.received
+        XCTAssertEqual(received, .zoom(2))
+        await driver.complete(2)
+        await task.value
+        XCTAssertEqual(model.appliedZoom, 2)
+        model.invalidate()
+        await model.refreshCapabilities()
+        XCTAssertEqual(model.appliedZoom, 1)
+    }
     func testDefaultRatioIsFourThreeWithoutInventingDeviceValues() async {
         let model = DetailCameraOptions()
         await model.refreshCapabilities()
@@ -72,7 +97,8 @@ private actor DeferredDetailControls: DetailCameraControlling {
     private(set) var received: DetailCameraControlRequest?
     private var completion: CheckedContinuation<Double, Never>?
     func capabilities() async throws -> DetailCameraCapabilities {
-        .init(exposure: .init(minimum: -1, maximum: 1))
+        .init(exposure: .init(minimum: -1, maximum: 1),
+              zoom: .init(minimum: 0.5, maximum: 2), zoomFactor: 1)
     }
     func apply(_ request: DetailCameraControlRequest) async throws -> Double {
         received = request

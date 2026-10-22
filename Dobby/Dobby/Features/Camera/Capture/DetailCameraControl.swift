@@ -19,6 +19,19 @@ nonisolated struct DetailCameraCapabilities: Equatable, Sendable {
     var exposure: DetailCameraControlRange?
     var zoom: DetailCameraControlRange?
     var exposureBias: Double?
+    var zoomFactor: Double?
+}
+
+/// 표시 배율 기준 왕복 순환. 초광각이 없는 기기는 0.5x를 건너뛴다.
+nonisolated struct DetailZoomStops {
+    private var descending = false
+    mutating func next(from value: Double, range: DetailCameraControlRange) -> Double {
+        if value >= range.maximum - 0.001 { descending = true }
+        if value <= range.minimum + 0.001 { descending = false }
+        let target = descending ? (value > 1.001 ? 1 : range.minimum)
+            : (value < 0.999 ? 1 : range.maximum)
+        return range.clamped(target) ?? value
+    }
 }
 nonisolated enum DetailPhotoAspectRatio: String, CaseIterable, Sendable {
     case fourThree = "4:3", sixteenNine = "16:9", square = "1:1"

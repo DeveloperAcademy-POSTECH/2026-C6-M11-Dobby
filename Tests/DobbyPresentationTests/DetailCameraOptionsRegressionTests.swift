@@ -4,23 +4,31 @@ import XCTest
 
 @MainActor
 final class DetailCameraOptionsRegressionTests: XCTestCase {
-    func testDragCoalescesWaitingValuesAndInvalidationClearsQueue() async {
+    func testDragKeepsLatestExposureAndZoomAndInvalidationClearsQueue() async {
         let first = expectation(description: "first"), latest = expectation(description: "latest")
-        let driver = SuspendedExposureControls(started: [first, latest])
+        let zoom = expectation(description: "zoom")
+        let driver = SuspendedExposureControls(started: [first, latest, zoom])
         let model = DetailCameraOptions(controller: driver)
         await model.refreshCapabilities()
         model.requestExposure(0.25)
         await fulfillment(of: [first], timeout: 2)
         model.requestExposure(0.5)
         model.requestExposure(1)
+        model.requestZoom(1.5)
+        model.requestZoom(2)
         await driver.finish(0.25, returning: 0.25)
         await fulfillment(of: [latest], timeout: 2)
         let received = await driver.received
         XCTAssertEqual(received, [0.25, 1])
-        model.requestExposure(-1)
-        model.invalidate()
         await driver.finish(1, returning: 1)
+        await fulfillment(of: [zoom], timeout: 2)
+        let allReceived = await driver.received
+        XCTAssertEqual(allReceived, [0.25, 1, 2])
+        model.requestZoom(0.5)
+        model.invalidate()
+        await driver.finish(2, returning: 2)
         XCTAssertNil(model.appliedExposure)
+        XCTAssertNil(model.appliedZoom)
         XCTAssertFalse(model.isApplying)
     }
 
@@ -85,10 +93,13 @@ private actor SuspendedExposureControls: DetailCameraControlling {
     private var pending: [Double: CheckedContinuation<Double, Error>] = [:]
     init(started: [XCTestExpectation]) { self.started = started }
     func capabilities() async throws -> DetailCameraCapabilities {
-        .init(exposure: .init(minimum: -1, maximum: 1), exposureBias: 0)
+        .init(exposure: .init(minimum: -1, maximum: 1), zoom: .init(minimum: 0.5, maximum: 2), exposureBias: 0)
     }
     func apply(_ request: DetailCameraControlRequest) async throws -> Double {
-        guard case .exposure(let value) = request else { throw DetailCameraControlFailure.unsupported }
+        let value: Double
+        switch request {
+        case .exposure(let factor), .zoom(let factor): value = factor
+        }
         return try await withCheckedThrowingContinuation {
             received.append(value)
             pending[value] = $0

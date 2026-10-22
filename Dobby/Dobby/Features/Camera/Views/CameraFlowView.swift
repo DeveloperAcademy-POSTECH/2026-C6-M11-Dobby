@@ -38,6 +38,9 @@ struct CameraFlowView: View {
     var body: some View {
         CameraPermissionGate(permission: permission) {
             ratioPreview
+                .modifier(DetailZoomModifier(options: camera?.options,
+                    enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
+                        && (previewSource != nil || camera?.state == .running)))
                 .overlay {
                     if isMoreOptionsPresented {
                         Button { isMoreOptionsPresented = false } label: {
@@ -77,10 +80,11 @@ struct CameraFlowView: View {
                 NavigationLink {
                     ProductPhotoSelectionView(model: model, onComplete: onComplete)
                 } label: {
-                    Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white)
+                    Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.blue)
+                .buttonBorderShape(.capsule)
+                .tint(Color(red: 0.94, green: 0.24, blue: 0.07))
                 .disabled(isPhotoOperationInProgress)
                 .accessibilityIdentifier("camera.selectPhotos")
             }
@@ -157,7 +161,10 @@ struct CameraFlowView: View {
 
     private var shutter: some View {
         Button { captureRequested = true } label: {
-            Image("DetailCaptureShutter").resizable().frame(width: 92, height: 92)
+            Circle().fill(Color(red: 0.10, green: 0.10, blue: 0.10))
+                .overlay { Circle().stroke(.black.opacity(0.5), lineWidth: 2).padding(12) }
+                .overlay { Circle().fill(Color(red: 0.89, green: 0.35, blue: 0.24)).frame(width: 25, height: 25) }
+                .frame(width: 92, height: 92)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
