@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct ChakPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
@@ -17,16 +19,27 @@ struct ChakPrimaryButtonStyle: ButtonStyle {
             .contentShape(Rectangle())
             .background(.brandMain)
             .cornerRadius(60)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
     }
 }
 
 struct ChakPrimaryButton: View {
     let title: String
+    var isLoading = false
+    var showsCompletion = false
     let action: @MainActor () -> Void
     
     var body: some View {
         Button(action: action) {
-            Text(title)
+            HStack(spacing: 8) {
+                if isLoading {
+                    ProgressView()
+                        .tint(.white)
+                } else if showsCompletion {
+                    Image(systemName: "checkmark")
+                }
+                Text(title)
+            }
         }
         .buttonStyle(ChakPrimaryButtonStyle())
     }

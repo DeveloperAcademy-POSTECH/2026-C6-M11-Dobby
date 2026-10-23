@@ -173,17 +173,12 @@ private struct FruitsExportGuideContent: View {
                             .font(.subheadline)
                     }
 
-                    Button(action: onOpen) {
-                        HStack(spacing: 8) {
-                            if opening { ProgressView().tint(.white) }
-                            Text("후루츠패밀리 열기")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 62)
+                    ChakPrimaryButton(
+                        title: "후루츠패밀리 열기",
+                        isLoading: opening
+                    ) {
+                        onOpen()
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(Color("BrandMain"), in: Capsule())
                     .disabled(opening || busy)
                     .accessibilityIdentifier("export.fruits.overlay.open")
                 }

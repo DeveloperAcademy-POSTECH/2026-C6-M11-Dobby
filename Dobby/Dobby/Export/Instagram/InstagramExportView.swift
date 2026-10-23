@@ -65,14 +65,10 @@ struct InstagramExportView: View {
                         }
                     }
                 } else {
-                    Button { Task { await connect() } } label: {
-                        Label("Instagram 계정 연결", systemImage: "link")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity, minHeight: 52)
+                    ChakPrimaryButton(title: "Instagram 계정 연결", isLoading: busy) {
+                        Task { await connect() }
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(ExportScreenStyle.accent, in: Capsule())
+                    .disabled(busy)
 
                     Button { Task { await loadAccount() } } label: {
                         Label("연결 상태 새로고침", systemImage: "arrow.clockwise")

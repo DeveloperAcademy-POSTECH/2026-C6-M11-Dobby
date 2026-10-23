@@ -110,14 +110,10 @@ struct NaverStoreExportView: View {
             }
 
             if categories.isEmpty {
-                Button { Task { await searchCategories() } } label: {
-                    Label("카테고리 불러오기", systemImage: "arrow.clockwise")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity, minHeight: 52)
+                ChakPrimaryButton(title: "카테고리 불러오기", isLoading: isWorking) {
+                    Task { await searchCategories() }
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .background(ExportScreenStyle.accent, in: Capsule())
+                .disabled(isWorking)
             } else if recommendations.isEmpty {
                 Text("추천 정보가 없어요. 검색하거나 전체 카테고리에서 선택해 주세요.")
                     .font(.subheadline)

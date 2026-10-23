@@ -58,13 +58,10 @@ struct Cafe24ExportView: View {
                             .autocorrectionDisabled()
                             .exportTextFieldStyle()
                     }
-                    Button("카페24 계정 연결") { Task { await connect() } }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(ExportScreenStyle.accent, in: Capsule())
+                    ChakPrimaryButton(title: "카페24 계정 연결", isLoading: isWorking) {
+                        Task { await connect() }
+                    }
                         .disabled(isWorking || mallID.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .opacity(mallID.trimmingCharacters(in: .whitespaces).isEmpty ? 0.45 : 1)
                 }
             }
 

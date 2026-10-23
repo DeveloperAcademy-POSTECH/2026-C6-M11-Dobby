@@ -201,21 +201,13 @@ struct ExportBottomAction: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                if isWorking {
-                    ProgressView().tint(.white)
-                } else if isComplete {
-                    Image(systemName: "checkmark")
-                }
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-            }
-            .frame(maxWidth: .infinity, minHeight: 62)
+        ChakPrimaryButton(
+            title: title,
+            isLoading: isWorking,
+            showsCompletion: isComplete
+        ) {
+            action()
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.white)
-        .background(isEnabled ? ExportScreenStyle.accent : Color.secondary.opacity(0.35), in: Capsule())
         .disabled(!isEnabled || isWorking)
     }
 }

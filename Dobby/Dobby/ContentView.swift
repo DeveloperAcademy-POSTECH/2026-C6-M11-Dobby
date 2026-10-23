@@ -216,8 +216,7 @@ struct ProductSavedDetailView: View {
                     LabeledContent(value.displayLabel, value: MeasurementDisplayText.centimeters(value.valueCm) + " cm")
                         .accessibilityIdentifier("library.measurement.\(value.key)")
                 }
-                Button("내보내기") { openExport() }
-                    .buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
+                ChakPrimaryButton(title: "내보내기") { openExport() }
                     .accessibilityIdentifier("library.export")
             }.padding(20)
         }

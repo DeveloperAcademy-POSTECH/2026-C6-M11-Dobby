@@ -18,7 +18,7 @@ struct FruitsExportView: View {
                         .font(.title2.bold())
                     Text("옷 정보를 내보내기 위해서는 직접 열어주셔야해요")
                         .font(.subheadline.weight(.semibold))
-                    Button {
+                    ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: opening) {
                         opening = true
                         Task {
                             let started = await controller.start(product: product)
@@ -33,16 +33,7 @@ struct FruitsExportView: View {
                                 alertMessage = controller.errorMessage
                             }
                         }
-                    } label: {
-                        HStack {
-                            if opening { ProgressView().tint(.white) }
-                            Text("후루츠패밀리 열기").font(.subheadline.weight(.semibold))
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 62)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(Color("BrandMain"), in: Capsule())
                     .padding(.top, 12)
                     .disabled(opening || controller.busy)
                     .accessibilityIdentifier("export.fruits.open")

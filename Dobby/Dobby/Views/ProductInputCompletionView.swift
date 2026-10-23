@@ -56,11 +56,7 @@ private struct ProductCompletionActions: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Button(action: onExport) {
-                Text("플랫폼에 업로드하러 가기").frame(maxWidth: .infinity).frame(height: 62)
-                    .foregroundStyle(.white)
-                    .background(ProductInformationStyle.accent, in: Capsule())
-            }
+            ChakPrimaryButton(title: "플랫폼에 업로드하러 가기", action: onExport)
             .accessibilityIdentifier("product-complete.export")
             Button(action: onLibrary) {
                 Text("보관함으로 이동하기").frame(maxWidth: .infinity).frame(height: 62)
