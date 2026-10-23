@@ -39,7 +39,7 @@ struct DetailCaptureOptionsView: View {
         .padding(.top, 24)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
+        .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 32))
         .overlay(alignment: .topTrailing) {
             Button(action: onClose) {
                 Image(systemName: "xmark")

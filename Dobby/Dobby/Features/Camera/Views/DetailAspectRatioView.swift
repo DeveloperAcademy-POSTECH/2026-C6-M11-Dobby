@@ -42,7 +42,7 @@ struct DetailAspectRatioView: View {
         }
         .padding(16).padding(.bottom, 32)
         .frame(maxWidth: .infinity)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 40))
+        .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 40))
         .padding(.horizontal, 8).padding(.bottom, 24)
         .accessibilityIdentifier("camera.aspectRatioPanel")
         .accessibilityAction(.escape, onBack)

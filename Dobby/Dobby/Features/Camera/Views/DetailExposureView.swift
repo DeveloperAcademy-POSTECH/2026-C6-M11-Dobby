@@ -41,7 +41,7 @@ struct DetailExposureView: View {
         }
         .padding(16).padding(.bottom, 12)
         .frame(maxWidth: .infinity)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 40))
+        .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 40))
         .padding(.horizontal, 8).padding(.bottom, 24)
         .accessibilityIdentifier("camera.exposurePanel")
         .accessibilityAction(.escape, onBack)
