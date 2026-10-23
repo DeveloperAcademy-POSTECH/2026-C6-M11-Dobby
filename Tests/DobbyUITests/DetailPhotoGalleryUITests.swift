@@ -3,11 +3,11 @@ import XCTest
 
 final class DetailPhotoGalleryUITests: XCTestCase {
     @MainActor
-    func testBrowsingDeletionRecoveryAndReturnToCapture() {
+    func testBrowsingWithoutDeletionAndReturnToCapture() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString,
-                               "--garment-preview-top", "--detail-delete-failure-once"]
+                               "--garment-preview-top"]
         app.launch()
         defer { app.terminate() }
         let start = app.buttons["product-flow.start"]
@@ -56,28 +56,17 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [centered], timeout: 5), .completed)
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = "detail-photo-gallery"; shot.lifetime = .keepAlways; add(shot)
-        let delete = app.buttons["camera.galleryDelete.2"]
-        delete.tap()
-        app.alerts["상세 사진을 삭제할까요?"].buttons["취소"].tap()
+        XCTAssertFalse(app.buttons["camera.galleryDelete.2"].exists)
+        XCTAssertFalse(app.buttons["camera.galleryDelete.3"].exists)
         XCTAssertEqual(pager.value as? String, "3 / 4")
-        delete.tap()
-        app.alerts["상세 사진을 삭제할까요?"].buttons["삭제"].tap()
-        let error = app.alerts["사진을 삭제하지 못했어요"]
-        XCTAssertTrue(error.waitForExistence(timeout: 5)); error.buttons["확인"].tap()
-        XCTAssertEqual(pager.value as? String, "3 / 4")
-        for expected in ["3 / 3", "2 / 2"] {
-            delete.tap()
-            app.alerts["상세 사진을 삭제할까요?"].buttons["삭제"].tap()
-            assertPage(pager, expected)
-        }
         app.buttons["촬영으로 돌아가기"].tap()
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 10))
         XCTAssertFalse(guide.exists)
         capture.tap()
         let next = app.buttons["camera.selectPhotos"]
         XCTAssertTrue(next.wait(for: \.isEnabled, toEqual: true, timeout: 10)); next.tap()
-        XCTAssertTrue(app.buttons["camera.thumbnail.1"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["camera.thumbnail.2"].exists)
+        XCTAssertTrue(app.buttons["camera.thumbnail.3"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["camera.thumbnail.4"].exists)
         XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장")
     }
     @MainActor
