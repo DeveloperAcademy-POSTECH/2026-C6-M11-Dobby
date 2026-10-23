@@ -69,34 +69,25 @@ struct DetailPhotoGalleryView: View {
     }
 
     private func thumbnailStrip(width: CGFloat) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        thumbnail(item, index: index)
-                    }
-                }
-                .padding(.horizontal, max(0, width / 2 - 28))
-            }
-            .onChange(of: focusedID, initial: true) { _, id in proxy.scrollTo("photo-\(id)", anchor: .center) }
+        DetailPhotoFilmstrip(ids: items.map(\.id), focusedID: $focusedID, width: width) { index in
+            thumbnail(items[index], index: index)
         }
-        .frame(height: 55)
-        .accessibilityIdentifier("camera.galleryStrip")
     }
 
     private func thumbnail(_ item: Item, index: Int) -> some View {
         let photo = item.photo
         let detailNumber = index - (model.measurementRecord == nil ? 0 : 1)
-        let width: CGFloat = focusedID == item.id ? 56 : 36
+        let focused = focusedID == item.id
         return Button { focusedID = item.id } label: {
             photoView(item, thumbnail: true).accessibilityHidden(true)
-                .frame(width: width, height: 55).clipShape(RoundedRectangle(cornerRadius: 8))
-                .frame(minWidth: 44).contentShape(Rectangle())
+                .frame(width: focused ? 40 : 22, height: focused ? 40 : 36)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .frame(height: 44).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .id("photo-\(item.id)")
         .accessibilityLabel(item.label + (photo.purpose == .detail ? " \(detailNumber)" : ""))
-        .accessibilityValue(focusedID == item.id ? "현재 보는 사진" : "")
+        .accessibilityValue(focused ? "현재 보는 사진" : "")
+        .accessibilityAddTraits(focused ? .isSelected : [])
         .accessibilityIdentifier("camera.galleryThumbnail.\(index)")
     }
 }
