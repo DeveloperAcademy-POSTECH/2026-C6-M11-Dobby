@@ -27,6 +27,52 @@ final class DetailPhotoProcessorTests: XCTestCase {
         let output = try await DetailPhotoProcessor().process(original, aspectRatio: nil)
         XCTAssertEqual(output, original)
     }
+
+    // Created by mason on 10/23/26. 제어기는 목, 크롭·JPEG·저장소는 실제 구현이다.
+    func testOptionsRecoveryAndAllRatiosReachSavedPhotosWithoutRewritingEarlierFiles() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controls = RecoveringDetailControls()
+        let options = DetailCameraOptions(controller: controls)
+        let processor = DetailPhotoProcessor(), store = CameraPhotoStore(directory: root)
+        let session = UUID(), garment = UUID()
+        let original = try photo(orientation: 6)
+        var saved: [(URL, Data)] = []
+        await options.refreshCapabilities()
+        await options.apply(.exposure(0.5))
+        for ratio in DetailPhotoAspectRatio.allCases {
+            options.photoAspectRatio = ratio
+            await controls.failNextZoom()
+            await options.apply(.zoom(2))
+            XCTAssertEqual(options.failure, .deviceFailure)
+            XCTAssertEqual(options.appliedExposure, 0.5)
+            XCTAssertFalse(options.isApplying)
+            await options.apply(.zoom(2))
+            XCTAssertNil(options.failure)
+            XCTAssertEqual(options.appliedZoom, 2)
+
+            // 중단/복귀 시 Model 경계: 비율은 유지하고 장치가 보고한 값을 다시 읽는다.
+            options.invalidate()
+            XCTAssertNil(options.appliedZoom)
+            await options.refreshCapabilities()
+            XCTAssertEqual(options.photoAspectRatio, ratio)
+            XCTAssertEqual(options.appliedExposure, 0.5)
+            XCTAssertEqual(options.appliedZoom, 2)
+            let data = try await processor.process(original, aspectRatio: options.photoAspectRatio)
+            let asset = try await store.save(data, sessionID: session, garmentID: garment, capturedAt: .now)
+            guard case let .localFile(url, metadata) = asset.source else { return XCTFail("저장 파일 없음") }
+            XCTAssertEqual(asset.sessionID, session)
+            XCTAssertEqual(asset.garmentID, garment)
+            XCTAssertEqual(asset.purpose, .detail)
+            XCTAssertEqual(metadata.orientation, .up)
+            XCTAssertEqual(Double(metadata.pixelWidth) / Double(metadata.pixelHeight),
+                           ratio.previewRatio(isLandscape: false), accuracy: 0.0001)
+            saved.append((url, data))
+        }
+        XCTAssertEqual(Set(saved.map { $0.0 }).count, 3)
+        for (url, bytes) in saved { XCTAssertEqual(try Data(contentsOf: url), bytes) }
+        XCTAssertEqual(try photo(orientation: 6), original)
+    }
     func testEightOrientationsArePhysicallyNormalizedIncludingMirrors() async throws {
         let expected = [[0, 1, 2, 3], [1, 0, 3, 2], [3, 2, 1, 0], [2, 3, 0, 1],
                         [0, 2, 1, 3], [2, 0, 3, 1], [3, 1, 2, 0], [1, 3, 0, 2]]
@@ -150,5 +196,27 @@ final class DetailPhotoProcessorTests: XCTestCase {
         try await store.discardUncommitted(asset)
         try await store.discardUncommitted(asset)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+}
+
+private actor RecoveringDetailControls: DetailCameraControlling {
+    private var exposure = 0.0, zoom = 1.0
+    private var shouldFailZoom = false
+    func failNextZoom() { shouldFailZoom = true }
+    func capabilities() async throws -> DetailCameraCapabilities {
+        .init(exposure: .init(minimum: -2, maximum: 2), zoom: .init(minimum: 0.5, maximum: 2),
+              exposureBias: exposure, zoomFactor: zoom)
+    }
+    func apply(_ request: DetailCameraControlRequest) async throws -> Double {
+        switch request {
+        case .exposure(let value): exposure = value; return value
+        case .zoom(let value):
+            if shouldFailZoom {
+                shouldFailZoom = false
+                throw DetailCameraControlFailure.deviceFailure
+            }
+            zoom = value
+            return value
+        }
     }
 }

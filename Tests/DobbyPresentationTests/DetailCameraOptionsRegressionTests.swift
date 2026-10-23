@@ -4,6 +4,18 @@ import XCTest
 
 @MainActor
 final class DetailCameraOptionsRegressionTests: XCTestCase {
+    func testQueuedControlImmediatelyBlocksCaptureUntilInvalidated() async {
+        for zoom in [false, true] {
+            let model = DetailCameraOptions(controller: SuspendedExposureControls(started: []))
+            await model.refreshCapabilities()
+            if zoom { model.requestZoom(2) } else { model.requestExposure(0.5) }
+            // Task가 실행되기 전 같은 MainActor 구간에서도 촬영을 막아야 한다.
+            XCTAssertTrue(model.isApplying)
+            model.invalidate()
+            XCTAssertFalse(model.isApplying)
+        }
+    }
+
     func testDragKeepsLatestExposureAndZoomAndInvalidationClearsQueue() async {
         let first = expectation(description: "first"), latest = expectation(description: "latest")
         let zoom = expectation(description: "zoom")

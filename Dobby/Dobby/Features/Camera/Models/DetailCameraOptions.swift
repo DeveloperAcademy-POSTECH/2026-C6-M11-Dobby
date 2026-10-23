@@ -9,7 +9,9 @@ final class DetailCameraOptions {
     private(set) var appliedExposure: Double?
     private(set) var appliedZoom: Double?
     private(set) var failure: DetailCameraControlFailure?
-    private(set) var isApplying = false
+    // Task 실행 전 대기 구간도 포함해 이전 옵션으로 촬영되는 틈을 막는다.
+    var isApplying: Bool { isExecuting || !queuedControls.isEmpty }
+    private var isExecuting = false
     // 프리뷰와 저장 크롭이 공유하는 사용자 선택. 세션 재시작에도 유지한다.
     var photoAspectRatio: DetailPhotoAspectRatio = .fourThree
     @ObservationIgnored private let controller: any DetailCameraControlling
@@ -30,7 +32,7 @@ final class DetailCameraOptions {
         appliedExposure = nil
         appliedZoom = nil
         failure = nil
-        isApplying = false
+        isExecuting = false
     }
     func refreshCapabilities() async {
         invalidate()
@@ -71,8 +73,8 @@ final class DetailCameraOptions {
         let token = revision
         requested = request
         failure = nil
-        isApplying = true
-        defer { if revision == token { isApplying = false } }
+        isExecuting = true
+        defer { if revision == token { isExecuting = false } }
         do {
             let applied = try await controller.apply(limitedRequest)
             guard revision == token, !Task.isCancelled else { return }
