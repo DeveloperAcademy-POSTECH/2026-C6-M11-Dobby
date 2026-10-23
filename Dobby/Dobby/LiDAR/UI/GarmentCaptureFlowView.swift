@@ -129,12 +129,6 @@ struct GarmentCaptureFlowView: View {
             else if !isPreview, model == nil { restartCamera() }
         }
         .onDisappear { clearPreviewFocus(); cancel(); camera.stop() }
-        .task(id: previewControls.focusRequestID) {
-            guard isPreview, let requestID = previewControls.focusRequestID else { return }
-            do { try await Task.sleep(for: .seconds(3)) } catch { return }
-            guard !Task.isCancelled, previewControls.focusRequestID == requestID else { return }
-            previewFocusVisible = false
-        }
         .task(id: processingSnapshot?.frame.frameID) {
             guard let snapshot = processingSnapshot else { return }
             let image = await SnapshotPresentation.thumbnail(for: snapshot, maximumDimension: 1024)
@@ -219,33 +213,21 @@ struct GarmentCaptureFlowView: View {
                         }
                         .frame(width: width, height: height)
                         .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                        if previewFocusVisible, previewControls.focusStatus == .accepted,
-                           let point = previewControls.focusPoint,
-                           let displayed = CameraPreviewGeometry.displayPoint(sensorPoint: point,
-                             viewportWidth: Double(geometry.size.width), viewportHeight: Double(geometry.size.height),
-                             displayTransform: transform) {
-                            SyntheticCameraFocusIndicator(point: CGPoint(x: displayed.x, y: displayed.y))
-                        }
+                        SyntheticCameraControlSurface(state: previewControls, capabilities: controlCapabilities,
+                            transform: transform, isEnabled: canFocus, focusVisible: previewFocusVisible,
+                            onFocus: setPreviewFocus, onExposure: setPreviewExposure,
+                            onExposureAdjustmentActive: { _ in })
                     }
                     .contentShape(Rectangle())
-                    .gesture(SpatialTapGesture().onEnded { event in
-                        guard canUseCameraControls,
-                              let point = CameraPreviewGeometry.sensorPoint(
-                                viewPoint: .init(x: Double(event.location.x), y: Double(event.location.y)),
-                                viewportWidth: Double(geometry.size.width), viewportHeight: Double(geometry.size.height),
-                                displayTransform: transform) else { return }
-                        // This deliberately exercises presentation without invoking autofocus hardware.
-                        previewControls.focusPoint = point
-                        previewControls.focusRequestID = UUID()
-                        previewControls.focusStatus = .accepted
-                        previewFocusVisible = true
-                    })
                     .onChange(of: geometry.size) { _, _ in clearPreviewFocus() }
                 }.clipped()
             } else if !isPreview, camera.isSupported, loadingError == nil {
                 ZoomedCameraPreview(session: camera.session, readiness: camera.liveReadiness, orientation: $orientation,
                     controlState: camera.cameraControls,
-                    focusEnabled: canTakePhoto && camera.cameraCapabilities.focusSupported, onFocus: camera.requestFocus)
+                    focusEnabled: canFocus,
+                    capabilities: camera.cameraCapabilities, onFocus: camera.requestFocus,
+                    onExposure: camera.requestExposureBias,
+                    onExposureAdjustmentActive: camera.setExposureAdjustmentActive)
             } else {
                 Rectangle().fill(.black)
             }
@@ -319,9 +301,10 @@ struct GarmentCaptureFlowView: View {
 
     private var captureControls: some View {
         VStack(spacing: 6) {
-            CameraControlPanel(capabilities: controlCapabilities, state: controlState,
-                isEnabled: canUseCameraControls, errorMessage: isPreview ? nil : camera.controlError,
-                onExposure: adjustExposure, onResetExposure: resetExposure, onZoom: changeZoom)
+            CameraControlPanel(errorMessage: isPreview ? nil : camera.controlError)
+                // Preserve the shutter's established position after removing
+                // the two persistent control rows (44 + 4 + 44 points).
+                .frame(minHeight: 92, alignment: .bottom)
             GarmentShutterButton(isEnabled: canTakePhoto,
                 isCapturing: isCapturing, action: takePhoto, forceReduceMotion: presentationReduceMotion)
                 .accessibilityHint(isPreview && previewControls.selectedZoom == .double
@@ -335,32 +318,27 @@ struct GarmentCaptureFlowView: View {
     }
 
     private var controlCapabilities: CameraControlCapabilities {
-        isPreview ? .init(focusSupported: true, exposureRange: .init(minimum: -2, maximum: 2),
-                          availableZooms: [.standard, .double]) : camera.cameraCapabilities
+        isPreview ? .init(focusSupported: true, meteringSupported: true,
+                          exposureRange: .init(minimum: -2, maximum: 2), availableZooms: [.standard, .double]) : camera.cameraCapabilities
     }
 
-    private var controlState: CameraControlState { isPreview ? previewControls : camera.cameraControls }
-
-    private func adjustExposure(_ value: Double) {
-        guard canUseCameraControls else { return }
-        if isPreview, let clamped = controlCapabilities.exposureRange?.clamp(value) {
-            previewControls.requestedExposureBias = clamped
-            previewControls.exposureBias = clamped
-            previewControls.settingsRevision &+= 1
-        } else if !isPreview { camera.setExposureBias(value) }
+    private func setPreviewFocus(_ point: ImagePoint, requestID: UUID) {
+        guard canFocus, point.isValid else { return }
+        // A labelled synthetic control state, never a hardware observation.
+        previewControls.focusPoint = point
+        previewControls.focusRequestID = requestID
+        previewControls.focusStatus = .accepted
+        previewControls.aeafStatus = .unlocked
+        previewControls.requestedExposureBias = 0
+        previewControls.exposureBias = 0
+        previewFocusVisible = true
     }
 
-    private func resetExposure() {
-        if isPreview { adjustExposure(0) } else { camera.resetExposure() }
-    }
-
-    private func changeZoom(_ zoom: CameraZoom) {
-        guard canUseCameraControls, controlCapabilities.availableZooms.contains(zoom) else { return }
-        clearPreviewFocus()
-        if isPreview {
-            previewControls.selectedZoom = zoom
-            previewControls.settingsRevision &+= 1
-        } else { camera.setZoom(zoom) }
+    private func setPreviewExposure(_ bias: Double) {
+        guard canFocus, let target = controlCapabilities.exposureRange?.clamp(bias) else { return }
+        // This fixture never changes a camera or establishes sensor response.
+        previewControls.requestedExposureBias = target
+        previewControls.exposureBias = target
     }
 
     private func clearPreviewFocus() {
@@ -368,12 +346,20 @@ struct GarmentCaptureFlowView: View {
         previewControls.focusPoint = nil
         previewControls.focusRequestID = nil
         previewControls.focusStatus = .idle
+        previewControls.aeafStatus = .unlocked
     }
 
     /// The physical shutter depends only on camera availability. The synthetic
     /// control fixture cannot claim a cropped 2x capture from its fixed 1x inputs.
     private var canTakePhoto: Bool {
         canUseCameraControls && (!isPreview || previewControls.selectedZoom != .double)
+    }
+    /// Tapping to focus does not depend on garment recognition or the
+    /// measurement service being ready. The camera owns autofocus support.
+    private var canFocus: Bool {
+        guard !isCapturing else { return false }
+        if isPreview { return previewModel != nil }
+        return camera.isRunning && camera.cameraCapabilities.focusSupported
     }
     private var canUseCameraControls: Bool {
         guard !isCapturing else { return false }
@@ -526,21 +512,21 @@ struct GarmentCaptureFlowView: View {
     private func presentFailure(_ error: Error) {
         let failure = (error as? AutomaticMeasurementWorkflowFailure)
             ?? (error as? RecordedMeasurementRunFailure)?.workflowFailure
-        switch failure?.stage {
-        case .landmarks:
-            errorTitle = failure?.code == .invalidConfiguration ? "옷 인식 모델을 확인해 주세요" : "측정점 확인이 필요해요"
-            errorMessage = "사진은 촬영했지만 자동 측정점을 확인하지 못했어요.\n\n"
-                + (failure?.message ?? error.localizedDescription)
-                + "\n\n다시 촬영하거나 이 사진에서 점을 직접 확인할 수 있어요."
-        case .measurement:
-            errorTitle = "길이를 계산하지 못했어요"
-            errorMessage = "사진과 측정점은 유지돼요.\n\n"
-                + (failure?.message ?? error.localizedDescription)
-                + "\n\n사진에서 점을 확인하거나 거리와 각도를 바꿔 다시 촬영해 주세요."
-        default:
-            errorTitle = "사진을 촬영하지 못했어요"
-            errorMessage = error.localizedDescription
+            ?? AutomaticMeasurementWorkflowFailure(
+                stage: processingSnapshot == nil ? .capture : .landmarks,
+                code: error is CancellationError ? .cancelled
+                    : (error as? any AutomaticMeasurementFailureClassifying)?.automaticMeasurementFailureCode ?? .providerFailure,
+                message: error.localizedDescription,
+                cause: (error as? any AutomaticMeasurementFailureCauseProviding)?.automaticMeasurementFailureCause)
+        guard let feedback = WorkflowFailureFeedback.make(for: failure,
+            hasCapturedPhoto: processingSnapshot != nil) else {
+            // A provider can report a normal stop even when the owning task's
+            // cancellation flag has not reached this actor yet.
+            errorMessage = nil
+            return
         }
+        errorTitle = feedback.title
+        errorMessage = feedback.message
     }
 
     private func reviewCapturedPhoto() {
