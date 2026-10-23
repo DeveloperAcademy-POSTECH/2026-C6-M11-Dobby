@@ -136,16 +136,9 @@ struct CameraFlowView: View {
     }
 
     private var ratioPreview: some View {
-        GeometryReader { geometry in
-            let ratio = (camera?.options.photoAspectRatio ?? .fourThree)
-                .previewRatio(isLandscape: geometry.size.width > geometry.size.height)
-            let width = min(geometry.size.width, geometry.size.height * ratio)
+        DetailAspectRatioPreview(aspectRatio: camera?.options.photoAspectRatio ?? .fourThree) {
             preview
-                .frame(width: width, height: width / ratio)
-                .clipped()
-                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }
-        .background(Color(.systemBackground))
     }
 
     @ViewBuilder
