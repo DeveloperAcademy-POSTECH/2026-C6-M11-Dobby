@@ -52,7 +52,10 @@ struct CameraPreviewSurface: UIViewRepresentable {
             case .landscapeRight: angle = 0
             default: return
             }
-            if connection.isVideoRotationAngleSupported(angle) { connection.videoRotationAngle = angle }
+            // 비율 전환 중 매 프레임 재배치되어도 실제 방향이 바뀔 때만 연결을 갱신한다.
+            if connection.videoRotationAngle != angle, connection.isVideoRotationAngleSupported(angle) {
+                connection.videoRotationAngle = angle
+            }
             onRotationChange(angle)
         }
     }
