@@ -133,7 +133,35 @@ enum GarmentCapturePreview {
             modelVersion: isDesignReference ? "garment-ui-design-reference-synthetic-v1"
                 : kind == .top ? "garment-ui-top-preview-v1" : "garment-ui-preview-v1", points: points, mask: mask,
             garmentKind: kind)
-        let result = LiDARMeasurementEngine().measure(frame: frame, landmarks: landmarks, definitions: definitions)
+        var result = LiDARMeasurementEngine().measure(frame: frame, landmarks: landmarks, definitions: definitions)
+        // Explicit synthetic feedback rehearsals. These exercise presentation
+        // states, never replace a failed camera capture or claim sensor accuracy.
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--garment-preview-feedback-uncertain") {
+            for index in result.values.indices where result.values[index].hasUsableMeasurement {
+                result.values[index].status = .uncertain
+            }
+        }
+        if arguments.contains("--garment-preview-feedback-depth-failure"), let index = result.values.firstIndex(where: { $0.hasUsableMeasurement }) {
+            result.values[index].meters = nil
+            result.values[index].status = .unavailable
+            result.values[index].failure = .insufficientDepth
+            let id = definitions[index].landmarkIDs[0]
+            result.values[index].failureContexts = [.init(stage: .depth, reason: .lowSensorConfidence,
+                scope: .landmark, affectedLandmarkIDs: [id], recovery: .retake)]
+            result.values[index].pointFailures = [.init(landmarkID: id, reason: .insufficientDepth,
+                context: result.values[index].failureContexts?.first)]
+        }
+        if arguments.contains("--garment-preview-feedback-plane-failure") {
+            for index in result.values.indices {
+                result.values[index].meters = nil
+                result.values[index].status = .unavailable
+                result.values[index].failure = .insufficientGarmentPlane
+                result.values[index].failureContexts = [.init(stage: .garmentPlane, reason: .planeLowCoverage,
+                    scope: .capture, recovery: .retake)]
+                result.values[index].pointFailures = nil
+            }
+        }
         let output = AutomaticMeasurementOutput(runID: UUID(),
             snapshot: .init(frame: frame, imageJPEG: image.jpegData(compressionQuality: 0.95)!),
             landmarks: landmarks, result: result, definitions: definitions, options: .init(),

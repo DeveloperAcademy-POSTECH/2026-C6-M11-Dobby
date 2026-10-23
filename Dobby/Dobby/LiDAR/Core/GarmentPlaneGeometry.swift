@@ -37,18 +37,27 @@ nonisolated enum GarmentPlaneGeometry {
 
     static func fit(frame: MeasurementFrame, mask: GarmentMask,
                     uprightOrientation: ImageOrientation) throws -> GarmentPlane {
+        do { return try fitDetailed(frame: frame, mask: mask, uprightOrientation: uprightOrientation) }
+        catch let error as ContextualMeasurementError { throw error.failure }
+    }
+
+    static func fitDetailed(frame: MeasurementFrame, mask: GarmentMask,
+                            uprightOrientation: ImageOrientation) throws -> GarmentPlane {
         try validate(frame: frame, mask: mask)
         let foreground = mask.values.reduce(0) { $0 + ($1 == 1 ? 1 : 0) }
         let fraction = Double(foreground) / Double(mask.values.count)
-        guard fraction >= 0.10, fraction <= 0.85,
-              !touchesUprightLateralEdge(mask, orientation: uprightOrientation)
-        else { throw MeasurementFailure.invalidMask }
+        guard fraction >= 0.10, fraction <= 0.85 else {
+            throw failure(.invalidMask, .maskCoverage, evidence: ["foregroundFraction": fraction, "minimum": 0.10, "maximum": 0.85])
+        }
+        guard !touchesUprightLateralEdge(mask, orientation: uprightOrientation) else {
+            throw failure(.invalidMask, .maskClipped)
+        }
         let width = frame.depth.size.width, height = frame.depth.size.height
         var step = max(1, Int(ceil(sqrt(Double(width * height) / Double(maximumSamples)))))
         while ((width + step - 1) / step) * ((height + step - 1) / step) > maximumSamples { step += 1 }
         var samples: [Sample] = []
         samples.reserveCapacity(maximumSamples)
-        var interiorCount = 0
+        var interiorCount = 0, inRangeInteriorCount = 0
         var interiorBounds = Bounds()
         let confidence = frame.depth.confidence! // validate requires this exact frame's confidence.
         for y in stride(from: 1, to: height - 1, by: step) {
@@ -58,17 +67,25 @@ nonisolated enum GarmentPlaneGeometry {
                 let location = ImagePoint(x: Double(x) / Double(width), y: Double(y) / Double(height))
                 interiorBounds.include(location)
                 let index = y * width + x, z = Double(frame.depth.values[y * width + x])
-                guard (1...2).contains(confidence[index]), z.isFinite,
-                      (minimumDepthMeters...maximumDepthMeters).contains(z) else { continue }
+                guard z.isFinite, (minimumDepthMeters...maximumDepthMeters).contains(z) else { continue }
+                inRangeInteriorCount += 1
+                guard (1...2).contains(confidence[index]) else { continue }
                 let position = scale(ray(location, frame: frame), z)
                 guard finite(position) else { continue }
                 samples.append(.init(position: position, raw: location))
             }
         }
-        guard interiorCount > 0 else { throw MeasurementFailure.invalidMask }
-        guard samples.count >= minimumSamples,
-              Double(samples.count) / Double(interiorCount) >= 0.25
-        else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard interiorCount > 0 else { throw failure(.invalidMask, .maskHasNoInterior) }
+        guard samples.count >= minimumSamples else {
+            let reason: MeasurementFailureReason = inRangeInteriorCount >= minimumSamples
+                ? .lowSensorConfidence : .planeTooFewSamples
+            throw failure(.insufficientGarmentPlane, reason,
+                          evidence: ["samples": Double(samples.count), "required": Double(minimumSamples), "interior": Double(interiorCount), "inRange": Double(inRangeInteriorCount)])
+        }
+        let validFraction = Double(samples.count) / Double(interiorCount)
+        guard validFraction >= 0.25 else {
+            throw failure(.insufficientGarmentPlane, .planeLowValidFraction, evidence: ["fraction": validFraction, "minimum": 0.25])
+        }
 
         var random = DeterministicRandom()
         var bestIndices: [Int] = []
@@ -90,14 +107,14 @@ nonisolated enum GarmentPlaneGeometry {
             }
         }
         let required = max(minimumSamples, Int(ceil(Double(samples.count) * minimumInlierFraction)))
-        guard bestIndices.count >= required else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard bestIndices.count >= required else { throw failure(.insufficientGarmentPlane, .planeInsufficientInliers, evidence: ["inliers": Double(bestIndices.count), "required": Double(required)]) }
         var indices = bestIndices
         var fitted = try principalPlane(samples: samples, indices: indices)
         for _ in 0..<3 {
             let next = samples.indices.filter {
                 abs(dot(fitted.normal, samples[$0].position) + fitted.offset) <= inlierToleranceMeters
             }
-            guard next.count >= required else { throw MeasurementFailure.insufficientGarmentPlane }
+            guard next.count >= required else { throw failure(.insufficientGarmentPlane, .planeInsufficientInliers, evidence: ["inliers": Double(next.count), "required": Double(required)]) }
             if next == indices { break }
             indices = next
             fitted = try principalPlane(samples: samples, indices: indices)
@@ -107,26 +124,31 @@ nonisolated enum GarmentPlaneGeometry {
         indices = samples.indices.filter {
             abs(dot(fitted.normal, samples[$0].position) + fitted.offset) <= inlierToleranceMeters
         }
-        guard indices.count >= required else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard indices.count >= required else { throw failure(.insufficientGarmentPlane, .planeInsufficientInliers, evidence: ["inliers": Double(indices.count), "required": Double(required)]) }
         let support = try principalPlane(samples: samples, indices: indices)
         guard support.minorVariance >= 0.000225,
               support.minorVariance / max(support.majorVariance, 1e-12) >= 0.005
-        else { throw MeasurementFailure.insufficientGarmentPlane }
+        else { throw failure(.insufficientGarmentPlane, .planeNarrowSupport, evidence: ["minorVariance": support.minorVariance, "majorVariance": support.majorVariance]) }
         var inlierBounds = Bounds(), squaredError = 0.0
         for index in indices {
             inlierBounds.include(samples[index].raw)
             let error = dot(fitted.normal, samples[index].position) + fitted.offset
             squaredError += error * error
         }
-        guard interiorBounds.extentX > 0, interiorBounds.extentY > 0 else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard interiorBounds.extentX > 0, interiorBounds.extentY > 0 else { throw failure(.insufficientGarmentPlane, .planeNarrowSupport) }
         let horizontalCoverage = inlierBounds.extentX / interiorBounds.extentX
         let verticalCoverage = inlierBounds.extentY / interiorBounds.extentY
-        guard horizontalCoverage >= 0.6, verticalCoverage >= 0.6 else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard horizontalCoverage >= 0.6, verticalCoverage >= 0.6 else { throw failure(.insufficientGarmentPlane, .planeLowCoverage, evidence: ["horizontal": horizontalCoverage, "vertical": verticalCoverage, "minimum": 0.6]) }
         let rms = sqrt(squaredError / Double(indices.count))
         let viewCosine = abs(dot(fitted.normal, scale(support.center, 1 / length(support.center))))
-        guard rms.isFinite, rms <= maximumOrthogonalRMSMeters,
-              viewCosine.isFinite, viewCosine >= minimumRayCosine
-        else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard rms.isFinite, rms <= maximumOrthogonalRMSMeters else {
+            throw failure(.insufficientGarmentPlane, .planeHighResidual,
+                          evidence: rms.isFinite ? ["rmsMeters": rms, "maximum": maximumOrthogonalRMSMeters] : nil)
+        }
+        guard viewCosine.isFinite, viewCosine >= minimumRayCosine else {
+            throw failure(.insufficientGarmentPlane, .planeViewingAngle,
+                          evidence: viewCosine.isFinite ? ["cosine": viewCosine, "minimum": minimumRayCosine] : nil)
+        }
         return .init(normal: fitted.normal, offset: fitted.offset,
                      quality: .init(interiorCount: interiorCount, candidateCount: samples.count,
                          inlierCount: indices.count, orthogonalRMSMeters: rms,
@@ -137,18 +159,23 @@ nonisolated enum GarmentPlaneGeometry {
     }
 
     static func intersection(point: ImagePoint, frame: MeasurementFrame, plane: GarmentPlane) throws -> Point3D {
-        guard point.isValid else { throw MeasurementFailure.outOfBounds }
-        guard calibrationIsValid(frame) else { throw MeasurementFailure.invalidCalibration }
+        do { return try intersectionDetailed(point: point, frame: frame, plane: plane) }
+        catch let error as ContextualMeasurementError { throw error.failure }
+    }
+
+    static func intersectionDetailed(point: ImagePoint, frame: MeasurementFrame, plane: GarmentPlane) throws -> Point3D {
+        guard point.isValid else { throw failure(.outOfBounds, .pointOutsideImage, scope: .landmark) }
+        guard calibrationIsValid(frame) else { throw failure(.invalidCalibration, .invalidCalibration, stage: .input) }
         let direction = ray(point, frame: frame), normalLength = length(plane.normal)
         guard finite(plane.normal), plane.offset.isFinite, normalLength > 0.000001 else {
-            throw MeasurementFailure.insufficientGarmentPlane
+            throw failure(.insufficientGarmentPlane, .planeDegenerate)
         }
         let denominator = dot(plane.normal, direction)
         let cosine = abs(denominator) / (normalLength * length(direction))
-        guard cosine.isFinite, cosine >= minimumRayCosine else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard cosine.isFinite, cosine >= minimumRayCosine else { throw failure(.insufficientGarmentPlane, .planeViewingAngle, scope: .landmark, evidence: cosine.isFinite ? ["cosine": cosine, "minimum": minimumRayCosine] : nil) }
         let position = scale(direction, -plane.offset / denominator)
         guard finite(position), (minimumDepthMeters...maximumDepthMeters).contains(position.z) else {
-            throw MeasurementFailure.insufficientGarmentPlane
+            throw failure(.insufficientGarmentPlane, .planeIntersectionRange, scope: .landmark)
         }
         return position
     }
@@ -167,18 +194,31 @@ nonisolated enum GarmentPlaneGeometry {
     }
 
     private static func validate(frame: MeasurementFrame, mask: GarmentMask) throws {
-        guard calibrationIsValid(frame) else { throw MeasurementFailure.invalidCalibration }
+        guard calibrationIsValid(frame) else { throw failure(.invalidCalibration, .invalidCalibration, stage: .input) }
         let size = frame.depth.size
         guard size.isValid, size.width >= 3, size.height >= 3,
               size.width <= maximumBufferPixels / size.height,
               frame.depth.values.count == size.width * size.height,
-              size.width * frame.imageSize.height == size.height * frame.imageSize.width,
-              let confidence = frame.depth.confidence, confidence.count == frame.depth.values.count,
-              confidence.allSatisfy({ $0 <= 2 }) else { throw MeasurementFailure.invalidDepthMap }
+              size.width * frame.imageSize.height == size.height * frame.imageSize.width
+        else { throw failure(.invalidDepthMap, .malformedDepth, stage: .input) }
+        guard let confidence = frame.depth.confidence else {
+            throw failure(.invalidDepthMap, .missingDepthConfidence, stage: .input)
+        }
+        guard confidence.count == frame.depth.values.count, confidence.allSatisfy({ $0 <= 2 }) else {
+            throw failure(.invalidDepthMap, .malformedConfidence, stage: .input)
+        }
         guard mask.size.isValid, mask.size.width <= maximumBufferPixels / mask.size.height,
               mask.values.count == mask.size.width * mask.size.height,
               mask.size.width * frame.imageSize.height == mask.size.height * frame.imageSize.width,
-              mask.values.allSatisfy({ $0 <= 1 }) else { throw MeasurementFailure.invalidMask }
+              mask.values.allSatisfy({ $0 <= 1 }) else { throw failure(.invalidMask, .malformedMask, stage: .input) }
+    }
+
+    private static func failure(_ failure: MeasurementFailure, _ reason: MeasurementFailureReason,
+                                stage: MeasurementFailureStage = .garmentPlane,
+                                scope: MeasurementFailureScope = .capture,
+                                evidence: [String: Double]? = nil) -> ContextualMeasurementError {
+        .init(failure: failure, context: .init(stage: stage, reason: reason, scope: scope,
+                                             recovery: .retake, evidence: evidence))
     }
 
     private static func calibrationIsValid(_ frame: MeasurementFrame) -> Bool {
@@ -252,7 +292,7 @@ nonisolated enum GarmentPlaneGeometry {
         var majorVariance: Double
     }
     private static func principalPlane(samples: [Sample], indices: [Int]) throws -> PrincipalPlane {
-        guard indices.count >= 3 else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard indices.count >= 3 else { throw failure(.insufficientGarmentPlane, .planeTooFewSamples) }
         var center = Point3D(x: 0, y: 0, z: 0)
         for index in indices { center = add(center, samples[index].position) }
         center = scale(center, 1 / Double(indices.count))
@@ -289,7 +329,7 @@ nonisolated enum GarmentPlaneGeometry {
         var normal = Point3D(x: vectors[smallest], y: vectors[3 + smallest], z: vectors[6 + smallest])
         normal = scale(normal, 1 / length(normal))
         if normal.z < 0 { normal = scale(normal, -1) }
-        guard finite(normal), finite(center) else { throw MeasurementFailure.insufficientGarmentPlane }
+        guard finite(normal), finite(center) else { throw failure(.insufficientGarmentPlane, .planeDegenerate) }
         return .init(normal: normal, offset: -dot(normal, center), center: center,
                      minorVariance: max(0, covariance[order[1] * 3 + order[1]]),
                      majorVariance: max(0, covariance[order[2] * 3 + order[2]]))

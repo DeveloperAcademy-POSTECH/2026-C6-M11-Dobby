@@ -6,6 +6,7 @@ import Vision
 /// Preview-only foreground outlines, without clothing models, depth or capture quality.
 nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.dobby.lidar.live-foreground", qos: .userInitiated)
+    private let cancellationQueue = DispatchQueue(label: "com.dobby.lidar.live-foreground-cancel", qos: .utility)
     private let lock = NSLock()
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var orientation: ImageOrientation = .right
@@ -13,6 +14,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     private var readinessEpoch = UUID()
     private var busy = false
     private var isSuspended = false
+    private var interactionGate = LivePreviewInteractionGate()
     private var activeJobID: UUID?
     private var activeRequest: VNGenerateForegroundInstanceMaskRequest?
     private var lastSubmissionTime: TimeInterval = -.infinity
@@ -42,6 +44,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         lock.lock()
         identifier = sessionID
         isSuspended = false
+        interactionGate.reset(sessionID: sessionID)
         readinessEpoch = UUID()
         lastSubmissionTime = -.infinity
         let request = activeRequest
@@ -77,10 +80,51 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         lastSubmissionTime = -.infinity
     }
 
+    /// Only preview Vision yields; RGB/depth capture and photo measurement keep
+    /// running. Do not publish a clearing result: the existing advisory outline
+    /// retains its normal source-age limit while the camera takes priority.
+    func prioritizeCameraInteraction(sessionID: UUID, duration: TimeInterval) {
+        lock.lock()
+        guard identifier == sessionID,
+              interactionGate.prioritize(sessionID: sessionID, duration: duration,
+                                         now: ProcessInfo.processInfo.systemUptime) else {
+            lock.unlock()
+            return
+        }
+        cancelInteractionAnalysisWhileLocked()
+    }
+
+    func setExposureAdjustmentActive(_ active: Bool, sessionID: UUID) {
+        lock.lock()
+        guard identifier == sessionID,
+              interactionGate.setExposureAdjustmentActive(active, sessionID: sessionID,
+                                                          now: ProcessInfo.processInfo.systemUptime) else {
+            lock.unlock()
+            return
+        }
+        cancelInteractionAnalysisWhileLocked()
+    }
+
+    /// Consumes the lock acquired by the caller. Never wait for Vision on the
+    /// touch path or enqueue cancellation behind the running perform request.
+    private func cancelInteractionAnalysisWhileLocked() {
+        readinessEpoch = UUID()
+        let cancellation = activeRequest.map(RequestCancellation.init)
+        activeRequest = nil
+        // Cancellation does not finish the job. Keep busy and activeJobID until
+        // finish executes, even if another session or gesture starts meanwhile.
+        lock.unlock()
+        if let cancellation {
+            cancellationQueue.async { cancellation.request.cancel() }
+        }
+    }
+
     func submit(frame: ARFrame, sessionID: UUID,
                 completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
         lock.lock()
-        guard identifier == sessionID, !isSuspended, !busy,
+        guard identifier == sessionID, !busy,
+              interactionGate.allowsAnalysis(sessionID: sessionID, captureSuspended: isSuspended,
+                                              now: ProcessInfo.processInfo.systemUptime),
               frame.timestamp.isFinite, frame.timestamp >= 0,
               frame.timestamp - lastSubmissionTime >= minimumInterval else {
             lock.unlock()
@@ -120,7 +164,9 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
 
     private func isCurrent(_ job: AnalysisJob) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        return activeJobID == job.id && identifier == job.sessionID && !isSuspended
+        return activeJobID == job.id && identifier == job.sessionID
+            && interactionGate.allowsAnalysis(sessionID: job.sessionID, captureSuspended: isSuspended,
+                                               now: ProcessInfo.processInfo.systemUptime)
             && readinessEpoch == job.readinessEpoch && orientation == job.orientation
     }
 
@@ -149,8 +195,13 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
                          completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
         guard isCurrent(job) else { finish(nil, job: job, completion: completion); return }
         let request = VNGenerateForegroundInstanceMaskRequest()
+        // Advisory outlines may take longer rather than competing with the
+        // camera's interactive rendering. Frozen-photo measurement is separate.
+        request.preferBackgroundProcessing = true
         lock.lock()
-        let canRegister = activeJobID == job.id && identifier == job.sessionID && !isSuspended
+        let canRegister = activeJobID == job.id && identifier == job.sessionID
+            && interactionGate.allowsAnalysis(sessionID: job.sessionID, captureSuspended: isSuspended,
+                                               now: ProcessInfo.processInfo.systemUptime)
             && readinessEpoch == job.readinessEpoch && orientation == job.orientation
         if canRegister { activeRequest = request }
         lock.unlock()
@@ -185,7 +236,9 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     private func finish(_ result: LiveCaptureReadiness?, job: AnalysisJob,
                         completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
         lock.lock()
-        let canPublish = activeJobID == job.id && identifier == job.sessionID && !isSuspended
+        let canPublish = activeJobID == job.id && identifier == job.sessionID
+            && interactionGate.allowsAnalysis(sessionID: job.sessionID, captureSuspended: isSuspended,
+                                               now: ProcessInfo.processInfo.systemUptime)
             && readinessEpoch == job.readinessEpoch && orientation == job.orientation
         if activeJobID == job.id {
             activeRequest = nil
@@ -245,4 +298,9 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     private struct SourceBuffer: @unchecked Sendable { let buffer: CVPixelBuffer }
     /// Fully rendered, immutable pixels; the buffer pool is no longer involved.
     private struct PreviewRaster: @unchecked Sendable { let image: CGImage }
+    /// VNRequest supports cancellation while another queue performs it. Retain
+    /// that exact request only; never carry ARKit image buffers to this queue.
+    private struct RequestCancellation: @unchecked Sendable {
+        let request: VNGenerateForegroundInstanceMaskRequest
+    }
 }

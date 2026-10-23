@@ -191,11 +191,11 @@ struct InfoInputView: View {
     private var sizeTable: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("실측 사이즈").font(.headline)
-            let uncertain = garment.visibleMeasurements.filter {
-                $0.sourceStatusRaw == MeasurementStatus.uncertain.rawValue && !$0.isEdited
+            let missingValues = garment.visibleMeasurements.filter {
+                !GarmentMeasurementInputText.hasUsableValue($0, drafts: measurementInput.wrappedValue.drafts)
             }
-            if !uncertain.isEmpty {
-                Label("\(uncertain.map(\.displayLabel).joined(separator: ", ")): 자동 측정값을 확인해 주세요.",
+            if !missingValues.isEmpty {
+                Label("\(missingValues.map(\.displayLabel).joined(separator: ", ")): 계산된 길이가 없어요. 치수를 입력하거나 실측 결과에서 실패 이유를 확인해 주세요.",
                       systemImage: "exclamationmark.circle")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -304,6 +304,14 @@ struct GarmentMeasurementInputState {
 /// write a rounded display value back into the automatic measurement.
 @MainActor
 enum GarmentMeasurementInputText {
+    static func hasUsableValue(_ value: MeasuredValue, drafts: [UUID: String]) -> Bool {
+        // An unfinished text edit is a form-validation concern, not evidence
+        // that the already calculated automatic measurement has failed.
+        if value.valueCm.isFinite && value.valueCm > 0 { return true }
+        if let draft = drafts[value.id] { return parsed(draft) != nil }
+        return false
+    }
+
     static func parsed(_ text: String) -> Double? {
         guard let value = Double(text.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: ",", with: ".")), value.isFinite, value > 0 else { return nil }

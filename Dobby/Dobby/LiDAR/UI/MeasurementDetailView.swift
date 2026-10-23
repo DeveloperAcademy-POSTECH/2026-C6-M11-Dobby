@@ -238,20 +238,15 @@ struct MeasurementDetailView: View {
                 ProgressView("측정 중…")
             } else if let value = model.result?.values.first {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(value.meters.map { MeasurementDisplayText.centimeters($0 * 100) } ?? "—")
+                    Text(value.hasUsableMeasurement ? value.meters.map { MeasurementDisplayText.centimeters($0 * 100) } ?? "—" : "—")
                         .font(.system(size: 48, weight: .semibold, design: .rounded)).monospacedDigit()
                         .accessibilityIdentifier("measurementValue")
                     Text("cm").font(.title2).foregroundStyle(.secondary)
                     Spacer()
-                    Text(value.status.label).font(.caption.bold()).padding(8)
-                        .background(value.status == .valid ? Color.teal.opacity(0.12) : Color.orange.opacity(0.12), in: Capsule())
+                    Text(value.hasUsableMeasurement ? "계산 완료" : "측정 불가").font(.caption.bold()).padding(8)
+                        .background(value.hasUsableMeasurement ? Color.teal.opacity(0.12) : Color.orange.opacity(0.12), in: Capsule())
                 }
-                if let failure = value.failure { Text(failure.message).font(.subheadline).foregroundStyle(.orange) }
-                MeasurementPointFailureDetails(value: value)
-                if value.status == .uncertain {
-                    Text("깊이 또는 측정점 품질을 확인하세요. 이 값은 확정 치수로 사용하기 전에 줄자로 비교해야 합니다.")
-                        .font(.caption).foregroundStyle(.orange)
-                }
+                MeasurementFailureFeedbackView(value: value)
                 ForEach(Array(value.points.enumerated()), id: \.offset) { index, point in
                     HStack {
                         Text(point.id == model.definition.landmarkIDs.first ? "A" : "B").fontWeight(.semibold)
@@ -324,22 +319,5 @@ extension MeasurementStatus {
 }
 
 extension MeasurementFailure {
-    var message: String {
-        switch self {
-        case .frameMismatch: "사진과 측정점의 촬영 프레임이 다릅니다."
-        case .invalidCalibration: "카메라 보정 정보와 이미지·깊이의 좌표가 맞지 않습니다."
-        case .invalidDepthMap: "깊이 데이터 형식이 올바르지 않습니다."
-        case .invalidMask: "의류 마스크 형식이 올바르지 않습니다."
-        case .invalidOptions: "측정 설정을 확인해 주세요."
-        case .invalidDefinition: "측정 항목의 시작점·끝점 정의가 올바르지 않습니다."
-        case .duplicateLandmark: "같은 이름의 측정점이 중복되어 있습니다."
-        case .missingLandmark: "측정에 필요한 점을 지정해 주세요."
-        case .outOfBounds: "측정점이 원본 사진의 범위를 벗어났습니다."
-        case .insufficientDepth: "이 점 주변에 사용할 수 있는 깊이가 부족합니다. 점과 옷의 경계를 확인해 주세요."
-        case .lowLandmarkConfidence: "ML이 측정점 위치를 충분히 확신하지 못했습니다."
-        case .occludedLandmark: "측정점을 지정하거나 가려진 부분이 보이도록 촬영해 주세요."
-        case .insufficientGarmentPlane: "옷 전체를 대표할 깊이 평면을 확인하지 못했어요. 옷을 평평하게 펼치고 전체가 보이도록 다시 촬영해 주세요."
-        case .contourIntersectionUnavailable: "총장 상단의 옷 경계를 확인하지 못했어요. 이 사진에서 총장 위치를 직접 확인할 수 있어요."
-        }
-    }
+    var message: String { fallbackExplanation }
 }
