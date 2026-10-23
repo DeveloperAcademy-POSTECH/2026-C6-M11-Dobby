@@ -148,11 +148,17 @@ nonisolated enum GarmentForegroundPoseSelection {
     ) throws -> GarmentForegroundRecognition {
         let snapped = try GarmentOutlineSnap.apply(points: prediction.points, mask: selection.mask,
             imageSize: imageSize)
-        // A contour request is calculation metadata, not a twelfth prediction.
+        // A contour request is calculation metadata, not an extra prediction.
         // Add it only after the original model candidate has passed association;
         // diagnostics and anatomical validation keep the untouched raw outputs.
-        let calculationPoints = schemaKind == .top && modelVersion == AutomaticGarmentKind.top.modelVersion
-            ? TopLandmarkSchema.calculationPoints(snapped.points) : snapped.points
+        let calculationPoints: [GarmentLandmark]
+        if schemaKind == .top && modelVersion == AutomaticGarmentKind.top.modelVersion {
+            calculationPoints = TopLandmarkSchema.calculationPoints(snapped.points)
+        } else if schemaKind == .bottoms && modelVersion == AutomaticGarmentKind.bottoms.modelVersion {
+            calculationPoints = BottomLandmarkSchema.addingRightThighCalculationPoint(to: snapped.points)
+        } else {
+            calculationPoints = snapped.points
+        }
         let diagnostics = GarmentRecognitionDiagnostics(requestedOrientation: requestedOrientation,
             selectedPoseOrientation: selectedOrientation, associationPolicy: selection.policy,
             rawPoints: prediction.points, pointAssessments: selection.pointAssessments,
@@ -340,8 +346,13 @@ actor CoreMLBottomLandmarkProvider: GarmentLandmarkProviding, GarmentImageRecogn
     /// Photo-only previews have no depth, so keep this request invisible until
     /// a frozen-frame measurement engine can resolve the actual intersection.
     private func calculationPoints(_ points: [GarmentLandmark]) -> [GarmentLandmark] {
-        canonicalSchemaKind == .top && modelVersion == AutomaticGarmentKind.top.modelVersion
-            ? TopLandmarkSchema.calculationPoints(points) : points
+        if canonicalSchemaKind == .top && modelVersion == AutomaticGarmentKind.top.modelVersion {
+            return TopLandmarkSchema.calculationPoints(points)
+        }
+        if canonicalSchemaKind == .bottoms && modelVersion == AutomaticGarmentKind.bottoms.modelVersion {
+            return schema.calculationPoints(points)
+        }
+        return points
     }
 
     private var canonicalSchemaKind: AutomaticGarmentKind? {

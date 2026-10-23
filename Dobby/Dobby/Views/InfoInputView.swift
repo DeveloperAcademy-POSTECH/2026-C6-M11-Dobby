@@ -45,9 +45,14 @@ struct InfoInputView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     photoStrip
                     field("제품 명", text: $garment.name,
-                          placeholder: "예: 90s 나이키 자켓", lines: 1...2, identifier: "name")
+                          placeholder: "예: 90s 나이키 자켓", lines: 1...2,
+                          identifier: "name", isRequired: true)
                     field("설명", text: $garment.detail,
-                          placeholder: "연식, 실착 사이즈, 상태를 적어주세요", lines: 5...10, identifier: "detail")
+                          placeholder: "연식, 실착 사이즈, 상태를 적어주세요", lines: 5...10,
+                          identifier: "detail", isRequired: true)
+                    field("가격", text: priceText,
+                          placeholder: "예: 23000", lines: 1...1,
+                          identifier: "price", isRequired: true, keyboardType: .numberPad)
                     field("브랜드", text: $garment.brand,
                           placeholder: "예: 나이키", lines: 1...1, identifier: "brand")
                     sizeTable.id(Self.measurementTableID)
@@ -76,6 +81,7 @@ struct InfoInputView: View {
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
                 .accessibilityIdentifier("product-info.done")
+                .disabled(!GarmentInputCompletion.hasRequiredInformation(garment))
             }
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
@@ -93,6 +99,7 @@ struct InfoInputView: View {
     }
 
     private func complete() {
+        guard GarmentInputCompletion.hasRequiredInformation(garment) else { return }
         do {
             try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts) {
                 try modelContext.save()
@@ -147,12 +154,30 @@ struct InfoInputView: View {
 
     // MARK: 글자 입력
 
+    private var priceText: Binding<String> {
+        Binding(
+            get: { garment.price.map(String.init) ?? "" },
+            set: { input in
+                let digits = input.filter(\.isNumber)
+                garment.price = digits.isEmpty ? nil : Int(digits)
+            }
+        )
+    }
+
     private func field(_ title: String, text: Binding<String>,
-                       placeholder: String, lines: ClosedRange<Int>, identifier: String) -> some View {
+                       placeholder: String, lines: ClosedRange<Int>, identifier: String,
+                       isRequired: Bool = false, keyboardType: UIKeyboardType = .default) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
+            HStack(spacing: 3) {
+                Text(title)
+                if isRequired {
+                    Text("*").foregroundStyle(.red)
+                }
+            }
+            .font(.headline)
             TextField(placeholder, text: text, axis: .vertical)
                 .accessibilityIdentifier("product-info.\(identifier)")
+                .keyboardType(keyboardType)
                 .lineLimit(lines)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -310,6 +335,12 @@ enum GarmentInputCompletion {
                 return "\(label)에 0보다 큰 숫자를 입력해 주세요. 입력한 정보는 화면에 남아 있어요."
             }
         }
+    }
+
+    static func hasRequiredInformation(_ garment: Garment) -> Bool {
+        let name = garment.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail = garment.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty && !detail.isEmpty && garment.price.map { $0 >= 0 } == true
     }
 
     /// Validate all visible fields before modifying any of them. A failed database save

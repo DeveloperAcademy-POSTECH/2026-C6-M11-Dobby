@@ -503,6 +503,7 @@ enum GarmentMeasurementText {
         switch definition.id {
         case "bottom.waist_left.waist_right": fallback = "허리"
         case "bottom.crotch.waist_center", "bottom.crotch.waist_front_center": fallback = "밑위"
+        case "bottom.thighWidthRight": fallback = "허벅지"
         case "top.shoulderWidth": fallback = "어깨"
         case "top.chestWidth": fallback = "가슴"
         case "top.hemWidth": fallback = "밑단"
