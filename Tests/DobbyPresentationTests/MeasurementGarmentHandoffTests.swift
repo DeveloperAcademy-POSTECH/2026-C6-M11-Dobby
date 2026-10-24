@@ -955,6 +955,8 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
             XCTAssertEqual(garment.exports.count, 1)
             XCTAssertEqual(garment.exports.first?.succeeded, true)
             XCTAssertEqual(garment.exports.first?.garment?.id, identifier)
+            XCTAssertNil(garment.selectedExportChannelRawValues)
+            XCTAssertEqual(garment.selectedExportChannels, [.instagram])
             XCTAssertEqual(try context.fetchCount(FetchDescriptor<Garment>()), 1)
             XCTAssertEqual(try context.fetchCount(FetchDescriptor<GarmentPhoto>()), 1)
             XCTAssertEqual(try context.fetchCount(FetchDescriptor<MeasuredValue>()), 1)

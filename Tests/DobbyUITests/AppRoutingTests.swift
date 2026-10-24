@@ -22,6 +22,18 @@ final class AppRoutingTests: XCTestCase {
 
         app.tabBars.buttons["보관함"].tap()
         expectEmptyLibrary(in: app)
+        let editLibrary = app.buttons["library.edit-mode"]
+        XCTAssertTrue(editLibrary.waitForExistence(timeout: 5))
+        XCTAssertEqual(editLibrary.label, "수정")
+        XCTAssertFalse(editLibrary.isEnabled)
+        attachScreenshot(app, name: "routing-empty-library-start-measurement")
+        app.buttons["library.empty.start-measurement"].tap()
+        XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["product-flow.fixture"].exists)
+        app.buttons["closeGarmentCapture"].tap()
+        expectEmptyLibrary(in: app)
+        XCTAssertFalse(editLibrary.isEnabled)
+        XCTAssertTrue(app.tabBars.buttons["보관함"].isSelected)
         app.tabBars.buttons["홈"].tap()
         expectHome(in: app)
         attachScreenshot(app, name: "routing-home-capture-library")
@@ -132,7 +144,14 @@ final class AppRoutingTests: XCTestCase {
     @MainActor
     private func expectEmptyLibrary(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10), file: file, line: line)
-        XCTAssertTrue(app.staticTexts["보관된 제품이 없어요"].waitForExistence(timeout: 5), file: file, line: line)
+        let title = app.staticTexts["library.empty.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertEqual(title.label, "보관함이 비어있어요", file: file, line: line)
+        XCTAssertTrue(app.staticTexts["작업을 시작해보세요"].exists, file: file, line: line)
+        let start = app.buttons["library.empty.start-measurement"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertEqual(start.label, "실측 시작하기", file: file, line: line)
+        XCTAssertTrue(start.isHittable, file: file, line: line)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "library.product.")).firstMatch.exists, file: file, line: line)
     }

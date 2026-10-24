@@ -273,7 +273,7 @@ final class ProductCreationFlowTests: XCTestCase {
         app.buttons["closeGarmentCapture"].tap()
         XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
         app.tabBars.buttons["보관함"].tap()
-        XCTAssertTrue(app.staticTexts["보관된 제품이 없어요"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["보관함이 비어있어요"].waitForExistence(timeout: 5))
         app.tabBars.buttons["홈"].tap()
         openCapture(in: app)
         app.buttons["captureGarment"].tap()

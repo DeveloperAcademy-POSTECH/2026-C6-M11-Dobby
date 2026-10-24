@@ -80,6 +80,7 @@ struct ProductCreationFlowView: View {
         .tint(path.last == .information || path.last == .completed ? .orange : .white)
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)
+                .environment(\.modelContext, context)
                 .preferredColorScheme(.light)
         }
         .onChange(of: copyHomeProduct?.id) { _, _ in
