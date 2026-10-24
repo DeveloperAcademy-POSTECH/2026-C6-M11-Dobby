@@ -11,7 +11,7 @@ import SwiftUI
 struct ProductPhotoSelectionGrid: View {
     let photos: [CapturedAsset]
     let selectedPhotoIDs: [UUID]
-    let onPreview: (CapturedAsset) -> Void
+    var onPreview: ((CapturedAsset) -> Void)? = nil
     let onToggleSelection: (UUID) -> Void
 
     var body: some View {
@@ -22,7 +22,7 @@ struct ProductPhotoSelectionGrid: View {
                         photo: photo,
                         order: selectedPhotoIDs.firstIndex(of: photo.id).map { $0 + 1 },
                         captureIndex: index,
-                        onPreview: { onPreview(photo) },
+                        onPreview: onPreview.map { preview in { preview(photo) } },
                         onToggleSelection: { onToggleSelection(photo.id) }
                     )
                 }

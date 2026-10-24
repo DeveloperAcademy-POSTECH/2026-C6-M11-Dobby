@@ -22,6 +22,7 @@ struct ProductCreationFlowView: View {
     @State private var showFruits = false
     @State private var isFinishing = false
     @State private var cleanupError: String?
+    @State private var isPhotoSelectionVisible = false
 
     init(container: ModelContainer, controller: CopyActivityController, isPresented: Binding<Bool>,
          copyHomeProduct: Binding<ExportProduct?>,
@@ -50,6 +51,7 @@ struct ProductCreationFlowView: View {
                             case .details:
                                 CameraFlowView(model: photoModel, permission: permission, camera: camera,
                                     previewSource: isFixture ? photoModel.input.measurement.source : nil,
+                                    onSelectionVisibilityChange: { isPhotoSelectionVisible = $0 },
                                     onComplete: receivePhotos)
                                     .navigationBarBackButtonHidden()
                                     .toolbar {
@@ -76,7 +78,7 @@ struct ProductCreationFlowView: View {
                 }
         }
         .environment(\.modelContext, context)
-        .preferredColorScheme(path.last == .information || path.last == .completed ? .light : .dark)
+        .preferredColorScheme(isPhotoSelectionVisible || path.last == .information || path.last == .completed ? .light : .dark)
         .tint(path.last == .information || path.last == .completed ? .orange : .white)
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)

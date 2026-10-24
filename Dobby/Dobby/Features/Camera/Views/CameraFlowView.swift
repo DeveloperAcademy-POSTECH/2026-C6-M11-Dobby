@@ -16,6 +16,7 @@ struct CameraFlowView: View {
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
     let onComplete: (ProductPhotoOutput) async throws -> Void
+    private let onSelectionVisibilityChange: (Bool) -> Void
     var previewSource: CapturedAsset.Source?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
@@ -27,11 +28,13 @@ struct CameraFlowView: View {
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
          previewSource: CapturedAsset.Source? = nil,
+         onSelectionVisibilityChange: @escaping (Bool) -> Void = { _ in },
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
         self.camera = camera
         _permission = State(initialValue: permission)
         self.onComplete = onComplete
+        self.onSelectionVisibilityChange = onSelectionVisibilityChange
         self.previewSource = previewSource
     }
 
@@ -79,6 +82,8 @@ struct CameraFlowView: View {
                 // 기존 사진 선택에는 카메라 권한이 필요하지 않다.
                 NavigationLink {
                     ProductPhotoSelectionView(model: model, onComplete: onComplete)
+                        .onAppear { onSelectionVisibilityChange(true) }
+                        .onDisappear { onSelectionVisibilityChange(false) }
                 } label: {
                     Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
                 }
