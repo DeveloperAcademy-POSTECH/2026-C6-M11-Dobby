@@ -21,6 +21,7 @@ struct InfoInputView: View {
     @State private var localMeasurementInput = GarmentMeasurementInputState()
     private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
     @State private var saveError: String?
+    @State private var hasAttemptedCompletion = false
     @FocusState private var focusedMeasurementID: UUID?
     static let measurementTableID = "product-info.measurement-table"
 
@@ -39,7 +40,7 @@ struct InfoInputView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 ProductInformationFields(garment: garment, measurementInput: measurementInput,
-                    focus: $focusedMeasurementID)
+                    focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
             }
@@ -67,11 +68,11 @@ struct InfoInputView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 61, height: 44)
-                        .background(GarmentInformationValidation.isValid(garment)
+                        .background(GarmentInformationValidation.hasAnyInformation(garment)
                             ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
                             in: Capsule())
                 }
-                .disabled(!GarmentInformationValidation.isValid(garment))
+                .disabled(!GarmentInformationValidation.hasAnyInformation(garment))
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }
@@ -92,6 +93,8 @@ struct InfoInputView: View {
     }
 
     private func complete() {
+        hasAttemptedCompletion = true
+        guard GarmentInformationValidation.isValid(garment) else { return }
         do {
             try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts) {
                 try modelContext.save()

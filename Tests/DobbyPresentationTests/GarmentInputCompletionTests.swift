@@ -41,6 +41,27 @@ struct GarmentInputCompletionTests {
         }
     }
 
+    @Test func completionButtonActivatesAfterAnyInformationWhileRequiredFieldsRemainInvalid() {
+        let (garment, _, _) = product()
+        garment.name = ""
+        garment.detail = ""
+        garment.brand = ""
+        garment.price = nil
+        #expect(!GarmentInformationValidation.hasAnyInformation(garment))
+        #expect(!GarmentInformationValidation.isValid(garment))
+
+        garment.brand = "나이키"
+        #expect(GarmentInformationValidation.hasAnyInformation(garment))
+        #expect(!GarmentInformationValidation.isNameValid(garment))
+        #expect(!GarmentInformationValidation.isDetailValid(garment))
+        #expect(!GarmentInformationValidation.isPriceValid(garment))
+
+        garment.brand = ""
+        garment.price = 0
+        #expect(GarmentInformationValidation.hasAnyInformation(garment))
+        #expect(!GarmentInformationValidation.isPriceValid(garment))
+    }
+
     @Test func optionalBrandDoesNotBlockCompletionAndPriceIsExported() throws {
         let (garment, _, _) = product()
         garment.brand = ""

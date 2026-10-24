@@ -2,8 +2,26 @@ import Foundation
 
 @MainActor
 enum GarmentInformationValidation {
+    static func hasAnyInformation(_ garment: Garment) -> Bool {
+        [garment.name, garment.detail, garment.brand].contains {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } || garment.price != nil
+    }
+
+    static func isNameValid(_ garment: Garment) -> Bool {
+        !garment.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    static func isDetailValid(_ garment: Garment) -> Bool {
+        !garment.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    static func isPriceValid(_ garment: Garment) -> Bool {
+        garment.price.map { $0 > 0 } ?? false
+    }
+
     static func isValid(_ garment: Garment) -> Bool {
-        (try? validate(garment)) != nil
+        isNameValid(garment) && isDetailValid(garment) && isPriceValid(garment)
     }
 
     static func validate(_ garment: Garment) throws {

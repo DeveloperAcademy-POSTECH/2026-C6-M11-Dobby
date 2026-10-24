@@ -6,6 +6,7 @@ enum ProductInformationStyle {
     static let accent = Color(red: 237 / 255, green: 77 / 255, blue: 41 / 255)
     static let accentSoft = Color("BrandMain300")
     static let upload = Color("BrandMain")
+    static let error = Color("AccentsRed")
 
     static func measurements(for garment: Garment) -> [MeasuredValue] {
         guard garment.group == .top else { return garment.visibleMeasurements }
@@ -29,18 +30,25 @@ struct ProductInformationFields: View {
     @Bindable var garment: Garment
     @Binding var measurementInput: GarmentMeasurementInputState
     let focus: FocusState<UUID?>.Binding
+    let showsValidationErrors: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             ProductInputPhotoSection(garment: garment)
-            ProductInputField(title: "제품 명", text: $garment.name,
-                placeholder: "업로드에 사용되는 제품 명을 입력해주세요", identifier: "name", isRequired: true)
+            ProductInputField(title: "제품명", text: $garment.name,
+                placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name", isRequired: true,
+                errorMessage: showsValidationErrors && !GarmentInformationValidation.isNameValid(garment)
+                    ? "제품명을 입력해주세요" : nil)
             ProductInputField(title: "설명", text: $garment.detail,
                 placeholder: "제품의 설명을 입력해주세요\n(예: 제품 정보, 하자 여부, 어울리는 코디)",
-                identifier: "detail", isRequired: true, isMultiline: true)
+                identifier: "detail", isRequired: true, isMultiline: true,
+                errorMessage: showsValidationErrors && !GarmentInformationValidation.isDetailValid(garment)
+                    ? "설명을 입력해주세요" : nil)
+            ProductPriceField(garment: garment,
+                errorMessage: showsValidationErrors && !GarmentInformationValidation.isPriceValid(garment)
+                    ? "가격을 입력해주세요" : nil)
             ProductInputField(title: "브랜드", text: $garment.brand,
                 placeholder: "제품의 브랜드를 적어주세요 (없다면 생략 가능)", identifier: "brand")
-            ProductPriceField(garment: garment)
             ProductMeasurementInputTable(garment: garment, measurementInput: $measurementInput, focus: focus)
                 .id(InfoInputView.measurementTableID)
         }
@@ -70,6 +78,7 @@ struct ProductInputField: View {
     let identifier: String
     var isRequired = false
     var isMultiline = false
+    var errorMessage: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -81,8 +90,20 @@ struct ProductInputField: View {
                 .frame(minHeight: isMultiline ? 203 : 52, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(ProductInformationStyle.field, in: RoundedRectangle(cornerRadius: 14))
+                .overlay {
+                    if errorMessage != nil {
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(ProductInformationStyle.error, lineWidth: 1)
+                    }
+                }
                 .accessibilityLabel(title)
                 .accessibilityIdentifier("product-info.\(identifier)")
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(ProductInformationStyle.error)
+                    .accessibilityIdentifier("product-info.\(identifier).error")
+            }
         }
     }
 }
@@ -147,6 +168,7 @@ private struct ProductInputPhotoRow: View {
 
 struct ProductPriceField: View {
     @Bindable var garment: Garment
+    let errorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -156,6 +178,18 @@ struct ProductPriceField: View {
                 .padding(.vertical, 16)
                 .frame(minHeight: 52)
                 .background(ProductInformationStyle.field, in: RoundedRectangle(cornerRadius: 14))
+                .overlay {
+                    if errorMessage != nil {
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(ProductInformationStyle.error, lineWidth: 1)
+                    }
+                }
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(ProductInformationStyle.error)
+                    .accessibilityIdentifier("product-info.price.error")
+            }
         }
     }
 }
