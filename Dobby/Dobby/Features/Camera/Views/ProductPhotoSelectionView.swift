@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 /// 선택 데이터와 결과는 촬영 화면의 같은 MV Model을 사용한다.
 struct ProductPhotoSelectionView: View {
@@ -16,13 +15,14 @@ struct ProductPhotoSelectionView: View {
     @State private var completionRequested = false
     @State private var failureMessage: String?
     @State private var selectionLimitNoticeID: UUID?
+    @State private var previewPhoto: CapturedAsset?
     private let background = Color(.systemBackground)
-    private let selectionLimitMessage = "사진은 최대 \(ProductPhotoModel.maximumSelectionCount)개까지 선택할 수 있습니다."
 
     var body: some View {
         ProductPhotoSelectionGrid(
             photos: model.photos,
             selectedPhotoIDs: model.selectedPhotoIDs,
+            onPreview: { selectionLimitNoticeID = nil; previewPhoto = $0 },
             onToggleSelection: toggleSelection
         )
         .disabled(model.isCapturing || model.isDeleting || completionRequested || didComplete)
@@ -41,25 +41,10 @@ struct ProductPhotoSelectionView: View {
                     .accessibilityIdentifier("camera.savingPhotos")
             }
         }
-        .overlay {
-            if selectionLimitNoticeID != nil {
-                Text(selectionLimitMessage)
-                    .font(.caption.weight(.medium)).foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24).padding(.vertical, 14)
-                    .frame(maxWidth: 302, minHeight: 50)
-                    .background(Color(white: 23 / 255), in: Capsule())
-                    .overlay { Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1) }
-                    .padding(.horizontal, 20)
-                    .allowsHitTesting(false)
-                    .accessibilityIdentifier("camera.selectionLimitNotice")
-            }
-        }
-        .task(id: selectionLimitNoticeID) {
-            guard let noticeID = selectionLimitNoticeID else { return }
-            do { try await Task.sleep(for: .seconds(3)) } catch { return }
-            guard selectionLimitNoticeID == noticeID else { return }
-            selectionLimitNoticeID = nil
+        .overlay { ProductPhotoSelectionNotice(requestID: $selectionLimitNoticeID) }
+        .fullScreenCover(item: $previewPhoto) { photo in
+            NavigationStack { ProductPhotoSelectionPreviewView(photo: photo, model: model) }
+                .preferredColorScheme(.dark)
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -107,7 +92,6 @@ struct ProductPhotoSelectionView: View {
         switch model.toggleSelection(id) {
         case .limitReached:
             selectionLimitNoticeID = UUID()
-            UIAccessibility.post(notification: .announcement, argument: selectionLimitMessage)
         case .updated:
             selectionLimitNoticeID = nil
         case .ignored:
