@@ -99,7 +99,7 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         XCTAssertEqual(garment.orderedMeasurements.map(\.key), ["shoulderWidth", "chestWidth", "hemWidth",
             "sleeveLengthLeft", "sleeveLengthRight", "totalLength"])
         let chest = try XCTUnwrap(garment.measurement("chestWidth"))
-        XCTAssertEqual(chest.valueCm, 61.25, accuracy: 1e-10)
+        XCTAssertEqual(chest.valueCm, 61.2, accuracy: 1e-10)
         XCTAssertEqual(try XCTUnwrap(chest.autoValueCm), 60, accuracy: 1e-10)
         XCTAssertFalse(chest.isEdited, "Moving a physical point is not a typed numeric edit")
         XCTAssertEqual(chest.sourceStatusRaw, "valid")
@@ -150,12 +150,12 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
             "hemWidthLeft", "inseamLeft", "totalLengthRight", "hemWidthRight", "inseamRight", "thighWidthRight"])
         for (index, value) in garment.orderedMeasurements.enumerated() {
             let expected = try XCTUnwrap(record.result.values[index].meters) * 100
-            XCTAssertEqual(value.valueCm, expected)
+            XCTAssertEqual(value.valueCm, StoredMeasurementValue.centimeters(expected))
             XCTAssertEqual(value.autoValueCm, expected)
             XCTAssertEqual(value.label, record.result.values[index].title)
         }
         XCTAssertEqual(garment.waistCm, 43)
-        XCTAssertEqual(try XCTUnwrap(garment.lengthCm), 102.25, accuracy: 1e-10)
+        XCTAssertEqual(try XCTUnwrap(garment.lengthCm), 102.2, accuracy: 1e-10)
         XCTAssertNil(garment.shoulderCm)
         XCTAssertEqual(garment.measurementPhoto?.landmark("waist_center")?.derivedFrom,
                        ["waist_left", "waist_right"])
