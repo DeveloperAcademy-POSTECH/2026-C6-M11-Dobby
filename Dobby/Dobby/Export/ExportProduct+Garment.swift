@@ -22,6 +22,10 @@ extension ExportProduct {
                     value: value.valueCm.formatted(.number.locale(Locale(identifier: "en_US_POSIX"))
                         .grouping(.never).precision(.significantDigits(1...15))))
             }
+        let instagramMeasurements = measurements.map { measurement in
+            ExportMeasurement(id: measurement.id, title: measurement.title,
+                value: Double(measurement.value).map(StoredMeasurementValue.text) ?? measurement.value)
+        }
         let photos = garment.productPhotos.compactMap { photo -> (id: UUID, data: Data)? in
             guard let data = loadPhoto(photo) else { return nil }
             return (photo.id, data)
@@ -41,11 +45,26 @@ extension ExportProduct {
                     ?? measurements.first { $0.id == "thighWidthRight" }?.value ?? ""
                 : ""
         )
+        let instagramPayload = ProductCopyPayload(
+            productName: payload.productName,
+            description: payload.description,
+            brand: payload.brand,
+            measurements: instagramMeasurements.map { "\($0.title) \($0.value)cm" }.joined(separator: "\n"),
+            price: payload.price,
+            length: instagramMeasurements.first { $0.id == "totalLength" }?.value
+                ?? instagramMeasurements.first { $0.id == "totalLengthLeft" }?.value
+                ?? instagramMeasurements.first { $0.id == "totalLengthRight" }?.value ?? "",
+            waist: garment.group == .top ? "" : instagramMeasurements.first { $0.id == "waistWidth" }?.value ?? "",
+            thigh: garment.group == .pants
+                ? instagramMeasurements.first { $0.id == "thighWidthLeft" }?.value
+                    ?? instagramMeasurements.first { $0.id == "thighWidthRight" }?.value ?? ""
+                : ""
+        )
         self.init(
             id: garment.id.uuidString,
             imageData: photos.first { $0.id == garment.thumbnail?.id }?.data ?? photos.first?.data,
             fruits: payload,
-            instagram: payload,
+            instagram: instagramPayload,
             detailMeasurements: measurements,
             photoData: photos.map(\.data),
             garmentCategory: garment.category.isEmpty ? nil : garment.category
