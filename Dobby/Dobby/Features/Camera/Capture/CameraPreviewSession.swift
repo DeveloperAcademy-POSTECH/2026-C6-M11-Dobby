@@ -19,16 +19,22 @@ final class CameraPreviewSession: CaptureProviding {
 
     private(set) var state: State = .stopped
     private(set) var isCapturing = false
+    let options: DetailCameraOptions
     @ObservationIgnored private let driver = CameraPreviewDriver()
     @ObservationIgnored private let store = CameraPhotoStore()
+    @ObservationIgnored private let processor = DetailPhotoProcessor()
     @ObservationIgnored var rotationAngle: CGFloat = 90
     @ObservationIgnored private var wantsRunning = false
     @ObservationIgnored private var revision = 0
 
+    init(optionController: (any DetailCameraControlling)? = nil) {
+        options = DetailCameraOptions(controller: optionController ?? driver)
+    }
+
     // View에는 프리뷰 레이어 연결만 허용한다. 구성·시작·중지는 driver가 직렬 처리한다.
     var session: AVCaptureSession { driver.session }
     // 최초 진입에도 관찰 가능한 state를 읽어 셔터가 세션 준비 완료를 감지하게 한다.
-    var canCapture: Bool { state == .running && wantsRunning && !isCapturing }
+    var canCapture: Bool { state == .running && wantsRunning && !isCapturing && !options.isApplying }
 
     func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset {
         try Task.checkCancellation()
@@ -37,10 +43,14 @@ final class CameraPreviewSession: CaptureProviding {
         defer { isCapturing = false }
         let request = revision
         let capturedAt = Date()
+        let aspectRatio = options.photoAspectRatio
         let data = try await driver.capture(rotationAngle: rotationAngle)
         try Task.checkCancellation()
         guard wantsRunning, revision == request else { throw CancellationError() }
-        let asset = try await store.save(data, sessionID: sessionID, garmentID: garmentID, capturedAt: capturedAt)
+        let processed = try await processor.process(data, aspectRatio: aspectRatio)
+        try Task.checkCancellation()
+        guard wantsRunning, revision == request else { throw CancellationError() }
+        let asset = try await store.save(processed, sessionID: sessionID, garmentID: garmentID, capturedAt: capturedAt)
         do {
             try Task.checkCancellation()
             guard wantsRunning, revision == request else { throw CancellationError() }
@@ -70,10 +80,12 @@ final class CameraPreviewSession: CaptureProviding {
         guard wantsRunning else { return }
         revision += 1
         state = .unavailable(message)
+        options.invalidate()
         driver.cancelCapture()
     }
 
     private func updateSession() {
+        options.invalidate()
         revision += 1
         let request = revision
         state = wantsRunning ? .starting : .stopped
@@ -81,6 +93,7 @@ final class CameraPreviewSession: CaptureProviding {
             Task { @MainActor [weak self] in
                 guard let self, self.revision == request else { return }
                 self.state = result
+                if result == .running { await self.options.refreshCapabilities() }
             }
         }
     }
