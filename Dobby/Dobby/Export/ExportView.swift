@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct ExportView: View {
     let product: ExportProduct
@@ -6,6 +7,7 @@ struct ExportView: View {
     @Binding var showFruits: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.modelContext) private var modelContext
     @State private var history = ExportHistoryStore()
     @State private var isShowingOpenError = false
     @State private var isOpeningLink = false
@@ -15,6 +17,7 @@ struct ExportView: View {
     @State private var showInstagram = false
     @State private var showFruitsGuideOverlay = false
     @State private var openedFruitsMethods: Set<FruitsExportMethod> = []
+    @State private var selectionSaveError: String?
 
     var body: some View {
         NavigationStack {
@@ -77,10 +80,18 @@ struct ExportView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showFruitsGuideOverlay)
+        .alert("플랫폼 기록을 저장하지 못했어요", isPresented: Binding(
+            get: { selectionSaveError != nil },
+            set: { if !$0 { selectionSaveError = nil } }
+        )) {
+            Button("확인", role: .cancel) { selectionSaveError = nil }
+        } message: {
+            Text(selectionSaveError ?? "다시 시도해 주세요.")
+        }
     }
 
     private func selectFruits(_ method: FruitsExportMethod) {
-        guard !controller.busy, !isOpeningLink else { return }
+        guard !controller.busy, !isOpeningLink, recordSelection(.fruitsFamily) else { return }
         if method == .dynamicIslandB {
             showFruitsGuideOverlay = true
         } else {
@@ -89,6 +100,7 @@ struct ExportView: View {
     }
 
     private func didSelectChannel(_ channel: ExportChannel) {
+        guard !controller.busy, !isOpeningLink, recordSelection(channel) else { return }
         if channel == .instagram { showInstagram = true; return }
         if channel == .fruitsFamily { showFruits = true; return }
         if channel == .cafe24 { showCafe24 = true; return }
@@ -99,6 +111,16 @@ struct ExportView: View {
             history.recordOpenResult(for: channel, accepted: accepted)
             isOpeningLink = false
             isShowingOpenError = !accepted
+        }
+    }
+
+    private func recordSelection(_ channel: ExportChannel) -> Bool {
+        do {
+            try GarmentStore.recordSelectedExportChannel(channel, productID: product.id, in: modelContext)
+            return true
+        } catch {
+            selectionSaveError = "플랫폼 선택 기록을 저장하지 못했어요. 잠시 후 다시 시도해 주세요."
+            return false
         }
     }
 }

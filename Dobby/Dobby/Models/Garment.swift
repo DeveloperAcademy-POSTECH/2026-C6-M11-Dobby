@@ -37,6 +37,9 @@ final class Garment {
     var detail: String
     var price: Int?
 
+    /// 내보내기 화면에서 선택한 플랫폼. 기존 상품은 nil이며 업로드 성공 기록과 구분한다.
+    var selectedExportChannelRawValues: [String]? = nil
+
     // MARK: 필터용 사본
     //
     // 필터 화면의 "총장 60\~70cm" 같은 범위 검색을 위해 `measurements` 안의 값을 복사해 둔다.
@@ -111,6 +114,12 @@ extension Garment {
 
     var thumbnail: GarmentPhoto? {
         orderedPhotos.first { $0.role == .thumbnail } ?? orderedPhotos.first
+    }
+
+    /// 상품별 선택 이력과 기존 내보내기 성공 기록을 중복 없이 표시한다.
+    var selectedExportChannels: [ExportChannel] {
+        let selected = Set(selectedExportChannelRawValues ?? [])
+        return ExportChannel.allCases.filter { selected.contains($0.rawValue) || hasExported(to: $0) }
     }
 
     /// 실측에 쓴 사진. 「지점 다시 잡기」 화면이 이 사진과 그 점들을 연다.
