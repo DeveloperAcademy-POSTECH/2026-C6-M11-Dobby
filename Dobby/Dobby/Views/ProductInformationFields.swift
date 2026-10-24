@@ -5,7 +5,7 @@ enum ProductInformationStyle {
     static let field = Color(red: 242 / 255, green: 241 / 255, blue: 240 / 255)
     static let accent = Color(red: 237 / 255, green: 77 / 255, blue: 41 / 255)
     static let accentSoft = Color("BrandMain300")
-    static let upload = Color("BrandMain")
+    static let upload = Color("BrandMain500")
     static let error = Color("AccentsRed")
 
     static func measurements(for garment: Garment) -> [MeasuredValue] {

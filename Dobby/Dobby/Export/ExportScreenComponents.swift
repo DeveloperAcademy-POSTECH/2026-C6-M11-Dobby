@@ -10,7 +10,7 @@ enum ExportScreenStyle {
     static let background = Color(.systemGroupedBackground)
     static let card = Color(.systemBackground)
     static let field = Color("BrandNeutral100")
-    static let accent = Color("BrandMain")
+    static let accent = Color("BrandMain500")
     static let accentSoft = Color("BrandMain300")
     static let label = Color("BrandNeutral800")
 }

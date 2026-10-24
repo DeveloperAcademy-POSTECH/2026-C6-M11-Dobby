@@ -210,7 +210,7 @@ private struct FruitsExportGuideContent: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(width: 28, height: 28)
-                .background(Color("BrandMain"), in: Circle())
+                .background(Color("BrandMain500"), in: Circle())
 
             content()
                 .font(.callout.weight(.semibold))
