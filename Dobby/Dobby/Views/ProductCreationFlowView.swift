@@ -186,29 +186,3 @@ struct ProductCreationFlowView: View {
         onCancel()
     }
 }
-
-struct ProductInputCompletionView: View {
-    let garment: Garment
-    let onExport: () -> Void
-    let onLibrary: () -> Void
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image("CameraShutter").resizable().scaledToFit().frame(width: 180, height: 150)
-                .accessibilityHidden(true)
-            Text("제품 정보 입력 완료!").font(.title2.bold())
-            Text(garment.name.isEmpty ? "제품의 사진과 실측값을 저장했어요." : "\(garment.name)의 사진과 실측값을 저장했어요.")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Spacer()
-            Button("내보내기", action: onExport)
-                .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large)
-                .frame(maxWidth: .infinity).accessibilityIdentifier("product-complete.export")
-            Button("보관함으로 이동하기", action: onLibrary)
-                .buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.large)
-                .accessibilityIdentifier("product-complete.library")
-        }.padding(24).navigationTitle("제품 정보 입력 완료").navigationBarTitleDisplayMode(.inline)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("product-complete.screen")
-    }
-}
