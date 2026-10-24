@@ -11,7 +11,6 @@ struct ExportView: View {
     @State private var isOpeningLink = false
     @State private var showFruitsGuideA = false
     @State private var showCafe24 = false
-    @State private var showNaverStore = false
     @State private var showInstagram = false
     @State private var showFruitsGuideOverlay = false
     @State private var openedFruitsMethods: Set<FruitsExportMethod> = []
@@ -49,9 +48,6 @@ struct ExportView: View {
             }
             .navigationDestination(isPresented: $showCafe24) {
                 Cafe24ExportView(product: product)
-            }
-            .navigationDestination(isPresented: $showNaverStore) {
-                NaverStoreExportView(product: product)
             }
             .navigationDestination(isPresented: $showInstagram) {
                 InstagramExportView(product: product)
@@ -92,7 +88,6 @@ struct ExportView: View {
         if channel == .instagram { showInstagram = true; return }
         if channel == .fruitsFamily { showFruits = true; return }
         if channel == .cafe24 { showCafe24 = true; return }
-        if channel == .naverStore { showNaverStore = true; return }
         guard !isOpeningLink else { return }
         isOpeningLink = true
         openURL(channel.destinationURL) { accepted in

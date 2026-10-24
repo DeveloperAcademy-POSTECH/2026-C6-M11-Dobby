@@ -8,7 +8,7 @@ struct ExportChannelListView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            ForEach(ExportChannel.allCases) { channel in
+            ForEach(ExportChannel.availableCases) { channel in
                 if channel == .fruitsFamily, let onSelectFruits {
                     ForEach(FruitsExportMethod.allCases) { method in
                         ExportChannelButton(channel: channel,

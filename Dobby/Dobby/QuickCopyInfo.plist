@@ -26,7 +26,5 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NaverBackendBaseURL</key>
-	<string>$(NAVER_BACKEND_BASE_URL)</string>
 </dict>
 </plist>

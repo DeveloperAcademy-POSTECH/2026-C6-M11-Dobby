@@ -7,6 +7,9 @@ enum ExportChannel: String, CaseIterable, Identifiable, Codable {
     case cafe24
     case fruitsFamily
 
+    /// 현재 앱에서 새 내보내기에 사용할 수 있는 채널입니다.
+    static let availableCases: [ExportChannel] = [.instagram, .cafe24, .fruitsFamily]
+
     var id: String { rawValue }
 
     var title: String {
