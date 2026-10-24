@@ -377,7 +377,10 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertFalse(done.isEnabled)
         attachScreenshot(app, name: "product-info-empty")
         replaceText(in: field("name", app: app), with: "Design validation", app: app)
-        replaceText(in: field("detail", app: app), with: "Vintage jacket. Good condition.", app: app)
+        let detail = "Vintage jacket. Good condition.\n\n"
+            + "The fabric has light signs of wear. Please review all product photos for details. "
+            + "Measurements are shown below the description and price."
+        replaceText(in: field("detail", app: app), with: detail, app: app)
         XCTAssertFalse(done.isEnabled)
         let price = field("price", app: app)
         reveal(price, in: app)
@@ -394,6 +397,8 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
         XCTAssertTrue(app.staticTexts["Design validation"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", detail)).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["브랜드"].exists, "An omitted brand must not leave an empty section")
         attachScreenshot(app, name: "product-complete-summary")
         let photo = app.buttons["제품 사진 확대"].firstMatch
         reveal(photo, in: app)
@@ -401,7 +406,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["제품 사진"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["닫기"].exists)
         app.buttons["닫기"].tap()
-        let measurements = app.descendants(matching: .any)["product-complete.measurements"].firstMatch
+        let measurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
         let actions = app.buttons["product-complete.export"]
         for _ in 0..<5 {
             if measurements.exists && measurements.frame.maxY <= actions.frame.minY { break }
@@ -411,6 +416,11 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(measurements.exists)
         XCTAssertLessThanOrEqual(measurements.frame.maxY, actions.frame.minY)
         attachScreenshot(app, name: "product-complete-measurements")
+        actions.tap()
+        XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Design validation"].exists)
+        app.buttons["export.close"].tap()
+        XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
         app.buttons["product-complete.library"].tap()
         openLibraryProduct(named: "Design validation", app: app)
     }

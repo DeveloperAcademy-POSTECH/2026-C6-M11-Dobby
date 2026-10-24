@@ -59,7 +59,7 @@ private struct ProductCompletionActions: View {
             Button(action: onExport) {
                 Text("플랫폼에 업로드하러 가기").frame(maxWidth: .infinity).frame(height: 62)
                     .foregroundStyle(.white)
-                    .background(ProductInformationStyle.upload, in: Capsule())
+                    .background(ProductInformationStyle.accent, in: Capsule())
             }
             .accessibilityIdentifier("product-complete.export")
             Button(action: onLibrary) {
@@ -73,7 +73,6 @@ private struct ProductCompletionActions: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 33)
         .padding(.top, 16)
-        .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
         .background(Color(red: 1, green: 249 / 255, blue: 246 / 255).ignoresSafeArea(edges: .bottom))
     }

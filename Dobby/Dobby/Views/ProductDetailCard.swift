@@ -7,7 +7,8 @@ struct ProductDetailCard: View {
         ProductDetailSections(garment: garment)
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white, in: RoundedRectangle(cornerRadius: 17))
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 17))
     }
 }
 
@@ -15,19 +16,24 @@ private struct ProductDetailSections: View {
     let garment: Garment
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 18) {
             ProductDetailField(title: "제품명", text: garment.name)
+            Divider()
             ProductDetailPhotoSection(garment: garment)
+            Divider()
             ProductDetailField(title: "설명", text: garment.detail)
-            if !garment.brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                ProductDetailField(title: "브랜드", text: garment.brand)
-            }
+            Divider()
             ProductDetailField(title: "가격", text: garment.price.map {
                 $0.formatted(.number.locale(Locale(identifier: "ko_KR")))
             } ?? "")
+            if !garment.brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider()
+                ProductDetailField(title: "브랜드", text: garment.brand)
+            }
+            Divider()
             ProductDetailMeasurements(garment: garment)
                 .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("product-complete.measurements")
+                .accessibilityIdentifier("product-detail.measurements")
         }
     }
 }
@@ -51,6 +57,7 @@ private struct ProductDetailPhotoSection: View {
         VStack(alignment: .leading, spacing: 8) {
             ProductFieldTitle(title: "제품 사진")
             ProductDetailPhotos(garment: garment)
+                .padding(.trailing, -16)
         }
     }
 }
@@ -61,6 +68,7 @@ private struct ProductDetailPhotos: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             ProductDetailPhotoRow(garment: garment)
+                .padding(.trailing, 16)
         }
     }
 }
@@ -71,7 +79,7 @@ private struct ProductDetailPhotoRow: View {
     var body: some View {
         HStack(spacing: 8) {
             ForEach(garment.productPhotos) { photo in
-                ProductDetailPhoto(photo: photo)
+                ProductDetailPhoto(photo: photo, showsExpansionIcon: photo.id == garment.productPhotos.first?.id)
             }
         }
     }
@@ -79,6 +87,7 @@ private struct ProductDetailPhotoRow: View {
 
 private struct ProductDetailPhoto: View {
     let photo: GarmentPhoto
+    let showsExpansionIcon: Bool
     @State private var isExpanded = false
 
     var body: some View {
@@ -87,10 +96,12 @@ private struct ProductDetailPhoto: View {
                 .frame(width: 152, height: 212)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 12)).foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(.black.opacity(0.2), in: Circle()).padding(10)
+                    if showsExpansionIcon {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 12)).foregroundStyle(.white)
+                            .frame(width: 28, height: 28)
+                            .background(.black.opacity(0.2), in: Circle()).padding(10)
+                    }
                 }
         }
         .buttonStyle(.plain)
@@ -151,7 +162,7 @@ private struct ProductDetailMeasurementScroll: View {
         .background(ProductInformationStyle.field)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).stroke(Color(white: 0.88), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14).strokeBorder(Color("BrandNeutral200"), lineWidth: 1.5)
         }
     }
 }
@@ -165,7 +176,7 @@ private struct ProductDetailMeasurementRow: View {
                 ProductDetailMeasurementColumn(value: value)
             }
         }
-        .background(Color(white: 0.88))
+        .background(Color("BrandNeutral200"))
     }
 }
 
