@@ -12,6 +12,9 @@ import Observation
 @MainActor
 @Observable
 final class ProductPhotoModel {
+    static let maximumSelectionCount = 10
+    enum SelectionResult: Equatable { case updated, limitReached, ignored }
+
     let input: ProductPhotoInput
     // 이전 화면의 확정 결과를 열람용으로 보관한다. 측정 계산·수정은 소유하지 않는다.
     let measurementRecord: SavedMeasurement?
@@ -38,6 +41,7 @@ final class ProductPhotoModel {
     // 최소 한 장, 선택 순서 유지, 첫 선택이 대표 사진이다.
     var output: ProductPhotoOutput? {
         guard !isCapturing, !isDeleting, !isDiscardingDetails,
+              selectedPhotoIDs.count <= Self.maximumSelectionCount,
               let representativeID = selectedPhotoIDs.first else { return nil }
         return ProductPhotoOutput(
             sessionID: input.sessionID, garmentID: input.garmentID,
@@ -114,13 +118,16 @@ final class ProductPhotoModel {
         try await task.value
     }
 
-    func toggleSelection(_ id: UUID) {
-        guard !isDeleting, !isDiscardingDetails, photos.contains(where: { $0.id == id }) else { return }
+    @discardableResult
+    func toggleSelection(_ id: UUID) -> SelectionResult {
+        guard !isDeleting, !isDiscardingDetails, photos.contains(where: { $0.id == id }) else { return .ignored }
         if selectedPhotoIDs.contains(id) {
             selectedPhotoIDs.removeAll { $0 == id }
         } else {
+            guard selectedPhotoIDs.count < Self.maximumSelectionCount else { return .limitReached }
             selectedPhotoIDs.append(id)
         }
+        return .updated
     }
 
     func moveSelection(fromOffsets offsets: IndexSet, toOffset destination: Int) {
