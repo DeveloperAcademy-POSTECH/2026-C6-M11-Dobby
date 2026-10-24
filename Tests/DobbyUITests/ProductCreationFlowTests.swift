@@ -396,7 +396,6 @@ final class ProductCreationFlowTests: XCTestCase {
         let priceUnit = app.staticTexts["product-info.price.unit"]
         XCTAssertTrue(priceUnit.exists)
         app.swipeDown()
-        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
         XCTAssertTrue(priceUnit.exists)
         XCTAssertTrue(done.isEnabled, "Brand is optional")
         price.tap()

@@ -217,14 +217,20 @@ private struct ProductPriceInput: View {
         }
         .font(.subheadline)
         .onAppear { priceText = formatPrice(price) }
-        .onChange(of: priceText) { _, text in
-            let digits = text.replacingOccurrences(of: ",", with: "")
-            if digits.isEmpty {
-                price = nil
-            } else if digits.allSatisfy({ $0.isASCII && $0.isNumber }), let value = Int(digits) {
-                price = value
-            }
-            priceText = formatPrice(price)
+        .onChange(of: priceText) { _, text in updatePriceText(text) }
+    }
+
+    private func updatePriceText(_ text: String) {
+        let digits = text.replacingOccurrences(of: ",", with: "")
+        if digits.allSatisfy({ $0.isASCII && $0.isNumber }) {
+            price = digits.isEmpty ? nil : Int(digits)
+        }
+        let formatted = formatPrice(price)
+        guard formatted != text else { return }
+        Task { @MainActor in
+            await Task.yield()
+            guard priceText == text else { return }
+            priceText = formatted
         }
     }
 
