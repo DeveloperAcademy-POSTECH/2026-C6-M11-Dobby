@@ -157,10 +157,11 @@ private struct ProductInputPhotoRow: View {
     let garment: Garment
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             ForEach(garment.productPhotos) { photo in
-                StoredProductPhotoView(photo: photo, maximumPixelSize: 320)
-                    .frame(width: 77, height: 108).clipped()
+                StoredProductPhotoView(photo: photo, maximumPixelSize: 320, contentMode: .fill)
+                    .frame(width: 77, height: 108)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
     }
