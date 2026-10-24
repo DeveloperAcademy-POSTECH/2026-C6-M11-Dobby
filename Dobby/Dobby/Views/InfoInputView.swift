@@ -149,6 +149,14 @@ struct GarmentMeasurementInputState {
 /// write a rounded display value back into the automatic measurement.
 @MainActor
 enum GarmentMeasurementInputText {
+    static func hasUsableValue(_ value: MeasuredValue, drafts: [UUID: String]) -> Bool {
+        // An unfinished text edit is a form-validation concern, not evidence
+        // that the already calculated automatic measurement has failed.
+        if value.valueCm.isFinite && value.valueCm > 0 { return true }
+        if let draft = drafts[value.id] { return parsed(draft) != nil }
+        return false
+    }
+
     static func parsed(_ text: String) -> Double? {
         guard let value = Double(text.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: ",", with: ".")), value.isFinite, value > 0 else { return nil }

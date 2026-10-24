@@ -129,8 +129,8 @@ struct GarmentMeasurementPhotoEditor: View {
                 context.stroke(path, with: .color(.black.opacity(0.5)), lineWidth: 3)
                 context.stroke(path, with: .color(.white.opacity(0.95)),
                     style: .init(lineWidth: 1.5, lineCap: .round, dash: [4, 5]))
-                // Spatially derived and projected endpoints remain indicators,
-                // never draggable substitutes for their physical source points.
+                // Endpoint indicators accompany the measurement line; editable
+                // physical and contour handles are drawn separately above it.
                 for endpoint in [item.start, item.end] {
                     let marker = Path(ellipseIn: CGRect(x: endpoint.x - 3, y: endpoint.y - 3, width: 6, height: 6))
                     context.fill(marker, with: .color(.white))
@@ -161,10 +161,6 @@ struct GarmentMeasurementPhotoEditor: View {
                 Text(drag != nil || isRecalculating ? "…" : visibleMeasurementValue(item.value))
                     .font(.system(size: labelFontSize, weight: .regular))
                     .monospacedDigit().fixedSize(horizontal: true, vertical: false)
-                if item.value.status == .uncertain {
-                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(GarmentCaptureStyle.accent)
-                        .frame(width: labelFontSize)
-                }
             }.font(.system(size: labelFontSize, weight: .regular)).foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.65), radius: 0.75, y: 0.5)
                 .lineLimit(1).padding(.horizontal, 6)
@@ -173,7 +169,7 @@ struct GarmentMeasurementPhotoEditor: View {
                 .frame(height: max(44, item.labelSize.height))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
-            .accessibilityLabel("\(item.definition.title), \(drag != nil || isRecalculating ? "재계산 중" : GarmentMeasurementText.value(item.value)), \(item.value.status.label)")
+            .accessibilityLabel("\(item.definition.title), \(drag != nil || isRecalculating ? "재계산 중" : GarmentMeasurementText.value(item.value))")
             .accessibilityHint("측정 항목 상세 보기")
             .accessibilityIdentifier("garmentMeasurementLabel_\(item.id)")
     }
@@ -302,7 +298,7 @@ struct GarmentMeasurementPhotoEditor: View {
         let items: [Annotation] = definitions.compactMap { definition in
             guard definition.landmarkIDs.count == 2,
                   let value = values.first(where: { $0.id == definition.id }),
-                  value.status != .unavailable, let meters = value.meters, meters.isFinite, meters > 0,
+                  value.hasUsableMeasurement,
                   value.points.count == 2, value.points.allSatisfy({ $0.imagePoint.isValid }) else { return nil }
             let start = screenPoint(value.points[0].imagePoint, size: size)
             let end = screenPoint(value.points[1].imagePoint, size: size)
@@ -314,7 +310,7 @@ struct GarmentMeasurementPhotoEditor: View {
                 .size(withAttributes: [.font: titleFont]).width
             let valueWidth = (visibleMeasurementValue(value) as NSString)
                 .size(withAttributes: [.font: valueFont]).width
-            let width = ceil(titleWidth + valueWidth + 15 + (value.status == .uncertain ? labelFontSize + 3 : 0)) + 2
+            let width = ceil(titleWidth + valueWidth + 15) + 2
             let labelSize = CGSize(width: min(max(60, width), size.width - 8), height: labelHeight)
             return .init(definition: definition, value: value, start: start, end: end,
                 labelCenter: nil, labelSize: labelSize, isCallout: false)
@@ -410,6 +406,7 @@ enum GarmentPointName {
         case "neck_center": "목 중앙점"
         case "top_length_start": "총장 상단점"
         case "waist_front_center": "앞허리 중앙점"
+        case "thigh_right": "오른쪽 허벅지점"
         case "neck_left": "왼쪽 목점"
         case "neck_right": "오른쪽 목점"
         case "shoulder_left": "왼쪽 어깨점"

@@ -5,6 +5,20 @@ import Testing
 
 @MainActor
 struct GarmentInputCompletionTests {
+    @Test func numericQualityAdvisoryDoesNotBecomeProductInputFailure() {
+        let (_, length, _) = product()
+        length.sourceStatusRaw = "uncertain"
+        #expect(GarmentMeasurementInputText.hasUsableValue(length, drafts: [:]))
+        #expect(GarmentMeasurementInputText.hasUsableValue(length, drafts: [length.id: ""]),
+                "Clearing a field must not falsely claim its automatic measurement failed")
+        #expect(length.sourceStatusRaw == "uncertain" && !length.isEdited)
+        length.valueCm = 0
+        #expect(!GarmentMeasurementInputText.hasUsableValue(length, drafts: [:]))
+        #expect(GarmentMeasurementInputText.hasUsableValue(length, drafts: [length.id: "67.25"]))
+        #expect(!GarmentMeasurementInputText.hasUsableValue(length, drafts: [length.id: "NaN"]))
+        #expect(length.valueCm == 0 && !length.isEdited)
+    }
+
     private func product() -> (Garment, MeasuredValue, MeasuredValue) {
         let garment = Garment(category: "Jacket", group: .top, name: "직접 입력한 자켓", detail: "제품 설명", price: 40000)
         let length = MeasuredValue(key: "totalLength", label: "총장", displayOrder: 1,

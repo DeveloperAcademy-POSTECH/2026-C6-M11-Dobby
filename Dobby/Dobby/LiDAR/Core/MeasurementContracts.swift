@@ -76,8 +76,14 @@ nonisolated enum LandmarkOrigin: String, Codable, Sendable {
 /// A contour intersection is not the spatial average described by derivedFrom.
 nonisolated enum GarmentContourRule: String, Codable, Sendable {
     case neckPerpendicularMaskV1
+    case waistParallelRightThighMaskV1
 
-    var sourceLandmarkIDs: [String] { ["neck_left", "neck_right", "hem_center"] }
+    var sourceLandmarkIDs: [String] {
+        switch self {
+        case .neckPerpendicularMaskV1: ["neck_left", "neck_right", "hem_center"]
+        case .waistParallelRightThighMaskV1: ["waist_left", "waist_right", "crotch"]
+        }
+    }
 }
 
 nonisolated struct GarmentLandmark: Codable, Sendable, Identifiable {
@@ -200,6 +206,8 @@ nonisolated struct MeasurementValue: Codable, Sendable, Identifiable {
     /// Point-specific final failures, including failed derived contributors.
     /// Older archives retain their existing item-level failure when omitted.
     var pointFailures: [LandmarkMeasurementFailure]? = nil
+    /// Optional evidence from the exact failing guards. Missing in older archives.
+    var failureContexts: [MeasurementFailureContext]? = nil
 }
 
 nonisolated struct GarmentMeasurementResult: Codable, Sendable {

@@ -24,7 +24,8 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
     }
 
     private func fixture(_ kind: AutomaticGarmentKind = .top,
-                         orientation: ImageOrientation = .up, corrected: Bool = false, legacy: Bool = false) throws -> SavedMeasurement {
+                         orientation: ImageOrientation = .up, corrected: Bool = false, legacy: Bool = false,
+                         legacyBottom8: Bool = false) throws -> SavedMeasurement {
         var frame = SyntheticFixtures.scene().frame
         frame.orientation = orientation
         let format = UIGraphicsImageRendererFormat()
@@ -39,7 +40,9 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
             }
         let schemaURL = try XCTUnwrap(Bundle.main.url(forResource: legacy && kind == .bottoms ? "schema_bottom7" : kind.schemaResourceName, withExtension: "json"))
         let schema = try BottomLandmarkSchema(jsonData: Data(contentsOf: schemaURL))
-        let definitions = kind == .top ? (legacy ? TopLandmarkSchema.legacyMeasurementDefinitions : TopLandmarkSchema.canonicalMeasurementDefinitions) : schema.measurementDefinitions
+        let definitions = kind == .top
+            ? (legacy ? TopLandmarkSchema.legacyMeasurementDefinitions : TopLandmarkSchema.canonicalMeasurementDefinitions)
+            : (legacy || legacyBottom8 ? schema.measurementDefinitions : schema.currentMeasurementDefinitions)
         var points = schema.keypoints.enumerated().map { index, name in
             GarmentLandmark(id: name, point: .init(x: 0.15 + Double(index % 4) * 0.15,
                                                   y: 0.1 + Double(index / 4) * 0.2),
@@ -53,11 +56,14 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
             points.append(GarmentLandmark(id: name, point: coordinate, confidence: 0.94, derivedFrom: sources))
         }
         if kind == .top && !legacy { points = TopLandmarkSchema.calculationPoints(points) }
+        if kind == .bottoms && !legacy && !legacyBottom8 { points = schema.calculationPoints(points) }
+        let modelVersion = legacy ? kind.legacyModelVersion
+            : legacyBottom8 ? AutomaticGarmentKind.legacyBottom8ModelVersion : kind.modelVersion
         let original = GarmentLandmarkSet(sessionID: frame.sessionID, frameID: frame.frameID,
-            origin: .model, modelVersion: legacy ? kind.legacyModelVersion : kind.modelVersion, points: points,
+            origin: .model, modelVersion: modelVersion, points: points,
             mask: nil, garmentKind: kind)
         let meters = kind == .top ? [0.48, 0.60, 0.50, 0.62, 0.61, 0.6725]
-                                 : [0.43, 0.28, 1.0225, 0.22, 0.76, 1.0125, 0.215, 0.75]
+                                 : [0.43, 0.28, 1.0225, 0.22, 0.76, 1.0125, 0.215, 0.75, 0.32125]
         let values = definitions.enumerated().map { index, definition in
             MeasurementValue(id: definition.id, title: definition.title, meters: meters[index],
                              status: .valid, failure: nil, points: [])
@@ -132,7 +138,7 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         XCTAssertEqual(fetched.measurementPhoto?.landmark("armpit_left")?.autoX, original.point.x)
     }
 
-    func testBottomEightMeasurementsUseActualCatalogOrderAndKeys() throws {
+    func testCurrentBottomNineMeasurementsUseActualCatalogOrderAndKeys() throws {
         let container = try makeContainer()
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -141,7 +147,7 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
             photosDirectory: directory, allowsSynthetic: true)
         XCTAssertEqual(garment.group, .pants)
         XCTAssertEqual(garment.orderedMeasurements.map(\.key), ["waistWidth", "frontRise", "totalLengthLeft",
-            "hemWidthLeft", "inseamLeft", "totalLengthRight", "hemWidthRight", "inseamRight"])
+            "hemWidthLeft", "inseamLeft", "totalLengthRight", "hemWidthRight", "inseamRight", "thighWidthRight"])
         for (index, value) in garment.orderedMeasurements.enumerated() {
             let expected = try XCTUnwrap(record.result.values[index].meters) * 100
             XCTAssertEqual(value.valueCm, expected)
@@ -153,7 +159,10 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         XCTAssertNil(garment.shoulderCm)
         XCTAssertEqual(garment.measurementPhoto?.landmark("waist_center")?.derivedFrom,
                        ["waist_left", "waist_right"])
-        XCTAssertNil(garment.measurement("thighWidth"), "Bottom7 has no validated thigh observation")
+        XCTAssertEqual(try XCTUnwrap(garment.measurement("thighWidthRight")?.valueCm), 32.125, accuracy: 1e-10)
+        XCTAssertNil(garment.measurement("thighWidthLeft"))
+        XCTAssertEqual(garment.visibleMeasurements.map(\.key),
+                       ["totalLengthLeft", "waistWidth", "frontRise", "thighWidthRight", "hemWidthLeft"])
     }
 
     func testLegacyVersionsKeepTheirOriginalPointAndMeasurementContracts() throws {
@@ -188,9 +197,217 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         XCTAssertEqual(rise.valueCm, 0)
         XCTAssertNil(rise.autoValueCm)
         XCTAssertEqual(rise.sourceStatusRaw, "unavailable")
-        XCTAssertEqual(stored.visibleMeasurements.map(\.key), ["totalLengthLeft", "waistWidth", "frontRise", "hemWidthLeft"])
+        XCTAssertEqual(stored.visibleMeasurements.map(\.key), ["totalLengthLeft", "waistWidth", "frontRise", "thighWidthRight", "hemWidthLeft"])
         XCTAssertNotNil(stored.measurementPhoto?.landmark("waist_center"))
         XCTAssertNil(stored.measurementPhoto?.landmark("waist_front_center"))
+    }
+
+    func testPreviousBottom8KeepsEightMeasurementsAndNeverAcquiresThigh() throws {
+        let record = try fixture(.bottoms, legacyBottom8: true)
+        let decoded = try JSONDecoder().decode(SavedMeasurement.self, from: recordBytes(record))
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(decoded, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        XCTAssertEqual(stored.measurementPhoto?.measurementModelVersion, AutomaticGarmentKind.legacyBottom8ModelVersion)
+        XCTAssertEqual(stored.orderedMeasurements.count, 8)
+        XCTAssertNotNil(stored.measurementPhoto?.landmark("waist_front_center"))
+        XCTAssertNil(stored.measurementPhoto?.landmark("thigh_right"))
+        XCTAssertNil(stored.measurement("thighWidthRight"))
+        XCTAssertEqual(stored.visibleMeasurements.map(\.key), ["totalLengthLeft", "waistWidth", "frontRise", "hemWidthLeft"])
+        XCTAssertEqual(decoded.definitions.map(\.id), record.definitions.map(\.id))
+        XCTAssertTrue(ExportProduct(garment: stored, loadPhoto: { _ in nil }).fruits.thigh.isEmpty)
+    }
+
+    private func putResolvedThigh(_ coordinate: ImagePoint, in result: inout GarmentMeasurementResult,
+                                  method: DepthSamplingMethod = .contourIntersection) throws {
+        let index = try XCTUnwrap(result.values.firstIndex { $0.id == "bottom.thighWidthRight" })
+        let quality = PointQuality(validSamples: 70, candidateSamples: 80, confidenceAvailable: true,
+            depthSpreadMeters: 0, planeResidualMeters: nil, method: method)
+        result.values[index].points = [
+            .init(id: "crotch", imagePoint: .init(x: 0.5, y: coordinate.y),
+                  position: .init(x: 0.5, y: coordinate.y, z: 1), quality: quality),
+            .init(id: "thigh_right", imagePoint: coordinate,
+                  position: .init(x: coordinate.x, y: coordinate.y, z: 1), quality: quality,
+                  sourceLandmarkIDs: method == .contourIntersection ? ["waist_left", "waist_right", "crotch"] : nil)
+        ]
+    }
+
+    func testThighManualOverrideKeepsResolvedAutomaticBaselineAcrossArchiveAndProductReopen() throws {
+        var record = try fixture(.bottoms)
+        let automatic = ImagePoint(x: 0.76, y: 0.45)
+        let manual = ImagePoint(x: 0.72, y: 0.46)
+        try putResolvedThigh(automatic, in: &record.result)
+        record.originalAutomaticLandmarks = record.landmarks
+        record.originalAutomaticResult = record.result
+        let index = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "thigh_right" })
+        record.landmarks.points[index] = .init(id: "thigh_right", point: manual,
+            confidence: nil, isVisible: true, origin: .manual)
+        let valueIndex = try XCTUnwrap(record.result.values.firstIndex { $0.id == "bottom.thighWidthRight" })
+        record.result.values[valueIndex].meters = 0.34125
+        try putResolvedThigh(manual, in: &record.result, method: .garmentPlane)
+        let encoded = try recordBytes(record)
+        let decoded = try JSONDecoder().decode(SavedMeasurement.self, from: encoded)
+        XCTAssertNil(decoded.landmarks.points[index].contourRule)
+        XCTAssertEqual(decoded.originalAutomaticLandmarks?.points[index].contourRule, .waistParallelRightThighMaskV1)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let database = directory.appendingPathComponent("thigh-products.store")
+        let photos = directory.appendingPathComponent("photos", isDirectory: true)
+        try autoreleasepool {
+            let schema = ProductAppStorage.schema
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, url: database, cloudKitDatabase: .none)
+            ])
+            let stored = try GarmentStore.importMeasurement(decoded, in: ModelContext(container),
+                photosDirectory: photos, allowsSynthetic: true)
+            XCTAssertEqual(stored.visibleMeasurements.count, 5)
+        }
+        try autoreleasepool {
+            let schema = ProductAppStorage.schema
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, url: database, cloudKitDatabase: .none)
+            ])
+            let reader = ModelContext(container)
+            let stored = try XCTUnwrap(reader.fetch(FetchDescriptor<Garment>()).first)
+            let point = try XCTUnwrap(stored.measurementPhoto?.landmark("thigh_right"))
+            XCTAssertEqual(point.x, manual.x)
+            XCTAssertEqual(point.y, manual.y)
+            XCTAssertEqual(point.autoX, automatic.x)
+            XCTAssertEqual(point.autoY, automatic.y)
+            XCTAssertEqual(point.hasAutomaticObservation, true)
+            XCTAssertTrue(point.isMoved)
+            XCTAssertNil(point.derivedFrom)
+            XCTAssertNil(point.autoDerivedFrom)
+            XCTAssertEqual(point.originRaw, "manual")
+            XCTAssertEqual(point.autoOriginRaw, "model")
+            let value = try XCTUnwrap(stored.measurement("thighWidthRight"))
+            XCTAssertEqual(value.valueCm, 34.125, accuracy: 1e-10)
+            XCTAssertEqual(try XCTUnwrap(value.autoValueCm), 32.125, accuracy: 1e-10)
+            let product = ExportProduct(garment: stored, loadPhoto: { _ in nil })
+            XCTAssertEqual(product.fruits.thigh, "34.125")
+            XCTAssertEqual(product.copyMeasurements.map(\.title), ["총장", "허리", "밑위", "허벅지", "밑단"])
+            point.resetToAuto()
+            XCTAssertEqual(point.x, automatic.x)
+            XCTAssertEqual(point.y, automatic.y)
+            XCTAssertFalse(point.isMoved)
+        }
+        XCTAssertEqual(try recordBytes(record), encoded, "Product import must not rewrite the archived raw prediction")
+    }
+
+    func testParentEditedThighStoresRecomputedIntersectionWithoutCallingItADirectMove() throws {
+        var record = try fixture(.bottoms)
+        let automatic = ImagePoint(x: 0.75, y: 0.45)
+        let recomputed = ImagePoint(x: 0.73, y: 0.48)
+        try putResolvedThigh(automatic, in: &record.result)
+        record.originalAutomaticLandmarks = record.landmarks
+        record.originalAutomaticResult = record.result
+        let parent = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "waist_right" })
+        record.landmarks.points[parent].point.y = 0.18
+        record.landmarks.points[parent].origin = .manual
+        record.landmarks.points[parent].confidence = nil
+        record.landmarks = record.landmarks.refreshingDerivations(affectedBy: ["waist_right"])
+        try putResolvedThigh(recomputed, in: &record.result)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("thigh_right"))
+        XCTAssertEqual(point.x, recomputed.x)
+        XCTAssertEqual(point.y, recomputed.y)
+        XCTAssertEqual(point.autoX, automatic.x)
+        XCTAssertEqual(point.autoY, automatic.y)
+        XCTAssertFalse(point.isMoved)
+        XCTAssertNil(point.derivedFrom, "Contour dependence must not be stored as spatial-average parents")
+        XCTAssertEqual(stored.measurementPhoto?.landmark("waist_right")?.isMoved, true)
+    }
+
+    func testUnavailableThighKeepsBlankRowButDoesNotExportZeroOrInventAutomaticPoint() throws {
+        var record = try fixture(.bottoms)
+        let index = try XCTUnwrap(record.result.values.firstIndex { $0.id == "bottom.thighWidthRight" })
+        record.result.values[index].meters = nil
+        record.result.values[index].status = .unavailable
+        record.result.values[index].failure = .contourIntersectionUnavailable
+        record.result.values[index].points = []
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let value = try XCTUnwrap(stored.measurement("thighWidthRight"))
+        XCTAssertEqual(value.valueCm, 0)
+        XCTAssertNil(value.autoValueCm)
+        XCTAssertEqual(value.sourceStatusRaw, "unavailable")
+        XCTAssertEqual(stored.visibleMeasurements.count, 5)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("thigh_right"))
+        XCTAssertEqual(point.isVisible, false)
+        XCTAssertEqual(point.hasAutomaticObservation, false)
+        XCTAssertFalse(point.isMoved)
+        let product = ExportProduct(garment: stored, loadPhoto: { _ in nil })
+        XCTAssertTrue(product.fruits.thigh.isEmpty)
+        XCTAssertFalse(product.copyMeasurements.contains { $0.id == "thighWidthRight" })
+        XCTAssertEqual(product.copyMeasurements.map(\.title), ["총장", "허리", "밑위", "밑단"])
+    }
+
+    func testExplicitThighEndpointRestorationDoesNotInventAnAutomaticBaseline() throws {
+        var record = try fixture(.bottoms)
+        record.originalAutomaticLandmarks = record.landmarks
+        record.originalAutomaticLandmarks?.points.removeAll { $0.id == "thigh_right" }
+        record.originalAutomaticResult = record.result
+        let valueIndex = try XCTUnwrap(record.result.values.firstIndex { $0.id == "bottom.thighWidthRight" })
+        record.originalAutomaticResult?.values[valueIndex].meters = nil
+        record.originalAutomaticResult?.values[valueIndex].status = .unavailable
+        record.originalAutomaticResult?.values[valueIndex].failure = .missingLandmark
+        for (id, x) in [("crotch", 0.5), ("thigh_right", 0.75)] {
+            let index = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == id })
+            record.landmarks.points[index] = .init(id: id, point: .init(x: x, y: 0.45),
+                confidence: nil, isVisible: true, origin: .manual)
+        }
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("thigh_right"))
+        XCTAssertEqual(point.hasAutomaticObservation, false)
+        XCTAssertTrue(point.isMoved)
+        XCTAssertEqual(point.x, 0.75)
+        XCTAssertEqual(point.originRaw, "manual")
+        XCTAssertNil(stored.measurement("thighWidthRight")?.autoValueCm)
+        XCTAssertGreaterThan(stored.measurement("thighWidthRight")?.valueCm ?? 0, 0)
+    }
+
+    func testBottomModelDefinitionAndContourMismatchesAreRejectedBeforeWritingPhotos() throws {
+        let current = try fixture(.bottoms)
+        let previous = try fixture(.bottoms, legacyBottom8: true)
+        var invalid: [SavedMeasurement] = []
+        var changed = current
+        changed.landmarks.modelVersion = AutomaticGarmentKind.legacyBottom8ModelVersion
+        invalid.append(changed)
+        changed = previous
+        changed.landmarks.modelVersion = AutomaticGarmentKind.bottoms.modelVersion
+        invalid.append(changed)
+        let index = try XCTUnwrap(current.landmarks.points.firstIndex { $0.id == "thigh_right" })
+        changed = current
+        changed.landmarks.points[index].contourRule = .neckPerpendicularMaskV1
+        invalid.append(changed)
+        changed = current
+        changed.landmarks.points[index].derivedFrom = ["waist_left", "waist_right", "crotch"]
+        invalid.append(changed)
+        changed = current
+        changed.landmarks.points[index].contourRule = nil
+        invalid.append(changed)
+        changed = current
+        changed.landmarks.points[index].confidence = 0.8
+        invalid.append(changed)
+        changed = current
+        changed.landmarks.modelVersion = "unknown-bottom-model"
+        invalid.append(changed)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for record in invalid {
+            XCTAssertThrowsError(try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+                photosDirectory: directory, allowsSynthetic: true))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
     }
 
     func testNewTotalLengthManualRestorationAndAutomaticBaselineStaySeparate() throws {

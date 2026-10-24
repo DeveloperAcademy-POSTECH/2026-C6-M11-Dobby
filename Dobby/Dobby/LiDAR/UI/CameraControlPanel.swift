@@ -1,51 +1,13 @@
 import ARKit
 import SwiftUI
+import UIKit
 
-/// The panel displays provider capabilities; it never changes an ARKit camera directly.
+/// Camera errors stay below the preview; exposure belongs beside the focus box.
 struct CameraControlPanel: View {
-    let capabilities: CameraControlCapabilities
-    let state: CameraControlState
-    var isEnabled = true
     var errorMessage: String? = nil
-    var onExposure: (Double) -> Void
-    var onResetExposure: () -> Void
-    var onZoom: (CameraZoom) -> Void
 
     var body: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 8) {
-                ForEach([CameraZoom.ultraWide, .standard, .double]) { zoom in
-                    let supported = capabilities.availableZooms.contains(zoom)
-                    Button { onZoom(zoom) } label: {
-                        Text(zoom.label).font(.subheadline.weight(.semibold))
-                            .foregroundStyle(state.selectedZoom == zoom ? Color.black : .white)
-                            .frame(width: 44, height: 44)
-                            .background(state.selectedZoom == zoom ? Color.yellow : .white.opacity(0.12), in: Circle())
-                            .contentShape(Circle())
-                    }.buttonStyle(.plain)
-                        .disabled(!isEnabled || !supported)
-                        .opacity(supported ? 1 : 0.35)
-                        .accessibilityLabel("\(zoom.label) 화각")
-                        .accessibilityValue(supported ? (state.selectedZoom == zoom ? "선택됨" : "선택 안 됨") : "지원하지 않음")
-                        .accessibilityHint(zoom == .ultraWide && !supported
-                            ? "현재 LiDAR 촬영에서는 0.5배 화각을 지원하지 않아요"
-                            : zoom == .double ? "촬영 미리보기를 두 배로 확대합니다" : "기본 촬영 화각입니다")
-                        .accessibilityIdentifier("cameraZoom_\(zoom.rawValue)")
-                }
-            }
-            if let range = capabilities.exposureRange, range.minimum < range.maximum {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        exposureValue
-                        exposureSlider(range).frame(minWidth: 120)
-                        resetExposure
-                    }
-                    VStack(spacing: 0) {
-                        HStack { exposureValue; Spacer(minLength: 4); resetExposure }
-                        exposureSlider(range)
-                    }
-                }
-            }
             if let errorMessage {
                 Text(errorMessage).font(.caption2).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -56,29 +18,6 @@ struct CameraControlPanel: View {
             .accessibilityIdentifier("cameraControlPanel")
     }
 
-    private var exposureValue: some View {
-        Text(String(format: "EV %+.1f", state.exposureBias))
-            .font(.caption.monospacedDigit()).foregroundStyle(.yellow)
-            .fixedSize().accessibilityIdentifier("cameraExposureValue")
-    }
-
-    private func exposureSlider(_ range: CameraExposureRange) -> some View {
-        Slider(value: Binding(get: { state.requestedExposureBias }, set: onExposure),
-               in: range.minimum...range.maximum, step: 0.1)
-            .tint(.yellow).disabled(!isEnabled)
-            .accessibilityLabel("노출 보정")
-            .accessibilityValue(String(format: "%+.1f EV", state.exposureBias))
-            .accessibilityIdentifier("cameraExposureSlider")
-    }
-
-    private var resetExposure: some View {
-        Button(action: onResetExposure) {
-            Image(systemName: "arrow.counterclockwise").font(.subheadline)
-                .frame(width: 44, height: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).disabled(!isEnabled)
-            .accessibilityLabel("노출 보정 초기화")
-            .accessibilityIdentifier("cameraExposureReset")
-    }
 }
 
 /// Enlarge the actual preview bounds so taps still map through ARKit's display transform.
@@ -89,29 +28,103 @@ struct ZoomedCameraPreview: View {
     @Binding var orientation: ImageOrientation
     var controlState: CameraControlState? = nil
     var focusEnabled = false
-    var onFocus: ((ImagePoint) -> Void)? = nil
+    var capabilities = CameraControlCapabilities.unavailable
+    var onFocus: ((ImagePoint, UUID) -> Void)? = nil
+    var onExposure: ((Double) -> Void)? = nil
+    var onExposureAdjustmentActive: ((Bool) -> Void)? = nil
 
     var body: some View {
         GeometryReader { geometry in
             let factor: CGFloat = controlState?.selectedZoom == .double ? 2 : 1
             CameraPreview(session: session, readiness: readiness, orientation: $orientation,
-                controlState: controlState, focusEnabled: focusEnabled, onFocus: onFocus)
+                controlState: controlState, focusEnabled: focusEnabled, capabilities: capabilities,
+                onFocus: onFocus, onExposure: onExposure,
+                onExposureAdjustmentActive: onExposureAdjustmentActive, visibleViewportSize: geometry.size)
                 .frame(width: geometry.size.width * factor, height: geometry.size.height * factor)
                 .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }.clipped()
     }
 }
 
-/// An explicit synthetic preview uses this marker without claiming hardware autofocus.
-struct SyntheticCameraFocusIndicator: View {
-    let point: CGPoint
+/// The fixture shares real recognizers and feedback drawing, but sends no
+/// commands to AVCaptureDevice and cannot establish physical autofocus.
+struct SyntheticCameraControlSurface: UIViewRepresentable {
+    let state: CameraControlState
+    let capabilities: CameraControlCapabilities
+    let transform: CameraAffineTransform
+    let isEnabled: Bool
+    let focusVisible: Bool
+    let onFocus: (ImagePoint, UUID) -> Void
+    let onExposure: (Double) -> Void
+    let onExposureAdjustmentActive: (Bool) -> Void
 
-    var body: some View {
-        RoundedRectangle(cornerRadius: 3).stroke(.yellow, lineWidth: 1.5)
-            .frame(width: 64, height: 64).position(point)
-            .allowsHitTesting(false)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("합성 미리보기 초점 조절 위치")
-            .accessibilityIdentifier("cameraFocusIndicator")
+    func makeUIView(context: Context) -> Surface { Surface() }
+    func updateUIView(_ view: Surface, context: Context) {
+        view.state = state
+        view.capabilities = capabilities
+        view.transformMapping = transform
+        view.controlsEnabled = isEnabled
+        view.focusVisible = focusVisible
+        view.onFocus = onFocus
+        view.onExposure = onExposure
+        view.onExposureAdjustmentActive = onExposureAdjustmentActive
+        view.updateControls()
+    }
+    static func dismantleUIView(_ view: Surface, coordinator: ()) { view.tearDown() }
+
+    final class Surface: UIView {
+        var state = CameraControlState()
+        var capabilities = CameraControlCapabilities.unavailable
+        var transformMapping = CameraAffineTransform(a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0)
+        var controlsEnabled = false
+        var focusVisible = false
+        var onFocus: ((ImagePoint, UUID) -> Void)?
+        var onExposure: ((Double) -> Void)?
+        var onExposureAdjustmentActive: ((Bool) -> Void)?
+        private lazy var renderer = CameraFocusIndicatorRenderer(containerView: self)
+        private lazy var interaction = CameraPreviewInteraction(view: self)
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            backgroundColor = .clear
+            isOpaque = false
+            isAccessibilityElement = false
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        func updateControls() {
+            interaction.enabled = controlsEnabled && capabilities.focusSupported
+            interaction.capabilities = capabilities
+            interaction.visibleViewport = bounds
+            interaction.sensorPoint = { [weak self] location in
+                guard let self else { return nil }
+                return CameraPreviewGeometry.sensorPoint(viewPoint: .init(x: Double(location.x), y: Double(location.y)),
+                    viewportWidth: Double(bounds.width), viewportHeight: Double(bounds.height), displayTransform: transformMapping)
+            }
+            interaction.onFocus = onFocus
+            interaction.onExposure = onExposure
+            interaction.onExposureAdjustmentActive = onExposureAdjustmentActive
+            interaction.renderer = renderer
+            interaction.pointLabel = "합성 미리보기 초점 요청 위치"
+            interaction.reduceMotion = UIAccessibility.isReduceMotionEnabled
+            interaction.synchronize(state: state, viewportHeight: Double(bounds.height))
+            guard controlsEnabled, let feedback = interaction.focusFeedback(),
+                  let displayed = CameraPreviewGeometry.displayPoint(sensorPoint: feedback.point,
+                    viewportWidth: Double(bounds.width), viewportHeight: Double(bounds.height),
+                    displayTransform: transformMapping) else {
+                interaction.cancelAdjustment(); renderer.clear(); return
+            }
+            renderer.update(point: .init(x: displayed.x, y: displayed.y), requestID: feedback.requestID,
+                pointLabel: "합성 미리보기 초점 요청 위치",
+                exposureBias: interaction.presentationExposureBias, exposureRange: capabilities.exposureRange,
+                onExposure: { [weak self] in self?.interaction.requestAccessibleExposure($0) },
+                reduceMotion: UIAccessibility.isReduceMotionEnabled)
+        }
+        override func layoutSubviews() { super.layoutSubviews(); updateControls() }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil { interaction.invalidateFocusFeedback() }
+        }
+        func tearDown() { interaction.tearDown(); renderer.tearDown() }
     }
 }

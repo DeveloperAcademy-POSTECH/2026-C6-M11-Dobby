@@ -40,4 +40,5 @@ nonisolated struct GarmentRecognitionDiagnostics: Codable, Sendable {
 nonisolated struct LandmarkMeasurementFailure: Codable, Sendable, Equatable {
     var landmarkID: String
     var reason: MeasurementFailure
+    var context: MeasurementFailureContext? = nil
 }

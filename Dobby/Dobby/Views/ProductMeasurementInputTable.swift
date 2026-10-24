@@ -8,11 +8,11 @@ struct ProductMeasurementInputTable: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ProductFieldTitle(title: "실측 사이즈")
-            let uncertain = garment.visibleMeasurements.filter {
-                $0.sourceStatusRaw == MeasurementStatus.uncertain.rawValue && !$0.isEdited
+            let missingValues = garment.visibleMeasurements.filter {
+                !GarmentMeasurementInputText.hasUsableValue($0, drafts: measurementInput.drafts)
             }
-            if !uncertain.isEmpty {
-                Label("\(uncertain.map(\.displayLabel).joined(separator: ", ")): 자동 측정값을 확인해 주세요.",
+            if !missingValues.isEmpty {
+                Label("\(missingValues.map(\.displayLabel).joined(separator: ", ")): 계산된 길이가 없어요. 치수를 입력하거나 실측 결과에서 실패 이유를 확인해 주세요.",
                     systemImage: "exclamationmark.circle")
                     .font(.footnote).foregroundStyle(.secondary)
                     .accessibilityIdentifier("product-info.measurement-warning")

@@ -7,9 +7,32 @@ struct MeasurementPointFailureDetails: View {
 
     var body: some View {
         ForEach(Array((value.pointFailures ?? []).enumerated()), id: \.offset) { _, failure in
-            Text("\(MeasurementLandmarkName.title(failure.landmarkID)): \(failure.reason.message)")
+            Text("\(MeasurementLandmarkName.title(failure.landmarkID)): \(failure.context?.reason.explanation ?? failure.reason.fallbackExplanation)")
                 .font(.caption).foregroundStyle(.secondary)
                 .accessibilityIdentifier("measurementPointFailure_\(failure.landmarkID)")
+        }
+    }
+}
+
+/// Quality diagnostics are intentionally separate from failure presentation.
+/// This view is empty for any usable numeric result, including `.uncertain`.
+struct MeasurementFailureFeedbackView: View {
+    let value: MeasurementValue
+
+    var body: some View {
+        if let feedback = value.failureFeedback {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(feedback.reason)
+                    .accessibilityIdentifier("measurementFailureReason_\(value.id)")
+                if (value.pointFailures ?? []).isEmpty, !feedback.relatedLandmarkIDs.isEmpty {
+                    Text("관련 측정점: " + feedback.relatedLandmarkIDs.map(MeasurementLandmarkName.title).joined(separator: ", "))
+                }
+                MeasurementPointFailureDetails(value: value)
+                Text(feedback.recovery).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("measurementFailureRecovery_\(value.id)")
+            }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("measurementFailureFeedback_\(value.id)")
         }
     }
 }
@@ -36,13 +59,14 @@ struct MeasurementRecognitionDetails: View {
 }
 
 enum MeasurementLandmarkName {
-    static func title(_ id: String) -> String {
+    nonisolated static func title(_ id: String) -> String {
         switch id {
         case "neck_left": "왼쪽 목점"
         case "neck_right": "오른쪽 목점"
         case "neck_center": "목 중앙점"
         case "top_length_start": "총장 상단점"
         case "waist_front_center": "앞허리 중앙점"
+        case "thigh_right": "오른쪽 허벅지점"
         case "shoulder_left": "왼쪽 어깨점"
         case "shoulder_right": "오른쪽 어깨점"
         case "armpit_left": "왼쪽 겨드랑이점"

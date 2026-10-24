@@ -3,6 +3,27 @@ import XCTest
 @testable import DobbyLiDARCore
 
 final class AutomaticMeasurementModelTests: XCTestCase {
+    func testRetryPreservesOriginalPointsAndRejectsStaleCalculationWithoutInventingAnEdit() throws {
+        var model = measurement()
+        let result = model.result, original = model.landmarks
+        let stale = model.calculationRevision
+        model.requestRecalculation()
+        XCTAssertTrue(model.needsRecalculation)
+        XCTAssertThrowsError(try model.makeRecord())
+        let superseded = model.calculationRevision
+        model.requestRecalculation()
+        XCTAssertFalse(model.apply(result, for: stale))
+        XCTAssertFalse(model.apply(result, for: superseded))
+        XCTAssertTrue(model.apply(result, for: model.calculationRevision))
+        XCTAssertFalse(model.needsRecalculation)
+        XCTAssertFalse(model.hasPointAdjustments)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        XCTAssertEqual(try encoder.encode(model.landmarks.points), try encoder.encode(original.points))
+        XCTAssertEqual(model.originalResult.values[0].meters, result.values[0].meters)
+        XCTAssertNil(try model.makeRecord().originalAutomaticLandmarks)
+    }
+
     private func measurement() -> AutomaticMeasurement {
         let fixture = SyntheticFixtures.scene()
         let definitions: [MeasurementDefinition] = [.testDistance,

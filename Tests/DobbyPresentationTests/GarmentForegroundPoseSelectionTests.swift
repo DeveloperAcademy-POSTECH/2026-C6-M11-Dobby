@@ -117,6 +117,45 @@ final class GarmentForegroundPoseSelectionTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(total.meters), 0, "Production recognition output must resolve total length")
     }
 
+    func testCurrentBottomAssemblyKeepsEightRawOutputsAndAddsAnIndependentThighRequest() throws {
+        let raw: [GarmentLandmark] = [
+            ("waist_left", 0.3, 0.2), ("waist_right", 0.7, 0.2), ("crotch", 0.5, 0.5),
+            ("hem_left_outer", 0.3, 0.8), ("hem_left_inner", 0.45, 0.8),
+            ("hem_right_inner", 0.55, 0.8), ("hem_right_outer", 0.7, 0.8),
+            ("waist_front_center", 0.5, 0.23)
+        ].map { .init(id: $0.0, point: .init(x: $0.1, y: $0.2), confidence: 0.95) }
+        let mask = polygon([.init(x: 0.1, y: 0.1), .init(x: 0.9, y: 0.1),
+                            .init(x: 0.9, y: 0.9), .init(x: 0.1, y: 0.9)])
+        let result = try GarmentForegroundPoseSelection.recognize(orientation: .up,
+            allowsHalfTurn: false, recordsRecoverableFailures: true, imageSize: size,
+            schemaKind: .bottoms, modelVersion: AutomaticGarmentKind.bottoms.modelVersion,
+            infer: { _ in self.predict(raw) }, masks: { _ in [mask] })
+        let diagnostics = try XCTUnwrap(result.recognition.diagnostics)
+        assertUnchanged(diagnostics.rawPoints, raw)
+        XCTAssertEqual(diagnostics.pointAssessments.count, 8)
+        XCTAssertEqual(result.recognition.points.count, 9)
+        let thigh = try XCTUnwrap(result.recognition.points.first { $0.id == "thigh_right" })
+        XCTAssertEqual(thigh.contourRule, .waistParallelRightThighMaskV1)
+        XCTAssertFalse(thigh.isVisible)
+        XCTAssertNil(thigh.confidence); XCTAssertNil(thigh.derivedFrom)
+        XCTAssertEqual(result.recognition.points.first { $0.id == "waist_front_center" }?.point, raw[7].point)
+
+        let topSchema = try XCTUnwrap(Bundle.main.url(forResource: "schema_top", withExtension: "json"))
+        let bottomSchema = try XCTUnwrap(Bundle.main.url(forResource: "schema_bottom8", withExtension: "json"))
+        let url = URL(fileURLWithPath: "/unused-model.mlpackage")
+        let provider = try AutoGarmentLandmarkProvider(
+            top: .init(kind: .top, modelURL: url, schemaData: Data(contentsOf: topSchema)),
+            bottoms: .init(kind: .bottoms, modelURL: url, schemaData: Data(contentsOf: bottomSchema)),
+            classifierModelURL: url)
+        let set = GarmentLandmarkSet(sessionID: UUID(), frameID: UUID(), origin: .model,
+            modelVersion: result.recognition.modelVersion, points: result.recognition.points,
+            mask: mask, garmentKind: .bottoms, recognitionDiagnostics: diagnostics)
+        let definitions = try provider.measurementDefinitions(for: set)
+        XCTAssertEqual(definitions.count, 9)
+        XCTAssertEqual(definitions.last?.id, "bottom.thighWidthRight")
+        XCTAssertEqual(definitions.last?.landmarkIDs, ["crotch", "thigh_right"])
+    }
+
     func testRawAssociationRejectionCannotBeRescuedByOutlineSnap() throws {
         let raster = PixelSize(width: 200, height: 100)
         var values = [UInt8](repeating: 0, count: 20_000)

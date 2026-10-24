@@ -133,7 +133,9 @@ final class GarmentValidationDiagnosticsTests: XCTestCase {
         XCTAssertEqual(value.status, .unavailable)
         XCTAssertNil(value.meters)
         XCTAssertEqual(value.failure, .insufficientDepth)
-        XCTAssertEqual(value.pointFailures, [.init(landmarkID: "A", reason: .insufficientDepth)])
+        XCTAssertEqual(value.pointFailures?.map(\.landmarkID), ["A"])
+        XCTAssertEqual(value.pointFailures?.map(\.reason), [.insufficientDepth])
+        XCTAssertEqual(value.pointFailures?.first?.context?.reason, .noDepthSamples)
         XCTAssertEqual(value.points.map(\.id), ["B"])
         XCTAssertEqual(scene.landmarks.mask, originalMask)
         XCTAssertTrue(scene.landmarks.points.first?.isVisible == true)
@@ -147,7 +149,9 @@ final class GarmentValidationDiagnosticsTests: XCTestCase {
         let value = try XCTUnwrap(result(scene).values.first)
         XCTAssertEqual(value.status, .unavailable)
         XCTAssertEqual(value.failure, .lowLandmarkConfidence)
-        XCTAssertEqual(value.pointFailures, [.init(landmarkID: "A", reason: .lowLandmarkConfidence)])
+        XCTAssertEqual(value.pointFailures?.map(\.landmarkID), ["A"])
+        XCTAssertEqual(value.pointFailures?.map(\.reason), [.lowLandmarkConfidence])
+        XCTAssertEqual(value.pointFailures?.first?.context?.reason, .lowModelConfidence)
         XCTAssertNil(value.meters)
     }
 
