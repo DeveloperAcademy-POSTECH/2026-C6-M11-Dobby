@@ -201,12 +201,16 @@ private struct ProductPriceInput: View {
     var body: some View {
         HStack(spacing: 4) {
             TextField("제품의 판매 가격을 입력해주세요", text: $priceText)
+                .font(.system(size: 16, weight: .medium))
                 .fixedSize(horizontal: price != nil, vertical: false)
                 .keyboardType(.numberPad)
                 .accessibilityLabel("가격, 원")
                 .accessibilityIdentifier("product-info.price")
             if price != nil {
-                Text("원").font(.caption).foregroundStyle(.secondary)
+                Text("원")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("product-info.price.unit")
                 Spacer(minLength: 0)
             }
         }
