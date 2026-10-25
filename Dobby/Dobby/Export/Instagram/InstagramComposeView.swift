@@ -15,7 +15,9 @@ struct InstagramComposeView: View {
                 }
                 InstagramAccountCard(account: account)
                 InstagramPhotoEditor(draft: $draft)
+                    .disabled(isDisabled)
                 InstagramCaptionEditor(draft: $draft)
+                    .disabled(isDisabled)
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
@@ -23,7 +25,6 @@ struct InstagramComposeView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Color(.brandNeutral50).ignoresSafeArea())
-        .disabled(isDisabled)
     }
 }
 

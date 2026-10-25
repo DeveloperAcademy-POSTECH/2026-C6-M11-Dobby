@@ -117,7 +117,7 @@ struct InstagramExportView: View {
         }
         .confirmationDialog("게시물을 한 번 더 올릴까요?", isPresented: $confirmingRepublish,
                             titleVisibility: .visible) {
-            Button("새 게시물 준비하기") { prepareRepublish() }
+            Button("다시 업로드하기") { Task { await republish() } }
             Button("취소", role: .cancel) {}
         } message: {
             Text("다시 업로드하면 같은 계정에 새 게시물이 추가됩니다.")
@@ -132,7 +132,6 @@ struct InstagramExportView: View {
 
     private var bottomActionTitle: String {
         if uploadState.isUploading { return "업로드 중" }
-        if uploadState.isCompleted { return "다시 업로드하기" }
         return "업로드하기"
     }
 
@@ -194,8 +193,8 @@ struct InstagramExportView: View {
         }
     }
 
-    private func prepareRepublish() {
+    private func republish() async {
         requestID = UUID().uuidString
-        uploadState = .idle
+        await publish()
     }
 }
