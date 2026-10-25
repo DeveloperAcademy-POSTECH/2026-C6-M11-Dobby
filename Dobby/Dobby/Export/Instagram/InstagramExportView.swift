@@ -3,7 +3,7 @@ import SwiftUI
 private enum InstagramUploadState {
     case idle
     case uploading
-    case completed(InstagramPublishResult)
+    case completed
 
     var isUploading: Bool {
         if case .uploading = self { true } else { false }
@@ -79,7 +79,7 @@ struct InstagramExportView: View {
             if account != nil {
                 ExportBottomActionBar {
                     ExportBottomAction(
-                        title: bottomActionTitle,
+                        title: "업로드하기",
                         isWorking: uploadState.isUploading,
                         isComplete: false,
                         isEnabled: uploadState.isCompleted || canPublish
@@ -128,11 +128,6 @@ struct InstagramExportView: View {
             } message: {
                 Text(message ?? "")
             }
-    }
-
-    private var bottomActionTitle: String {
-        if uploadState.isUploading { return "업로드 중" }
-        return "업로드하기"
     }
 
     private var canPublish: Bool {
@@ -185,7 +180,7 @@ struct InstagramExportView: View {
             }
             let result = try await client.publish(images: draft.photos.map(\.data), caption: draft.caption,
                                                   accountID: expected.id, requestID: requestID)
-            uploadState = .completed(result)
+            uploadState = .completed
             onPublished(result)
         } catch {
             uploadState = .idle

@@ -120,17 +120,7 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
         return result
     }
 
-    // Fit the complete image on a white canvas when its aspect ratio is outside feed bounds.
-    static func prepareImage(_ data: Data) throws -> Data {
-        guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else {
-            throw InstagramIntegrationError.message("사진을 읽을 수 없습니다.")
-        }
-        let ratio = boundedRatio(for: image)
-        return try prepareImage(image, ratio: ratio)
-    }
-
-    /// Instagram crops carousel items to the first item's ratio, so render every image on one canvas ratio.
-    static func prepareImages(_ data: [Data]) throws -> [Data] {
+    private static func prepareImages(_ data: [Data]) throws -> [Data] {
         guard let firstData = data.first, let firstImage = UIImage(data: firstData),
               firstImage.size.width > 0, firstImage.size.height > 0 else {
             throw InstagramIntegrationError.message("사진을 읽을 수 없습니다.")
@@ -142,14 +132,6 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
             }
             return try prepareImage(image, ratio: ratio)
         }
-    }
-
-    static func publishingOrder(_ images: [Data], selectedIndex: Int) -> [Data] {
-        guard images.indices.contains(selectedIndex) else { return images }
-        var ordered = images
-        let selected = ordered.remove(at: selectedIndex)
-        ordered.insert(selected, at: 0)
-        return ordered
     }
 
     private static func boundedRatio(for image: UIImage) -> CGFloat {
