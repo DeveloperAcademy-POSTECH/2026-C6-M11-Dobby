@@ -148,6 +148,12 @@ private struct InstagramCaptionEditor: View {
                 .frame(minHeight: 260)
                 .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 14))
                 .accessibilityValue("\(draft.caption.utf16.count) / 2,200자")
+            if let validationMessage = draft.validationMessage,
+               draft.photos.isEmpty == false {
+                Text(validationMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         }
     }
 }

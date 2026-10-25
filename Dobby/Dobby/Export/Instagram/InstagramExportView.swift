@@ -137,9 +137,7 @@ struct InstagramExportView: View {
     }
 
     private var canPublish: Bool {
-        !busy && !uploadState.isUploading && account != nil && !draft.photos.isEmpty
-            && !draft.caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && draft.caption.utf16.count <= 2200
+        !busy && !uploadState.isUploading && account != nil && draft.canPublish
     }
 
     private func loadAccount() async {
