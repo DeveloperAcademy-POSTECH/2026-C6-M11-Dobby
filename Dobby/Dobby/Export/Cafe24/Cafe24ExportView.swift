@@ -7,6 +7,8 @@ struct Cafe24ExportView: View {
     @State private var priceText: String
     @State private var connectedMallID: String?
     @State private var isWorking = false
+    @State private var isLoadingConnection = true
+    @State private var connectionError: String?
     @State private var resultMessage: String?
     @State private var isError = false
 
@@ -16,6 +18,33 @@ struct Cafe24ExportView: View {
     }
 
     var body: some View {
+        Group {
+            if connectedMallID != nil {
+                connectedContent
+            } else {
+                Cafe24ConnectionView(
+                    isLoading: isWorking || isLoadingConnection,
+                    errorMessage: connectionError,
+                    onConnect: { mallID in Task { await connect(mallID: mallID) } },
+                    onRefresh: { Task { await loadStatus() } }
+                )
+            }
+        }
+        .navigationTitle("카페24로 내보내기")
+        .navigationBarTitleDisplayMode(.inline)
+        .overlay {
+            if isWorking {
+                ExportLoadingOverlay(message: "카페24와 연결 중…")
+            }
+        }
+        .task { await loadStatus() }
+        .alert(isError ? "등록할 수 없습니다" : "등록 완료",
+               isPresented: Binding(get: { resultMessage != nil }, set: { if !$0 { resultMessage = nil } })) {
+            Button("확인", role: .cancel) {}
+        } message: { Text(resultMessage ?? "") }
+    }
+
+    private var connectedContent: some View {
         ExportScreenContent {
             ExportServiceHeader(
                 channel: .cafe24,
@@ -58,7 +87,7 @@ struct Cafe24ExportView: View {
                             .autocorrectionDisabled()
                             .exportTextFieldStyle()
                     }
-                    Button("카페24 계정 연결") { Task { await connect() } }
+                    Button("카페24 계정 연결") { Task { await connect(mallID: mallID) } }
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -87,8 +116,6 @@ struct Cafe24ExportView: View {
                 )
             }
         }
-        .navigationTitle("카페24 내보내기")
-        .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ExportBottomActionBar {
                 ExportBottomAction(
@@ -100,25 +127,30 @@ struct Cafe24ExportView: View {
                 }
             }
         }
-        .overlay { if isWorking { ExportLoadingOverlay(message: "카페24와 연결 중…") } }
-        .task { await loadStatus() }
-        .alert(isError ? "등록할 수 없습니다" : "등록 완료",
-               isPresented: Binding(get: { resultMessage != nil }, set: { if !$0 { resultMessage = nil } })) {
-            Button("확인", role: .cancel) {}
-        } message: { Text(resultMessage ?? "") }
     }
 
     private func loadStatus() async {
-        guard client.isConfigured else { return }
-        if let status = try? await client.connectionStatus() { connectedMallID = status.connected ? status.mallID : nil }
+        isLoadingConnection = true
+        connectionError = nil
+        defer { isLoadingConnection = false }
+        do {
+            let status = try await client.connectionStatus()
+            connectedMallID = status.connected ? status.mallID : nil
+        } catch {
+            connectedMallID = nil
+            connectionError = error.localizedDescription
+        }
     }
 
-    private func connect() async {
+    private func connect(mallID: String) async {
         isWorking = true; defer { isWorking = false }
         do {
             try await client.connect(mallID: mallID)
             connectedMallID = try await client.connectionStatus().mallID
-        } catch { show(error) }
+            connectionError = nil
+        } catch {
+            connectionError = error.localizedDescription
+        }
     }
 
     private func publish() async {
