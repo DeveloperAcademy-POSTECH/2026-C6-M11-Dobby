@@ -1,28 +1,51 @@
 import SwiftUI
 
+private enum InstagramUploadState {
+    case idle
+    case uploading
+    case completed(InstagramPublishResult)
+
+    var isUploading: Bool {
+        if case .uploading = self { true } else { false }
+    }
+
+    var isCompleted: Bool {
+        if case .completed = self { true } else { false }
+    }
+}
+
 struct InstagramExportView: View {
     let product: ExportProduct
+    let onPublished: (InstagramPublishResult) -> Void
     @State private var client = InstagramIntegrationClient()
     @State private var account: InstagramAccount?
     @State private var isLoadingAccount = true
     @State private var accountLoadError: String?
     @State private var draft: InstagramExportDraft
+    @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
     @State private var confirming = false
+    @State private var confirmingRepublish = false
     @State private var message: String?
-    @State private var published = false
     @State private var confirmingDisconnect = false
     @State private var requestID = UUID().uuidString
 
-    init(product: ExportProduct) {
+    init(product: ExportProduct, onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
         self.product = product
+        self.onPublished = onPublished
         _draft = State(initialValue: InstagramExportDraft(product: product))
     }
 
     var body: some View {
         Group {
             if let account {
-                InstagramComposeView(account: account, draft: $draft, isDisabled: busy || published)
+                InstagramComposeView(
+                    account: account,
+                    draft: $draft,
+                    isDisabled: busy || uploadState.isCompleted,
+                    isCompleted: uploadState.isCompleted,
+                    onReportProblem: { message = "Instagram 앱에서 게시물을 먼저 확인해 주세요. 게시물이 없다면 다시 업로드할 수 있습니다." }
+                )
             } else {
                 InstagramConnectionView(
                     isLoading: busy || isLoadingAccount,
@@ -34,8 +57,9 @@ struct InstagramExportView: View {
         }
         .navigationTitle("인스타그램으로 내보내기")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(uploadState.isUploading)
         .toolbar {
-            if account != nil {
+            if account != nil && !uploadState.isUploading {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("계정 새로고침", systemImage: "arrow.clockwise") {
@@ -55,16 +79,27 @@ struct InstagramExportView: View {
             if account != nil {
                 ExportBottomActionBar {
                     ExportBottomAction(
-                        title: published ? "게시 완료" : "업로드하기",
-                        isWorking: busy,
-                        isComplete: published,
-                        isEnabled: canPublish
+                        title: bottomActionTitle,
+                        isWorking: uploadState.isUploading,
+                        isComplete: false,
+                        isEnabled: uploadState.isCompleted || canPublish
                     ) {
-                        confirming = true
+                        if uploadState.isCompleted {
+                            confirmingRepublish = true
+                        } else {
+                            confirming = true
+                        }
                     }
                 }
             }
         }
+        .overlay {
+            if uploadState.isUploading {
+                InstagramUploadingOverlay()
+                    .zIndex(10)
+            }
+        }
+        .interactiveDismissDisabled(uploadState.isUploading)
         .task { await loadAccount() }
         .confirmationDialog("Instagram 연결을 해제할까요?", isPresented: $confirmingDisconnect,
                             titleVisibility: .visible) {
@@ -80,7 +115,14 @@ struct InstagramExportView: View {
         } message: {
             Text("선택한 사진과 내용이 Instagram에 공개됩니다.")
         }
-        .alert(published ? "게시 완료" : "Instagram 안내", isPresented: Binding(
+        .confirmationDialog("게시물을 한 번 더 올릴까요?", isPresented: $confirmingRepublish,
+                            titleVisibility: .visible) {
+            Button("새 게시물 준비하기") { prepareRepublish() }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("다시 업로드하면 같은 계정에 새 게시물이 추가됩니다.")
+        }
+        .alert("Instagram 안내", isPresented: Binding(
             get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("확인", role: .cancel) {}
             } message: {
@@ -88,8 +130,14 @@ struct InstagramExportView: View {
             }
     }
 
+    private var bottomActionTitle: String {
+        if uploadState.isUploading { return "업로드 중" }
+        if uploadState.isCompleted { return "다시 업로드하기" }
+        return "업로드하기"
+    }
+
     private var canPublish: Bool {
-        !busy && !published && account != nil && !draft.photos.isEmpty
+        !busy && !uploadState.isUploading && account != nil && !draft.photos.isEmpty
             && !draft.caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && draft.caption.utf16.count <= 2200
     }
@@ -121,6 +169,7 @@ struct InstagramExportView: View {
             try await client.disconnect()
             account = nil
             requestID = UUID().uuidString
+            uploadState = .idle
         } catch {
             message = error.localizedDescription
         }
@@ -128,21 +177,27 @@ struct InstagramExportView: View {
 
     private func publish() async {
         guard let expected = account else { return }
-        busy = true
-        defer { busy = false }
+        uploadState = .uploading
         do {
             let current = try await client.account()
             guard current?.id == expected.id else {
                 account = current
+                uploadState = .idle
                 message = "연결 계정이 변경되었습니다. 게시할 계정을 다시 확인해 주세요."
                 return
             }
             let result = try await client.publish(images: draft.photos.map(\.data), caption: draft.caption,
                                                   accountID: expected.id, requestID: requestID)
-            published = true
-            message = "@\(result.username)에 게시했습니다.\n게시물 ID: \(result.mediaID)"
+            uploadState = .completed(result)
+            onPublished(result)
         } catch {
+            uploadState = .idle
             message = error.localizedDescription
         }
+    }
+
+    private func prepareRepublish() {
+        requestID = UUID().uuidString
+        uploadState = .idle
     }
 }

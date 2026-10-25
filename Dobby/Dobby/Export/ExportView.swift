@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 struct ExportView: View {
@@ -5,6 +6,7 @@ struct ExportView: View {
     let controller: CopyActivityController
     @Binding var showFruits: Bool
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var completedChannels: Set<ExportChannel>
     @State private var showCafe24 = false
     @State private var showInstagram = false
@@ -44,7 +46,11 @@ struct ExportView: View {
                 Cafe24ExportView(product: product)
             }
             .navigationDestination(isPresented: $showInstagram) {
-                InstagramExportView(product: product)
+                InstagramExportView(product: product) { _ in
+                    completedChannels.insert(.instagram)
+                    try? ExportCompletionRecorder.record(productID: product.id, channel: .instagram,
+                                                         in: modelContext)
+                }
             }
             .disabled(controller.busy)
         }

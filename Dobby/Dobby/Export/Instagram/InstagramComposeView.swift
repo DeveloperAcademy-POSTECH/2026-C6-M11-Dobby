@@ -4,10 +4,15 @@ struct InstagramComposeView: View {
     let account: InstagramAccount
     @Binding var draft: InstagramExportDraft
     let isDisabled: Bool
+    var isCompleted = false
+    var onReportProblem: () -> Void = {}
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                if isCompleted {
+                    InstagramUploadCompletedHeader(onReportProblem: onReportProblem)
+                }
                 InstagramAccountCard(account: account)
                 InstagramPhotoEditor(draft: $draft)
                 InstagramCaptionEditor(draft: $draft)
@@ -19,6 +24,29 @@ struct InstagramComposeView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(Color(.brandNeutral50).ignoresSafeArea())
         .disabled(isDisabled)
+    }
+}
+
+private struct InstagramUploadCompletedHeader: View {
+    let onReportProblem: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("인스타그램에 업로드 완료 🎉")
+                .font(.title3.bold())
+            HStack(spacing: 4) {
+                Text("연결된 계정에 자동 업로드를")
+                Text("완료").foregroundStyle(Color(.brandMain))
+                Text("했어요")
+            }
+            .font(.body)
+            Button("정상적으로 업로드가 안됐어요", action: onReportProblem)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .underline()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 }
 
