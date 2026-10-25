@@ -25,6 +25,19 @@ enum ExportChannel: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    var shortTitle: String {
+        switch self {
+        case .instagram:
+            return "Instagram"
+        case .naverStore:
+            return "네이버스토어"
+        case .cafe24:
+            return "Cafe24"
+        case .fruitsFamily:
+            return "후루츠패밀리"
+        }
+    }
+
     var imageName: String {
         switch self {
         case .instagram:

@@ -67,7 +67,10 @@ extension ExportProduct {
             instagram: instagramPayload,
             detailMeasurements: measurements,
             photoData: photos.map(\.data),
-            garmentCategory: garment.category.isEmpty ? nil : garment.category
+            garmentCategory: garment.category.isEmpty ? nil : garment.category,
+            completedChannels: Set(garment.exports.filter(\.succeeded).compactMap {
+                ExportChannel(rawValue: $0.channelRaw)
+            })
         )
     }
 }

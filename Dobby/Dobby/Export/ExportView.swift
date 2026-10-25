@@ -5,28 +5,29 @@ struct ExportView: View {
     let controller: CopyActivityController
     @Binding var showFruits: Bool
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
-    @State private var history = ExportHistoryStore()
-    @State private var isShowingOpenError = false
-    @State private var isOpeningLink = false
-    @State private var showFruitsGuideA = false
+    @State private var completedChannels: Set<ExportChannel>
     @State private var showCafe24 = false
     @State private var showInstagram = false
     @State private var showFruitsGuideOverlay = false
-    @State private var openedFruitsMethods: Set<FruitsExportMethod> = []
+
+    init(product: ExportProduct, controller: CopyActivityController, showFruits: Binding<Bool>) {
+        self.product = product
+        self.controller = controller
+        _showFruits = showFruits
+        _completedChannels = State(initialValue: product.completedChannels)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
                     ExportProductHeader(product: product)
-                    ExportChannelListView(openedChannels: history.openedChannels,
-                                          onSelectChannel: didSelectChannel,
-                                          openedFruitsMethods: openedFruitsMethods,
-                                          onSelectFruits: selectFruits)
-                }.padding(.horizontal, 24).padding(.bottom, 24)
+                    ExportChannelListView(completedChannels: completedChannels,
+                                          onSelectChannel: didSelectChannel)
+                }.padding(.horizontal, 33).padding(.bottom, 32)
             }
-            .navigationTitle("내보내기")
+            .background(Color(.brandNeutral50))
+            .navigationTitle("플랫폼 업로드하기")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -36,14 +37,7 @@ struct ExportView: View {
             }
             .navigationDestination(isPresented: $showFruits) {
                 FruitsExportView(product: product, controller: controller) {
-                    openedFruitsMethods.insert(.dynamicIslandB)
-                    history.recordOpenResult(for: .fruitsFamily, accepted: true)
-                }
-            }
-            .navigationDestination(isPresented: $showFruitsGuideA) {
-                FruitsExportView(product: product, controller: controller) {
-                    openedFruitsMethods.insert(.dynamicIslandA)
-                    history.recordOpenResult(for: .fruitsFamily, accepted: true)
+                    completedChannels.insert(.fruitsFamily)
                 }
             }
             .navigationDestination(isPresented: $showCafe24) {
@@ -52,10 +46,7 @@ struct ExportView: View {
             .navigationDestination(isPresented: $showInstagram) {
                 InstagramExportView(product: product)
             }
-            .disabled(isOpeningLink || controller.busy)
-            .alert("페이지를 열 수 없습니다", isPresented: $isShowingOpenError) {
-                Button("확인", role: .cancel) {}
-            } message: { Text("잠시 후 다시 시도해 주세요.") }
+            .disabled(controller.busy)
         }
         .overlay {
             if showFruitsGuideOverlay {
@@ -64,8 +55,7 @@ struct ExportView: View {
                     controller: controller,
                     onDismiss: { showFruitsGuideOverlay = false },
                     onOpened: {
-                        openedFruitsMethods.insert(.dynamicIslandB)
-                        history.recordOpenResult(for: .fruitsFamily, accepted: true)
+                        completedChannels.insert(.fruitsFamily)
                     }
                 )
                 .transition(.opacity)
@@ -75,26 +65,10 @@ struct ExportView: View {
         .animation(.easeInOut(duration: 0.2), value: showFruitsGuideOverlay)
     }
 
-    private func selectFruits(_ method: FruitsExportMethod) {
-        guard !controller.busy, !isOpeningLink else { return }
-        if method == .dynamicIslandB {
-            showFruitsGuideOverlay = true
-        } else {
-            showFruitsGuideA = true
-        }
-    }
-
     private func didSelectChannel(_ channel: ExportChannel) {
         if channel == .instagram { showInstagram = true; return }
-        if channel == .fruitsFamily { showFruits = true; return }
+        if channel == .fruitsFamily { showFruitsGuideOverlay = true; return }
         if channel == .cafe24 { showCafe24 = true; return }
-        guard !isOpeningLink else { return }
-        isOpeningLink = true
-        openURL(channel.destinationURL) { accepted in
-            history.recordOpenResult(for: channel, accepted: accepted)
-            isOpeningLink = false
-            isShowingOpenError = !accepted
-        }
     }
 }
 

@@ -9,8 +9,16 @@ struct ExportProduct: Identifiable {
     var detailMeasurements: [ExportMeasurement]? = nil
     var photoData: [Data] = []
     var garmentCategory: String? = nil
+    var completedChannels: Set<ExportChannel> = []
     var displayPhotos: [Data] { photoData.isEmpty ? imageData.map { [$0] } ?? [] : photoData }
     var name: String { fruits.productName }
+
+    var brand: String { fruits.brand }
+
+    var displayPrice: String {
+        guard let price = Int(fruits.price) else { return fruits.price }
+        return "\(price.formatted(.number.grouping(.automatic)))원"
+    }
 
     var copyMeasurements: [ExportMeasurement] {
         detailMeasurements ?? [
@@ -50,17 +58,45 @@ extension ExportProduct {
 struct ExportProductHeader: View {
     let product: ExportProduct
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             if let data = product.imageData, let image = UIImage(data: data) {
-                Image(uiImage: image).resizable().scaledToFit().frame(height: 150)
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 175, height: 200)
+                    .clipped()
             } else {
-                Image(systemName: "tshirt").resizable().scaledToFit()
-                    .foregroundStyle(.secondary).frame(width: 100, height: 130)
+                Image(systemName: "tshirt")
+                    .resizable()
+                    .scaledToFit()
+                    .padding(42)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 175, height: 200)
+                    .background(Color(.secondarySystemBackground))
                     .accessibilityLabel("상품 사진 없음")
             }
-            Text(product.name).font(.subheadline.weight(.semibold))
-                .multilineTextAlignment(.center).padding(.horizontal, 16).padding(.vertical, 10)
-                .background(Color(.secondarySystemBackground), in: Capsule())
-        }.frame(maxWidth: .infinity).padding(.vertical, 20)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(product.name)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                if !product.brand.isEmpty {
+                    Text(product.brand)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if !product.displayPrice.isEmpty {
+                    Text(product.displayPrice)
+                        .font(.subheadline.weight(.medium))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color(.systemBackground))
+        }
+        .frame(width: 175)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
     }
 }

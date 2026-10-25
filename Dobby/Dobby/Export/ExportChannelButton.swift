@@ -3,56 +3,60 @@ import SwiftUI
 struct ExportChannelButton: View {
 
     let channel: ExportChannel
-    let hasOpenedLink: Bool
+    let isComplete: Bool
     let action: () -> Void
     var titleOverride: String? = nil
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 19) {
+            HStack(spacing: 16) {
                 Image(channel.imageName)
                     .resizable()
                     .scaledToFit()
                     .frame(width: 48, height: 48)
-                Text(titleOverride ?? channel.title)
-                    .font(.subheadline.weight(.semibold))
+                Text(titleOverride ?? channel.shortTitle)
+                    .font(.body.weight(.medium))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
-                Image(systemName: "checkmark")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.orange)
-                    .frame(width: 18)
-                    .opacity(hasOpenedLink ? 1 : 0)
+                if isComplete {
+                    Text("완료")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color(.brandMain))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color(.brandMain).opacity(0.12), in: Capsule())
+                }
             }
-            .padding(20)
-            .background(Color(.backgroundNomalAlternative), in: RoundedRectangle(cornerRadius: 28))
-            .contentShape(RoundedRectangle(cornerRadius: 28))
+            .padding(16)
+            .frame(minHeight: 80)
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24))
+            .contentShape(RoundedRectangle(cornerRadius: 24))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(titleOverride ?? channel.title)
-        .accessibilityValue(hasOpenedLink ? "열어본 채널" : "아직 열지 않은 채널")
+        .accessibilityLabel(titleOverride ?? channel.shortTitle)
+        .accessibilityValue(isComplete ? "업로드 완료" : "업로드 전")
     }
 }
 
 #Preview("방문 전", traits: .sizeThatFitsLayout) {
-    ExportChannelButton(channel: .instagram, hasOpenedLink: false, action: {})
+    ExportChannelButton(channel: .instagram, isComplete: false, action: {})
         .padding()
 }
 
 #Preview("방문 후", traits: .sizeThatFitsLayout) {
-    ExportChannelButton(channel: .instagram, hasOpenedLink: true, action: {})
+    ExportChannelButton(channel: .instagram, isComplete: true, action: {})
         .padding()
 }
 
 #Preview("카페24", traits: .sizeThatFitsLayout) {
-    ExportChannelButton(channel: .cafe24, hasOpenedLink: false, action: {})
+    ExportChannelButton(channel: .cafe24, isComplete: false, action: {})
         .padding()
 }
 
 #Preview("후루츠패밀리", traits: .sizeThatFitsLayout) {
-    ExportChannelButton(channel: .fruitsFamily, hasOpenedLink: false, action: {})
+    ExportChannelButton(channel: .fruitsFamily, isComplete: false, action: {})
         .padding()
 }
