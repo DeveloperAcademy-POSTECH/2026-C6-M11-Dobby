@@ -4,6 +4,8 @@ struct InstagramExportView: View {
     let product: ExportProduct
     @State private var client = InstagramIntegrationClient()
     @State private var account: InstagramAccount?
+    @State private var isLoadingAccount = true
+    @State private var accountLoadError: String?
     @State private var caption: String
     @State private var photoIndex = 0
     @State private var busy = false
@@ -26,7 +28,16 @@ struct InstagramExportView: View {
     }
 
     var body: some View {
-        ExportScreenContent {
+        Group {
+            if account == nil {
+                InstagramConnectionView(
+                    isLoading: busy || isLoadingAccount,
+                    errorMessage: accountLoadError,
+                    onConnect: { Task { await connect() } },
+                    onRefresh: { Task { await loadAccount() } }
+                )
+            } else {
+                ExportScreenContent {
             ExportServiceHeader(
                 channel: .instagram,
                 title: "Instagram",
@@ -40,9 +51,7 @@ struct InstagramExportView: View {
             ) {
                 if let account {
                     HStack(spacing: 12) {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.system(size: 38))
-                            .foregroundStyle(ExportScreenStyle.accent)
+                        InstagramProfileImage(url: account.profilePictureURL)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("연결된 계정")
                                 .font(.caption)
@@ -139,23 +148,26 @@ struct InstagramExportView: View {
                 text: "게시하면 연결된 계정에 선택한 사진과 내용이 실제로 공개됩니다.",
                 systemImage: "globe"
             )
-        }
-        .disabled(busy || published)
-        .navigationTitle("Instagram 내보내기")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ExportBottomActionBar {
-                ExportBottomAction(
-                    title: published ? "게시 완료" : "Instagram에 게시",
-                    isWorking: busy,
-                    isComplete: published,
-                    isEnabled: canPublish
-                ) {
-                    confirming = true
                 }
             }
         }
-        .overlay { if busy { ExportLoadingOverlay(message: "Instagram과 연결 중…") } }
+        .disabled(busy || published)
+        .navigationTitle("인스타그램으로 내보내기")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if account != nil {
+                ExportBottomActionBar {
+                    ExportBottomAction(
+                        title: published ? "게시 완료" : "Instagram에 게시",
+                        isWorking: busy,
+                        isComplete: published,
+                        isEnabled: canPublish
+                    ) {
+                        confirming = true
+                    }
+                }
+            }
+        }
         .task { await loadAccount() }
         .confirmationDialog("Instagram 연결을 해제할까요?", isPresented: $confirmingDisconnect, titleVisibility: .visible) {
             Button("연결 해제", role: .destructive) { Task { await disconnect() } }
@@ -218,17 +230,21 @@ struct InstagramExportView: View {
     }
 
     private func loadAccount() async {
-        busy = true
-        defer { busy = false }
+        isLoadingAccount = true
+        accountLoadError = nil
+        defer { isLoadingAccount = false }
         do { account = try await client.account() }
-        catch { account = nil; message = error.localizedDescription }
+        catch { account = nil; accountLoadError = error.localizedDescription }
     }
 
     private func connect() async {
         busy = true
         defer { busy = false }
-        do { account = try await client.connect(); requestID = UUID().uuidString }
-        catch { message = error.localizedDescription }
+        do {
+            account = try await client.connect()
+            accountLoadError = nil
+            requestID = UUID().uuidString
+        } catch { accountLoadError = error.localizedDescription }
     }
 
     private func disconnect() async {
@@ -255,5 +271,25 @@ struct InstagramExportView: View {
             published = true
             message = "@\(result.username)에 게시했습니다.\n게시물 ID: \(result.mediaID)"
         } catch { message = error.localizedDescription }
+    }
+}
+
+private struct InstagramProfileImage: View {
+    let url: URL?
+
+    var body: some View {
+        AsyncImage(url: url) { phase in
+            if case .success(let image) = phase {
+                image.resizable().scaledToFill()
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(ExportScreenStyle.accent)
+            }
+        }
+        .frame(width: 48, height: 48)
+        .clipShape(RoundedRectangle(cornerRadius: 15))
+        .accessibilityHidden(true)
     }
 }

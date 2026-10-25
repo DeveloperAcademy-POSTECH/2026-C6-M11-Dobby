@@ -46,6 +46,20 @@ async function upstream(url, options = {}) {
   return data;
 }
 function authorized(token) { return { Authorization: `Bearer ${token}` }; }
+async function fetchAccount(env, token) {
+  const me = graphURL(env, "me");
+  me.searchParams.set("fields", "user_id,username,account_type,profile_picture_url");
+  const profile = await upstream(me, { headers: authorized(token) });
+  if (!profile.user_id || !profile.username
+      || !["BUSINESS", "MEDIA_CREATOR", "CREATOR"].includes(profile.account_type)) {
+    throw new Failure("프로페셔널 계정이 필요합니다.");
+  }
+  return {
+    id: String(profile.user_id),
+    username: profile.username,
+    profilePictureURL: typeof profile.profile_picture_url === "string" ? profile.profile_picture_url : null
+  };
+}
 function decodeImages(body) {
   const encoded = Array.isArray(body.imagesBase64)
     ? body.imagesBase64
@@ -184,10 +198,8 @@ export class InstagramConnection {
         exchange.search = new URLSearchParams({ grant_type: "ig_exchange_token", client_secret: env.INSTAGRAM_APP_SECRET, access_token: short.access_token }).toString();
         const long = await upstream(exchange);
         if (!long.access_token || !(long.expires_in > 0)) throw new Failure("토큰 교환에 실패했습니다.");
-        const me = graphURL(env, "me"); me.searchParams.set("fields", "user_id,username,account_type");
-        const profile = await upstream(me, { headers: authorized(long.access_token) });
-        if (!profile.user_id || !profile.username || !["BUSINESS", "MEDIA_CREATOR", "CREATOR"].includes(profile.account_type)) throw new Failure("프로페셔널 계정이 필요합니다.");
-        await storage.put("connection", { token: long.access_token, expires: Date.now() + long.expires_in * 1000, refreshed: Date.now(), account: { id: String(profile.user_id), username: profile.username } });
+        const account = await fetchAccount(env, long.access_token);
+        await storage.put("connection", { token: long.access_token, expires: Date.now() + long.expires_in * 1000, refreshed: Date.now(), account });
         return redirect("success", pending.attempt);
       } catch (error) {
         console.error(JSON.stringify({ event: "oauth_failed", code: error.code, status: error.status || 500 }));
@@ -213,7 +225,12 @@ export class InstagramConnection {
       connection = { ...connection, token: token.access_token, expires: Date.now() + token.expires_in * 1000, refreshed: Date.now() };
       await storage.put("connection", connection);
     }
-    if (path === "/account") return json({ connected: true, account: connection.account, connectionMode: "oauth" });
+    if (path === "/account") {
+      const account = await fetchAccount(env, connection.token);
+      connection = { ...connection, account };
+      await storage.put("connection", connection);
+      return json({ connected: true, account, connectionMode: "oauth" });
+    }
     if (path === "/publish") {
       const body = await readBody(request);
       if (body.accountID !== connection.account.id) throw new Failure("연결된 계정이 변경되었습니다. 다시 확인해 주세요.", 409);

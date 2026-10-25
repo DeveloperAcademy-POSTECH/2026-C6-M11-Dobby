@@ -7,6 +7,7 @@ import UIKit
 struct InstagramAccount: Decodable {
     let id: String
     let username: String
+    let profilePictureURL: URL?
 }
 
 struct InstagramAccountResponse: Decodable {
