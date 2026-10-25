@@ -43,7 +43,11 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showCafe24) {
-                Cafe24ExportView(product: product)
+                Cafe24ExportView(product: product) { _ in
+                    completedChannels.insert(.cafe24)
+                    try? ExportCompletionRecorder.record(productID: product.id, channel: .cafe24,
+                                                         in: modelContext)
+                }
             }
             .navigationDestination(isPresented: $showInstagram) {
                 InstagramExportView(product: product) { _ in
