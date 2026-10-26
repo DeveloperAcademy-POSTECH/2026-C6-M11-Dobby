@@ -188,8 +188,16 @@ struct GarmentCaptureFlowView: View {
 
     private var cameraScreen: some View {
         GeometryReader { geometry in
+            let photoRect = photoViewport(in: geometry.size)
             ZStack {
-                cameraImage.accessibilityHidden(showsPlacementTutorial)
+                Color.black
+                // A photo's 1x is its complete sensor field of view. Filling the
+                // entire tall phone first would add an unlabelled ~1.63x crop.
+                cameraImage
+                    .frame(width: photoRect.width, height: photoRect.height)
+                    .position(x: photoRect.midX, y: photoRect.midY)
+                    .accessibilityHidden(showsPlacementTutorial)
+                cameraFeedback
                 if geometry.size.width > geometry.size.height {
                     HStack(spacing: 0) {
                         Spacer()
@@ -224,8 +232,8 @@ struct GarmentCaptureFlowView: View {
                         Image("MeasurementLevelTop").resizable().scaledToFit().frame(width: 161, height: 23)
                         Image("MeasurementLevelBottom").resizable().scaledToFit().frame(width: 229, height: 38)
                     }
-                    .position(x: geometry.size.width / 2,
-                        y: geometry.size.height * 389.5 / 874)
+                    .position(x: photoRect.midX,
+                        y: photoRect.minY + photoRect.height * (389.5 - 146) / 536)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("카메라를 바닥과 평행하게 맞춰주세요")
                     .accessibilityIdentifier("garmentCameraLevelGuide")
@@ -238,9 +246,12 @@ struct GarmentCaptureFlowView: View {
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
-            .onAppear { captureViewportSize = geometry.size }
-            .onChange(of: geometry.size) { _, size in
+            .onAppear { captureViewportSize = photoRect.size }
+            .onChange(of: photoRect.size) { _, size in
                 captureViewportSize = size
+                clearPreviewFocus()
+            }
+            .onChange(of: geometry.size) { _, _ in
                 if isPreview { previewRecognized = false }
             }
         }
@@ -248,6 +259,24 @@ struct GarmentCaptureFlowView: View {
         .background(GarmentCaptureStyle.background)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("garmentCaptureScreen")
+    }
+
+    private var cameraPhotoAspectRatio: CGFloat {
+        // A failed photo can remain available for manual recovery. Once live
+        // capture resumes, that old photo must not dictate its orientation.
+        if isCapturing, let snapshot = processingSnapshot { return SnapshotPresentation.aspectRatio(for: snapshot) }
+        if isPreview, let previewModel { return SnapshotPresentation.aspectRatio(for: previewModel.snapshot) }
+        // Only the initial empty preview needs a default. The first delivered
+        // frame supplies its real dimensions without copying any camera pixels.
+        let size = camera.frameStatus?.imageSize ?? PixelSize(width: 1920, height: 1440)
+        let quarterTurn = orientation == .left || orientation == .right
+        return CGFloat(quarterTurn ? size.height : size.width) / CGFloat(quarterTurn ? size.width : size.height)
+    }
+
+    private func photoViewport(in size: CGSize) -> CGRect {
+        guard let window = CameraPhotoViewport.layout(containerWidth: Double(size.width),
+            containerHeight: Double(size.height), photoAspectRatio: Double(cameraPhotoAspectRatio)) else { return .zero }
+        return CGRect(x: window.x, y: window.y, width: window.width, height: window.height)
     }
 
     private var shouldShowLevelGuide: Bool {
@@ -305,9 +334,9 @@ struct GarmentCaptureFlowView: View {
                 if let processingImage {
                     GeometryReader { geometry in
                         // Analysis retains the complete captured RGB/depth.
-                        // Only this frozen preview matches the live camera's
-                        // aspect-fill composition; never briefly reveal the
-                        // wider original or apply the selected zoom twice.
+                        // This frozen preview uses the same full-photo window
+                        // as the live camera. The registered 2x snapshot already
+                        // contains its crop, so never apply selected zoom again.
                         Canvas { context, _ in
                             let layout = GarmentPhotoGeometry.processingPhotoLayout(
                                 photoAspectRatio: SnapshotPresentation.aspectRatio(for: snapshot),
@@ -348,7 +377,11 @@ struct GarmentCaptureFlowView: View {
                             transform: transform, isEnabled: canFocus, focusVisible: previewFocusVisible,
                             onFocus: setPreviewFocus, onExposure: setPreviewExposure,
                             onExposureAdjustmentActive: { _ in })
+                            // Keep synthetic gesture coordinates in the visible
+                            // photo window, not the enlarged 2x image's ideal size.
+                            .frame(width: geometry.size.width, height: geometry.size.height)
                     }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                     .contentShape(Rectangle())
                     .onChange(of: geometry.size) { _, _ in clearPreviewFocus() }
                 }.clipped()
@@ -373,19 +406,6 @@ struct GarmentCaptureFlowView: View {
                     }
                 }.padding(32)
             }
-            VStack(spacing: 0) {
-                if isCapturing {
-                    processingProgress.padding(.top, 154)
-                }
-                if isPreview {
-                    Text("화면 미리보기 · 합성 카메라 조절 · 실제 측정 아님")
-                        .font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(.black.opacity(0.65), in: Capsule()).padding(.top, isCapturing ? 8 : 154)
-                        .opacity(showsPlacementTutorial ? 0 : 1)
-                        .accessibilityIdentifier("garmentPreviewProvenance")
-                }
-                Spacer(minLength: 24)
-            }.allowsHitTesting(false)
             if silhouetteVisible, !hidesPreviewOutline {
                 Color.clear.accessibilityElement().accessibilityLabel("촬영을 돕는 옷 윤곽 미리보기")
                     .accessibilityIdentifier("garmentSilhouette").allowsHitTesting(false)
@@ -393,6 +413,23 @@ struct GarmentCaptureFlowView: View {
         }.clipped()
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("garmentCameraViewport")
+    }
+
+    /// Progress belongs to the screen chrome, not the sensor-to-photo transform.
+    private var cameraFeedback: some View {
+        VStack(spacing: 0) {
+            if isCapturing {
+                processingProgress.padding(.top, 154)
+            }
+            if isPreview {
+                Text("화면 미리보기 · 합성 카메라 조절 · 실제 측정 아님")
+                    .font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(.black.opacity(0.65), in: Capsule()).padding(.top, isCapturing ? 8 : 154)
+                    .opacity(showsPlacementTutorial ? 0 : 1)
+                    .accessibilityIdentifier("garmentPreviewProvenance")
+            }
+            Spacer(minLength: 24)
+        }.allowsHitTesting(false)
     }
 
     private var outlineCue: Bool { canTakePhoto }
@@ -665,25 +702,16 @@ struct GarmentCaptureFlowView: View {
         }
     }
 
-    /// Match the unobscured camera photograph, rather than revealing pixels
-    /// hidden by aspect-fill or camera chrome. This never crops sensor data.
+    /// The actual preview bounds now fit the entire oriented sensor image.
+    /// Camera chrome is outside those bounds; do not subtract it a second time.
     private func framedSnapshot(_ snapshot: CaptureSnapshot, viewport: CGSize,
                                 including points: [GarmentLandmark] = [],
                                 endpoints: [ImagePoint] = []) -> CaptureSnapshot {
         guard !isPreview || ProcessInfo.processInfo.arguments.contains("--garment-preview-matched-framing"),
               viewport.width > 0, viewport.height > 0 else { return snapshot }
-        let visible: NormalizedRect
-        if viewport.width > viewport.height {
-            guard viewport.width > 180 else { return snapshot }
-            visible = .init(x: 0, y: 0, width: (viewport.width - 180) / viewport.width, height: 1)
-        } else {
-            guard viewport.height > 338 else { return snapshot }
-            visible = .init(x: 0, y: 146 / viewport.height, width: 1,
-                height: (viewport.height - 338) / viewport.height)
-        }
         guard let crop = PhotoDisplayCrop.matchingPreview(imageSize: snapshot.frame.imageSize,
             orientation: snapshot.frame.orientation, viewportWidth: viewport.width,
-            viewportHeight: viewport.height, visibleRect: visible) else { return snapshot }
+            viewportHeight: viewport.height, visibleRect: .init(x: 0, y: 0, width: 1, height: 1)) else { return snapshot }
         var framed = snapshot
         // Keep normal handles visible if recognition finds a point behind the
         // camera chrome. Expansion is frozen before editing, so drags cannot

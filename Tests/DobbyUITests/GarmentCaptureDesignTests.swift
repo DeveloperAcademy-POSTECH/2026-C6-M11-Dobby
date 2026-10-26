@@ -33,12 +33,13 @@ final class GarmentCaptureDesignTests: XCTestCase {
         XCTAssertLessThanOrEqual(back.frame.maxY, app.frame.minY + 146)
         XCTAssertGreaterThanOrEqual(back.frame.minY, app.frame.minY)
         if app.frame.width == 402 && app.frame.height == 874 {
-            // Native navigation-bar margins vary by SDK; the camera itself
-            // fills the screen behind its translucent top and bottom bands.
-            XCTAssertEqual(viewport.frame.minX, app.frame.minX, accuracy: 1)
-            XCTAssertEqual(viewport.frame.minY, app.frame.minY, accuracy: 1)
-            XCTAssertEqual(viewport.frame.width, 402, accuracy: 1)
-            XCTAssertEqual(viewport.frame.height, 874, accuracy: 1)
+            // Fit the complete 804×1120 reference inside the photo region;
+            // camera chrome must not add an unlabelled aspect-fill zoom.
+            let sourceWidth = 536.0 * 804 / 1120
+            XCTAssertEqual(viewport.frame.minX, app.frame.minX + (402 - sourceWidth) / 2, accuracy: 1)
+            XCTAssertEqual(viewport.frame.minY, app.frame.minY + 146, accuracy: 1)
+            XCTAssertEqual(viewport.frame.width, sourceWidth, accuracy: 1)
+            XCTAssertEqual(viewport.frame.height, 536, accuracy: 1)
             let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
             XCTAssertEqual(guidance.frame.height, 40, accuracy: 1)
             XCTAssertEqual(guidance.frame.minY, app.frame.minY + 560, accuracy: 1)

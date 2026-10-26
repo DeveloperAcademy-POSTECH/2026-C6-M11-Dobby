@@ -125,6 +125,9 @@ nonisolated enum CaptureUnavailableReason: Equatable, Sendable {
 nonisolated struct CaptureFrameStatus: Equatable, Sendable {
     var hasDepth: Bool
     var tracking: CaptureTrackingStatus
+    /// The preview uses the delivered sensor aspect ratio, never the phone's
+    /// full-screen aspect ratio. Equatable status avoids publishing every frame.
+    var imageSize: PixelSize? = nil
 }
 
 nonisolated enum CaptureTrackingStatus: Equatable, Sendable {
@@ -859,7 +862,9 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         let update: CaptureObservation? = shouldPublish
             ? CaptureObservation(sessionID: identifier,
                                  status: CaptureFrameStatus(hasDepth: frame.sceneDepth != nil,
-                                                            tracking: Self.trackingStatus(for: frame.camera.trackingState)),
+                                                            tracking: Self.trackingStatus(for: frame.camera.trackingState),
+                                                            imageSize: .init(width: CVPixelBufferGetWidth(frame.capturedImage),
+                                                                             height: CVPixelBufferGetHeight(frame.capturedImage))),
                                  timestamp: frame.timestamp)
             : nil
 

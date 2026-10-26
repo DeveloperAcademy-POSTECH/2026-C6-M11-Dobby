@@ -5,7 +5,7 @@ import UIKit
 /// not establish garment recognition, camera levelling or physical accuracy.
 final class GarmentHiFiUITests: XCTestCase {
     @MainActor
-    func testFullscreenCaptureAndResultWindowPreserveTheCapturedPhotoCoordinates() throws {
+    func testCapturePhotoWindowAndResultPreserveTheCapturedPhotoCoordinates() throws {
         continueAfterFailure = false
         let app = openPreview()
         let viewport = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
@@ -26,9 +26,11 @@ final class GarmentHiFiUITests: XCTestCase {
         XCTAssertFalse(app.buttons["confirmGarmentMeasurement"].exists)
         if app.frame.width == 402 && app.frame.height == 874 {
             XCTAssertEqual(viewport.frame.minX, app.frame.minX, accuracy: 1)
-            XCTAssertEqual(viewport.frame.minY, app.frame.minY, accuracy: 1)
+            // The complete 800×1000 fixture fits between the 146-point top
+            // and 192-point bottom chrome, retaining its own 4:5 aspect.
+            XCTAssertEqual(viewport.frame.minY, app.frame.minY + 162.75, accuracy: 1)
             XCTAssertEqual(viewport.frame.width, 402, accuracy: 1)
-            XCTAssertEqual(viewport.frame.height, 874, accuracy: 1)
+            XCTAssertEqual(viewport.frame.height, 502.5, accuracy: 1)
             XCTAssertEqual(guidance.frame.minY, app.frame.minY + 560, accuracy: 1)
             XCTAssertEqual(guidance.frame.height, 40, accuracy: 1)
             XCTAssertEqual(zoom.frame.minY, app.frame.minY + 617, accuracy: 1)
@@ -185,20 +187,14 @@ final class GarmentHiFiUITests: XCTestCase {
         XCTAssertEqual(original.x, 0.30, accuracy: 0.0001,
                        "A presentation crop must not rewrite the captured sensor point")
         XCTAssertEqual(original.y, 0.23, accuracy: 0.0001)
-        // The fixture is 800×1000 with neck y=.16, sleeves x=.10/.90,
-        // and hem y=.86. The visible camera window plus .02 point padding
-        // therefore yields this display crop while retaining raw coordinates.
-        let crop = CGRect(x: 0.08, y: 0.14, width: 0.84, height: 0.74)
-        let croppedSourceSize = CGSize(width: 800 * crop.width, height: 1000 * crop.height)
-        let expectedPhoto = assertAspectFitPhoto(photo, in: viewport, sourceSize: croppedSourceSize)
-        let expectedAspect = croppedSourceSize.width / croppedSourceSize.height
-        let actualAspect = photo.frame.width / photo.frame.height
-        XCTAssertLessThan(abs(actualAspect - expectedAspect), abs(actualAspect - 0.8),
-                          "The result must use the matched framing rather than the old full-frame aspect")
+        // The camera now shows the complete source photo. The opt-in legacy
+        // matched-framing flag must not reintroduce a second presentation crop.
+        let expectedPhoto = assertAspectFitPhoto(photo, in: viewport,
+            sourceSize: .init(width: 800, height: 1000))
         XCTAssertEqual(point.frame.midX,
-            expectedPhoto.minX + (original.x - crop.minX) / crop.width * expectedPhoto.width, accuracy: 1)
+            expectedPhoto.minX + original.x * expectedPhoto.width, accuracy: 1)
         XCTAssertEqual(point.frame.midY,
-            expectedPhoto.minY + (original.y - crop.minY) / crop.height * expectedPhoto.height, accuracy: 1)
+            expectedPhoto.minY + original.y * expectedPhoto.height, accuracy: 1)
         XCTAssertTrue(photo.frame.contains(CGPoint(x: point.frame.midX, y: point.frame.midY)))
         let initialShoulder = try XCTUnwrap(Self.measurementCentimeters(in: shoulder.label))
 
@@ -223,12 +219,12 @@ final class GarmentHiFiUITests: XCTestCase {
         XCTAssertGreaterThan(edited.y, original.y)
         XCTAssertLessThan(edited.x, 1)
         XCTAssertLessThan(edited.y, 1)
-        XCTAssertEqual(edited.x - original.x, 12 / photo.frame.width * crop.width, accuracy: 0.002,
-                       "Drag translation must invert the presentation crop into the original sensor grid")
-        XCTAssertEqual(edited.y - original.y, 6 / photo.frame.height * crop.height, accuracy: 0.002)
+        XCTAssertEqual(edited.x - original.x, 12 / photo.frame.width, accuracy: 0.002,
+                       "Drag translation must retain the complete source photo's coordinate grid")
+        XCTAssertEqual(edited.y - original.y, 6 / photo.frame.height, accuracy: 0.002)
         XCTAssertEqual(point.frame.midX, originalCenter.x + 12, accuracy: 3)
         XCTAssertEqual(point.frame.midY, originalCenter.y + 6, accuracy: 3)
-        XCTAssertFalse(magnifier.exists, "Finger-up must hide the loupe in a cropped presentation too")
+        XCTAssertFalse(magnifier.exists, "Finger-up must hide the loupe after editing the full source photo")
         waitUntil {
             Self.measurementCentimeters(in: shoulder.label).map { $0 != initialShoulder } == true
                 && confirm.isEnabled
