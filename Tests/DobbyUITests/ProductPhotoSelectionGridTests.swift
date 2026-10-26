@@ -87,6 +87,7 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString, "--garment-preview-top"]
         app.launch()
         tap(app, "product-flow.start")
+        armSyntheticGarmentCapture(in: app)
         tap(app, "captureGarment")
         tap(app, "confirmGarmentMeasurement")
         let guide = app.buttons["camera.startDetailCapture"]

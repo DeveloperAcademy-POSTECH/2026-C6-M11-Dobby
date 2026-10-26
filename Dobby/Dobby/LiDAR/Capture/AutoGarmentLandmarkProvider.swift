@@ -2,6 +2,7 @@ import CoreImage
 import CoreML
 import Foundation
 import ImageIO
+import os
 import Vision
 
 nonisolated enum AutoGarmentRecognitionError: Error, LocalizedError, Sendable, Equatable,
@@ -66,6 +67,7 @@ nonisolated struct AutoGarmentRecognitionEvaluation: Sendable {
 /// cached pose model. That model independently associates its points with a
 /// foreground mask. A fresh-photo fallback never borrows another frame's points.
 actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, GarmentImageRecognizing {
+    private static let modelLoadSignposter = OSSignposter(subsystem: "com.dobby.lidar", category: .pointsOfInterest)
     private nonisolated let top: CoreMLGarmentLandmarkProvider
     private nonisolated let bottoms: CoreMLGarmentLandmarkProvider
     private let orientationProvider: GarmentOrientationModelProvider
@@ -353,6 +355,9 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
     private func loadedClassifier() throws -> VNCoreMLModel {
         if let classifier { return classifier }
         try Task.checkCancellation()
+        let interval = Self.modelLoadSignposter.beginInterval("GarmentClassifierModelLoad",
+            id: Self.modelLoadSignposter.makeSignpostID())
+        defer { Self.modelLoadSignposter.endInterval("GarmentClassifierModelLoad", interval) }
         let url = classifierURL.pathExtension == "mlmodelc" ? classifierURL : try MLModel.compileModel(at: classifierURL)
         let configuration = MLModelConfiguration(); configuration.computeUnits = .all
         let model = try MLModel(contentsOf: url, configuration: configuration)
@@ -361,8 +366,12 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
             throw AutoGarmentRecognitionError.incompatibleClassifier
         }
         let loaded = try VNCoreMLModel(for: model)
-        try Task.checkCancellation()
+        // Cache only a fully validated model, independently of the requesting
+        // photo. A timeout during cold loading must not discard that costly
+        // preparation and force the next capture to repeat it. The cancelled
+        // caller still throws before it can infer or publish a photo result.
         classifier = loaded
+        try Task.checkCancellation()
         return loaded
     }
 

@@ -8,7 +8,9 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.dobby.lidar.live-foreground", qos: .userInitiated)
     private let cancellationQueue = DispatchQueue(label: "com.dobby.lidar.live-foreground-cancel", qos: .utility)
     private let lock = NSLock()
-    private let context = CIContext(options: [.cacheIntermediates: false])
+    // Created and accessed only by render() on the serial analysis queue.
+    // Constructing a camera owner on the UI actor must not initialize Metal.
+    private lazy var context = CIContext(options: [.cacheIntermediates: false])
     private var orientation: ImageOrientation = .right
     private var identifier: UUID?
     private var readinessEpoch = UUID()
@@ -29,9 +31,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         orientation = value
         readinessEpoch = UUID()
         lastSubmissionTime = -.infinity
-        let request = activeRequest
-        lock.unlock()
-        request?.cancel()
+        cancelActiveRequestWhileLocked()
     }
 
     func isCurrent(_ readiness: LiveCaptureReadiness) -> Bool {
@@ -47,19 +47,15 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         interactionGate.reset(sessionID: sessionID)
         readinessEpoch = UUID()
         lastSubmissionTime = -.infinity
-        let request = activeRequest
         // Cancelling Vision does not end its physical request immediately.
         // Keep busy until the worker exits to prevent a second request.
-        lock.unlock()
-        request?.cancel()
+        cancelActiveRequestWhileLocked()
     }
 
     func invalidateReadiness() {
         lock.lock()
         readinessEpoch = UUID()
-        let request = activeRequest
-        lock.unlock()
-        request?.cancel()
+        cancelActiveRequestWhileLocked()
     }
 
     func suspend(sessionID: UUID) {
@@ -67,9 +63,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         guard identifier == sessionID else { lock.unlock(); return }
         isSuspended = true
         readinessEpoch = UUID()
-        let request = activeRequest
-        lock.unlock()
-        request?.cancel()
+        cancelActiveRequestWhileLocked()
     }
 
     func resume(sessionID: UUID) {
@@ -109,6 +103,12 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     /// touch path or enqueue cancellation behind the running perform request.
     private func cancelInteractionAnalysisWhileLocked() {
         readinessEpoch = UUID()
+        cancelActiveRequestWhileLocked()
+    }
+
+    /// Consumes the caller's lock. Rotation, pause, reset and zoom must be as
+    /// responsive as a gesture, even while Vision drains an earlier request.
+    private func cancelActiveRequestWhileLocked() {
         let cancellation = activeRequest.map(RequestCancellation.init)
         activeRequest = nil
         // Cancellation does not finish the job. Keep busy and activeJobID until

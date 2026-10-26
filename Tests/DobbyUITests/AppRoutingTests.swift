@@ -16,12 +16,25 @@ final class AppRoutingTests: XCTestCase {
         // before shutter/confirmation, so no product or measurement is stored.
         app.buttons["product-flow.start"].tap()
         XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["captureGarment"].isEnabled)
+        XCTAssertEqual(app.buttons["captureGarment"].value as? String, "옷 인식 대기")
         XCTAssertTrue(app.staticTexts["product-flow.fixture"].exists)
         app.buttons["closeGarmentCapture"].tap()
         expectHome(in: app)
 
         app.tabBars.buttons["보관함"].tap()
         expectEmptyLibrary(in: app)
+        let editLibrary = app.buttons["library.edit-mode"]
+        XCTAssertTrue(editLibrary.waitForExistence(timeout: 5))
+        XCTAssertEqual(editLibrary.label, "수정")
+        XCTAssertFalse(editLibrary.isEnabled)
+        attachScreenshot(app, name: "routing-empty-library-start-measurement")
+        app.buttons["library.empty.start-measurement"].tap()
+        XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["product-flow.fixture"].exists)
+        app.buttons["closeGarmentCapture"].tap()
+        expectEmptyLibrary(in: app)
+        XCTAssertFalse(editLibrary.isEnabled)
         XCTAssertTrue(app.tabBars.buttons["보관함"].isSelected)
         app.tabBars.buttons["홈"].tap()
         expectHome(in: app)
@@ -88,7 +101,13 @@ final class AppRoutingTests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["90s 나이키 트랙탑"].exists)
-        XCTAssertTrue(app.staticTexts["나이키"].exists)
+        // LabeledContent는 OS에 따라 값이 별도 텍스트 대신 행의 value로 노출됩니다.
+        let brand = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "브랜드")).firstMatch
+        XCTAssertTrue(brand.waitForExistence(timeout: 5))
+        let brandText = [brand.label, brand.value as? String ?? ""]
+            + brand.descendants(matching: .staticText).allElementsBoundByIndex.map(\.label)
+        XCTAssertTrue(brandText.contains { $0.contains("나이키") })
         XCTAssertTrue(app.descendants(matching: .any)["library.measurement.shoulderWidth"].exists)
 
         let exportButton = app.buttons["library.export"]
@@ -140,7 +159,14 @@ final class AppRoutingTests: XCTestCase {
     @MainActor
     private func expectEmptyLibrary(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10), file: file, line: line)
-        XCTAssertTrue(app.staticTexts["보관된 제품이 없어요"].waitForExistence(timeout: 5), file: file, line: line)
+        let title = app.staticTexts["library.empty.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertEqual(title.label, "보관함이 비어있어요", file: file, line: line)
+        XCTAssertTrue(app.staticTexts["작업을 시작해보세요"].exists, file: file, line: line)
+        let start = app.buttons["library.empty.start-measurement"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertEqual(start.label, "실측 시작하기", file: file, line: line)
+        XCTAssertTrue(start.isHittable, file: file, line: line)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "library.product.")).firstMatch.exists, file: file, line: line)
     }

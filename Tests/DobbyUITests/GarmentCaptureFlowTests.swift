@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// This exercises the explicitly labelled synthetic preview. It is evidence of
 /// navigation, display and persistence, never camera or model accuracy.
@@ -31,6 +32,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
             reveal(preview, in: app)
             preview.tap()
             XCTAssertTrue(shutter.waitForExistence(timeout: 10))
+            armPreviewCapture(in: app)
             XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
             shutter.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: 0.5)).tap()
             XCTAssertTrue(confirm.waitForExistence(timeout: 10))
@@ -46,6 +48,8 @@ final class GarmentCaptureFlowTests: XCTestCase {
                 let retake = app.buttons["retakeGarmentMeasurement"]
                 retake.coordinate(withNormalizedOffset: CGVector(dx: 0.84, dy: 0.5)).tap()
                 XCTAssertTrue(shutter.waitForExistence(timeout: 5))
+                assertRecognitionGate(in: app, ready: false)
+                armPreviewCapture(in: app)
                 shutter.coordinate(withNormalizedOffset: CGVector(dx: 0.18, dy: 0.5)).tap()
                 XCTAssertTrue(confirm.waitForExistence(timeout: 10))
             }
@@ -72,10 +76,11 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let recognize = app.buttons["previewRecognizeGarment"]
         XCTAssertTrue(recognize.waitForExistence(timeout: 10))
         let shutter = app.buttons["captureGarment"]
-        XCTAssertTrue(shutter.isEnabled)
+        assertRecognitionGate(in: app, ready: false)
         let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
         XCTAssertFalse(guidance.label.contains("인식 완료"))
         recognize.tap()
+        assertRecognitionGate(in: app, ready: true)
         XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
         XCTAssertTrue(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
         assertAdvisoryContourGuidance(guidance)
@@ -83,13 +88,13 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         app.buttons["retakeGarmentMeasurement"].tap()
         XCTAssertTrue(recognize.waitForExistence(timeout: 5))
-        XCTAssertTrue(shutter.isEnabled)
+        assertRecognitionGate(in: app, ready: false)
         XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
         attachScreenshot(app, name: "garment-reduced-motion-retake")
     }
 
     @MainActor
-    func testSyntheticPreviewCanCaptureBeforeRecognitionAndRetakeForBothKinds() throws {
+    func testSyntheticPreviewRequiresRecognitionAndDisablesAfterLossAndRetakeForBothKinds() throws {
         continueAfterFailure = false
         let fixtures: [(arguments: [String], prefix: String, count: Int)] = [
             (["--garment-preview-top"], "top.", 4),
@@ -110,9 +115,30 @@ final class GarmentCaptureFlowTests: XCTestCase {
             let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
             XCTAssertTrue(app.staticTexts["garmentPreviewProvenance"].exists)
             XCTAssertFalse(silhouette.exists)
-            XCTAssertTrue(guidance.label.contains("옷이 잘리지 않게 카메라 안에 넣어주세요"))
             XCTAssertFalse(guidance.label.contains("인식 완료"))
-            XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+            assertRecognitionGate(in: app, ready: false)
+            try assertShutterCenterColor(in: app, ready: false,
+                attachmentName: "garment-\(fixture.prefix)-waiting-shutter")
+            shutter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTAssertFalse(app.buttons["confirmGarmentMeasurement"].exists)
+            XCTAssertFalse(app.descendants(matching: .any)["garmentProcessingPhoto"].firstMatch.exists,
+                           "Tapping a waiting shutter must not begin photo analysis")
+            recognize.tap()
+            assertRecognitionGate(in: app, ready: true)
+            try assertShutterCenterColor(in: app, ready: true,
+                attachmentName: "garment-\(fixture.prefix)-recognized-orange-shutter")
+            XCTAssertTrue(silhouette.exists)
+            recognize.tap()
+            assertRecognitionGate(in: app, ready: false)
+            try assertShutterCenterColor(in: app, ready: false,
+                attachmentName: "garment-\(fixture.prefix)-lost-recognition-shutter")
+            XCTAssertFalse(silhouette.exists, "Losing recognition must remove both the outline and orange readiness dot")
+            shutter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTAssertFalse(app.buttons["confirmGarmentMeasurement"].exists)
+            recognize.tap()
+            assertRecognitionGate(in: app, ready: true)
+            try assertShutterCenterColor(in: app, ready: true,
+                attachmentName: "garment-\(fixture.prefix)-recognition-reacquired")
             shutter.tap()
             let confirm = app.buttons["confirmGarmentMeasurement"]
             XCTAssertTrue(confirm.waitForExistence(timeout: 10))
@@ -125,13 +151,17 @@ final class GarmentCaptureFlowTests: XCTestCase {
             let otherPrefix = fixture.prefix == "top." ? "bottom." : "top."
             XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
                 "garmentMeasurementLabel_" + otherPrefix)).firstMatch.exists)
-            attachScreenshot(app, name: "garment-\(fixture.prefix)-captured-before-recognition")
+            attachScreenshot(app, name: "garment-\(fixture.prefix)-captured-after-recognition")
 
             app.buttons["retakeGarmentMeasurement"].tap()
             XCTAssertTrue(recognize.waitForExistence(timeout: 5))
             XCTAssertFalse(silhouette.exists)
             XCTAssertFalse(guidance.label.contains("인식 완료"))
-            XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+            assertRecognitionGate(in: app, ready: false)
+            shutter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTAssertFalse(confirm.exists, "Retaking must not reuse the previous capture's recognition")
+            recognize.tap()
+            assertRecognitionGate(in: app, ready: true)
             shutter.tap()
             XCTAssertTrue(confirm.waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
@@ -144,7 +174,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
     func testSyntheticCaptureFreezesPhotoAndShowsProcessingBeforeMeasurementResult() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--garment-preview-top", "--garment-preview-processing"]
+        app.launchArguments = ["--garment-preview-top", "--garment-preview-processing", "--garment-preview-no-outline"]
         launchLiDARLab(app)
         let preview = app.buttons["openGarmentPreview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
@@ -153,16 +183,52 @@ final class GarmentCaptureFlowTests: XCTestCase {
 
         let shutter = app.buttons["captureGarment"]
         XCTAssertTrue(shutter.waitForExistence(timeout: 10))
-        XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+        assertRecognitionGate(in: app, ready: false)
         XCTAssertTrue(app.staticTexts["garmentPreviewProvenance"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
-        XCTAssertFalse(app.descendants(matching: .any)["captureGuidance"].firstMatch.label.contains("인식 완료"))
+        armPreviewCapture(in: app)
+        XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists,
+                       "This processing-only fixture hides the advisory tint so source pixels can be compared")
+        let viewport = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
+        let liveBounds = viewport.frame
+        let screenBounds = app.frame
+        let liveScreenshot = XCUIScreen.main.screenshot()
+        attachFrame(liveScreenshot, name: "garment-top-live-framing-before-capture")
         // The fixture intentionally holds its processing presentation long
         // enough to inspect it. It never exercises real model/depth accuracy.
         shutter.tap()
         let frozenPhoto = app.descendants(matching: .any)["garmentProcessingPhoto"].firstMatch
         XCTAssertTrue(frozenPhoto.waitForExistence(timeout: 5),
                       "Capture must keep the frozen photo visible while finding points and measuring")
+        XCTAssertEqual(shutter.value as? String, "촬영 중")
+        // Take the frame immediately, before the intentionally short analysis
+        // fixture advances. Progress/provenance and controls occupy other areas.
+        let frozenBounds = frozenPhoto.frame
+        let frozenScreenshot = XCUIScreen.main.screenshot()
+        attachFrame(frozenScreenshot, name: "garment-top-frozen-framing-during-analysis")
+        XCTAssertEqual(frozenBounds.minX, liveBounds.minX, accuracy: 1)
+        XCTAssertEqual(frozenBounds.minY, liveBounds.minY, accuracy: 1)
+        XCTAssertEqual(frozenBounds.width, liveBounds.width, accuracy: 1)
+        XCTAssertEqual(frozenBounds.height, liveBounds.height, accuracy: 1,
+                       "The frozen photo must stay bounded to the full camera viewport")
+        let sampleSites = [CGPoint(x: 0.05, y: 0.28), CGPoint(x: 0.15, y: 0.46),
+            CGPoint(x: 0.85, y: 0.46), CGPoint(x: 0.42, y: 0.60),
+            CGPoint(x: 0.08, y: 0.64), CGPoint(x: 0.92, y: 0.64)]
+        var liveColors: [[Int]] = []
+        for site in sampleSites {
+            let location = CGPoint(x: liveBounds.minX + liveBounds.width * site.x,
+                y: liveBounds.minY + liveBounds.height * site.y)
+            let liveColor = try rgbSample(in: liveScreenshot.image, at: location, screen: screenBounds)
+            let frozenColor = try rgbSample(in: frozenScreenshot.image, at: location, screen: screenBounds)
+            liveColors.append(liveColor)
+            for channel in 0..<3 {
+                XCTAssertLessThanOrEqual(abs(liveColor[channel] - frozenColor[channel]), 8,
+                    "The same source pixel must remain at \(site) during analysis without an additional crop")
+            }
+        }
+        XCTAssertGreaterThan(abs(liveColors[0][0] - liveColors[1][0]), 40,
+            "Probe both the colored garment and its background so a blank frozen frame cannot pass")
         let progress = app.descendants(matching: .any)["garmentMeasurementProgress"].firstMatch
         XCTAssertTrue(progress.exists)
         let capturedProgress = NSPredicate { _, _ in
@@ -180,7 +246,6 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertFalse(app.buttons["confirmGarmentMeasurement"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists,
                        "An advisory live contour must not overlay a different captured photo")
-        attachScreenshot(app, name: "garment-top-frozen-photo-and-measurement-progress")
 
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 10))
@@ -193,7 +258,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
 
         app.buttons["retakeGarmentMeasurement"].tap()
         XCTAssertTrue(shutter.waitForExistence(timeout: 5))
-        XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
+        assertRecognitionGate(in: app, ready: false)
         XCTAssertFalse(frozenPhoto.exists)
         XCTAssertFalse(progress.exists)
         XCTAssertFalse(confirm.exists)
@@ -794,11 +859,55 @@ final class GarmentCaptureFlowTests: XCTestCase {
     }
 
     @MainActor
+    private func assertRecognitionGate(in app: XCUIApplication, ready: Bool,
+                                       file: StaticString = #filePath, line: UInt = #line) {
+        let shutter = app.buttons["captureGarment"]
+        let expectedValue = ready ? "촬영 가능" : "옷 인식 대기"
+        expectation(for: NSPredicate { _, _ in
+            shutter.isEnabled == ready && shutter.value as? String == expectedValue
+        }, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(shutter.isEnabled, ready, file: file, line: line)
+        XCTAssertEqual(shutter.value as? String, expectedValue, file: file, line: line)
+    }
+
+    @MainActor
+    private func assertShutterCenterColor(in app: XCUIApplication, ready: Bool, attachmentName: String,
+                                          file: StaticString = #filePath, line: UInt = #line) throws {
+        let shutterBounds = app.buttons["captureGarment"].frame
+        let screenBounds = app.frame
+        let frame = XCUIScreen.main.screenshot()
+        attachFrame(frame, name: attachmentName)
+        let rgb = try rgbSample(in: frame.image,
+            at: CGPoint(x: shutterBounds.midX, y: shutterBounds.midY), screen: screenBounds,
+            file: file, line: line)
+        if ready {
+            XCTAssertGreaterThan(rgb[0], 180, "A ready shutter must visibly show its orange center", file: file, line: line)
+            XCTAssertGreaterThanOrEqual(rgb[1], 60, file: file, line: line)
+            XCTAssertLessThanOrEqual(rgb[1], 140, file: file, line: line)
+            XCTAssertLessThan(rgb[2], 120, file: file, line: line)
+            XCTAssertGreaterThan(rgb[0] - rgb[1], 60, file: file, line: line)
+        } else {
+            XCTAssertLessThan(abs(rgb[0] - rgb[1]), 20,
+                "Waiting or lost recognition must remove the visible orange center", file: file, line: line)
+            XCTAssertLessThan(abs(rgb[1] - rgb[2]), 20, file: file, line: line)
+        }
+    }
+
+    @MainActor
+    private func armPreviewCapture(in app: XCUIApplication,
+                                   file: StaticString = #filePath, line: UInt = #line) {
+        let recognize = app.buttons["previewRecognizeGarment"]
+        XCTAssertTrue(recognize.waitForExistence(timeout: 5), file: file, line: line)
+        if app.buttons["captureGarment"].value as? String != "촬영 가능" { recognize.tap() }
+        assertRecognitionGate(in: app, ready: true, file: file, line: line)
+    }
+
+    @MainActor
     private func assertAdvisoryContourGuidance(_ guidance: XCUIElement) {
-        XCTAssertTrue(guidance.label.contains("윤곽 미리보기"))
-        XCTAssertTrue(guidance.label.contains("촬영 후"))
-        XCTAssertFalse(guidance.label.contains("인식 완료"),
-                       "An advisory contour must not claim that the captured garment was classified or measured")
+        XCTAssertEqual(guidance.label, "옷 인식 완료! 촬영 버튼을 눌러주세요")
+        // Hi-Fi labels the visible outline as recognition. Actual measurement
+        // is still verified separately after the shutter in each flow test.
     }
 
     @MainActor
@@ -873,6 +982,37 @@ final class GarmentCaptureFlowTests: XCTestCase {
             let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: goingDown ? 0.65 : 0.52))
             start.press(forDuration: 0.05, thenDragTo: end)
         }
+    }
+
+    @MainActor
+    private func rgbSample(in image: UIImage, at point: CGPoint, screen: CGRect,
+                           file: StaticString = #filePath, line: UInt = #line) throws -> [Int] {
+        let cgImage = try XCTUnwrap(image.cgImage, file: file, line: line)
+        let scaleX = CGFloat(cgImage.width) / screen.width
+        let scaleY = CGFloat(cgImage.height) / screen.height
+        let x = (point.x - screen.minX) * scaleX
+        let y = (point.y - screen.minY) * scaleY
+        // Average a tiny patch well inside the flat colored fixture regions.
+        // This tolerates screenshot scaling without overlooking a framing jump.
+        let patch = CGRect(x: x - 1.5 * scaleX, y: y - 1.5 * scaleY,
+            width: 3 * scaleX, height: 3 * scaleY).integral.intersection(
+                CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+        let pixels = try XCTUnwrap(cgImage.cropping(to: patch), file: file, line: line)
+        var rgba = [UInt8](repeating: 0, count: 4)
+        let context = try XCTUnwrap(CGContext(data: &rgba, width: 1, height: 1, bitsPerComponent: 8,
+            bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue), file: file, line: line)
+        context.interpolationQuality = .medium
+        context.draw(pixels, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return rgba.prefix(3).map(Int.init)
+    }
+
+    @MainActor
+    private func attachFrame(_ frame: XCUIScreenshot, name: String) {
+        let attachment = XCTAttachment(screenshot: frame)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor
