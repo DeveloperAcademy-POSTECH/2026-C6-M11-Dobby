@@ -62,10 +62,15 @@ struct InstagramExportView: View {
             if account != nil && !uploadState.isUploading {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("계정 새로고침", systemImage: "arrow.clockwise") {
-                            Task { await loadAccount() }
+                        Button {
+                            Task { await connect() }
+                        } label: {
+                            Label("다시 연결하기", systemImage: "arrow.clockwise")
+                                .symbolRenderingMode(.monochrome)
+                                .foregroundStyle(.primary)
                         }
-                        Button("연결 해제", systemImage: "link.badge.minus", role: .destructive) {
+                        Button("연결 해제하기", systemImage: "rectangle.portrait.and.arrow.forward",
+                               role: .destructive) {
                             confirmingDisconnect = true
                         }
                     } label: {
@@ -103,7 +108,7 @@ struct InstagramExportView: View {
         .task { await loadAccount() }
         .confirmationDialog("Instagram 연결을 해제할까요?", isPresented: $confirmingDisconnect,
                             titleVisibility: .visible) {
-            Button("연결 해제", role: .destructive) { Task { await disconnect() } }
+            Button("연결 해제하기", role: .destructive) { Task { await disconnect() } }
             Button("취소", role: .cancel) {}
         } message: {
             Text("이 기기의 연결 정보가 서버에서 삭제됩니다. 기존 Instagram 게시물은 유지됩니다.")
