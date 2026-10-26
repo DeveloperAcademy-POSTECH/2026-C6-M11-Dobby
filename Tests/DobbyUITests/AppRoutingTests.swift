@@ -204,6 +204,85 @@ final class AppRoutingTests: XCTestCase {
     }
 
     @MainActor
+    func testProductInformationBackgroundTapDismissesKeyboardsWithoutLosingInput() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        app.tabBars.buttons["보관함"].tap()
+        app.buttons["debug.export-sample"].tap()
+        XCTAssertTrue(app.buttons["library.edit"].waitForExistence(timeout: 10))
+        app.buttons["library.edit"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 5))
+
+        let name = app.descendants(matching: .any)["product-info.name"].firstMatch
+        let detail = app.descendants(matching: .any)["product-info.detail"].firstMatch
+        let price = app.textFields["product-info.price"]
+        let shoulder = app.textFields["product-info.measurement.shoulderWidth"]
+        let keyboard = app.keyboards.firstMatch
+
+        reveal(name, in: app)
+        tapVisibleInput(name, in: app)
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        name.typeText("X")
+        let editedName = name.value as? String
+        XCTAssertTrue(editedName?.contains("X") == true)
+        dismissKeyboardByTappingBackground(beside: name, in: app)
+        XCTAssertEqual(name.value as? String, editedName)
+
+        tapVisibleInput(name, in: app)
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        // Switch inputs while the keyboard is already open. A background
+        // gesture must not consume the editor's tap or prevent typing.
+        XCTAssertTrue(detail.isHittable)
+        tapVisibleInput(detail, in: app)
+        detail.typeText("Y")
+        let editedDetail = detail.value as? String
+        XCTAssertTrue(editedDetail?.contains("Y") == true)
+        XCTAssertTrue(keyboard.exists)
+        dismissKeyboardByTappingBackground(beside: detail, in: app)
+        XCTAssertEqual(detail.value as? String, editedDetail)
+
+        for input in [price, shoulder] {
+            reveal(input, in: app)
+            let value = input.value as? String
+            tapVisibleInput(input, in: app)
+            XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+            dismissKeyboardByTappingBackground(beside: input, in: app)
+            XCTAssertEqual(input.value as? String, value)
+            tapVisibleInput(input, in: app)
+            XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+            dismissKeyboardByTappingBackground(beside: input, in: app)
+        }
+        XCTAssertEqual(name.value as? String, editedName)
+        XCTAssertEqual(detail.value as? String, editedDetail)
+        attachScreenshot(app, name: "product-info-background-dismissed-keyboard")
+    }
+
+    @MainActor
+    private func tapVisibleInput(_ input: XCUIElement, in app: XCUIApplication) {
+        let barBottom = app.navigationBars.firstMatch.frame.maxY
+        let keyboardTop = app.keyboards.firstMatch.exists
+            ? app.keyboards.firstMatch.frame.minY : app.frame.maxY
+        let top = max(input.frame.minY, barBottom + 12)
+        let bottom = min(input.frame.maxY, keyboardTop - 12)
+        XCTAssertGreaterThan(bottom, top)
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: input.frame.maxX - min(4, input.frame.width / 2),
+                                 dy: (top + min(bottom, top + 44)) / 2)).tap()
+    }
+
+    @MainActor
+    private func dismissKeyboardByTappingBackground(beside input: XCUIElement, in app: XCUIApplication) {
+        let keyboard = app.keyboards.firstMatch
+        let top = app.navigationBars.firstMatch.frame.maxY + 20
+        let bottom = keyboard.frame.minY - 20
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: 8, dy: min(max(input.frame.midY, top), bottom))).tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+    }
+
+    @MainActor
     private func fixtureApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
