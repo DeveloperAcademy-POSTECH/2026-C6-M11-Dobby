@@ -110,14 +110,16 @@ final class GarmentPhotoGeometryTests: XCTestCase {
         // The enlarged image covers the complete loupe, including near edges.
         XCTAssertLessThanOrEqual(layout.imageOrigin.x, 0, file: file, line: line)
         XCTAssertLessThanOrEqual(layout.imageOrigin.y, 0, file: file, line: line)
-        XCTAssertGreaterThanOrEqual(layout.imageOrigin.x + layout.imageSize.width, loupeSize.width,
+        XCTAssertGreaterThanOrEqual(layout.imageOrigin.x + layout.imageSize.width + 1e-9, loupeSize.width,
             file: file, line: line)
-        XCTAssertGreaterThanOrEqual(layout.imageOrigin.y + layout.imageSize.height, loupeSize.height,
+        XCTAssertGreaterThanOrEqual(layout.imageOrigin.y + layout.imageSize.height + 1e-9, loupeSize.height,
             file: file, line: line)
-        XCTAssertGreaterThanOrEqual(layout.crosshair.x, 0, file: file, line: line)
-        XCTAssertGreaterThanOrEqual(layout.crosshair.y, 0, file: file, line: line)
-        XCTAssertLessThanOrEqual(layout.crosshair.x, loupeSize.width, file: file, line: line)
-        XCTAssertLessThanOrEqual(layout.crosshair.y, loupeSize.height, file: file, line: line)
+        // Edge subtraction on sub-point viewports can differ by one floating
+        // representation step; allow no visually meaningful overflow.
+        XCTAssertGreaterThanOrEqual(layout.crosshair.x, -1e-9, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(layout.crosshair.y, -1e-9, file: file, line: line)
+        XCTAssertLessThanOrEqual(layout.crosshair.x, loupeSize.width + 1e-9, file: file, line: line)
+        XCTAssertLessThanOrEqual(layout.crosshair.y, loupeSize.height + 1e-9, file: file, line: line)
 
         // Recover the selected image pixel from the crosshair. Clamping a crop
         // must move the crosshair with the pixel rather than silently recenter it.
@@ -126,9 +128,50 @@ final class GarmentPhotoGeometryTests: XCTestCase {
             display, accuracy: 1e-12, file: file, line: line)
     }
 
+    func testCompactMagnifierUsesTheSameEightyByOneHundredTwelveInsetForNormalPhotos() {
+        for size in photoSizes + [CGSize(width: 120, height: 150), CGSize(width: 402, height: 560)] {
+            XCTAssertEqual(GarmentPhotoGeometry.magnifierRect(photoSize: size),
+                CGRect(x: 20, y: 19, width: 80, height: 112))
+        }
+    }
+
+    func testCompactMagnifierFitsSmallPortraitAndLandscapePhotosWithoutDistortion() {
+        let cases: [(photo: CGSize, expected: CGRect)] = [
+            (.init(width: 90, height: 220), .init(x: 20, y: 19, width: 50, height: 70)),
+            (.init(width: 220, height: 100), .init(x: 20, y: 19, width: 80.0 * 62 / 112, height: 62)),
+            (.init(width: 20, height: 30), .init(x: 9.5, y: 14.5, width: 80.0 / 112, height: 1)),
+            (.init(width: 1, height: 1), .init(x: 0, y: 0, width: 80.0 / 112, height: 1))
+        ]
+        for item in cases {
+            let rect = GarmentPhotoGeometry.magnifierRect(photoSize: item.photo)
+            XCTAssertEqual(rect.minX, item.expected.minX, accuracy: 1e-9)
+            XCTAssertEqual(rect.minY, item.expected.minY, accuracy: 1e-9)
+            XCTAssertEqual(rect.width, item.expected.width, accuracy: 1e-9)
+            XCTAssertEqual(rect.height, item.expected.height, accuracy: 1e-9)
+        }
+        for size in cases.map(\.photo) + [CGSize(width: 60, height: 60), CGSize(width: 0.25, height: 0.5)] {
+            let rect = GarmentPhotoGeometry.magnifierRect(photoSize: size)
+            XCTAssertTrue([rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite))
+            XCTAssertGreaterThan(rect.width, 0)
+            XCTAssertGreaterThan(rect.height, 0)
+            XCTAssertLessThanOrEqual(rect.width, 80)
+            XCTAssertLessThanOrEqual(rect.height, 112)
+            XCTAssertEqual(rect.width / rect.height, 80.0 / 112, accuracy: 1e-12)
+            XCTAssertTrue(CGRect(origin: .zero, size: size).insetBy(dx: -1e-9, dy: -1e-9).contains(rect),
+                "The viewport must stay inside even a photo smaller than its usual inset.")
+        }
+    }
+
+    func testInvalidPhotoSizeDoesNotProduceAnOffscreenMagnifierRect() {
+        for size in [CGSize.zero, CGSize(width: -1, height: 520), CGSize(width: 390, height: 0),
+                     CGSize(width: CGFloat.infinity, height: 520), CGSize(width: 390, height: CGFloat.nan)] {
+            XCTAssertEqual(GarmentPhotoGeometry.magnifierRect(photoSize: size), .zero)
+        }
+    }
+
     func testInteriorMagnifierCentresSelectedPixelWithoutDistortingPhoto() {
-        let loupe = CGSize(width: 108, height: 124)
         for size in photoSizes {
+            let loupe = GarmentPhotoGeometry.magnifierRect(photoSize: size).size
             let selected = ImagePoint(x: 0.37, y: 0.62)
             let layout = GarmentPhotoGeometry.magnifier(displayPoint: selected, photoSize: size, loupeSize: loupe)
             assertMagnifier(layout, display: .init(x: selected.x, y: selected.y), photoSize: size, loupeSize: loupe)
@@ -139,13 +182,14 @@ final class GarmentPhotoGeometryTests: XCTestCase {
     }
 
     func testMagnifierCornersAndEdgesKeepCrosshairOnTheSamePixelForEveryOrientation() {
-        let loupe = CGSize(width: 108, height: 124)
         let upper = Double(1).nextDown
         let originals: [ImagePoint] = [
             .init(x: 0, y: 0), .init(x: upper, y: 0), .init(x: upper, y: upper), .init(x: 0, y: upper),
             .init(x: 0, y: 0.45), .init(x: upper, y: 0.55), .init(x: 0.35, y: 0), .init(x: 0.65, y: upper)
         ]
-        for size in photoSizes {
+        for size in photoSizes + [CGSize(width: 90, height: 220), CGSize(width: 220, height: 100),
+                                  CGSize(width: 20, height: 30), CGSize(width: 1, height: 1)] {
+            let loupe = GarmentPhotoGeometry.magnifierRect(photoSize: size).size
             for orientation in ImageOrientation.allCases {
                 for original in originals {
                     let display = expectedDisplay(original, orientation: orientation)
@@ -159,6 +203,19 @@ final class GarmentPhotoGeometryTests: XCTestCase {
                 }
             }
         }
+    }
+
+    func testCaptionAvoidsTheCompactMagnifierRectangleUsedByRendering() throws {
+        let size = photoSizes[0], label = CGSize(width: 80, height: 24)
+        let loupe = GarmentPhotoGeometry.magnifierRect(photoSize: size)
+        XCTAssertEqual(loupe.size, CGSize(width: 80, height: 112))
+        let occupied = [loupe.insetBy(dx: -4, dy: -4)]
+        let placement = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(
+            start: .init(x: 35, y: 70), end: .init(x: 205, y: 70), labelSize: label,
+            imageSize: size, occupied: occupied))
+        XCTAssertFalse(placement.rect.intersects(occupied[0].insetBy(dx: -3, dy: -3)),
+            "A capsule's complete touch area must avoid the actual compact viewport while it is visible.")
+        XCTAssertTrue(CGRect(origin: .zero, size: size).insetBy(dx: 4, dy: 4).contains(placement.rect))
     }
 
     func testLabelTouchRectAvoidsPointHandlesMagnifierAndOtherLabels() throws {
