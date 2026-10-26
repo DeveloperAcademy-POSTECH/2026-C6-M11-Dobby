@@ -14,6 +14,10 @@ struct GarmentCaptureFlowView: View {
     private let previewBothSidesPartial: Bool
     private let previewMissingTopLength: Bool
     private let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
+    private let onExitRecord: ((SavedMeasurement) async throws -> Void)?
+    private let onExitRequested: ((@escaping () -> Void) -> Void)?
+    private let restoredRecord: SavedMeasurement?
+    private let allowsRetake: Bool
     private let onCancel: (() -> Void)?
     private let embedsNavigation: Bool
     @Environment(\.dismiss) private var dismiss
@@ -46,10 +50,19 @@ struct GarmentCaptureFlowView: View {
 
     init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false,
          onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
-         onCancel: (() -> Void)? = nil, embedsNavigation: Bool = true) {
+         onCancel: (() -> Void)? = nil, embedsNavigation: Bool = true,
+         restoredRecord: SavedMeasurement? = nil,
+         onExitRecord: ((SavedMeasurement) async throws -> Void)? = nil,
+         allowsRetake: Bool = true,
+         onExitRequested: ((@escaping () -> Void) -> Void)? = nil) {
         self.archive = archive
         self.isPreview = preview
         self.onConfirmedRecord = onConfirmedRecord
+        self.onExitRecord = onExitRecord
+        self.onExitRequested = onExitRequested
+        self.restoredRecord = restoredRecord
+        self.allowsRetake = allowsRetake
+        _model = State(initialValue: restoredRecord.map(AutomaticMeasurement.init(record:)))
         self.onCancel = onCancel
         self.embedsNavigation = embedsNavigation
         // Fixture selection affects only the labelled synthetic preview.
@@ -67,7 +80,9 @@ struct GarmentCaptureFlowView: View {
                     GarmentMeasurementResultView(model: model, archive: archive, recordingError: recordingError,
                         initialImage: processingImage, onRetake: retake,
                         onConfirm: { if onConfirmedRecord == nil { dismiss() } },
-                        onConfirmedRecord: onConfirmedRecord)
+                        onConfirmedRecord: onConfirmedRecord,
+                        onExitRecord: onExitRecord, initialRecord: restoredRecord,
+                        allowsRetake: allowsRetake, onExitRequested: onExitRequested)
                 } else {
                     cameraScreen
                         .navigationTitle("실측 촬영")
@@ -755,6 +770,7 @@ struct GarmentCaptureFlowView: View {
     }
 
     private func retake() {
+        guard allowsRetake else { return }
         cancel()
         clearPreviewFocus()
         model = nil

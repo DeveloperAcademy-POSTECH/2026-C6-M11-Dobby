@@ -5,11 +5,16 @@ import ImageIO
 
 struct ContentView: View {
     private enum HomeTab: Hashable { case capture, library }
+    private struct CreationRequest: Identifiable {
+        let id = UUID()
+        let productID: UUID?
+    }
     @Environment(\.modelContext) private var context
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
     @State private var tab: HomeTab = .capture
     @State private var libraryPath: [UUID] = []
-    @State private var showCreation = false
+    @State private var libraryIsEditing = false
+    @State private var creationRequest: CreationRequest?
     @State private var creationCopyHomeProduct: ExportProduct?
     @State private var showLiDAR = false
     @State private var exportProduct: ExportProduct?
@@ -18,10 +23,17 @@ struct ContentView: View {
     @State private var linkError: String?
     @State private var routeTask: Task<Void, Never>?
 
+#if DEBUG
+    init(previewLibrary: Bool = false, previewEditing: Bool = false) {
+        _tab = State(initialValue: previewLibrary ? .library : .capture)
+        _libraryIsEditing = State(initialValue: previewEditing)
+    }
+#endif
+
     var body: some View {
         TabView(selection: $tab) {
-            Tab("홈", systemImage: "house", value: .capture) {
-                HomeView { showCreation = true }
+            Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: HomeTab.capture) {
+                HomeView { startCreation() }
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
                         if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
@@ -36,44 +48,20 @@ struct ContentView: View {
                     }
 #endif
             }
-            Tab("보관함", systemImage: "hanger", value: .library) {
+            Tab("보관함", systemImage: "hanger", value: HomeTab.library) {
                 NavigationStack(path: $libraryPath) {
-                    Group {
-                        if garments.isEmpty {
-                            ContentUnavailableView("보관된 제품이 없어요", systemImage: "hanger",
-                                description: Text("옷을 촬영하고 실측하면 여기에 보관돼요."))
-                        } else {
-                            List(garments) { garment in
-                                NavigationLink(value: garment.id) {
-                                    HStack(spacing: 14) {
-                                        if let photo = garment.thumbnail {
-                                            StoredProductPhotoView(photo: photo, maximumPixelSize: 240)
-                                                .frame(width: 64, height: 80).clipShape(RoundedRectangle(cornerRadius: 8))
-                                        } else {
-                                            Image(systemName: "tshirt").frame(width: 64, height: 80)
-                                        }
-                                        VStack(alignment: .leading, spacing: 6) {
-                                            Text(garment.name.isEmpty ? "이름 없는 \(garment.group.label)" : garment.name)
-                                                .font(.headline)
-                                            Text("\(garment.visibleMeasurements.count)개 실측 · \(garment.productPhotos.count)장 사진")
-                                                .font(.caption).foregroundStyle(.secondary)
-                                            if garment.sourceMeasurementID != nil && garment.informationCompletedAt == nil {
-                                                Text("작성 중 · 이어서 입력할 수 있어요").font(.caption).foregroundStyle(.orange)
-                                            }
-                                        }
-                                    }
-                                }.accessibilityIdentifier("library.product.\(garment.id.uuidString)")
-                            }.accessibilityIdentifier("library.products")
-                        }
-                    }
-                    .navigationTitle("보관함")
+                    ProductLibraryView(garments: garments, isEditing: $libraryIsEditing,
+                        onStartMeasurement: { startCreation() },
+                        onResumeDraft: { startCreation(resuming: $0) })
 #if DEBUG
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("내보내기 샘플", systemImage: "shippingbox") {
-                                openDebugExportSample()
+                        if ProductAppStorage.fixtureDirectory != nil {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("내보내기 샘플", systemImage: "shippingbox") {
+                                    openDebugExportSample()
+                                }
+                                .accessibilityIdentifier("debug.export-sample")
                             }
-                            .accessibilityIdentifier("debug.export-sample")
                         }
                     }
 #endif
@@ -86,18 +74,22 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(Color("HomeAccent"))
+        .tint(tab == .library && libraryPath.isEmpty
+            ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color("HomeAccent"))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
                     .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
             }
         }
-        .fullScreenCover(isPresented: $showCreation) {
-            ProductCreationFlowView(container: context.container, controller: controller, isPresented: $showCreation,
+        .fullScreenCover(item: $creationRequest) { request in
+            ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
                 copyHomeProduct: $creationCopyHomeProduct,
-                onFinish: { showCreation = false; libraryPath.removeAll(); tab = .library },
-                onCancel: { showCreation = false })
+                resumeProductID: request.productID,
+                onDraftSaved: { creationRequest = nil; libraryPath.removeAll(); tab = .capture },
+                onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
+                onCancel: { creationRequest = nil })
+                .tint(Color("HomeAccent"))
         }
         .fullScreenCover(isPresented: $showLiDAR) {
             LiDARLabView().safeAreaInset(edge: .top, spacing: 0) {
@@ -110,12 +102,22 @@ struct ContentView: View {
         }
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)
+                .tint(Color("HomeAccent"))
         }
         .alert("내보내기를 열 수 없어요", isPresented: Binding(
             get: { linkError != nil }, set: { if !$0 { linkError = nil } })) {
                 Button("확인", role: .cancel) { linkError = nil }
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
+    }
+
+    private func startCreation(resuming productID: UUID? = nil) {
+        libraryIsEditing = false
+        creationRequest = CreationRequest(productID: productID)
+    }
+
+    private var creationIsPresented: Binding<Bool> {
+        Binding(get: { creationRequest != nil }, set: { if !$0 { creationRequest = nil } })
     }
 
 #if DEBUG
@@ -157,7 +159,7 @@ struct ContentView: View {
             detailMeasurements: session.measurementItems?.map { ExportMeasurement(id: $0.id, title: $0.title, value: $0.value) },
             photoData: saved?.photoData ?? [])
         routeTask?.cancel()
-        if showCreation {
+        if creationRequest != nil {
             // A previous product's copy helper can return while a new draft is
             // open. Keep its context and captures alive below the export cover.
             creationCopyHomeProduct = restored
@@ -278,8 +280,22 @@ struct StoredProductPhotoView: View {
 }
 
 #if DEBUG
-#Preview {
-    ContentView().modelContainer(for: [Garment.self, GarmentPhoto.self, LandmarkPoint.self,
-        MeasuredValue.self, ExportRecord.self], inMemory: true)
+#Preview("보관함 · 목업 데이터") {
+    ContentView(previewLibrary: true)
+        .modelContainer(LibraryPreviewData.makeContainer())
+        .preferredColorScheme(.light)
+}
+
+#Preview("보관함 · 수정 모드") {
+    ContentView(previewLibrary: true, previewEditing: true)
+        .modelContainer(LibraryPreviewData.makeContainer())
+        .preferredColorScheme(.light)
+}
+
+#Preview("보관함 · 비어 있음") {
+    ContentView(previewLibrary: true)
+        .modelContainer(for: [Garment.self, GarmentPhoto.self, LandmarkPoint.self,
+            MeasuredValue.self, ExportRecord.self], inMemory: true)
+        .preferredColorScheme(.light)
 }
 #endif
