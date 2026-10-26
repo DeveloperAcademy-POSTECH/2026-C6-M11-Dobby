@@ -8,28 +8,27 @@ struct ExportChannelButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack {
                 Image(channel.imageName)
                     .resizable()
                     .scaledToFit()
                     .frame(width: 48, height: 48)
+
                 Text(channel.shortTitle)
                     .font(.body.weight(.medium))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .layoutPriority(1)
+                Spacer()
                 if isComplete {
                     Text("완료")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color(.brandMain))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color(.brandMain).opacity(0.12), in: Capsule())
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Color(.brandMain))
                 }
             }
             .padding(16)
-            .frame(minHeight: 80)
             .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24))
             .contentShape(RoundedRectangle(cornerRadius: 24))
         }
