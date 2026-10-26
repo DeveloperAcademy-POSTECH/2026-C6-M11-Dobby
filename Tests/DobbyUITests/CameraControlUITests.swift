@@ -107,9 +107,19 @@ final class CameraControlUITests: XCTestCase {
         let app = openPreview()
         let zoom = app.buttons["cameraZoomSelector"]
         let shutter = app.buttons["captureGarment"]
+        let viewport = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
+        let originalViewport = viewport.frame
         XCTAssertTrue(zoom.isHittable)
         XCTAssertEqual(zoom.value as? String, "1x")
         assertRecognitionGate(in: app, ready: false)
+        let focus = app.descendants(matching: .any)["cameraFocusIndicator"].firstMatch
+        let exposure = app.descendants(matching: .any)["cameraExposureControl"].firstMatch
+        viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.30, dy: 0.40)).tap()
+        XCTAssertTrue(exposure.waitForExistence(timeout: 2))
+        let oneXDrag = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: 0.70))
+        oneXDrag.press(forDuration: 0.01, thenDragTo: oneXDrag.withOffset(CGVector(dx: 0, dy: -50)))
+        waitUntil { Self.exposureBias(in: exposure.value as? String).map { $0 > 0 } == true }
+        let oneXBias = try XCTUnwrap(Self.exposureBias(in: exposure.value as? String))
         app.buttons["previewRecognizeGarment"].tap()
         assertRecognitionGate(in: app, ready: true)
 
@@ -119,6 +129,26 @@ final class CameraControlUITests: XCTestCase {
                        "Tapping the zoom button must switch directly, without opening a menu")
         XCTAssertFalse(app.buttons["cameraZoom_0.5"].exists,
                        "The aligned LiDAR path must not offer an unsupported ultra-wide capture")
+        XCTAssertEqual(viewport.frame.minX, originalViewport.minX, accuracy: 1)
+        XCTAssertEqual(viewport.frame.minY, originalViewport.minY, accuracy: 1)
+        XCTAssertEqual(viewport.frame.width, originalViewport.width, accuracy: 1)
+        XCTAssertEqual(viewport.frame.height, originalViewport.height, accuracy: 1,
+            "Digital zoom changes source content, not the visible photo window")
+        viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.30, dy: 0.40)).tap()
+        XCTAssertTrue(focus.waitForExistence(timeout: 2))
+        XCTAssertEqual(focus.frame.midX, viewport.frame.minX + viewport.frame.width * 0.30, accuracy: 2)
+        XCTAssertEqual(focus.frame.midY, viewport.frame.minY + viewport.frame.height * 0.40, accuracy: 2)
+        XCTAssertEqual(focus.frame.width, 64, accuracy: 2)
+        XCTAssertEqual(focus.frame.height, 64, accuracy: 2,
+            "A 2× preview must not scale its focus feedback a second time")
+        let drag = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: 0.70))
+        drag.press(forDuration: 0.01, thenDragTo: drag.withOffset(CGVector(dx: 0, dy: -50)))
+        waitUntil { Self.exposureBias(in: exposure.value as? String).map { $0 > 0 } == true }
+        // Compare identical delivered UI gestures rather than assuming XCTest's
+        // nominal distance is the pan recognizer's complete translation.
+        XCTAssertEqual(try XCTUnwrap(Self.exposureBias(in: exposure.value as? String)),
+            oneXBias, accuracy: 0.051,
+            "The same visible-window drag must have the same EV response at 1× and 2×")
         attachScreenshot(name: "liquid-glass-zoom-two-x")
         // This synthetic fixture contains a calibrated 1x snapshot only. Its
         // disabled 2x shutter cannot be treated as physical zoom validation.
@@ -185,6 +215,11 @@ final class CameraControlUITests: XCTestCase {
     private func waitUntil(_ condition: @escaping () -> Bool) {
         expectation(for: NSPredicate { _, _ in condition() }, evaluatedWith: nil)
         waitForExpectations(timeout: 5)
+    }
+
+    nonisolated private static func exposureBias(in text: String?) -> Double? {
+        guard let text, text.hasPrefix("EV ") else { return nil }
+        return Double(text.dropFirst(3))
     }
 
     @MainActor

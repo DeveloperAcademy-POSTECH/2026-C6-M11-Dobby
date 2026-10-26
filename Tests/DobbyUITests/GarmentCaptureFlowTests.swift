@@ -212,9 +212,9 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertEqual(frozenBounds.width, liveBounds.width, accuracy: 1)
         XCTAssertEqual(frozenBounds.height, liveBounds.height, accuracy: 1,
                        "The frozen photo must stay bounded to the full camera viewport")
-        let sampleSites = [CGPoint(x: 0.06, y: 0.30), CGPoint(x: 0.94, y: 0.30),
-            CGPoint(x: 0.30, y: 0.58), CGPoint(x: 0.70, y: 0.58),
-            CGPoint(x: 0.05, y: 0.58), CGPoint(x: 0.95, y: 0.58)]
+        let sampleSites = [CGPoint(x: 0.05, y: 0.28), CGPoint(x: 0.15, y: 0.46),
+            CGPoint(x: 0.85, y: 0.46), CGPoint(x: 0.42, y: 0.60),
+            CGPoint(x: 0.08, y: 0.64), CGPoint(x: 0.92, y: 0.64)]
         var liveColors: [[Int]] = []
         for site in sampleSites {
             let location = CGPoint(x: liveBounds.minX + liveBounds.width * site.x,
@@ -224,10 +224,10 @@ final class GarmentCaptureFlowTests: XCTestCase {
             liveColors.append(liveColor)
             for channel in 0..<3 {
                 XCTAssertLessThanOrEqual(abs(liveColor[channel] - frozenColor[channel]), 8,
-                    "The same visible scene pixel must remain at \(site) during analysis; no aspect-fit jump or letterboxing")
+                    "The same source pixel must remain at \(site) during analysis without an additional crop")
             }
         }
-        XCTAssertGreaterThan(abs(liveColors[0][0] - liveColors[4][0]), 40,
+        XCTAssertGreaterThan(abs(liveColors[0][0] - liveColors[1][0]), 40,
             "Probe both the colored garment and its background so a blank frozen frame cannot pass")
         let progress = app.descendants(matching: .any)["garmentMeasurementProgress"].firstMatch
         XCTAssertTrue(progress.exists)
