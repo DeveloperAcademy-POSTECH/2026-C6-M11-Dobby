@@ -7,6 +7,35 @@ import UIKit
 
 @MainActor
 struct ProductPhotoFlowHandoffTests {
+    @Test func maximumSelectionPersistsOnlyChosenPhotosInSelectionOrder() async throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        let input = try fixture.input()
+        let details = try (0..<11).map { _ in try fixture.detail(input: input, shade: .blue) }
+        let model = try ProductPhotoModel(input: input, captureProvider: DetailStub(assets: details))
+        for _ in details { try await model.captureDetail() }
+        let selected = Array(details.prefix(10).reversed())
+        for photo in selected { model.toggleSelection(photo.id) }
+        #expect(model.toggleSelection(details[10].id) == .limitReached)
+        let output = try #require(model.output)
+        try await fixture.apply(output, input: input)
+        let durable = ModelContext(fixture.container)
+        let stored = try #require(durable.fetch(FetchDescriptor<Garment>()).first)
+        #expect(stored.productPhotos.map(\.id) == selected.map(\.id))
+        #expect(stored.thumbnail?.id == selected[0].id)
+        #expect(stored.photos.count == 11, "선택한 10장과 보정 근거인 실측 원본만 저장")
+        #expect(stored.measurementPhoto?.id == fixture.measured.id)
+        #expect(stored.measurementPhoto?.isSelectedForProduct == false)
+        #expect(stored.measurement("totalLength")?.valueCm == 63.25)
+        #expect(!stored.photos.contains { $0.id == details[10].id })
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.photosDirectory.path).count == 11)
+        // 미선택 원본은 저장 결과에서 제외되며, 임시 원본 정리는 별도 완료 단계의 책임이다.
+        for photo in details {
+            guard case let .localFile(url, _) = photo.source else { Issue.record("실제 파일 fixture 필요"); continue }
+            #expect(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+
     @Test func measuredSourceIsSeededWithoutCopyingOrLosingGeometry() throws {
         let fixture = try Fixture()
         defer { fixture.removeFiles() }
