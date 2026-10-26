@@ -8,6 +8,7 @@ export default {
       const url = new URL(request.url);
       const appEndpoint = url.pathname === "/oauth/start"
         || url.pathname === "/connection"
+        || url.pathname === "/disconnect"
         || url.pathname === "/products";
       if (appEndpoint && !validAppKey(request, env)) {
         return json({ error: "unauthorized", message: "인증되지 않은 앱 요청입니다." }, 401);
@@ -15,6 +16,7 @@ export default {
       if (request.method === "POST" && url.pathname === "/oauth/start") return await startOAuth(request, url, env);
       if (request.method === "GET" && url.pathname === "/oauth/callback") return await finishOAuth(url, env);
       if (request.method === "GET" && url.pathname === "/connection") return await connection(request, env);
+      if (request.method === "POST" && url.pathname === "/disconnect") return await disconnect(request, env);
       if (request.method === "POST" && url.pathname === "/products") return await createProduct(request, env);
       return json({ error: "not_found" }, 404);
     } catch (error) {
@@ -42,11 +44,20 @@ async function startOAuth(request, url, env) {
   const state = crypto.randomUUID();
   const codeVerifier = randomBase64URL(32);
   const codeChallenge = await sha256Base64URL(codeVerifier);
-  await env.CAFE24_TOKENS.put(
-    `pending:${state}`,
-    JSON.stringify({ deviceToken, mallID, codeVerifier }),
-    { expirationTtl: 600 },
-  );
+  const deviceKey = await tokenKey(deviceToken);
+  const pendingDeviceKey = `pending-device:${deviceKey}`;
+  const previousState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
+
+  if (previousState) await env.CAFE24_TOKENS.delete(`pending:${previousState}`);
+
+  await Promise.all([
+    env.CAFE24_TOKENS.put(
+      `pending:${state}`,
+      JSON.stringify({ deviceToken, deviceKey, mallID, codeVerifier }),
+      { expirationTtl: 600 },
+    ),
+    env.CAFE24_TOKENS.put(pendingDeviceKey, state, { expirationTtl: 600 }),
+  ]);
   const authorize = new URL(`https://${mallID}.cafe24api.com/api/v2/oauth/authorize`);
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("client_id", env.CAFE24_CLIENT_ID);
@@ -63,20 +74,55 @@ async function finishOAuth(url, env) {
   const pendingText = state && await env.CAFE24_TOKENS.get(`pending:${state}`);
   if (!pendingText || !code) return appRedirect(env, "error");
   const pending = JSON.parse(pendingText);
+  const pendingDeviceKey = `pending-device:${pending.deviceKey}`;
+  const activeState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
+
+  if (!pending.deviceKey || activeState !== state) {
+    await env.CAFE24_TOKENS.delete(`pending:${state}`);
+    return appRedirect(env, "error");
+  }
   const token = await cafe24Token(pending.mallID, env, new URLSearchParams({
     grant_type: "authorization_code",
     code,
     redirect_uri: env.CAFE24_REDIRECT_URI,
     code_verifier: pending.codeVerifier,
   }));
-  await env.CAFE24_TOKENS.put(`connection:${await tokenKey(pending.deviceToken)}`, JSON.stringify(token));
-  await env.CAFE24_TOKENS.delete(`pending:${state}`);
+  const latestState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
+
+  if (latestState !== state) {
+    await env.CAFE24_TOKENS.delete(`pending:${state}`);
+    return appRedirect(env, "error");
+  }
+
+  await Promise.all([
+    env.CAFE24_TOKENS.put(`connection:${pending.deviceKey}`, JSON.stringify(token)),
+    env.CAFE24_TOKENS.delete(`pending:${state}`),
+    env.CAFE24_TOKENS.delete(pendingDeviceKey),
+  ]);
   return appRedirect(env, "success");
 }
 
 async function connection(request, env) {
   const stored = await storedConnection(request, env, false);
   return json(stored ? { connected: true, mallID: stored.mall_id } : { connected: false, mallID: null });
+}
+
+async function disconnect(request, env) {
+  const deviceToken = bearer(request);
+  if (!deviceToken) return json({ error: "device_token_required" }, 400);
+
+  const deviceKey = await tokenKey(deviceToken);
+  const pendingDeviceKey = `pending-device:${deviceKey}`;
+  const pendingState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
+  const deletions = [
+    env.CAFE24_TOKENS.delete(`connection:${deviceKey}`),
+    env.CAFE24_TOKENS.delete(pendingDeviceKey),
+  ];
+
+  if (pendingState) deletions.push(env.CAFE24_TOKENS.delete(`pending:${pendingState}`));
+
+  await Promise.all(deletions);
+  return json({ disconnected: true });
 }
 
 async function createProduct(request, env) {
