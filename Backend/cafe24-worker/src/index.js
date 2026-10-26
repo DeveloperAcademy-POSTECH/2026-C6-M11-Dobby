@@ -15,6 +15,7 @@ export default {
       if (request.method === "POST" && url.pathname === "/oauth/start") return await startOAuth(request, url, env);
       if (request.method === "GET" && url.pathname === "/oauth/callback") return await finishOAuth(url, env);
       if (request.method === "GET" && url.pathname === "/connection") return await connection(request, env);
+      if (request.method === "DELETE" && url.pathname === "/connection") return await disconnect(request, env);
       if (request.method === "POST" && url.pathname === "/products") return await createProduct(request, env);
       return json({ error: "not_found" }, 404);
     } catch (error) {
@@ -77,6 +78,13 @@ async function finishOAuth(url, env) {
 async function connection(request, env) {
   const stored = await storedConnection(request, env, false);
   return json(stored ? { connected: true, mallID: stored.mall_id } : { connected: false, mallID: null });
+}
+
+async function disconnect(request, env) {
+  const deviceToken = bearer(request);
+  if (!deviceToken) return json({ error: "invalid_request" }, 400);
+  await env.CAFE24_TOKENS.delete(`connection:${await tokenKey(deviceToken)}`);
+  return json({ disconnected: true });
 }
 
 async function createProduct(request, env) {

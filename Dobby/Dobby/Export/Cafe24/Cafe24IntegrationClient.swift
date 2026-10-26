@@ -20,6 +20,16 @@ final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationCo
         try await send(authorizedRequest(path: "/connection", method: "GET"), as: Cafe24ConnectionStatus.self)
     }
 
+    func disconnect() async throws {
+        let result = try await send(
+            authorizedRequest(path: "/connection", method: "DELETE"),
+            as: Cafe24DisconnectResult.self
+        )
+        guard result.disconnected else {
+            throw Cafe24IntegrationError.server("연결을 해제하지 못했습니다.")
+        }
+    }
+
     func connect(mallID rawMallID: String) async throws {
         let mallID = rawMallID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard mallID.range(of: #"^[a-z0-9][a-z0-9_-]{1,39}$"#, options: .regularExpression) != nil else {

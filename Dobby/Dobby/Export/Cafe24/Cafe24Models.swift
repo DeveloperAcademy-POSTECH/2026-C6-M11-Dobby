@@ -5,6 +5,10 @@ struct Cafe24ConnectionStatus: Decodable {
     let mallID: String?
 }
 
+struct Cafe24DisconnectResult: Decodable {
+    let disconnected: Bool
+}
+
 struct Cafe24PublishResult: Decodable {
     let productNo: Int
     let mallID: String

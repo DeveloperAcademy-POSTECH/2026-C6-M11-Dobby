@@ -27,7 +27,6 @@ struct InstagramExportView: View {
     @State private var confirming = false
     @State private var confirmingRepublish = false
     @State private var message: String?
-    @State private var confirmingDisconnect = false
     @State private var requestID = UUID().uuidString
 
     init(product: ExportProduct, onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
@@ -69,9 +68,11 @@ struct InstagramExportView: View {
                                 .symbolRenderingMode(.monochrome)
                                 .foregroundStyle(.primary)
                         }
-                        Button("연결 해제하기", systemImage: "rectangle.portrait.and.arrow.forward",
-                               role: .destructive) {
-                            confirmingDisconnect = true
+                        Button(role: .destructive) {
+                            Task { await disconnect() }
+                        } label: {
+                            Label("연결 해제하기", systemImage: "personalhotspot.slash")
+                                .foregroundStyle(.red)
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -106,13 +107,6 @@ struct InstagramExportView: View {
         }
         .interactiveDismissDisabled(uploadState.isUploading)
         .task { await loadAccount() }
-        .confirmationDialog("Instagram 연결을 해제할까요?", isPresented: $confirmingDisconnect,
-                            titleVisibility: .visible) {
-            Button("연결 해제하기", role: .destructive) { Task { await disconnect() } }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text("이 기기의 연결 정보가 서버에서 삭제됩니다. 기존 Instagram 게시물은 유지됩니다.")
-        }
         .confirmationDialog("@\(account?.username ?? "")에 실제로 게시할까요?", isPresented: $confirming,
                             titleVisibility: .visible) {
             Button("공개 게시하기") { Task { await publish() } }
@@ -160,6 +154,7 @@ struct InstagramExportView: View {
     }
 
     private func disconnect() async {
+        guard !busy else { return }
         busy = true
         defer { busy = false }
         do {

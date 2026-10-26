@@ -58,11 +58,11 @@ struct Cafe24ExportView: View {
             if connectedMallID != nil && !uploadState.isUploading {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("연결 상태 새로고침", systemImage: "arrow.clockwise") {
+                        Button("다시 연결하기", systemImage: "arrow.clockwise") {
                             Task { await loadStatus() }
                         }
-                        Button("다른 쇼핑몰 연결", systemImage: "link") {
-                            prepareNewConnection()
+                        Button("연결 해제하기", systemImage: "personalhotspot.slash", role: .destructive) {
+                            Task { await disconnect() }
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -164,10 +164,18 @@ struct Cafe24ExportView: View {
         }
     }
 
-    private func prepareNewConnection() {
-        connectedMallID = nil
-        connectionError = nil
-        uploadState = .idle
+    private func disconnect() async {
+        guard !isConnecting else { return }
+        isConnecting = true
+        defer { isConnecting = false }
+        do {
+            try await client.disconnect()
+            connectedMallID = nil
+            connectionError = nil
+            uploadState = .idle
+        } catch {
+            message = error.localizedDescription
+        }
     }
 }
 
