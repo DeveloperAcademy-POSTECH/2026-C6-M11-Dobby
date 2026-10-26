@@ -2,6 +2,43 @@ import CoreGraphics
 import Foundation
 
 extension GarmentPhotoGeometry {
+    struct ProcessingPhotoLayout {
+        let photoRect: CGRect
+        /// Clip here as well as at the screen: rotation creates letterboxing,
+        /// which must never reveal hidden pixels of the full source image.
+        let viewportRect: CGRect
+    }
+
+    static func processingPhotoLayout(photoAspectRatio: CGFloat, capturedViewportSize: CGSize,
+                                      viewportSize: CGSize) -> ProcessingPhotoLayout {
+        let original = aspectFillRect(photoAspectRatio: photoAspectRatio, viewportSize: capturedViewportSize)
+        guard !original.isEmpty, viewportSize.width.isFinite, viewportSize.height.isFinite,
+              viewportSize.width > 0, viewportSize.height > 0 else {
+            return .init(photoRect: .zero, viewportRect: .zero)
+        }
+        let scale = min(viewportSize.width / capturedViewportSize.width,
+            viewportSize.height / capturedViewportSize.height)
+        let window = CGRect(x: (viewportSize.width - capturedViewportSize.width * scale) / 2,
+            y: (viewportSize.height - capturedViewportSize.height * scale) / 2,
+            width: capturedViewportSize.width * scale, height: capturedViewportSize.height * scale)
+        return .init(photoRect: CGRect(x: window.minX + original.minX * scale,
+            y: window.minY + original.minY * scale,
+            width: original.width * scale, height: original.height * scale), viewportRect: window)
+    }
+
+    /// The full oriented photo behind a camera-sized window. Used only for
+    /// frozen processing feedback; the raw capture and analysis stay intact.
+    static func aspectFillRect(photoAspectRatio: CGFloat, viewportSize: CGSize) -> CGRect {
+        guard photoAspectRatio.isFinite, photoAspectRatio > 0,
+              viewportSize.width.isFinite, viewportSize.height.isFinite,
+              viewportSize.width > 0, viewportSize.height > 0 else { return .zero }
+        let width = max(viewportSize.width, viewportSize.height * photoAspectRatio)
+        let height = width / photoAspectRatio
+        guard width.isFinite, height.isFinite else { return .zero }
+        return CGRect(x: (viewportSize.width - width) / 2,
+            y: (viewportSize.height - height) / 2, width: width, height: height)
+    }
+
     /// Centre the capsule on its measurement line, sliding along that same line
     /// only when the midpoint is obstructed. A nearby callout is the fallback;
     /// the visible capsule must never cover a physical marker or another control.

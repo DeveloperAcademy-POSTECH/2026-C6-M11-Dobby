@@ -28,5 +28,9 @@
 	</dict>
 	<key>NaverBackendBaseURL</key>
 	<string>$(NAVER_BACKEND_BASE_URL)</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Pretendard-Regular.otf</string>
+	</array>
 </dict>
 </plist>

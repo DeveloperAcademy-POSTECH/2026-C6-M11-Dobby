@@ -3,10 +3,12 @@ import CoreImage
 import CoreML
 import CoreVideo
 import Foundation
+import os
 
 /// Owned by one serial inference actor. Cached independently of live preview;
 /// the preview silhouette never waits for this four-way classifier.
 nonisolated final class GarmentOrientationModelProvider {
+    private static let modelLoadSignposter = OSSignposter(subsystem: "com.dobby.lidar", category: .pointsOfInterest)
     static let resourceName = "GarmentOrientationClassifier"
     static let modelVersion = AutomaticGarmentKind.orientationModelVersion
     private let modelURL: URL
@@ -37,6 +39,9 @@ nonisolated final class GarmentOrientationModelProvider {
         let image = try Self.orientedImage(source, orientation: deviceOrientation, context: context)
         let input = try Self.pixelBuffer(image)
         let model = try loadedModel()
+        // Core ML loading may finish after the photo's task has timed out.
+        // Retain the prepared model but skip an already cancelled prediction.
+        try Task.checkCancellation()
         let features = try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: input)])
         let output = try model.prediction(from: features)
         try Task.checkCancellation()
@@ -56,6 +61,9 @@ nonisolated final class GarmentOrientationModelProvider {
 
     private func loadedModel() throws -> MLModel {
         if let model { return model }
+        let interval = Self.modelLoadSignposter.beginInterval("GarmentOrientationModelLoad",
+            id: Self.modelLoadSignposter.makeSignpostID())
+        defer { Self.modelLoadSignposter.endInterval("GarmentOrientationModelLoad", interval) }
         guard FileManager.default.fileExists(atPath: modelURL.path) else { throw GarmentOrientationError.modelMissing }
         let url = modelURL.pathExtension == "mlmodelc" ? modelURL : try MLModel.compileModel(at: modelURL)
         let configuration = MLModelConfiguration(); configuration.computeUnits = .all

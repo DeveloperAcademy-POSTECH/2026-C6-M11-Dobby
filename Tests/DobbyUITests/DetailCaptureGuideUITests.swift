@@ -16,6 +16,7 @@ final class DetailCaptureGuideUITests: XCTestCase {
         start.tap()
         let measure = app.buttons["captureGarment"]
         XCTAssertTrue(measure.waitForExistence(timeout: 15))
+        armSyntheticGarmentCapture(in: app)
         measure.tap()
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.wait(for: \.isEnabled, toEqual: true, timeout: 20))
@@ -79,6 +80,7 @@ final class DetailCaptureGuideUITests: XCTestCase {
         XCTAssertTrue(retake.waitForExistence(timeout: 10))
         retake.tap()
         XCTAssertTrue(measure.waitForExistence(timeout: 10))
+        armSyntheticGarmentCapture(in: app)
         measure.tap()
         XCTAssertTrue(confirm.wait(for: \.isEnabled, toEqual: true, timeout: 20))
         confirm.tap()

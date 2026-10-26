@@ -127,7 +127,9 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         let start = app.buttons["product-flow.start"]
         XCTAssertTrue(start.waitForExistence(timeout: 20)); start.tap()
         let measure = app.buttons["captureGarment"]
-        XCTAssertTrue(measure.waitForExistence(timeout: 15)); measure.tap()
+        XCTAssertTrue(measure.waitForExistence(timeout: 15))
+        armSyntheticGarmentCapture(in: app)
+        measure.tap()
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.wait(for: \.isEnabled, toEqual: true, timeout: 20))
         let labels = app.buttons.matching(NSPredicate(format:

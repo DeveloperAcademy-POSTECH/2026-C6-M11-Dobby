@@ -5,6 +5,7 @@ enum GarmentCaptureStyle {
     static let background = Color("CaptureBackground")
     static let accent = Color("CaptureAccent")
     static let recognition = Color("CaptureRecognition")
+    static let guidance = Color("CaptureGuidance")
 }
 
 struct GarmentCaptureToolbarIcon: View {
@@ -22,19 +23,32 @@ struct GarmentCaptureToolbarIcon: View {
 struct GarmentShutterButton: View {
     var isEnabled: Bool
     var isCapturing: Bool
+    var showsRecognizedState = false
     var action: () -> Void
     var forceReduceMotion = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var usesReducedMotion: Bool { reduceMotion || forceReduceMotion }
+    private var isReady: Bool { isEnabled && showsRecognizedState && !isCapturing }
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            guard isReady else { return }
+            action()
+        } label: {
             ZStack {
-                // Reuse the original Figma shutter already bundled by the
-                // detail-camera feature. Its export includes shadow margins.
-                Image("CameraShutter").resizable().frame(width: 152, height: 118)
-                    .offset(x: 12, y: 7).frame(width: 92, height: 92)
+                Image("MeasurementShutterIdle")
+                    .resizable().scaledToFit().frame(width: 92, height: 92)
+                    .accessibilityHidden(true)
+                // Animate only the original asset's 25pt center. The ring and
+                // its 92pt touch region stay still while orange softly appears.
+                Image("MeasurementShutterReady")
+                    .resizable().scaledToFit().frame(width: 92, height: 92)
+                    .mask { Circle().frame(width: 25, height: 25).offset(x: 0.5, y: 0.5) }
+                    .scaleEffect(isReady ? 1 : 0.65)
+                    .opacity(isReady ? 1 : 0)
+                    .animation(usesReducedMotion || !isReady ? nil
+                        : .spring(response: 0.24, dampingFraction: 0.85), value: isReady)
                     .accessibilityHidden(true)
                 if isCapturing { ProgressView().tint(.white).transition(.opacity) }
             }.frame(width: 92, height: 92)
@@ -44,9 +58,10 @@ struct GarmentShutterButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(GarmentShutterPressStyle(reduceMotion: usesReducedMotion))
-        .disabled(!isEnabled || isCapturing)
+        .disabled(!isReady)
         .accessibilityLabel(isCapturing ? "실측 계산 중" : "실측 사진 촬영")
-        .accessibilityHint(isEnabled ? "인식을 기다리지 않고 사진을 촬영한 뒤 옷 종류와 길이를 확인합니다" : "카메라가 준비되면 촬영할 수 있습니다")
+        .accessibilityValue(isCapturing ? "촬영 중" : isReady ? "촬영 가능" : "옷 인식 대기")
+        .accessibilityHint(isReady ? "주황색 점이 표시되어 촬영할 수 있습니다" : "옷 윤곽이 인식되어 주황색 점이 나타나면 촬영할 수 있습니다")
         .accessibilityIdentifier("captureGarment")
     }
 }
