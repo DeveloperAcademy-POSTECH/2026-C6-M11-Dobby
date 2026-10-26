@@ -175,9 +175,6 @@ struct ProductPriceField: View {
         VStack(alignment: .leading, spacing: 8) {
             ProductFieldTitle(title: "가격", isRequired: true)
             ProductPriceInput(price: $garment.price)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .frame(minHeight: 52)
                 .background(ProductInformationStyle.field, in: RoundedRectangle(cornerRadius: 14))
                 .overlay {
                     if errorMessage != nil {
@@ -198,24 +195,35 @@ struct ProductPriceField: View {
 private struct ProductPriceInput: View {
     @Binding var price: Int?
     @State private var priceText = ""
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 4) {
-            TextField("제품의 판매 가격을 입력해주세요", text: $priceText)
+            Text(priceText.isEmpty ? " " : priceText)
                 .font(.system(size: 16, weight: .medium))
-                .fixedSize(horizontal: price != nil, vertical: false)
-                .keyboardType(.numberPad)
-                .accessibilityLabel("가격, 원")
-                .accessibilityIdentifier("product-info.price")
-            if price != nil {
-                Text("원")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("product-info.price.unit")
-                Spacer(minLength: 0)
-            }
+                .hidden()
+                .padding(.trailing, 2)
+                .overlay {
+                    TextField("", text: $priceText)
+                        .font(.system(size: 16, weight: .medium))
+                        .keyboardType(.numberPad)
+                        .focused($isFocused)
+                        .accessibilityLabel("가격, 원")
+                        .accessibilityHint("제품의 판매 가격을 입력해주세요")
+                        .accessibilityIdentifier("product-info.price")
+                }
+            Text("원")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("product-info.price.unit")
+            Spacer(minLength: 0)
         }
         .font(.subheadline)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(minHeight: 52)
+        .contentShape(Rectangle())
+        .onTapGesture { isFocused = true }
         .onAppear { priceText = formatPrice(price) }
         .onChange(of: priceText) { _, text in updatePriceText(text) }
     }

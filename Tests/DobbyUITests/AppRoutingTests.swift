@@ -92,13 +92,55 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(sampleButton.waitForExistence(timeout: 5))
         sampleButton.tap()
 
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["90s 나이키 트랙탑"].exists)
-        XCTAssertTrue(app.staticTexts["나이키"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["library.measurement.shoulderWidth"].exists)
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
+        let photos = app.descendants(matching: .any)["product-detail.photos"].firstMatch
+        let name = app.descendants(matching: .any)["product-detail.name"].firstMatch
+        XCTAssertTrue(photos.waitForExistence(timeout: 5))
+        XCTAssertTrue(name.exists)
+        XCTAssertLessThanOrEqual(photos.frame.maxY, name.frame.minY)
+        XCTAssertTrue(name.staticTexts["90s 나이키 트랙탑"].exists)
 
         let exportButton = app.buttons["library.export"]
-        reveal(exportButton, in: app)
+        XCTAssertTrue(exportButton.isHittable, "The upload action stays fixed below the detail content")
+        attachScreenshot(app, name: "debug-library-detail-top")
+
+        let photo = app.buttons["제품 사진 확대"].firstMatch
+        XCTAssertTrue(photo.isHittable)
+        photo.tap()
+        XCTAssertTrue(app.navigationBars["제품 사진"].waitForExistence(timeout: 5))
+        app.buttons["닫기"].tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+
+        app.buttons["library.edit"].tap()
+        let information = app.navigationBars["제품 정보 입력"]
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        information.buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+
+        let price = app.descendants(matching: .any)["product-detail.price"].firstMatch
+        reveal(price, in: app)
+        XCTAssertTrue(price.staticTexts["89,000 원"].exists)
+        XCTAssertTrue(app.staticTexts["나이키"].exists)
+        let measurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
+        for _ in 0..<8 where !measurements.exists || measurements.frame.maxY > exportButton.frame.minY {
+            app.swipeUp()
+        }
+        XCTAssertTrue(measurements.exists)
+        XCTAssertLessThanOrEqual(measurements.frame.maxY, exportButton.frame.minY)
+        for (key, title, value) in [
+            ("shoulderWidth", "어깨", "56cm"),
+            ("chestWidth", "가슴", "55cm"),
+            ("totalLength", "기장", "68cm"),
+            ("sleeveLengthLeft", "소매", "52cm")
+        ] {
+            let column = app.descendants(matching: .any)["library.measurement.\(key)"].firstMatch
+            XCTAssertTrue(column.exists, key)
+            XCTAssertTrue(column.staticTexts[title].exists, key)
+            XCTAssertTrue(column.staticTexts[value].exists, key)
+        }
+        XCTAssertTrue(exportButton.isHittable)
+        attachScreenshot(app, name: "debug-library-detail-measurements")
         exportButton.tap()
 
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
@@ -110,16 +152,52 @@ final class AppRoutingTests: XCTestCase {
         attachScreenshot(app, name: "debug-library-sample-export-channels")
 
         app.buttons["export.close"].tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 5))
-        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+        app.buttons["library.edit"].tap()
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        let done = app.buttons["product-info.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["product-complete.screen"].firstMatch
+            .waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
+        let completedPhotos = app.descendants(matching: .any)["product-detail.photos"].firstMatch
+        let completedName = app.descendants(matching: .any)["product-detail.name"].firstMatch
+        XCTAssertTrue(completedPhotos.exists)
+        XCTAssertTrue(completedName.exists)
+        XCTAssertLessThanOrEqual(completedPhotos.frame.maxY, completedName.frame.minY)
+        XCTAssertTrue(completedName.staticTexts["90s 나이키 트랙탑"].exists)
+        let completedExport = app.buttons["product-complete.export"]
+        let completedLibrary = app.buttons["product-complete.library"]
+        XCTAssertTrue(completedExport.isHittable)
+        XCTAssertTrue(completedLibrary.isHittable)
+        attachScreenshot(app, name: "debug-product-complete-top")
+
+        let completedPrice = app.descendants(matching: .any)["product-detail.price"].firstMatch
+        reveal(completedPrice, in: app)
+        XCTAssertTrue(completedPrice.staticTexts["89,000 원"].exists)
+        let completedMeasurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
+        for _ in 0..<8 where !completedMeasurements.exists
+            || completedMeasurements.frame.maxY > completedExport.frame.minY {
+            app.swipeUp()
+        }
+        XCTAssertTrue(completedMeasurements.exists)
+        XCTAssertLessThanOrEqual(completedMeasurements.frame.maxY, completedExport.frame.minY)
+        XCTAssertTrue(completedExport.isHittable)
+        XCTAssertTrue(completedLibrary.isHittable)
+        attachScreenshot(app, name: "debug-product-complete-measurements")
+        completedLibrary.tap()
         XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["보관함"].isHittable)
         XCTAssertEqual(app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "library.product."
         )).count, 1)
 
         app.buttons["debug.export-sample"].tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 5))
-        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+        app.navigationBars["90s 나이키 트랙탑"].buttons.firstMatch.tap()
         XCTAssertEqual(app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "library.product."
         )).count, 1)

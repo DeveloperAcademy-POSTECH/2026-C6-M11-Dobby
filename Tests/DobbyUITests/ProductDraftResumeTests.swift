@@ -158,11 +158,11 @@ final class ProductDraftResumeTests: XCTestCase {
         app.tabBars.buttons["보관함"].tap()
         assertCompletedProduct(productID: productID, name: name, brand: brand, app: app)
         app.buttons["library.product.\(productID)"].tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
         let row = app.descendants(matching: .any)["library.measurement.shoulderWidth"].firstMatch
         reveal(row, in: app)
         let labels = [row.label] + row.descendants(matching: .staticText).allElementsBoundByIndex.map(\.label)
-        XCTAssertTrue(labels.contains { $0.contains("67 cm") })
+        XCTAssertTrue(labels.contains { $0.contains("67cm") })
     }
 
     private func fixtureApp() -> XCUIApplication {

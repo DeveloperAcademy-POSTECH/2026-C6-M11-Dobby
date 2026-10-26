@@ -14,8 +14,8 @@ final class LibraryDeletionTests: XCTestCase {
         let sample = app.buttons["debug.export-sample"]
         XCTAssertTrue(sample.waitForExistence(timeout: 10))
         sample.tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
-        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        app.navigationBars["90s 나이키 트랙탑"].buttons.firstMatch.tap()
 
         let productID = "53E00000-0000-4000-8000-000000000053"
         let card = app.buttons["library.product.\(productID)"]
@@ -42,7 +42,7 @@ final class LibraryDeletionTests: XCTestCase {
         let cancelButton = alert.buttons["취소"]
         XCTAssertLessThan(deleteButton.frame.midX, cancelButton.frame.midX)
         XCTAssertEqual(deleteButton.frame.midY, cancelButton.frame.midY, accuracy: 1)
-        XCTAssertFalse(app.navigationBars["제품 상세"].exists)
+        XCTAssertFalse(app.navigationBars["90s 나이키 트랙탑"].exists)
         attachScreenshot(app, name: "library-delete-confirmation")
         alert.buttons["취소"].tap()
 
@@ -54,8 +54,8 @@ final class LibraryDeletionTests: XCTestCase {
         XCTAssertFalse(remove.exists)
         XCTAssertEqual(edit.label, "수정")
         card.tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
-        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        app.navigationBars["90s 나이키 트랙탑"].buttons.firstMatch.tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5))
 
         edit.tap()
