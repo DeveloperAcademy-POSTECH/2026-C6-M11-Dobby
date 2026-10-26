@@ -7,25 +7,21 @@ struct InstagramConnectionView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("처음이신가요?")
                     .font(.subheadline)
-                    .foregroundStyle(Color(.exportConnectionIntro))
                 Text("먼저 인스타그램 프로페셔널 계정과\n연결이 필요해요")
                     .font(.title3.bold())
                     .fixedSize(horizontal: false, vertical: true)
                 Text("인스타그램을 열고, 프로페셔널 계정으로\n연결을 완료하면 자동으로 업로드할 수 있어요")
                     .font(.body)
-                    .foregroundStyle(Color(.exportConnectionText))
                     .fixedSize(horizontal: false, vertical: true)
 
-                Spacer(minLength: 92)
+                Spacer()
 
                 VStack(spacing: 18) {
                     Text("아래 버튼을 누르고, 프로페셔널 계정으로\n로그인해주세요")
                         .font(.body.weight(.medium))
-                        .foregroundStyle(Color(.exportConnectionText))
                         .multilineTextAlignment(.center)
 
                     Button(action: onConnect) {
@@ -53,24 +49,13 @@ struct InstagramConnectionView: View {
                         openURL(url)
                     }
                     .font(.caption)
-                    .foregroundStyle(Color(.exportConnectionText))
                     .underline()
                 }
                 .frame(maxWidth: .infinity)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 8)
-                }
-
-                Spacer(minLength: 72)
             }
             .padding(.horizontal, 20)
             .padding(.top, 24)
-        }
-        .background(Color(.brandNeutral50).ignoresSafeArea())
+            .background(Color(.brandNeutral50).ignoresSafeArea())
+
     }
 }
