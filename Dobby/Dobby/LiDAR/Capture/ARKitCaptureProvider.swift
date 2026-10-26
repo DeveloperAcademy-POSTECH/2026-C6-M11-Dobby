@@ -4,6 +4,7 @@ import Combine
 import CoreImage
 import Foundation
 import ImageIO
+import OSLog
 
 extension CameraControlState {
     /// Requested EV belongs to the finger, accepted EV to the device queue.
@@ -205,6 +206,8 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     private var lastCameraTimestamp: TimeInterval?
     private var lastCameraReceivedAt: TimeInterval?
     private var generation: UUID?
+    private static let startupSignposter = OSSignposter(subsystem: "com.dobby.performance", category: "CameraStartup")
+    private var startupInterval: OSSignpostIntervalState?
     private var permissionRequestInProgress = false
     private var imageOrientation: ImageOrientation = .right
     override init() {
@@ -263,6 +266,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         }
 
         let configuration = ARWorldTrackingConfiguration()
+        finishStartupInterval()
+        startupInterval = Self.startupSignposter.beginInterval("CameraPreviewStartup",
+            id: Self.startupSignposter.makeSignpostID())
         configuration.frameSemantics = [.sceneDepth]
         if ARWorldTrackingConfiguration.supportsFrameSemantics([.sceneDepth, .smoothedSceneDepth]) {
             configuration.frameSemantics.insert(.smoothedSceneDepth)
@@ -299,6 +305,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     }
 
     private func pauseCamera() {
+        finishStartupInterval()
         generation = nil
         permissionRequestInProgress = false
         worker.stop(error: .stopped)
@@ -584,9 +591,14 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         lastCameraTimestamp = update.timestamp
         lastCameraReceivedAt = ProcessInfo.processInfo.systemUptime
         if frameStatus != update.status { frameStatus = update.status }
-        // An RGB preview frame enables the shutter. Snapshot selection still
-        // validates synchronized depth and camera quality after the tap.
-        if state == .starting { state = .ready }
+        // An RGB preview makes the camera available. The product UI separately
+        // gates its shutter on a live outline; snapshot selection still checks
+        // synchronized depth and camera quality after the tap.
+        if state == .starting {
+            Self.startupSignposter.emitEvent("CameraFirstPreviewFrame")
+            finishStartupInterval()
+            state = .ready
+        }
         updateZoomCapabilities()
         if !controlDeviceAttached, controlAttachmentSessionID != update.sessionID, state != .capturing {
             Task { [weak self] in await self?.attachCameraControls(sessionID: update.sessionID) }
@@ -603,8 +615,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
               readiness.timestamp >= liveReadiness.timestamp,
               current.timestamp - readiness.timestamp >= 0,
               current.timestamp - readiness.timestamp <= 2 else { return }
-        // Preview masks are advisory visual feedback only. They contain no
-        // garment kind, measurement points, depth checks or capture permission.
+        // These are foreground outlines, not garment kind/points/depth proof.
+        // Product UI may require the outline before accepting a shutter tap;
+        // classification and measurement still use the newly captured photo.
         liveReadiness = readiness
     }
 
@@ -612,6 +625,12 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         liveReadiness = .waiting
         lastCameraTimestamp = nil
         lastCameraReceivedAt = nil
+    }
+
+    private func finishStartupInterval() {
+        guard let interval = startupInterval else { return }
+        startupInterval = nil
+        Self.startupSignposter.endInterval("CameraPreviewStartup", interval)
     }
 
     private func startFreshnessMonitor(sessionID: UUID) {
@@ -710,7 +729,9 @@ private nonisolated struct CaptureObservation: Sendable {
 private nonisolated final class CaptureWorker: @unchecked Sendable {
     let queue = DispatchQueue(label: "com.dobby.lidar.capture", qos: .userInitiated)
     private let lock = NSLock()
-    private let context = CIContext(options: [.cacheIntermediates: false])
+    // Accessed only by the serial capture queue; constructing a camera view
+    // must not initialize a GPU image context on the UI actor.
+    private lazy var context = CIContext(options: [.cacheIntermediates: false])
     private var identifier: UUID?
     private var acceptsFrames = false
     private var pending: SnapshotRequest?

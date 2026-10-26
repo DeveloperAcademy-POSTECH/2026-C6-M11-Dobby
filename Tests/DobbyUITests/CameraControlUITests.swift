@@ -4,15 +4,15 @@ import XCTest
 /// Marker movement proves event routing, never optical autofocus or image sharpness.
 final class CameraControlUITests: XCTestCase {
     @MainActor
-    func testTapsMoveFocusAndDoNotBlockImmediateCaptureOrRetake() throws {
+    func testTapsMoveFocusBeforeRecognitionAndCaptureWorksOnceRecognized() throws {
         continueAfterFailure = false
         let app = openPreview()
         let viewport = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
         let focus = app.descendants(matching: .any)["cameraFocusIndicator"].firstMatch
         let shutter = app.buttons["captureGarment"]
         XCTAssertFalse(focus.exists)
-        XCTAssertTrue(shutter.isEnabled && shutter.isHittable)
-        assertBottomControlsAreAbsent(app)
+        assertRecognitionGate(in: app, ready: false)
+        assertOnlyCompactZoomIsPersistent(app)
 
         for site in [CGVector(dx: 0.25, dy: 0.35), CGVector(dx: 0.72, dy: 0.65), CGVector(dx: 0.72, dy: 0.65)] {
             viewport.coordinate(withNormalizedOffset: site).tap()
@@ -25,7 +25,7 @@ final class CameraControlUITests: XCTestCase {
             // The visible square animates; its semantic target remains stable.
             XCTAssertEqual(focus.frame.width, 64, accuracy: 2)
             XCTAssertEqual(focus.frame.height, 64, accuracy: 2)
-            XCTAssertTrue(shutter.isEnabled, "Autofocus must not become a shutter gate.")
+            XCTAssertFalse(shutter.isEnabled, "Focus remains available while the shutter waits for garment recognition.")
         }
         XCTAssertTrue(app.descendants(matching: .any)["cameraExposureControl"].firstMatch.exists)
         viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.55)).tap()
@@ -35,18 +35,20 @@ final class CameraControlUITests: XCTestCase {
                 && abs(focus.frame.midY - (viewport.frame.minY + viewport.frame.height * 0.3)) <= 2
         }
         attachScreenshot(name: "synthetic-camera-immediate-focus-exposure")
+        app.buttons["previewRecognizeGarment"].tap()
+        assertRecognitionGate(in: app, ready: true)
         shutter.tap()
         let retake = app.buttons["retakeGarmentMeasurement"]
         XCTAssertTrue(retake.waitForExistence(timeout: 10))
         retake.tap()
         XCTAssertTrue(shutter.waitForExistence(timeout: 5))
-        XCTAssertTrue(shutter.isEnabled)
+        assertRecognitionGate(in: app, ready: false)
         XCTAssertFalse(focus.exists)
-        assertBottomControlsAreAbsent(app)
+        assertOnlyCompactZoomIsPersistent(app)
     }
 
     @MainActor
-    func testDragAnywhereAdjustsExposureAndNextTapResetsItWithoutBlockingCapture() throws {
+    func testDragAnywhereAdjustsExposureAndNextTapResetsItWhileAwaitingRecognition() throws {
         continueAfterFailure = false
         let app = openPreview()
         let viewport = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
@@ -61,12 +63,14 @@ final class CameraControlUITests: XCTestCase {
         waitUntil { (exposure.value as? String)?.hasPrefix("EV +") == true && exposure.value as? String != "EV +0.0" }
         XCTAssertEqual(focus.frame.midX, originalFrame.midX, accuracy: 2)
         XCTAssertEqual(focus.frame.midY, originalFrame.midY, accuracy: 2)
-        assertBottomControlsAreAbsent(app)
-        XCTAssertTrue(app.buttons["captureGarment"].isEnabled)
+        assertOnlyCompactZoomIsPersistent(app)
+        assertRecognitionGate(in: app, ready: false)
         viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.55)).tap()
         waitUntil { exposure.value as? String == "EV +0.0" }
         XCTAssertEqual(focus.frame.midX, viewport.frame.minX + viewport.frame.width * 0.35, accuracy: 2)
         XCTAssertEqual(focus.frame.midY, viewport.frame.minY + viewport.frame.height * 0.55, accuracy: 2)
+        app.buttons["previewRecognizeGarment"].tap()
+        assertRecognitionGate(in: app, ready: true)
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["retakeGarmentMeasurement"].waitForExistence(timeout: 10))
     }
@@ -83,16 +87,60 @@ final class CameraControlUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         waitUntil { app.frame.width > app.frame.height }
         XCTAssertFalse(focus.exists)
-        assertBottomControlsAreAbsent(app)
+        assertOnlyCompactZoomIsPersistent(app)
         viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.42)).tap()
         XCTAssertTrue(focus.waitForExistence(timeout: 2))
         XCTAssertEqual(focus.frame.midX, viewport.frame.minX + viewport.frame.width * 0.45, accuracy: 2)
         XCTAssertEqual(focus.frame.midY, viewport.frame.minY + viewport.frame.height * 0.42, accuracy: 2)
         XCTAssertEqual(focus.frame.width, 64, accuracy: 2)
         XCTAssertEqual(focus.frame.height, 64, accuracy: 2)
-        XCTAssertTrue(app.buttons["captureGarment"].isHittable)
+        assertRecognitionGate(in: app, ready: false)
+        XCTAssertTrue(app.frame.contains(app.buttons["captureGarment"].frame),
+                      "The waiting shutter must remain visible after rotation")
         app.buttons["closeGarmentCapture"].coordinate(withNormalizedOffset: CGVector(dx: 0.84, dy: 0.5)).tap()
         XCTAssertFalse(app.buttons["captureGarment"].exists)
+    }
+
+    @MainActor
+    func testCompactZoomButtonTogglesScalesWithOneTapAndRequiresFreshRecognition() throws {
+        continueAfterFailure = false
+        let app = openPreview()
+        let zoom = app.buttons["cameraZoomSelector"]
+        let shutter = app.buttons["captureGarment"]
+        XCTAssertTrue(zoom.isHittable)
+        XCTAssertEqual(zoom.value as? String, "1x")
+        assertRecognitionGate(in: app, ready: false)
+        app.buttons["previewRecognizeGarment"].tap()
+        assertRecognitionGate(in: app, ready: true)
+
+        zoom.tap()
+        waitUntil { zoom.value as? String == "2x" }
+        XCTAssertFalse(app.buttons["cameraZoom_2.0"].exists,
+                       "Tapping the zoom button must switch directly, without opening a menu")
+        XCTAssertFalse(app.buttons["cameraZoom_0.5"].exists,
+                       "The aligned LiDAR path must not offer an unsupported ultra-wide capture")
+        attachScreenshot(name: "liquid-glass-zoom-two-x")
+        // This synthetic fixture contains a calibrated 1x snapshot only. Its
+        // disabled 2x shutter cannot be treated as physical zoom validation.
+        XCTAssertFalse(shutter.isEnabled)
+        assertRecognitionGate(in: app, ready: false)
+        app.buttons["previewRecognizeGarment"].tap()
+        assertRecognitionGate(in: app, ready: false)
+        zoom.tap()
+        waitUntil { zoom.value as? String == "1x" }
+        assertRecognitionGate(in: app, ready: false)
+        attachScreenshot(name: "liquid-glass-zoom-one-x")
+        XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists)
+        app.buttons["previewRecognizeGarment"].tap()
+        assertRecognitionGate(in: app, ready: true)
+        shutter.tap()
+        let retake = app.buttons["retakeGarmentMeasurement"]
+        XCTAssertTrue(retake.waitForExistence(timeout: 10))
+        retake.tap()
+        XCTAssertTrue(zoom.waitForExistence(timeout: 5))
+        XCTAssertEqual(zoom.value as? String, "1x")
+        assertRecognitionGate(in: app, ready: false)
+        assertOnlyCompactZoomIsPersistent(app)
     }
 
     @MainActor
@@ -111,10 +159,23 @@ final class CameraControlUITests: XCTestCase {
     }
 
     @MainActor
-    private func assertBottomControlsAreAbsent(_ app: XCUIApplication) {
-        for id in ["cameraZoom_0.5", "cameraZoom_1.0", "cameraZoom_2.0", "cameraExposureReset"] {
-            XCTAssertFalse(app.buttons[id].exists)
+    private func assertRecognitionGate(in app: XCUIApplication, ready: Bool,
+                                       file: StaticString = #filePath, line: UInt = #line) {
+        let shutter = app.buttons["captureGarment"]
+        let expectedValue = ready ? "촬영 가능" : "옷 인식 대기"
+        waitUntil {
+            shutter.isEnabled == ready && shutter.value as? String == expectedValue
         }
+        XCTAssertEqual(shutter.isEnabled, ready, file: file, line: line)
+        XCTAssertEqual(shutter.value as? String, expectedValue, file: file, line: line)
+    }
+
+    @MainActor
+    private func assertOnlyCompactZoomIsPersistent(_ app: XCUIApplication) {
+        let zoom = app.buttons["cameraZoomSelector"]
+        XCTAssertTrue(zoom.exists && zoom.isHittable)
+        XCTAssertFalse(app.buttons["cameraZoom_0.5"].exists)
+        XCTAssertFalse(app.buttons["cameraExposureReset"].exists)
         XCTAssertFalse(app.sliders["cameraExposureSlider"].exists)
         XCTAssertFalse(app.staticTexts["cameraExposureValue"].exists)
         XCTAssertFalse(app.staticTexts["cameraAEAFLockStatus"].exists)

@@ -6,6 +6,48 @@ import XCTest
 /// depth quality or physical measurement accuracy.
 @MainActor
 final class GarmentPhotoGeometryTests: XCTestCase {
+    func testProcessingPhotoFillsPortraitAndLandscapeWithoutRevealingTheFullFrame() {
+        let portrait = GarmentPhotoGeometry.aspectFillRect(photoAspectRatio: 3.0 / 4,
+            viewportSize: .init(width: 402, height: 874))
+        XCTAssertEqual(portrait.minX, -126.75, accuracy: 0.001)
+        XCTAssertEqual(portrait.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(portrait.width, 655.5, accuracy: 0.001)
+        XCTAssertEqual(portrait.height, 874, accuracy: 0.001)
+        let landscape = GarmentPhotoGeometry.aspectFillRect(photoAspectRatio: 4.0 / 3,
+            viewportSize: .init(width: 874, height: 402))
+        XCTAssertEqual(landscape.minX, 0, accuracy: 0.001)
+        XCTAssertEqual(landscape.minY, -126.75, accuracy: 0.001)
+        XCTAssertEqual(landscape.width, 874, accuracy: 0.001)
+        XCTAssertEqual(landscape.height, 655.5, accuracy: 0.001)
+    }
+
+    func testProcessingPhotoDoesNotApplyTwoXAgainToAnAlreadyRegisteredSnapshot() {
+        let size = CGSize(width: 402, height: 874)
+        let original = GarmentPhotoGeometry.aspectFillRect(photoAspectRatio: 1440.0 / 1920, viewportSize: size)
+        let registeredTwoX = GarmentPhotoGeometry.aspectFillRect(photoAspectRatio: 720.0 / 960, viewportSize: size)
+        XCTAssertEqual(original, registeredTwoX)
+        XCTAssertEqual(GarmentPhotoGeometry.aspectFillRect(photoAspectRatio: .nan, viewportSize: size), .zero)
+        XCTAssertEqual(GarmentPhotoGeometry.aspectFillRect(photoAspectRatio: 0.75, viewportSize: .zero), .zero)
+    }
+
+    func testProcessingPhotoPreservesTheCapturedWindowWhenThePhoneRotates() {
+        let captured = CGSize(width: 402, height: 874)
+        let original = GarmentPhotoGeometry.processingPhotoLayout(photoAspectRatio: 0.75,
+            capturedViewportSize: captured, viewportSize: captured)
+        let rotated = GarmentPhotoGeometry.processingPhotoLayout(photoAspectRatio: 0.75,
+            capturedViewportSize: captured, viewportSize: .init(width: 874, height: 402))
+        XCTAssertEqual(original.viewportRect, CGRect(origin: .zero, size: captured))
+        XCTAssertEqual(rotated.viewportRect.midX, 437, accuracy: 0.001)
+        XCTAssertEqual(rotated.viewportRect.height, 402, accuracy: 0.001)
+        // The normalized source visible through the clip remains identical,
+        // rather than widening to include the original photograph's sides.
+        for layout in [original, rotated] {
+            XCTAssertEqual((layout.viewportRect.minX - layout.photoRect.minX) / layout.photoRect.width,
+                126.75 / 655.5, accuracy: 0.00001)
+            XCTAssertEqual(layout.viewportRect.width / layout.photoRect.width, 402 / 655.5, accuracy: 0.00001)
+        }
+    }
+
     private let photoSizes = [CGSize(width: 390, height: 520), CGSize(width: 640, height: 360)]
 
     private func expectedDisplay(_ point: ImagePoint, orientation: ImageOrientation) -> CGPoint {
@@ -49,6 +91,107 @@ final class GarmentPhotoGeometryTests: XCTestCase {
                     XCTAssertEqual(recovered.y, original.y, accuracy: 1e-12)
                     XCTAssertTrue(recovered.isValid)
                 }
+            }
+        }
+    }
+
+    func testCroppedPhotoAndOverlaysReferToTheSameOriginalImagePixel() {
+        let crop = PhotoDisplayCrop(x: 0.12, y: 0.18, width: 0.72, height: 0.64)
+        for size in photoSizes {
+            let imageRect = GarmentPhotoGeometry.photoRect(photoSize: size, displayCrop: crop)
+            XCTAssertEqual(imageRect.width, size.width / crop.width, accuracy: 1e-9)
+            XCTAssertEqual(imageRect.height, size.height / crop.height, accuracy: 1e-9)
+            for fraction in [CGPoint.zero, CGPoint(x: 0.23, y: 0.71), CGPoint(x: 1, y: 1)] {
+                let display = ImagePoint(x: crop.x + fraction.x * crop.width,
+                    y: crop.y + fraction.y * crop.height)
+                let renderedPixel = CGPoint(x: imageRect.minX + display.x * imageRect.width,
+                    y: imageRect.minY + display.y * imageRect.height)
+                assertPoint(renderedPixel, .init(x: fraction.x * size.width, y: fraction.y * size.height))
+                let overlay = GarmentPhotoGeometry.screenPoint(display, photoSize: size,
+                    orientation: .up, displayCrop: crop)
+                assertPoint(overlay, renderedPixel)
+            }
+        }
+    }
+
+    func testCroppedScreenCoordinatesRoundTripWithoutChangingRawPointsInEveryOrientation() throws {
+        let crop = PhotoDisplayCrop(x: 0.12, y: 0.18, width: 0.72, height: 0.64)
+        let originals = [ImagePoint(x: 0.3, y: 0.4), ImagePoint(x: 0.7, y: 0.6)]
+        for size in photoSizes {
+            for orientation in ImageOrientation.allCases {
+                for original in originals {
+                    let display = expectedDisplay(original, orientation: orientation)
+                    let screen = GarmentPhotoGeometry.screenPoint(original, photoSize: size,
+                        orientation: orientation, displayCrop: crop)
+                    assertPoint(screen, .init(x: (display.x - crop.x) / crop.width * size.width,
+                        y: (display.y - crop.y) / crop.height * size.height))
+                    let recovered = try XCTUnwrap(GarmentPhotoGeometry.originalPoint(at: screen,
+                        photoSize: size, orientation: orientation, displayCrop: crop))
+                    XCTAssertEqual(recovered.x, original.x, accuracy: 1e-12)
+                    XCTAssertEqual(recovered.y, original.y, accuracy: 1e-12)
+                    XCTAssertTrue(recovered.isValid)
+                }
+            }
+        }
+    }
+
+    func testCroppedOutsideDragsClampToVisibleEdgesBeforeUndoingEveryRotation() throws {
+        let crop = PhotoDisplayCrop(x: 0.16, y: 0.19, width: 0.68, height: 0.62)
+        let displayCorners = [CGPoint(x: crop.x, y: crop.y), CGPoint(x: crop.x + crop.width, y: crop.y),
+            CGPoint(x: crop.x + crop.width, y: crop.y + crop.height), CGPoint(x: crop.x, y: crop.y + crop.height)]
+        for size in photoSizes {
+            let outside = [CGPoint(x: -100, y: -100), CGPoint(x: size.width + 100, y: -100),
+                CGPoint(x: size.width + 100, y: size.height + 100), CGPoint(x: -100, y: size.height + 100)]
+            let visibleCorners = [CGPoint.zero, CGPoint(x: size.width, y: 0),
+                CGPoint(x: size.width, y: size.height), CGPoint(x: 0, y: size.height)]
+            for orientation in ImageOrientation.allCases {
+                for (index, location) in outside.enumerated() {
+                    let raw = try XCTUnwrap(GarmentPhotoGeometry.originalPoint(at: location,
+                        photoSize: size, orientation: orientation, displayCrop: crop))
+                    assertPoint(expectedDisplay(raw, orientation: orientation), displayCorners[index])
+                    assertPoint(GarmentPhotoGeometry.screenPoint(raw, photoSize: size,
+                        orientation: orientation, displayCrop: crop), visibleCorners[index])
+                    XCTAssertTrue(raw.isValid)
+                }
+            }
+        }
+    }
+
+    func testCroppedMagnifierKeepsThreeTimesVisibleScaleAndCrosshairOnTheOriginalPixel() {
+        let crop = PhotoDisplayCrop(x: 0.14, y: 0.21, width: 0.72, height: 0.58)
+        for size in photoSizes {
+            let loupe = GarmentPhotoGeometry.magnifierRect(photoSize: size).size
+            for orientation in ImageOrientation.allCases {
+                for original in [ImagePoint(x: 0.3, y: 0.4), ImagePoint(x: 0.7, y: 0.6)] {
+                    let display = expectedDisplay(original, orientation: orientation)
+                    let layout = GarmentPhotoGeometry.magnifier(displayPoint: .init(x: display.x, y: display.y),
+                        photoSize: size, loupeSize: loupe, displayCrop: crop)
+                    XCTAssertEqual(layout.imageSize.width, size.width / crop.width * 3, accuracy: 1e-9)
+                    XCTAssertEqual(layout.imageSize.height, size.height / crop.height * 3, accuracy: 1e-9)
+                    assertPoint(.init(x: (layout.crosshair.x - layout.imageOrigin.x) / layout.imageSize.width,
+                        y: (layout.crosshair.y - layout.imageOrigin.y) / layout.imageSize.height),
+                        display, accuracy: 1e-12)
+                    assertPoint(layout.crosshair, .init(x: loupe.width / 2, y: loupe.height / 2))
+                }
+            }
+        }
+    }
+
+    func testExplicitFullCropMatchesLegacyPhotoGeometryAndInvalidCropsCannotMovePoints() throws {
+        let point = ImagePoint(x: 0.31, y: 0.67)
+        let size = photoSizes[0]
+        XCTAssertEqual(GarmentPhotoGeometry.photoRect(photoSize: size), CGRect(origin: .zero, size: size))
+        for orientation in ImageOrientation.allCases {
+            let legacy = GarmentPhotoGeometry.screenPoint(point, photoSize: size, orientation: orientation)
+            XCTAssertEqual(legacy, GarmentPhotoGeometry.screenPoint(point, photoSize: size,
+                orientation: orientation, displayCrop: .full))
+            XCTAssertEqual(GarmentPhotoGeometry.originalPoint(at: legacy, photoSize: size, orientation: orientation),
+                GarmentPhotoGeometry.originalPoint(at: legacy, photoSize: size, orientation: orientation, displayCrop: .full))
+            for crop in [PhotoDisplayCrop(x: 0, y: 0, width: 0, height: 1),
+                         PhotoDisplayCrop(x: .nan, y: 0, width: 1, height: 1),
+                         PhotoDisplayCrop(x: 0.5, y: 0, width: 1, height: 1)] {
+                XCTAssertNil(GarmentPhotoGeometry.originalPoint(at: .init(x: 50, y: 80),
+                    photoSize: size, orientation: orientation, displayCrop: crop))
             }
         }
     }
@@ -128,19 +271,19 @@ final class GarmentPhotoGeometryTests: XCTestCase {
             display, accuracy: 1e-12, file: file, line: line)
     }
 
-    func testCompactMagnifierUsesTheSameEightyByOneHundredTwelveInsetForNormalPhotos() {
+    func testHiFiMagnifierUsesSeventySixByOneHundredSevenInsetForNormalPhotos() {
         for size in photoSizes + [CGSize(width: 120, height: 150), CGSize(width: 402, height: 560)] {
             XCTAssertEqual(GarmentPhotoGeometry.magnifierRect(photoSize: size),
-                CGRect(x: 20, y: 19, width: 80, height: 112))
+                CGRect(x: 20, y: 19, width: 76, height: 107))
         }
     }
 
     func testCompactMagnifierFitsSmallPortraitAndLandscapePhotosWithoutDistortion() {
         let cases: [(photo: CGSize, expected: CGRect)] = [
-            (.init(width: 90, height: 220), .init(x: 20, y: 19, width: 50, height: 70)),
-            (.init(width: 220, height: 100), .init(x: 20, y: 19, width: 80.0 * 62 / 112, height: 62)),
-            (.init(width: 20, height: 30), .init(x: 9.5, y: 14.5, width: 80.0 / 112, height: 1)),
-            (.init(width: 1, height: 1), .init(x: 0, y: 0, width: 80.0 / 112, height: 1))
+            (.init(width: 90, height: 220), .init(x: 20, y: 19, width: 50, height: 107.0 * 50 / 76)),
+            (.init(width: 220, height: 100), .init(x: 20, y: 19, width: 76.0 * 62 / 107, height: 62)),
+            (.init(width: 20, height: 30), .init(x: 9.5, y: 14.5, width: 76.0 / 107, height: 1)),
+            (.init(width: 1, height: 1), .init(x: 0, y: 0, width: 76.0 / 107, height: 1))
         ]
         for item in cases {
             let rect = GarmentPhotoGeometry.magnifierRect(photoSize: item.photo)
@@ -154,9 +297,9 @@ final class GarmentPhotoGeometryTests: XCTestCase {
             XCTAssertTrue([rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite))
             XCTAssertGreaterThan(rect.width, 0)
             XCTAssertGreaterThan(rect.height, 0)
-            XCTAssertLessThanOrEqual(rect.width, 80)
-            XCTAssertLessThanOrEqual(rect.height, 112)
-            XCTAssertEqual(rect.width / rect.height, 80.0 / 112, accuracy: 1e-12)
+            XCTAssertLessThanOrEqual(rect.width, 76)
+            XCTAssertLessThanOrEqual(rect.height, 107)
+            XCTAssertEqual(rect.width / rect.height, 76.0 / 107, accuracy: 1e-12)
             XCTAssertTrue(CGRect(origin: .zero, size: size).insetBy(dx: -1e-9, dy: -1e-9).contains(rect),
                 "The viewport must stay inside even a photo smaller than its usual inset.")
         }
@@ -208,7 +351,7 @@ final class GarmentPhotoGeometryTests: XCTestCase {
     func testCaptionAvoidsTheCompactMagnifierRectangleUsedByRendering() throws {
         let size = photoSizes[0], label = CGSize(width: 80, height: 24)
         let loupe = GarmentPhotoGeometry.magnifierRect(photoSize: size)
-        XCTAssertEqual(loupe.size, CGSize(width: 80, height: 112))
+        XCTAssertEqual(loupe.size, CGSize(width: 76, height: 107))
         let occupied = [loupe.insetBy(dx: -4, dy: -4)]
         let placement = try XCTUnwrap(GarmentPhotoGeometry.overlaySegmentLabelPlacement(
             start: .init(x: 35, y: 70), end: .init(x: 205, y: 70), labelSize: label,

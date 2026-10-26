@@ -67,6 +67,10 @@ nonisolated struct CaptureSnapshot: Codable, Sendable {
     /// Optional keeps older archives compatible. These settings never replace
     /// the actual frame's RGB/depth calibration used by the measurement engine.
     var cameraSettings: CameraCaptureSettings? = nil
+    /// Presentation only: the oriented photo region visible at the shutter.
+    /// RGB, depth, calibration and landmark coordinates remain unchanged.
+    /// Older captures omit this and continue to show the complete photo.
+    var presentationCrop: PhotoDisplayCrop? = nil
 }
 
 nonisolated enum LandmarkOrigin: String, Codable, Sendable {

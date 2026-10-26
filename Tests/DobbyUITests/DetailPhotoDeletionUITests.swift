@@ -14,6 +14,7 @@ final class DetailPhotoDeletionUITests: XCTestCase {
         start.tap()
         let capture = app.buttons["captureGarment"]
         XCTAssertTrue(capture.waitForExistence(timeout: 15))
+        armSyntheticGarmentCapture(in: app)
         capture.tap()
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
