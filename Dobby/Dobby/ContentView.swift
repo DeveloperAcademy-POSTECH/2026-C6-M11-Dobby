@@ -5,12 +5,16 @@ import ImageIO
 
 struct ContentView: View {
     private enum HomeTab: Hashable { case capture, library }
+    private struct CreationRequest: Identifiable {
+        let id = UUID()
+        let productID: UUID?
+    }
     @Environment(\.modelContext) private var context
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
     @State private var tab: HomeTab = .capture
     @State private var libraryPath: [UUID] = []
     @State private var libraryIsEditing = false
-    @State private var showCreation = false
+    @State private var creationRequest: CreationRequest?
     @State private var creationCopyHomeProduct: ExportProduct?
     @State private var showLiDAR = false
     @State private var exportProduct: ExportProduct?
@@ -29,7 +33,7 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $tab) {
             Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: HomeTab.capture) {
-                HomeView { showCreation = true }
+                HomeView { startCreation() }
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
                         if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
@@ -47,7 +51,8 @@ struct ContentView: View {
             Tab("보관함", systemImage: "hanger", value: HomeTab.library) {
                 NavigationStack(path: $libraryPath) {
                     ProductLibraryView(garments: garments, isEditing: $libraryIsEditing,
-                        onStartMeasurement: { showCreation = true })
+                        onStartMeasurement: { startCreation() },
+                        onResumeDraft: { startCreation(resuming: $0) })
 #if DEBUG
                     .toolbar {
                         if ProductAppStorage.fixtureDirectory != nil {
@@ -77,11 +82,13 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
             }
         }
-        .fullScreenCover(isPresented: $showCreation) {
-            ProductCreationFlowView(container: context.container, controller: controller, isPresented: $showCreation,
+        .fullScreenCover(item: $creationRequest) { request in
+            ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
                 copyHomeProduct: $creationCopyHomeProduct,
-                onFinish: { showCreation = false; libraryPath.removeAll(); tab = .library },
-                onCancel: { showCreation = false })
+                resumeProductID: request.productID,
+                onDraftSaved: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
+                onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
+                onCancel: { creationRequest = nil })
                 .tint(Color("HomeAccent"))
         }
         .fullScreenCover(isPresented: $showLiDAR) {
@@ -107,6 +114,15 @@ struct ContentView: View {
             try? SampleData.refreshExportSampleIfPresent(in: context)
         }
 #endif
+    }
+
+    private func startCreation(resuming productID: UUID? = nil) {
+        libraryIsEditing = false
+        creationRequest = CreationRequest(productID: productID)
+    }
+
+    private var creationIsPresented: Binding<Bool> {
+        Binding(get: { creationRequest != nil }, set: { if !$0 { creationRequest = nil } })
     }
 
 #if DEBUG
@@ -148,7 +164,7 @@ struct ContentView: View {
             detailMeasurements: session.measurementItems?.map { ExportMeasurement(id: $0.id, title: $0.title, value: $0.value) },
             photoData: saved?.photoData ?? [])
         routeTask?.cancel()
-        if showCreation {
+        if creationRequest != nil {
             // A previous product's copy helper can return while a new draft is
             // open. Keep its context and captures alive below the export cover.
             creationCopyHomeProduct = restored

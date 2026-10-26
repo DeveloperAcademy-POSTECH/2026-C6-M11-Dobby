@@ -15,6 +15,8 @@ struct CameraFlowView: View {
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
     let onComplete: (ProductPhotoOutput) async throws -> Void
+    let onSelectPhotos: (() -> Void)?
+    let onExit: (() -> Void)?
     var previewSource: CapturedAsset.Source?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
@@ -26,11 +28,15 @@ struct CameraFlowView: View {
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
          previewSource: CapturedAsset.Source? = nil,
+         onSelectPhotos: (() -> Void)? = nil,
+         onExit: (() -> Void)? = nil,
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
         self.camera = camera
         _permission = State(initialValue: permission)
         self.onComplete = onComplete
+        self.onSelectPhotos = onSelectPhotos
+        self.onExit = onExit
         self.previewSource = previewSource
     }
 
@@ -68,17 +74,16 @@ struct CameraFlowView: View {
         .toolbarBackground(background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
+            if let onExit {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("나가기", action: onExit)
+                        .disabled(isPhotoOperationInProgress)
+                        .accessibilityIdentifier("product-flow.exit")
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 // 기존 사진 선택에는 카메라 권한이 필요하지 않다.
-                NavigationLink {
-                    ProductPhotoSelectionView(model: model, onComplete: onComplete)
-                } label: {
-                    Text("완료").font(.body.weight(.semibold)).foregroundStyle(.white)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .disabled(isPhotoOperationInProgress)
-                .accessibilityIdentifier("camera.selectPhotos")
+                photoSelectionControl
             }
         }
         .alert("상세 사진을 삭제할까요?", isPresented: Binding(
@@ -124,6 +129,26 @@ struct CameraFlowView: View {
         }
         // 화면 이탈은 요청만 취소한다. 사진과 선택 결과는 초기화하지 않는다.
         .onDisappear { captureRequested = false }
+    }
+
+    private var photoSelectionControl: some View {
+        Group {
+            if let onSelectPhotos {
+                Button(action: onSelectPhotos) { selectionLabel }
+            } else {
+                NavigationLink {
+                    ProductPhotoSelectionView(model: model, onComplete: onComplete)
+                } label: { selectionLabel }
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.blue)
+        .disabled(isPhotoOperationInProgress)
+        .accessibilityIdentifier("camera.selectPhotos")
+    }
+
+    private var selectionLabel: some View {
+        Text("완료").font(.body.weight(.semibold)).foregroundStyle(.white)
     }
 
     @ViewBuilder

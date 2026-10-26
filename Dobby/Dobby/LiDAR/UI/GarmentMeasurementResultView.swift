@@ -10,6 +10,7 @@ struct GarmentMeasurementResultView: View {
     let onRetake: () -> Void
     let onConfirm: () -> Void
     let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
+    let onExitRecord: ((SavedMeasurement) async throws -> Void)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var headingTitleSize: CGFloat = 22
     @ScaledMetric(relativeTo: .subheadline) private var headingSubtitleSize: CGFloat = 14
@@ -35,14 +36,20 @@ struct GarmentMeasurementResultView: View {
     init(model: AutomaticMeasurement, archive: MeasurementArchive,
          recordingError: String? = nil, initialImage: UIImage? = nil, onRetake: @escaping () -> Void,
          onConfirm: @escaping () -> Void,
-         onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil) {
+         onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
+         onExitRecord: ((SavedMeasurement) async throws -> Void)? = nil,
+         initialRecord: SavedMeasurement? = nil) {
         _model = State(initialValue: model)
         self.archive = archive
         self.recordingError = recordingError
         self.onRetake = onRetake
         self.onConfirm = onConfirm
         self.onConfirmedRecord = onConfirmedRecord
+        self.onExitRecord = onExitRecord
         _image = State(initialValue: initialImage)
+        _pendingRecord = State(initialValue: initialRecord)
+        _pendingRecordRevision = State(initialValue: initialRecord == nil ? nil : model.persistenceRevision)
+        _pendingRecordArchived = State(initialValue: initialRecord != nil)
     }
 
     private var isSynthetic: Bool { model.snapshot.frame.source == .synthetic }
@@ -70,11 +77,19 @@ struct GarmentMeasurementResultView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: onRetake) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("다시 촬영")
-                    .accessibilityIdentifier("retakeGarmentMeasurement")
-                    .disabled(isSaving || isEditingPoint)
+                if onExitRecord != nil {
+                    Button("나가기") { Task { await saveAndExit() } }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("현재 실측 결과를 저장하고 나갑니다")
+                        .accessibilityIdentifier("product-flow.exit")
+                        .disabled(isSaving || isEditingPoint || model.needsRecalculation)
+                } else {
+                    Button(action: onRetake) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("다시 촬영")
+                        .accessibilityIdentifier("retakeGarmentMeasurement")
+                        .disabled(isSaving || isEditingPoint)
+                }
             }.sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .topBarTrailing) { resultActions }
                 .sharedBackgroundVisibility(.hidden)
@@ -460,21 +475,39 @@ struct GarmentMeasurementResultView: View {
         isSaving = true
         defer { isSaving = false }
         do {
-            if pendingRecord == nil || pendingRecordRevision != model.persistenceRevision {
-                pendingRecord = try model.makeRecord()
-                pendingRecordRevision = model.persistenceRevision
-                pendingRecordArchived = false
-            }
-            guard let record = pendingRecord else { return }
-            if !pendingRecordArchived {
-                _ = try await archive.save(record)
-                pendingRecordArchived = true
-            }
+            let record = try await savedRecord()
             // A downstream storage failure retries the same confirmed record;
             // the already published immutable archive is not saved twice.
             try await onConfirmedRecord?(record)
             onConfirm()
         } catch { saveError = error.localizedDescription }
+    }
+
+    private func saveAndExit() async {
+        guard let onExitRecord, !isSaving, !isEditingPoint, !model.needsRecalculation else { return }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let record = try await savedRecord()
+            try await onExitRecord(record)
+        } catch { saveError = error.localizedDescription }
+    }
+
+    private func savedRecord() async throws -> SavedMeasurement {
+        if let pendingRecord, pendingRecordRevision == model.persistenceRevision {
+            if !pendingRecordArchived {
+                _ = try await archive.save(pendingRecord)
+                pendingRecordArchived = true
+            }
+            return pendingRecord
+        }
+        let record = try model.makeRecord()
+        pendingRecord = record
+        pendingRecordRevision = model.persistenceRevision
+        pendingRecordArchived = false
+        _ = try await archive.save(record)
+        pendingRecordArchived = true
+        return record
     }
 
     private func recalculate() async {

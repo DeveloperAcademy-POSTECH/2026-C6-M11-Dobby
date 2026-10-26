@@ -32,10 +32,16 @@ final class LibraryDeletionTests: XCTestCase {
         attachScreenshot(app, name: "library-edit-mode")
 
         remove.tap()
-        let alert = app.alerts["정말 삭제하시겠습니까?"]
+        let alert = app.alerts["이 작업을 삭제하겠습니까?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts["삭제된 작업은 복구할 수 없어요"].exists)
         XCTAssertTrue(alert.buttons["취소"].exists)
-        XCTAssertTrue(alert.buttons["삭제"].exists)
+        XCTAssertTrue(alert.buttons["삭제하기"].exists)
+        XCTAssertEqual(alert.buttons.count, 2)
+        let deleteButton = alert.buttons["삭제하기"]
+        let cancelButton = alert.buttons["취소"]
+        XCTAssertLessThan(deleteButton.frame.midX, cancelButton.frame.midX)
+        XCTAssertEqual(deleteButton.frame.midY, cancelButton.frame.midY, accuracy: 1)
         XCTAssertFalse(app.navigationBars["제품 상세"].exists)
         attachScreenshot(app, name: "library-delete-confirmation")
         alert.buttons["취소"].tap()
@@ -56,7 +62,7 @@ final class LibraryDeletionTests: XCTestCase {
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         remove.tap()
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        alert.buttons["삭제"].tap()
+        alert.buttons["삭제하기"].tap()
         expectEmptyLibrary(in: app)
         XCTAssertFalse(remove.exists)
         XCTAssertFalse(edit.isEnabled)

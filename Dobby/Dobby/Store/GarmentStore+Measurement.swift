@@ -11,8 +11,10 @@ extension GarmentStore {
     static func importMeasurement(_ record: SavedMeasurement, in context: ModelContext,
                                   photosDirectory directory: URL? = nil,
                                   allowsSynthetic: Bool = false,
+                                  allowsUnavailableDraft: Bool = false,
                                   save: (ModelContext) throws -> Void = { try $0.save() }) throws -> Garment {
-        let kind = try validateProductMeasurement(record, allowsSynthetic: allowsSynthetic)
+        let kind = try validateProductMeasurement(record, allowsSynthetic: allowsSynthetic,
+            allowsUnavailableDraft: allowsUnavailableDraft)
         let identifier = record.id
         let query = FetchDescriptor<Garment>(predicate: #Predicate { $0.id == identifier })
         if let existing = try context.fetch(query).first {
@@ -105,50 +107,8 @@ extension GarmentStore {
             garment.photos.append(photo)
         }
 
-        let originalLandmarks = record.originalAutomaticLandmarks ?? record.landmarks
-        let displayedCurrent = record.landmarks.replacingDerivedImagePoints(with: record.result)
-        let displayedAutomatic = originalLandmarks.replacingDerivedImagePoints(with: originalResult)
-        // Only contour placeholders need their calculated intersection copied
-        // into the product graph. Preserve the existing storage convention for
-        // older spatial-average points, and leave the raw archive untouched.
-        func productPoint(_ raw: GarmentLandmark, displayed: GarmentLandmarkSet) -> GarmentLandmark {
-            guard raw.contourRule != nil else { return raw }
-            return displayed.points.first(where: { $0.id == raw.id }) ?? raw
-        }
         for (index, rawCurrent) in record.landmarks.points.enumerated() {
-            let current = productPoint(rawCurrent, displayed: displayedCurrent)
-            let point = LandmarkPoint(name: current.id, index: index,
-                                      x: current.point.x, y: current.point.y)
-            point.originRaw = (current.origin ?? record.landmarks.origin).rawValue
-            point.confidence = current.confidence
-            point.isVisible = current.isVisible
-            point.derivedFrom = record.landmarks.effectiveDerivedSourceIDs(for: current.id)
-            if let rawOriginal = originalLandmarks.points.first(where: { $0.id == current.id }),
-               rawOriginal.contourRule == nil || productPoint(rawOriginal, displayed: displayedAutomatic).isVisible {
-                let original = productPoint(rawOriginal, displayed: displayedAutomatic)
-                point.hasAutomaticObservation = true
-                point.autoX = original.point.x
-                point.autoY = original.point.y
-                point.autoOriginRaw = (original.origin ?? originalLandmarks.origin).rawValue
-                point.autoConfidence = original.confidence
-                point.autoIsVisible = original.isVisible
-                point.autoDerivedFrom = originalLandmarks.effectiveDerivedSourceIDs(for: original.id)
-                // A contour recomputed after a parent edit is still a derived
-                // intersection, not a directly moved model observation. Keep
-                // average-source fields nil: contour dependence is not a mean.
-                point.isMoved = rawCurrent.contourRule == nil && point.derivedFrom == nil
-                    && (current.point != original.point || point.originRaw != point.autoOriginRaw)
-            } else {
-                // Missing direct endpoints and unresolved automatic contour
-                // placeholders have no observed automatic coordinate. The init
-                // autoX/Y must not become a reset target or movement evidence.
-                point.hasAutomaticObservation = false
-                point.autoOriginRaw = nil
-                point.autoConfidence = nil
-                point.autoIsVisible = false
-                point.autoDerivedFrom = nil
-                point.isMoved = rawCurrent.contourRule == nil && current.origin == .manual
-            }
+            let point = productLandmark(rawCurrent, index: index, record: record)
             point.photo = photo
             insertionContext.insert(point)
             if !photo.landmarks.contains(where: { $0.id == point.id }) {
@@ -164,6 +124,128 @@ extension GarmentStore {
             throw MeasurementImportError.contextUnavailable
         }
         return callerModel
+    }
+
+    /// A result correction belongs to the same frozen capture and product.
+    /// Keep product/photo/measurement IDs so text drafts and selected photos
+    /// still reference the same objects after the corrected archive is saved.
+    @MainActor
+    static func refreshMeasurement(_ record: SavedMeasurement, for garment: Garment,
+                                   in context: ModelContext, allowsSynthetic: Bool = false,
+                                   allowsUnavailableDraft: Bool = false,
+                                   save: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        let kind = try validateProductMeasurement(record, allowsSynthetic: allowsSynthetic,
+            allowsUnavailableDraft: allowsUnavailableDraft)
+        guard garment.modelContext === context, garment.informationCompletedAt == nil, garment.sourceMeasurementID != nil,
+              garment.group == (kind == .top ? .top : .pants),
+              let photo = garment.measurementPhoto,
+              photo.measurementSessionID == record.snapshot.frame.sessionID,
+              photo.measurementFrameID == record.snapshot.frame.frameID else {
+            throw MeasurementImportError.invalidRecord
+        }
+        _ = try orientedMeasurementJPEG(record.snapshot)
+        let originalResult = record.originalAutomaticResult ?? record.result
+        for (index, definition) in record.definitions.enumerated() {
+            let result = record.result.values[index]
+            let centimeters = result.status == .unavailable ? nil : result.meters.flatMap {
+                $0.isFinite && $0 > 0 ? $0 * 100 : nil
+            }
+            guard let key = productMeasurementKeys[definition.id] else { throw MeasurementImportError.invalidRecord }
+            let original = originalResult.values[index]
+            let automatic = original.status == .unavailable ? nil : original.meters.flatMap {
+                $0.isFinite && $0 > 0 ? $0 * 100 : nil
+            }
+            if let existing = garment.measurement(key) {
+                existing.valueCm = centimeters ?? 0
+                existing.autoValueCm = automatic
+                existing.isEdited = false
+                existing.sourceStatusRaw = result.status.rawValue
+                existing.label = result.title
+                existing.displayOrder = index
+            } else {
+                guard centimeters != nil || GarmentMeasurementPresentation.isVisibleMeasurementID(definition.id, kind: kind) else { continue }
+                let value = MeasuredValue(key: key, label: result.title, displayOrder: index,
+                    valueCm: centimeters ?? 0, autoValueCm: automatic)
+                value.sourceStatusRaw = result.status.rawValue
+                value.garment = garment
+                context.insert(value)
+                if !garment.measurements.contains(where: { $0.id == value.id }) { garment.measurements.append(value) }
+            }
+        }
+        for (index, raw) in record.landmarks.points.enumerated() {
+            let updated = productLandmark(raw, index: index, record: record)
+            if let existing = photo.landmark(updated.name) {
+                copyLandmarkEvidence(from: updated, to: existing)
+            } else {
+                updated.photo = photo
+                context.insert(updated)
+                if !photo.landmarks.contains(where: { $0.id == updated.id }) { photo.landmarks.append(updated) }
+            }
+        }
+        garment.sourceMeasurementID = record.id
+        photo.measurementRecordID = record.id
+        photo.measurementModelVersion = record.landmarks.modelVersion
+        photo.measurementAlgorithmVersion = record.result.algorithmVersion
+        photo.measurementDepthSourceRaw = record.snapshot.frame.source.rawValue
+        photo.measurementLandmarkOriginRaw = record.landmarks.origin.rawValue
+        garment.syncFilterFields()
+        // Like information-input saving, a failure leaves current edits in the
+        // flow's private context so the user can retry without losing them.
+        try save(context)
+    }
+
+    @MainActor
+    private static func productLandmark(_ rawCurrent: GarmentLandmark, index: Int,
+                                        record: SavedMeasurement) -> LandmarkPoint {
+        let originalLandmarks = record.originalAutomaticLandmarks ?? record.landmarks
+        let originalResult = record.originalAutomaticResult ?? record.result
+        let displayedCurrent = record.landmarks.replacingDerivedImagePoints(with: record.result)
+        let displayedAutomatic = originalLandmarks.replacingDerivedImagePoints(with: originalResult)
+        // Only contour placeholders use calculated intersections in the graph.
+        func productPoint(_ raw: GarmentLandmark, displayed: GarmentLandmarkSet) -> GarmentLandmark {
+            guard raw.contourRule != nil else { return raw }
+            return displayed.points.first(where: { $0.id == raw.id }) ?? raw
+        }
+        let current = productPoint(rawCurrent, displayed: displayedCurrent)
+        let point = LandmarkPoint(name: current.id, index: index, x: current.point.x, y: current.point.y)
+        point.originRaw = (current.origin ?? record.landmarks.origin).rawValue
+        point.confidence = current.confidence
+        point.isVisible = current.isVisible
+        point.derivedFrom = record.landmarks.effectiveDerivedSourceIDs(for: current.id)
+        if let rawOriginal = originalLandmarks.points.first(where: { $0.id == current.id }),
+           rawOriginal.contourRule == nil || productPoint(rawOriginal, displayed: displayedAutomatic).isVisible {
+            let original = productPoint(rawOriginal, displayed: displayedAutomatic)
+            point.hasAutomaticObservation = true
+            point.autoX = original.point.x
+            point.autoY = original.point.y
+            point.autoOriginRaw = (original.origin ?? originalLandmarks.origin).rawValue
+            point.autoConfidence = original.confidence
+            point.autoIsVisible = original.isVisible
+            point.autoDerivedFrom = originalLandmarks.effectiveDerivedSourceIDs(for: original.id)
+            point.isMoved = rawCurrent.contourRule == nil && point.derivedFrom == nil
+                && (current.point != original.point || point.originRaw != point.autoOriginRaw)
+        } else {
+            point.hasAutomaticObservation = false
+            point.autoOriginRaw = nil
+            point.autoConfidence = nil
+            point.autoIsVisible = false
+            point.autoDerivedFrom = nil
+            point.isMoved = rawCurrent.contourRule == nil && current.origin == .manual
+        }
+        return point
+    }
+
+    @MainActor
+    private static func copyLandmarkEvidence(from updated: LandmarkPoint, to existing: LandmarkPoint) {
+        existing.index = updated.index
+        existing.x = updated.x; existing.y = updated.y
+        existing.autoX = updated.autoX; existing.autoY = updated.autoY
+        existing.hasAutomaticObservation = updated.hasAutomaticObservation
+        existing.isMoved = updated.isMoved
+        existing.originRaw = updated.originRaw; existing.autoOriginRaw = updated.autoOriginRaw
+        existing.confidence = updated.confidence; existing.autoConfidence = updated.autoConfidence
+        existing.isVisible = updated.isVisible; existing.autoIsVisible = updated.autoIsVisible
+        existing.derivedFrom = updated.derivedFrom; existing.autoDerivedFrom = updated.autoDerivedFrom
     }
 
     /// Write a private file, then publish it with a same-directory move that
@@ -201,7 +283,8 @@ extension GarmentStore {
     ]
 
     private static func validateProductMeasurement(_ record: SavedMeasurement,
-                                                   allowsSynthetic: Bool) throws -> AutomaticGarmentKind {
+                                                   allowsSynthetic: Bool,
+                                                   allowsUnavailableDraft: Bool = false) throws -> AutomaticGarmentKind {
         let frame = record.snapshot.frame
         guard record.schemaVersion == 1, frame.imageSize.isValid,
               allowsSynthetic || frame.source != .synthetic,
@@ -344,7 +427,7 @@ extension GarmentStore {
                 throw MeasurementImportError.invalidRecord
             }
         }
-        guard record.result.values.contains(where: {
+        guard allowsUnavailableDraft || record.result.values.contains(where: {
             $0.status != .unavailable && ($0.meters.map { $0.isFinite && $0 > 0 && ($0 * 100).isFinite } ?? false)
         }) else { throw MeasurementImportError.noAvailableMeasurements }
         guard record.result.values.allSatisfy({ hasUsableCentimeters($0) }) else {

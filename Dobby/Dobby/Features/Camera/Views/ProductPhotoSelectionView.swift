@@ -10,11 +10,19 @@ import SwiftUI
 /// 선택 데이터와 결과는 촬영 화면의 같은 MV Model을 사용한다.
 struct ProductPhotoSelectionView: View {
     let model: ProductPhotoModel
+    let onExit: (() -> Void)?
     let onComplete: (ProductPhotoOutput) async throws -> Void
     @State private var didComplete = false
     @State private var completionRequested = false
     @State private var failureMessage: String?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
+
+    init(model: ProductPhotoModel, onExit: (() -> Void)? = nil,
+         onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
+        self.model = model
+        self.onExit = onExit
+        self.onComplete = onComplete
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -31,7 +39,7 @@ struct ProductPhotoSelectionView: View {
                 Spacer(minLength: 0)
             }
         }
-        .disabled(model.isCapturing || completionRequested || didComplete)
+        .disabled(model.isCapturing || model.isDeleting || completionRequested || didComplete)
         .background(background.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .navigationTitle("제품 사진 선택")
@@ -45,6 +53,13 @@ struct ProductPhotoSelectionView: View {
             }
         }
         .toolbar {
+            if let onExit {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("나가기", action: onExit)
+                        .disabled(model.isCapturing || model.isDeleting || completionRequested || didComplete)
+                        .accessibilityIdentifier("product-flow.exit")
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     guard !didComplete, !completionRequested, model.output != nil else { return }

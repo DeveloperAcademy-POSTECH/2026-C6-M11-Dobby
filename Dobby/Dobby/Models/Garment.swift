@@ -19,6 +19,8 @@ final class Garment {
     var sourceMeasurementID: UUID? = nil
     /// 사진·치수와 제품 정보 입력을 저장한 시점. nil이면 새 연결 흐름의 초안이다.
     var informationCompletedAt: Date? = nil
+    /// 나가기를 눌러 보관한 등록 과정. 과거 상품의 nil은 초안으로 취급하지 않는다.
+    var creationDraftData: Data? = nil
 
     // MARK: 분류 — 모델이 채운다
 
@@ -86,6 +88,16 @@ final class Garment {
 // MARK: - 읽기 편의
 
 extension Garment {
+    var creationDraft: ProductCreationDraft? {
+        guard let creationDraftData,
+              let draft = try? JSONDecoder().decode(ProductCreationDraft.self, from: creationDraftData),
+              draft.schemaVersion == 1,
+              draft.photoState.map({ $0.garmentID == id }) ?? true else { return nil }
+        return draft
+    }
+
+    var isCreationDraft: Bool { informationCompletedAt == nil && creationDraft != nil }
+
     /// 관계 배열은 저장 순서를 보장하지 않으므로 읽을 때마다 정렬한다. 화면에서는 `photos`가
     /// 아니라 반드시 이쪽을 쓴다.
     var orderedPhotos: [GarmentPhoto] {

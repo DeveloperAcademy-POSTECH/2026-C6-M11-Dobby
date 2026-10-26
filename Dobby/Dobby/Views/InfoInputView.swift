@@ -11,6 +11,7 @@ import UIKit
 
 struct InfoInputView: View {
     @Bindable var garment: Garment
+    let onExit: (() -> Void)?
     var onComplete: ((Garment) -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
@@ -29,9 +30,11 @@ struct InfoInputView: View {
     private static let evenlyFittingColumns = 5
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
+         onExit: (() -> Void)? = nil,
          onComplete: ((Garment) -> Void)? = nil) {
         self.garment = garment
         self.retainedMeasurementInput = measurementInput
+        self.onExit = onExit
         self.onComplete = onComplete
     }
 
@@ -69,6 +72,15 @@ struct InfoInputView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { focusedMeasurementID = nil }
         .toolbar {
+            if let onExit {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("나가기") {
+                        focusedMeasurementID = nil
+                        onExit()
+                    }
+                    .accessibilityIdentifier("product-flow.exit")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("완료", action: complete)
                 .fontWeight(.semibold)
@@ -259,15 +271,16 @@ private struct SizeColumn: View {
 /// The visible text outlives its dirty draft. Clearing a consumed draft must not
 /// switch a focused TextField back to a rounded model display and emit that
 /// rounded value as a new edit during navigation/keyboard dismissal.
-@MainActor
-struct GarmentMeasurementInputState {
+nonisolated struct GarmentMeasurementInputState: Codable {
     private var inputTexts: [UUID: String] = [:]
     var drafts: [UUID: String] = [:]
 
+    @MainActor
     func text(for value: MeasuredValue) -> String {
         inputTexts[value.id] ?? GarmentMeasurementInputText.format(value.valueCm)
     }
 
+    @MainActor
     mutating func setText(_ text: String, for value: MeasuredValue) {
         guard text != self.text(for: value) else { return }
         inputTexts[value.id] = text
@@ -334,13 +347,16 @@ enum GarmentInputCompletion {
         }
         garment.syncFilterFields()
         let previousCompletion = garment.informationCompletedAt
+        let previousDraft = garment.creationDraftData
         garment.informationCompletedAt = .now
+        garment.creationDraftData = nil
         do {
             try persist()
         } catch {
             // Keep the user's edits for retry, while a failed save must not
             // promote a draft to a completed product in the current context.
             garment.informationCompletedAt = previousCompletion
+            garment.creationDraftData = previousDraft
             throw error
         }
     }

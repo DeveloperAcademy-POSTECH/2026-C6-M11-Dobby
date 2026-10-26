@@ -6,9 +6,10 @@ struct ProductLibraryView: View {
     let garments: [Garment]
     @Binding var isEditing: Bool
     let onStartMeasurement: () -> Void
+    let onResumeDraft: (UUID) -> Void
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
-    @State private var pendingDeletion: PendingDeletion?
+    @State private var pendingDeletion: UUID?
     @State private var deletionFailed = false
     @ScaledMetric(relativeTo: .title2) private var titleLineHeight: CGFloat = 33
     @ScaledMetric(relativeTo: .title2) private var emptyTitleLineHeight: CGFloat = 28
@@ -20,12 +21,29 @@ struct ProductLibraryView: View {
         GridItem(.flexible(), spacing: 12, alignment: .top)
     ]
 
+    init(garments: [Garment], isEditing: Binding<Bool>,
+         onStartMeasurement: @escaping () -> Void,
+         onResumeDraft: @escaping (UUID) -> Void = { _ in }) {
+        self.garments = garments
+        _isEditing = isEditing
+        self.onStartMeasurement = onStartMeasurement
+        self.onResumeDraft = onResumeDraft
+    }
+
     private var filteredGarments: [Garment] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return garments }
         return garments.filter {
             $0.name.localizedStandardContains(query) || $0.brand.localizedStandardContains(query)
         }
+    }
+
+    private var filteredDraftGarments: [Garment] {
+        filteredGarments.filter(\.isCreationDraft)
+    }
+
+    private var filteredSavedGarments: [Garment] {
+        filteredGarments.filter { !$0.isCreationDraft }
     }
 
     var body: some View {
@@ -41,9 +59,17 @@ struct ProductLibraryView: View {
                     ContentUnavailableView.search(text: searchText.trimmingCharacters(in: .whitespacesAndNewlines))
                 } else {
                     ScrollView {
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                            ForEach(filteredGarments) { garment in
-                                productCell(garment)
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(filteredDraftGarments) { garment in
+                                draftCell(garment)
+                            }
+
+                            if !filteredSavedGarments.isEmpty {
+                                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                                    ForEach(filteredSavedGarments) { garment in
+                                        productCell(garment)
+                                    }
+                                }
                             }
                         }
                         .padding(.top, isEditing ? 16 : 0)
@@ -98,15 +124,8 @@ struct ProductLibraryView: View {
                     .accessibilityIdentifier("library.edit-mode")
             }
         }
-        .alert("정말 삭제하시겠습니까?", isPresented: Binding(
-            get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }
-        ), presenting: pendingDeletion) { product in
-            Button("취소", role: .cancel) { pendingDeletion = nil }
-            Button("삭제", role: .destructive) {
-                deleteProduct(id: product.id)
-            }
-        } message: { product in
-            Text("\(product.name) 상품을 보관함에서 삭제합니다.")
+        .background {
+            LibraryDeletionConfirmation(productID: $pendingDeletion, onDelete: deleteProduct)
         }
         .alert("상품을 삭제하지 못했어요", isPresented: $deletionFailed) {
             Button("확인", role: .cancel) { }
@@ -175,22 +194,7 @@ struct ProductLibraryView: View {
         if isEditing {
             ProductLibraryCard(garment: garment)
                 .overlay(alignment: .topLeading) {
-                    Button(role: .destructive) {
-                        pendingDeletion = PendingDeletion(id: garment.id,
-                            name: garment.name.isEmpty ? "선택한" : garment.name)
-                    } label: {
-                        Image(systemName: "minus")
-                            .font(.system(size: 9.589, weight: .semibold))
-                            .foregroundStyle(LibraryStyle.primary)
-                            .frame(width: 25, height: 25)
-                            .glassEffect(.regular.interactive(), in: Circle())
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .offset(x: -17.5, y: -16.5)
-                    .accessibilityLabel("\(garment.name.isEmpty ? "상품" : garment.name) 삭제")
-                    .accessibilityIdentifier("library.delete.\(garment.id.uuidString)")
+                    deleteButton(for: garment)
                 }
                 .accessibilityElement(children: .contain)
         } else {
@@ -202,6 +206,47 @@ struct ProductLibraryView: View {
         }
     }
 
+    @ViewBuilder
+    private func draftCell(_ garment: Garment) -> some View {
+        if let draft = garment.creationDraft {
+            if isEditing {
+                ProductLibraryDraftCard(garment: garment, draft: draft)
+                    .overlay(alignment: .topLeading) {
+                        deleteButton(for: garment)
+                    }
+                    .accessibilityElement(children: .contain)
+            } else {
+                Button {
+                    isSearchFocused = false
+                    onResumeDraft(garment.id)
+                } label: {
+                    ProductLibraryDraftCard(garment: garment, draft: draft)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
+                .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다.")
+            }
+        }
+    }
+
+    private func deleteButton(for garment: Garment) -> some View {
+        Button(role: .destructive) {
+            pendingDeletion = garment.id
+        } label: {
+            Image(systemName: "minus")
+                .font(.system(size: 9.589, weight: .semibold))
+                .foregroundStyle(LibraryStyle.primary)
+                .frame(width: 25, height: 25)
+                .glassEffect(.regular.interactive(), in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .offset(x: -17.5, y: -16.5)
+        .accessibilityLabel("\(garment.name.isEmpty ? "상품" : garment.name) 삭제")
+        .accessibilityIdentifier("library.delete.\(garment.id.uuidString)")
+    }
+
     private func deleteProduct(id: UUID) {
         pendingDeletion = nil
         do {
@@ -209,11 +254,6 @@ struct ProductLibraryView: View {
         } catch {
             deletionFailed = true
         }
-    }
-
-    private struct PendingDeletion {
-        let id: UUID
-        let name: String
     }
 
     private var searchBar: some View {

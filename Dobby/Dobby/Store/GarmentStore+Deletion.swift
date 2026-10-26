@@ -16,6 +16,7 @@ extension GarmentStore {
         // Capture every file before cascading deletion invalidates the graph,
         // including original measurement photos excluded from product photos.
         let photoURLs = garment.photos.map { url(for: $0) }
+            + ProductDraftStore.retainedCameraPhotoURLs(in: garment.creationDraft, garmentID: garment.id)
         deletionContext.delete(garment)
         do {
             try deletionContext.save()
