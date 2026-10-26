@@ -20,7 +20,7 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            Tab("홈", systemImage: "house", value: .capture) {
+            Tab("홈", systemImage: "house.fill", value: .capture) {
                 HomeView { showCreation = true }
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
@@ -84,13 +84,16 @@ struct ContentView: View {
                         }
                     }
                 }
+                .tint(Color("HomeAccent"))
             }
         }
-        .tint(Color("HomeAccent"))
+        // 탭만 중립색으로 표시하고 각 화면과 촬영 모달의 강조색은 유지합니다.
+        .tint(.primary)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
                     .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
+                    .allowsHitTesting(false)
             }
         }
         .fullScreenCover(isPresented: $showCreation) {
@@ -116,6 +119,7 @@ struct ContentView: View {
                 Button("확인", role: .cancel) { linkError = nil }
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
+        .tint(Color("HomeAccent"))
 #if DEBUG
         .task {
             try? SampleData.refreshExportSampleIfPresent(in: context)

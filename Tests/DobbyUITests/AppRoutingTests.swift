@@ -22,9 +22,17 @@ final class AppRoutingTests: XCTestCase {
 
         app.tabBars.buttons["보관함"].tap()
         expectEmptyLibrary(in: app)
+        XCTAssertTrue(app.tabBars.buttons["보관함"].isSelected)
         app.tabBars.buttons["홈"].tap()
         expectHome(in: app)
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
         attachScreenshot(app, name: "routing-home-capture-library")
+
+        // 탭 왕복 후에도 중간 화면 없이 실측 촬영으로 진입합니다.
+        app.buttons["product-flow.start"].tap()
+        XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
+        app.buttons["closeGarmentCapture"].tap()
+        expectHome(in: app)
     }
 
     @MainActor
