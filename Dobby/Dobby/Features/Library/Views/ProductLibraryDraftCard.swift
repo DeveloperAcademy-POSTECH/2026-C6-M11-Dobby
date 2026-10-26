@@ -13,40 +13,33 @@ struct ProductLibraryDraftCard: View {
     private let dateColor = Color(red: 159.0 / 255, green: 159.0 / 255, blue: 159.0 / 255)
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 4) {
                     Text("작업 이어서 하기")
-                        .font(.system(size: 14 * typeScale, weight: .semibold))
+                        .font(.custom("Pretendard-Bold", fixedSize: 16 * typeScale))
                         .tracking(-0.43 * typeScale)
                         .foregroundStyle(.black)
                         .lineLimit(1)
-                        .frame(height: 21 * typeScale)
+                        .frame(height: 24 * typeScale)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(stageColor)
+                        .frame(width: 10, height: 18)
                         .accessibilityHidden(true)
                 }
 
-                Spacer(minLength: 5 * typeScale)
+                Spacer(minLength: 0)
 
                 VStack(alignment: .leading, spacing: 6 * typeScale) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("현재")
-                            .font(.custom("Pretendard-Medium", fixedSize: 12 * typeScale))
-                            .tracking(-0.43 * typeScale)
-                            .foregroundStyle(stageColor)
-                            .frame(height: 18 * typeScale)
-                            .accessibilityHidden(true)
-                        Text(draft.step.title)
-                            .font(.custom("Pretendard-Bold", fixedSize: 18 * typeScale))
-                            .tracking(-0.43 * typeScale)
-                            .foregroundStyle(stageColor)
-                            .lineLimit(1)
-                            .frame(height: 27 * typeScale)
-                            .accessibilityLabel("현재 \(draft.step.title)")
-                            .accessibilityIdentifier("library.draft.stage.\(garment.id.uuidString)")
-                    }
+                    Text(draft.step.title)
+                        .font(.custom("Pretendard-SemiBold", fixedSize: 14 * typeScale))
+                        .tracking(-0.43 * typeScale)
+                        .foregroundStyle(stageColor)
+                        .lineLimit(1)
+                        .frame(height: 21 * typeScale)
+                        .accessibilityLabel("현재 \(draft.step.title)")
+                        .accessibilityIdentifier("library.draft.stage.\(garment.id.uuidString)")
                     Text(relativeSaveTime)
                         .font(.custom("Pretendard-Medium", fixedSize: 12 * typeScale))
                         .tracking(-0.43 * typeScale)
@@ -56,13 +49,13 @@ struct ProductLibraryDraftCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 95 * typeScale, alignment: .topLeading)
+            .frame(height: 88 * typeScale, alignment: .topLeading)
 
             thumbnail
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: max(125, 125 * typeScale), alignment: .topLeading)
+        .frame(height: max(125, 88 * typeScale + 32))
         .background(.white, in: RoundedRectangle(cornerRadius: 24))
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .contentShape(RoundedRectangle(cornerRadius: 24))
@@ -77,8 +70,8 @@ struct ProductLibraryDraftCard: View {
                     .fill(Color(red: 217.0 / 255, green: 217.0 / 255, blue: 217.0 / 255))
             }
         }
-        .frame(width: 123, height: 164)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .frame(width: 88, height: 88)
+        .clipShape(RoundedRectangle(cornerRadius: 11.136))
         .accessibilityHidden(true)
     }
 

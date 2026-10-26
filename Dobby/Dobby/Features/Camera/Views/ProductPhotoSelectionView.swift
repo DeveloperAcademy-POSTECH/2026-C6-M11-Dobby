@@ -40,6 +40,7 @@ struct ProductPhotoSelectionView: View {
         .tint(.primary)
         .navigationTitle("제품 사진 선택")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(onExit != nil)
         .toolbarColorScheme(.light, for: .navigationBar)
         .toolbarBackground(background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -57,9 +58,12 @@ struct ProductPhotoSelectionView: View {
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("나가기", action: onExit)
+                    Button(action: onExit) {
+                        Image(systemName: "chevron.left")
+                    }
                         .disabled(model.isCapturing || model.isDeleting || completionRequested || didComplete)
-                        .accessibilityIdentifier("product-flow.exit")
+                        .accessibilityLabel("뒤로가기")
+                        .accessibilityIdentifier("product-flow.back")
                 }
             }
             ToolbarItem(placement: .confirmationAction) {

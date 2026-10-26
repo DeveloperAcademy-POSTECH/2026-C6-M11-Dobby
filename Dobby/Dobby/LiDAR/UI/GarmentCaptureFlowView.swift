@@ -14,6 +14,7 @@ struct GarmentCaptureFlowView: View {
     private let previewMissingTopLength: Bool
     private let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
     private let onExitRecord: ((SavedMeasurement) async throws -> Void)?
+    private let onExitRequested: ((@escaping () -> Void) -> Void)?
     private let restoredRecord: SavedMeasurement?
     private let allowsRetake: Bool
     private let onCancel: (() -> Void)?
@@ -45,11 +46,13 @@ struct GarmentCaptureFlowView: View {
          onCancel: (() -> Void)? = nil, embedsNavigation: Bool = true,
          restoredRecord: SavedMeasurement? = nil,
          onExitRecord: ((SavedMeasurement) async throws -> Void)? = nil,
-         allowsRetake: Bool = true) {
+         allowsRetake: Bool = true,
+         onExitRequested: ((@escaping () -> Void) -> Void)? = nil) {
         self.archive = archive
         self.isPreview = preview
         self.onConfirmedRecord = onConfirmedRecord
         self.onExitRecord = onExitRecord
+        self.onExitRequested = onExitRequested
         self.restoredRecord = restoredRecord
         self.allowsRetake = allowsRetake
         _model = State(initialValue: restoredRecord.map(AutomaticMeasurement.init(record:)))
@@ -92,7 +95,7 @@ struct GarmentCaptureFlowView: View {
                         onConfirm: { if onConfirmedRecord == nil { dismiss() } },
                         onConfirmedRecord: onConfirmedRecord,
                         onExitRecord: onExitRecord, initialRecord: restoredRecord,
-                        allowsRetake: allowsRetake)
+                        allowsRetake: allowsRetake, onExitRequested: onExitRequested)
                 } else {
                     cameraScreen
                         .navigationTitle("실측 촬영")

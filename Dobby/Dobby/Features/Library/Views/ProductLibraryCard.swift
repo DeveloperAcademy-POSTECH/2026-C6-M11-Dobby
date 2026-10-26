@@ -1,31 +1,31 @@
 import SwiftUI
 import UIKit
 
-/// Figma Frame 217. Product content comes from the saved garment.
+/// Figma's library card. Product content comes from the saved garment.
 struct ProductLibraryCard: View {
     let garment: Garment
     @ScaledMetric(relativeTo: .subheadline) private var titleLineHeight: CGFloat = 16
-    @ScaledMetric(relativeTo: .caption) private var brandLineHeight: CGFloat = 14
+    @ScaledMetric(relativeTo: .callout) private var brandLineHeight: CGFloat = 20
     @ScaledMetric(relativeTo: .subheadline) private var priceLineHeight: CGFloat = 16
+
+    private var informationHeight: CGFloat {
+        brandLineHeight + titleLineHeight * 2 + priceLineHeight + 30 + 3 * 8 + 2 * 10
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             thumbnail
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(garment.name)
-                    .modifier(LibraryCardTextStyle(size: 14, lineHeight: 16, relativeTo: .subheadline))
-                    .foregroundStyle(LibraryCardStyle.title)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .frame(height: titleLineHeight * 3, alignment: .topLeading)
-
+            VStack(alignment: .leading, spacing: 8) {
                 Text(garment.brand)
-                    .modifier(LibraryCardTextStyle(size: 12, lineHeight: 14, relativeTo: .caption))
+                    .modifier(LibraryCardTextStyle(size: 16, lineHeight: 20, relativeTo: .callout))
                     .foregroundStyle(LibraryCardStyle.brand)
                     .lineLimit(1)
                     .frame(height: brandLineHeight, alignment: .topLeading)
+
+                LibraryCardTitle(text: garment.name)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(minHeight: titleLineHeight, alignment: .topLeading)
 
                 Text(garment.price.map { $0.formatted(.number.locale(Locale(identifier: "ko_KR"))) } ?? "")
                     .modifier(LibraryCardTextStyle(size: 14, lineHeight: 16, relativeTo: .subheadline))
@@ -36,6 +36,7 @@ struct ProductLibraryCard: View {
                 platformBadges
             }
             .padding(10)
+            .frame(height: informationHeight, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white, in: RoundedRectangle(cornerRadius: 16))
@@ -83,7 +84,7 @@ struct ProductLibraryCard: View {
     }
 
     private var cardAccessibilityLabel: String {
-        var values = [garment.name.isEmpty ? "저장된 상품" : garment.name, garment.brand]
+        var values = [garment.brand, garment.name.isEmpty ? "저장된 상품" : garment.name]
         if let price = garment.price {
             values.append(price.formatted(.number.locale(Locale(identifier: "ko_KR"))))
         }
@@ -107,9 +108,63 @@ private extension ExportChannel {
 
 private enum LibraryCardStyle {
     static let fontName = "Pretendard-Medium"
-    static let title = LibraryStyle.primary
-    static let brand = Color(red: 111.0 / 255, green: 106.0 / 255, blue: 99.0 / 255)
+    static let title = UIColor(red: 16.0 / 255, green: 16.0 / 255, blue: 15.0 / 255, alpha: 1)
+    static let brand = Color(red: 32.0 / 255, green: 30.0 / 255, blue: 27.0 / 255)
     static let price = Color(red: 66.0 / 255, green: 62.0 / 255, blue: 58.0 / 255)
+}
+
+/// Disables the label's Korean orphan prevention so wrapping uses the full card text width.
+private struct LibraryCardTitle: UIViewRepresentable {
+    let text: String
+    @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline) private var lineHeight: CGFloat = 16
+
+    func makeUIView(context: Context) -> UILabel {
+        let label = UILabel()
+        label.numberOfLines = 2
+        label.lineBreakMode = .byTruncatingTail
+        label.lineBreakStrategy = []
+        label.adjustsFontForContentSizeCategory = false
+        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return label
+    }
+
+    func updateUIView(_ label: UILabel, context: Context) {
+        let font = UIFont(name: LibraryCardStyle.fontName, size: fontSize)
+            ?? UIFont.systemFont(ofSize: fontSize, weight: .medium)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = lineHeight
+        paragraph.maximumLineHeight = lineHeight
+        paragraph.lineBreakMode = .byTruncatingTail
+        paragraph.lineBreakStrategy = []
+
+        label.font = font
+        label.textColor = LibraryCardStyle.title
+        label.attributedText = NSAttributedString(string: text, attributes: [
+            .font: font,
+            .foregroundColor: LibraryCardStyle.title,
+            .kern: -fontSize * 0.01,
+            .paragraphStyle: paragraph
+        ])
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView label: UILabel, context: Context) -> CGSize? {
+        guard let width = proposal.width, width.isFinite else { return nil }
+        guard width > 0 else { return CGSize(width: max(0, width), height: lineHeight) }
+        label.preferredMaxLayoutWidth = width
+        guard !text.isEmpty else { return CGSize(width: width, height: lineHeight) }
+
+        let measuredHeight = label.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let singleLineHeight = label.textRect(
+            forBounds: CGRect(x: 0, y: 0, width: width, height: lineHeight * 2),
+            limitedToNumberOfLines: 1
+        ).height
+        // UILabel rounds glyph bounds, so dividing its height by the 16pt design line height
+        // can incorrectly count one line as two. Compare against the same label's one-line bounds.
+        let numberOfLines: CGFloat = measuredHeight > singleLineHeight + 0.5 ? 2 : 1
+        return CGSize(width: width, height: lineHeight * numberOfLines)
+    }
 }
 
 /// Uses Figma's line height while allowing the type to scale with accessibility settings.
@@ -136,7 +191,7 @@ private struct LibraryCardTextStyle: ViewModifier {
 }
 
 #if DEBUG
-#Preview("Frame 217 · 175pt") {
+#Preview("보관함 카드 · 브랜드 우선 · 175pt") {
     ProductLibraryCard(garment: LibraryPreviewData.garments[0])
         .frame(width: 175)
         .padding(20)
@@ -152,6 +207,26 @@ private struct LibraryCardTextStyle: ViewModifier {
             .frame(width: 175)
     }
     .padding(20)
+    .background(LibraryStyle.background)
+}
+
+#Preview("상품명 · 한 줄 / 두 줄 / 말줄임 / 빈 값") {
+    let names = [
+        "팝오버 니트",
+        "황계 카모플라주 후드 셔츠 자켓",
+        "황계 카모플라주 후드 셔츠 자켓과 길이가 긴 상품명을 두 줄까지만 표시합니다",
+        ""
+    ]
+    return ScrollView {
+        LazyVGrid(columns: [GridItem(.fixed(175)), GridItem(.fixed(175))], spacing: 12) {
+            ForEach(names, id: \.self) { name in
+                ProductLibraryCard(garment: Garment(
+                    category: "Jacket", group: .top, name: name, brand: "Bape", price: 155_000
+                ))
+            }
+        }
+        .padding(20)
+    }
     .background(LibraryStyle.background)
 }
 #endif

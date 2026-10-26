@@ -60,6 +60,7 @@ struct InfoInputView: View {
         .background(ProductInformationStyle.background)
         .navigationTitle("제품 정보 입력")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(onExit != nil)
         .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .tint(.primary)
@@ -67,11 +68,14 @@ struct InfoInputView: View {
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("나가기") {
+                    Button {
                         focusedMeasurementID = nil
                         onExit()
+                    } label: {
+                        Image(systemName: "chevron.left")
                     }
-                    .accessibilityIdentifier("product-flow.exit")
+                    .accessibilityLabel("뒤로가기")
+                    .accessibilityIdentifier("product-flow.back")
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {

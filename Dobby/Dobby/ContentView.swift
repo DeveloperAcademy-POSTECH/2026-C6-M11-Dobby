@@ -86,7 +86,7 @@ struct ContentView: View {
             ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
                 copyHomeProduct: $creationCopyHomeProduct,
                 resumeProductID: request.productID,
-                onDraftSaved: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
+                onDraftSaved: { creationRequest = nil; libraryPath.removeAll(); tab = .capture },
                 onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
                 onCancel: { creationRequest = nil })
                 .tint(Color("HomeAccent"))

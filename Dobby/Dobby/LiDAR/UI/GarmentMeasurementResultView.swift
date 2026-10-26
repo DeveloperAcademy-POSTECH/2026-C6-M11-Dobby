@@ -11,6 +11,7 @@ struct GarmentMeasurementResultView: View {
     let onConfirm: () -> Void
     let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
     let onExitRecord: ((SavedMeasurement) async throws -> Void)?
+    let onExitRequested: ((@escaping () -> Void) -> Void)?
     let allowsRetake: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var headingTitleSize: CGFloat = 22
@@ -40,7 +41,8 @@ struct GarmentMeasurementResultView: View {
          onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
          onExitRecord: ((SavedMeasurement) async throws -> Void)? = nil,
          initialRecord: SavedMeasurement? = nil,
-         allowsRetake: Bool = true) {
+         allowsRetake: Bool = true,
+         onExitRequested: ((@escaping () -> Void) -> Void)? = nil) {
         _model = State(initialValue: model)
         self.archive = archive
         self.recordingError = recordingError
@@ -48,6 +50,7 @@ struct GarmentMeasurementResultView: View {
         self.onConfirm = onConfirm
         self.onConfirmedRecord = onConfirmedRecord
         self.onExitRecord = onExitRecord
+        self.onExitRequested = onExitRequested
         self.allowsRetake = allowsRetake
         _image = State(initialValue: initialImage)
         _pendingRecord = State(initialValue: initialRecord)
@@ -84,10 +87,12 @@ struct GarmentMeasurementResultView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 if onExitRecord != nil {
-                    Button("나가기") { Task { await saveAndExit() } }
+                    Button(action: requestExit) {
+                        GarmentCaptureToolbarIcon(systemName: "chevron.left")
+                    }
                         .buttonStyle(.plain)
-                        .accessibilityHint("현재 실측 결과를 저장하고 나갑니다")
-                        .accessibilityIdentifier("product-flow.exit")
+                        .accessibilityLabel("뒤로가기")
+                        .accessibilityIdentifier("product-flow.back")
                         .disabled(isSaving || isEditingPoint || model.needsRecalculation)
                 } else {
                     Button(action: retakeIfAllowed) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
@@ -559,6 +564,13 @@ struct GarmentMeasurementResultView: View {
             try await onConfirmedRecord?(record)
             onConfirm()
         } catch { saveError = error.localizedDescription }
+    }
+
+    private func requestExit() {
+        guard onExitRecord != nil, !isSaving, !isEditingPoint, !model.needsRecalculation else { return }
+        let save: () -> Void = { Task { await saveAndExit() } }
+        if let onExitRequested { onExitRequested(save) }
+        else { save() }
     }
 
     private func saveAndExit() async {

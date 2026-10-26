@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 /// Holds the same product and photo session through the complete creation flow.
 struct ProductCreationFlowView: View {
@@ -29,6 +30,7 @@ struct ProductCreationFlowView: View {
     @State private var restoredRecord: SavedMeasurement?
     @State private var measurementRecordID: UUID?
     @State private var preservesDraftPhotos = false
+    @State private var pendingExitAction: (() -> Void)?
 
     init(container: ModelContainer, controller: CopyActivityController, isPresented: Binding<Bool>,
          copyHomeProduct: Binding<ExportProduct?>,
@@ -67,7 +69,8 @@ struct ProductCreationFlowView: View {
                     GarmentCaptureFlowView(archive: archive, preview: isFixture,
                         onConfirmedRecord: receiveMeasurement, onCancel: onCancel, embedsNavigation: false,
                         restoredRecord: restoredRecord, onExitRecord: saveResultAndExit,
-                        allowsRetake: garment == nil)
+                        allowsRetake: garment == nil,
+                        onExitRequested: presentExitConfirmation)
                 }
             }
                 .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
@@ -79,25 +82,14 @@ struct ProductCreationFlowView: View {
                                 CameraFlowView(model: photoModel, permission: permission, camera: camera,
                                     previewSource: isFixture ? photoModel.input.measurement.source : nil,
                                     onSelectPhotos: { path.append(.photoSelection) },
-                                    onExit: requestSaveAndExit,
+                                    onExit: requestDraftExit,
                                     onComplete: receivePhotos)
-                                    .navigationBarBackButtonHidden()
-                                    .toolbar {
-                                        ToolbarItem(placement: .topBarLeading) {
-                                            Button("실측 결과로 돌아가기", systemImage: "chevron.left") {
-                                                guard path.last == .details else { return }
-                                                path.removeLast()
-                                            }
-                                            .labelStyle(.iconOnly)
-                                            .accessibilityIdentifier("product-flow.backToMeasurement")
-                                        }
-                                    }
                             case .photoSelection:
-                                ProductPhotoSelectionView(model: photoModel, onExit: requestSaveAndExit,
+                                ProductPhotoSelectionView(model: photoModel, onExit: requestDraftExit,
                                     onComplete: receivePhotos)
                             case .information:
                                 InfoInputView(garment: garment, measurementInput: $measurementInput,
-                                    onExit: requestSaveAndExit) {
+                                    onExit: requestDraftExit) {
                                     _ in path.append(.completed)
                                 }
                             case .completed:
@@ -109,10 +101,16 @@ struct ProductCreationFlowView: View {
                     }
                 }
         }
-        .disabled(isFinishing)
+        .disabled(isFinishing || pendingExitAction != nil)
         .overlay {
             if isFinishing {
                 ProgressView("작업을 저장하는 중…").padding().background(.regularMaterial, in: Capsule())
+            }
+        }
+        .overlay {
+            if pendingExitAction != nil {
+                ProductDraftExitConfirmation(onCancel: { pendingExitAction = nil },
+                    onSave: confirmDraftExit)
             }
         }
         .environment(\.modelContext, context)
@@ -142,8 +140,11 @@ struct ProductCreationFlowView: View {
         .onChange(of: isPresented) { _, presented in
             // A full-screen export covers the flow but keeps its draft alive.
             // Only the parent dismissing this flow releases temporary captures.
-            if !presented, !preservesDraftPhotos, let photoModel {
-                Task { try? await photoModel.discardUncommittedDetails() }
+            if !presented {
+                pendingExitAction = nil
+                if !preservesDraftPhotos, let photoModel {
+                    Task { try? await photoModel.discardUncommittedDetails() }
+                }
             }
         }
         .task { if isRestoring { await restoreDraft() } }
@@ -269,6 +270,22 @@ struct ProductCreationFlowView: View {
 
     private func requestSaveAndExit() {
         Task { await saveAndExit() }
+    }
+
+    private func presentExitConfirmation(_ saveAction: @escaping () -> Void) {
+        guard !isFinishing, pendingExitAction == nil else { return }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        pendingExitAction = saveAction
+    }
+
+    private func requestDraftExit() {
+        presentExitConfirmation(requestSaveAndExit)
+    }
+
+    private func confirmDraftExit() {
+        guard !isFinishing, let saveAction = pendingExitAction else { return }
+        pendingExitAction = nil
+        saveAction()
     }
 
     private func saveAndExit() async {

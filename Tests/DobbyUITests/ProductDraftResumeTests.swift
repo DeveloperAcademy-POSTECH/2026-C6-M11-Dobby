@@ -22,7 +22,9 @@ final class ProductDraftResumeTests: XCTestCase {
         wait(for: NSPredicate(format: "value != %@", initialPoint), on: point)
         waitEnabled(app.buttons["confirmGarmentMeasurement"])
         let correctedPoint = try XCTUnwrap(point.value as? String)
-        let productID = exitToLibrary(stage: "실측 결과 단계", app: app)
+        cancelExitAndStay(title: "실측 결과", screenshot: "draft-exit-confirmation-dark-result", app: app)
+        XCTAssertEqual(point.value as? String, correctedPoint)
+        let productID = saveDraftViaHome(stage: "실측 결과 단계", app: app)
         attachScreenshot(app, name: "draft-library-measurement-result")
 
         relaunchAndResume(productID: productID, stage: "실측 결과 단계", app: app)
@@ -36,9 +38,10 @@ final class ProductDraftResumeTests: XCTestCase {
         waitEnabled(confirm)
         confirm.tap()
         captureTwoDetails(in: app)
+        cancelExitAndStay(title: "제품 상세 촬영", app: app)
         let originalPhotoIndices = detailPhotoCaptureIndices(in: app)
         XCTAssertEqual(originalPhotoIndices.count, 3, "The measurement and both captured originals must be present")
-        XCTAssertEqual(exitToLibrary(stage: "상세 촬영 단계", app: app), productID)
+        XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
         attachScreenshot(app, name: "draft-library-details")
 
         relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
@@ -75,7 +78,10 @@ final class ProductDraftResumeTests: XCTestCase {
         selectionControl(0, in: app).tap()
         XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
         XCTAssertFalse(completePhotos.isEnabled)
-        let productID = exitToLibrary(stage: "제품 사진 선택 단계", app: app)
+        cancelExitAndStay(title: "제품 사진 선택", app: app)
+        XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
+        XCTAssertFalse(completePhotos.isEnabled)
+        let productID = saveDraftViaHome(stage: "제품 사진 선택 단계", app: app)
         attachScreenshot(app, name: "draft-library-photo-selection")
 
         relaunchAndResume(productID: productID, stage: "제품 사진 선택 단계", app: app)
@@ -89,7 +95,9 @@ final class ProductDraftResumeTests: XCTestCase {
 
         for index in [2, 0, 1] { selectionControl(index, in: app).tap() }
         assertSelectionOrder(in: app)
-        XCTAssertEqual(exitToLibrary(stage: "제품 사진 선택 단계", app: app), productID)
+        cancelExitAndStay(title: "제품 사진 선택", app: app)
+        assertSelectionOrder(in: app)
+        XCTAssertEqual(saveDraftViaHome(stage: "제품 사진 선택 단계", app: app), productID)
         relaunchAndResume(productID: productID, stage: "제품 사진 선택 단계", app: app)
         assertResumedStage("제품 사진 선택", app: app)
         assertSelectionOrder(in: app)
@@ -103,7 +111,11 @@ final class ProductDraftResumeTests: XCTestCase {
         replaceText(in: field("brand", in: app), with: brand, app: app)
         let shoulder = app.textFields["product-info.measurement.shoulderWidth"]
         replaceText(in: shoulder, with: "0", app: app)
-        XCTAssertEqual(exitToLibrary(stage: "제품 정보 입력 단계", app: app), productID)
+        cancelExitAndStay(title: "제품 정보 입력", screenshot: "draft-exit-confirmation-light-information", app: app)
+        reveal(shoulder, in: app)
+        XCTAssertEqual(shoulder.value as? String, "0")
+        XCTAssertEqual(field("name", in: app).value as? String, name)
+        XCTAssertEqual(saveDraftViaHome(stage: "제품 정보 입력 단계", app: app), productID)
         attachScreenshot(app, name: "draft-library-partial-information")
 
         relaunchAndResume(productID: productID, stage: "제품 정보 입력 단계", app: app)
@@ -116,12 +128,11 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertEqual(shoulder.value as? String, "0", "Raw invalid input must survive exit and process restart")
         attachScreenshot(app, name: "draft-restored-partial-information-and-zero")
 
-        // Back still preserves the restored photo order and unfinished numeric text.
-        tapBack(in: app)
-        XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        assertSelectionOrder(in: app)
-        completePhotos.tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        // Cancelling Back keeps this exact information draft and its raw edit.
+        cancelExitAndStay(title: "제품 정보 입력", app: app)
+        XCTAssertEqual(field("name", in: app).value as? String, name)
+        XCTAssertEqual(field("detail", in: app).value as? String, description)
+        XCTAssertEqual(field("brand", in: app).value as? String, brand)
         assertPriceIsOmitted(in: app)
         let price = field("price", in: app)
         reveal(price, in: app)
@@ -186,38 +197,45 @@ final class ProductDraftResumeTests: XCTestCase {
     }
 
     private func detailPhotoCaptureIndices(in app: XCUIApplication) -> Set<String> {
-        let choose = app.buttons["camera.selectPhotos"]
-        waitEnabled(choose)
-        choose.tap()
-        XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "camera.grid.select."))
-        XCTAssertEqual(photos.count, 3)
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장 · 최대 10장")
-        for index in 0..<3 {
-            let photo = selectionControl(index, in: app)
-            // The preview is enabled only after this original photo decodes.
-            waitEnabled(app.buttons["camera.grid.preview.\(index)"])
-            if index == 0 {
-                XCTAssertEqual(photo.value as? String, "1번째 선택")
-            } else {
-                waitEnabled(photo)
-                XCTAssertEqual(photo.value as? String, "선택 안 됨")
-            }
+        let gallery = app.buttons["camera.openGallery"]
+        waitEnabled(gallery)
+        gallery.tap()
+        let pager = app.descendants(matching: .any)["camera.galleryPager"].firstMatch
+        XCTAssertTrue(pager.waitForExistence(timeout: 10))
+        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "camera.galleryThumbnail."))
+        // Gallery has the measured original, its annotated copy, and two details.
+        XCTAssertEqual(photos.count, 4)
+        let originalSlots = [0, 2, 3]
+        for index in originalSlots {
+            let photo = app.buttons["camera.galleryThumbnail.\(index)"]
+            XCTAssertTrue(photo.waitForExistence(timeout: 5))
+            photo.tap()
+            wait(for: NSPredicate(format: "value == %@", "\(index + 1) / 4"), on: pager)
+            XCTAssertTrue(photo.isSelected)
         }
-        let indices = Set(photos.allElementsBoundByIndex.map(\.identifier))
-        tapBack(in: app)
+        app.buttons["camera.galleryThumbnail.1"].tap()
+        wait(for: NSPredicate(format: "value == %@", "2 / 4"), on: pager)
+        let measurement = app.descendants(matching: .any)["camera.galleryMeasurement"].firstMatch
+        XCTAssertTrue(measurement.exists)
+        XCTAssertTrue((measurement.value as? String)?.contains("cm") == true)
+        attachScreenshot(app, name: "draft-gallery-preserved-originals-and-evidence")
+        app.buttons["촬영으로 돌아가기"].tap()
         XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 10))
-        return indices
+        XCTAssertFalse(exitConfirmation(in: app).exists, "The auxiliary gallery Back must only close the gallery")
+        return Set(originalSlots.map { "camera.galleryThumbnail.\($0)" })
     }
 
     @discardableResult
-    private func exitToLibrary(stage: String, app: XCUIApplication) -> String {
-        let exits = app.buttons.matching(identifier: "product-flow.exit")
-        let exit = exits.allElementsBoundByIndex.last(where: { $0.isHittable }) ?? exits.firstMatch
-        waitEnabled(exit)
-        exit.tap()
-        XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 20))
+    private func saveDraftViaHome(stage: String, app: XCUIApplication) -> String {
+        presentExitConfirmation(in: app)
+        app.buttons["product-flow.exit-save"].tap()
+        let start = app.buttons["product-flow.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 20))
+        wait(for: NSPredicate(format: "hittable == true"), on: start)
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected, "Saving a registration draft must return to Home")
+        XCTAssertFalse(exitConfirmation(in: app).exists)
+        app.tabBars.buttons["보관함"].tap()
+        XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10))
         let drafts = draftButtons(in: app)
         XCTAssertTrue(drafts.firstMatch.waitForExistence(timeout: 10))
         XCTAssertEqual(drafts.count, 1)
@@ -225,6 +243,35 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertNotNil(UUID(uuidString: productID))
         assertDraft(productID: productID, stage: stage, app: app)
         return productID
+    }
+
+    private func cancelExitAndStay(title: String, screenshot: String? = nil, app: XCUIApplication) {
+        presentExitConfirmation(in: app)
+        if let screenshot { attachScreenshot(app, name: screenshot) }
+        app.buttons["product-flow.exit-cancel"].tap()
+        XCTAssertTrue(exitConfirmation(in: app).waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars[title].isHittable)
+        XCTAssertTrue(app.buttons["product-flow.back"].isHittable)
+    }
+
+    private func presentExitConfirmation(in app: XCUIApplication) {
+        let backs = app.buttons.matching(identifier: "product-flow.back")
+        let visible = backs.allElementsBoundByIndex.filter(\.isHittable)
+        XCTAssertEqual(visible.count, 1, "Registration must show one main Back chevron")
+        XCTAssertFalse(app.buttons["product-flow.exit"].exists)
+        XCTAssertFalse(app.buttons["product-flow.backToMeasurement"].exists)
+        let back = visible.first ?? backs.firstMatch
+        waitEnabled(back)
+        back.tap()
+        XCTAssertTrue(exitConfirmation(in: app).waitForExistence(timeout: 10))
+        let message = app.staticTexts["product-flow.exit-message"]
+        XCTAssertEqual(message.label, "메인화면으로 나갈까요?\n작성된 내용은 자동으로 임시저장되고\n사라지지 않아요.")
+        XCTAssertTrue(app.buttons["product-flow.exit-cancel"].isEnabled)
+        XCTAssertTrue(app.buttons["product-flow.exit-save"].isEnabled)
+    }
+
+    private func exitConfirmation(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["product-flow.exit-confirmation"].firstMatch
     }
 
     private func relaunchAndResume(productID: String, stage: String, app: XCUIApplication) {
@@ -319,22 +366,6 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertEqual(field.value as? String, text)
     }
 
-    private func tapBack(in app: XCUIApplication) {
-        if let back = app.buttons.matching(identifier: "BackButton").allElementsBoundByIndex.last(where: { $0.isHittable }) {
-            back.tap()
-            return
-        }
-        for bar in app.navigationBars.allElementsBoundByIndex.reversed() {
-            if let back = bar.buttons.allElementsBoundByIndex.first(where: {
-                $0.isHittable && $0.frame.midX < app.frame.midX && $0.identifier != "product-flow.exit"
-            }) {
-                back.tap()
-                return
-            }
-        }
-        attachDiagnostic(app, name: "draft-native-back-not-found")
-        XCTFail("The resumed flow must retain native Back navigation")
-    }
 
     private func waitEnabled(_ element: XCUIElement) {
         XCTAssertTrue(element.waitForExistence(timeout: 15))

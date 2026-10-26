@@ -81,14 +81,18 @@ struct CameraFlowView: View {
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(onExit != nil)
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("나가기") { requestExit(onExit) }
+                    Button { requestExit(onExit) } label: {
+                        Image(systemName: "chevron.left")
+                    }
                         .disabled(isExitDisabled)
-                        .accessibilityIdentifier("product-flow.exit")
+                        .accessibilityLabel("뒤로가기")
+                        .accessibilityIdentifier("product-flow.back")
                 }
             }
             ToolbarItem(placement: .confirmationAction) {

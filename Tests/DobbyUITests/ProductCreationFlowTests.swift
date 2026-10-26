@@ -131,18 +131,18 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertFalse(app.textFields["product-info.measurement.hemWidth"].exists)
         attachScreenshot(app, name: "flow-top-four-columns-fit-current-main-table")
 
-        // Native Back must keep an unfinished measurement edit in this same
-        // draft while the selected photo originals remain available.
+        // Cancelling the main Back confirmation must keep this information
+        // draft and its unfinished measurement text on the same screen.
         replaceText(in: shoulder, with: "68.39", app: app)
-        returnToInformationThroughPhotoSelection(in: app)
+        cancelCreationExit(in: app)
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "68.39")
         attachScreenshot(app, name: "flow-top-pending-draft-restored-68.39")
 
-        // Invalid input also survives navigation so the user can correct it;
-        // returning to Info must never silently replace it with an old value.
+        // Invalid input also survives cancelling Back so it can be corrected
+        // without silently replacing it with an earlier accepted value.
         replaceText(in: shoulder, with: "0", app: app)
-        returnToInformationThroughPhotoSelection(in: app)
+        cancelCreationExit(in: app)
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "0")
         attachScreenshot(app, name: "flow-top-invalid-pending-draft-restored-zero")
@@ -167,6 +167,7 @@ final class ProductCreationFlowTests: XCTestCase {
         // must persist all digits instead of reusing the rounded display value.
         app.buttons["product-info.done"].tap()
         XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 2)
         attachScreenshot(app, name: "flow-top-completion-real-product")
         app.buttons["product-complete.export"].tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
@@ -203,22 +204,10 @@ final class ProductCreationFlowTests: XCTestCase {
         app.buttons["export.close"].tap()
         XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
 
-        // Presenting Export must not discard the detail originals needed by
-        // back-navigation to the same photo-selection model.
-        tapBack(in: app)
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
-        tapBack(in: app)
-        if app.navigationBars["제품 상세 촬영"].exists {
-            app.buttons["camera.selectPhotos"].tap()
-        }
-        XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        reveal(detail, in: app)
-        XCTAssertEqual(detail.value as? String, "2번째 선택")
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
-        app.buttons["camera.completePhotos"].tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
-        app.buttons["product-info.done"].tap()
-        XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
+        // Export returns to the completed product with both selected photos;
+        // main registration Back no longer navigates into an earlier stage.
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 2)
+        attachScreenshot(app, name: "flow-top-selected-photos-retained-after-export")
         app.buttons["product-complete.library"].tap()
         openLibraryProduct(named: name, app: app)
         assertSavedValue(key: "shoulderWidth", contains: "67 cm", app: app)
@@ -472,14 +461,23 @@ final class ProductCreationFlowTests: XCTestCase {
     }
 
     @MainActor
-    private func returnToInformationThroughPhotoSelection(in app: XCUIApplication) {
-        tapBack(in: app)
-        let selectPhotos = app.buttons["camera.selectPhotos"]
-        if selectPhotos.isHittable { selectPhotos.tap() }
-        XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
-        app.buttons["camera.completePhotos"].tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+    private func cancelCreationExit(in app: XCUIApplication) {
+        let backs = app.buttons.matching(identifier: "product-flow.back")
+        let visible = backs.allElementsBoundByIndex.filter(\.isHittable)
+        XCTAssertEqual(visible.count, 1)
+        XCTAssertFalse(app.buttons["product-flow.exit"].exists)
+        let back = visible.first ?? backs.firstMatch
+        waitEnabled(back)
+        back.tap()
+        let confirmation = app.descendants(matching: .any)["product-flow.exit-confirmation"].firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["product-flow.exit-message"].label,
+            "메인화면으로 나갈까요?\n작성된 내용은 자동으로 임시저장되고\n사라지지 않아요.")
+        XCTAssertTrue(app.buttons["product-flow.exit-save"].isEnabled)
+        app.buttons["product-flow.exit-cancel"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
+        XCTAssertTrue(back.isHittable)
     }
 
     @MainActor

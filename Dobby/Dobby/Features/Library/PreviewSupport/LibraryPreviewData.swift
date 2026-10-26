@@ -63,16 +63,16 @@ enum LibraryPreviewData {
 
     private static let items = [
         Item(category: "Jacket",
-            name: "베이프 BAPE A Bathing Ape 황계 카모플라주 후드 셔츠 자켓",
+            name: "황계 카모플라주 후드 셔츠 자켓",
             brand: "Bape", price: 155_000, imageName: "library-preview-bape"),
         Item(category: "Sweater",
-            name: "아워레가시 Our Legacy 팝 오버 니트",
+            name: "팝오버 니트",
             brand: "Our Legacy", price: 165_000, imageName: "library-preview-knit"),
         Item(category: "Jacket",
-            name: "폴로 랄프로렌 Polo Ralph Lauren 폴리쉘 자켓",
+            name: "폴리쉘 자켓",
             brand: "Polo Ralph Lauren", price: 89_000, imageName: "library-preview-polo-jacket"),
         Item(category: "Shirt",
-            name: "폴로 랄프로렌 Polo Ralph Lauren 헌팅 플란넬 체크 레더패치 셔츠",
+            name: "헌팅 플란넬 체크 레더패치 셔츠",
             brand: "Polo Ralph Lauren", price: 180_000, imageName: "library-preview-polo-shirt")
     ]
 }
