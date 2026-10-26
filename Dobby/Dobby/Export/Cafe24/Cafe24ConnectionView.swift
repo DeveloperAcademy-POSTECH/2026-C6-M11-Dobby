@@ -8,58 +8,43 @@ struct Cafe24ConnectionView: View {
     @State private var mallID = ""
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("처음이신가요?")
-                    .font(.subheadline)
-                    .foregroundStyle(Color(.exportConnectionIntro))
-                Text("먼저 카페24 계정과 연결이 필요해요")
-                    .font(.title3.bold())
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("카페24 계정과 연결을 완료하면\n상품을 자동으로 업로드할 수 있어요")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("처음이신가요?")
+                .font(.subheadline)
+            Text("먼저 카페24 계정과 연결이 필요해요")
+                .font(.title3.bold())
+                .fixedSize(horizontal: false, vertical: true)
+            Text("카페24 계정과 연결을 완료하면\n상품을 자동으로 업로드할 수 있어요")
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
 
-                Spacer(minLength: 92)
+            Spacer()
 
-                VStack(spacing: 16) {
-                    Text("아래 버튼을 누르고, 카페24 계정으로\n로그인해주세요")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Color(.exportConnectionText))
-                        .multilineTextAlignment(.center)
+            VStack(spacing: 18) {
+                Text("아래 버튼을 누르고, 카페24 계정으로 로그인해주세요")
+                    .font(.body.weight(.medium))
+                    .multilineTextAlignment(.center)
 
-                    Button { isShowingMallIDInput = true } label: {
-                        HStack(spacing: 10) {
-                            Image("Cafe24Logo")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 30, height: 30)
-                            Text("카페24 계정 연결하기")
-                                .font(.body.weight(.semibold))
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 62)
+                Button { isShowingMallIDInput = true } label: {
+                    HStack(spacing: 10) {
+                        Image("Cafe24Logo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 30, height: 30)
+                        Text("카페24 계정 연결하기")
+                            .font(.body.weight(.semibold))
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(Color(.label), in: RoundedRectangle(cornerRadius: 12))
-                    .disabled(isLoading)
+                    .frame(maxWidth: .infinity, minHeight: 62)
                 }
-                .frame(maxWidth: .infinity)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 8)
-                }
-
-                Spacer(minLength: 72)
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(Color(.label), in: RoundedRectangle(cornerRadius: 60))
+                .disabled(isLoading)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 24)
+            .frame(maxWidth: .infinity)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 24)
         .background(Color(.brandNeutral50).ignoresSafeArea())
         .sheet(isPresented: $isShowingMallIDInput) {
             Cafe24MallIDInputView(
