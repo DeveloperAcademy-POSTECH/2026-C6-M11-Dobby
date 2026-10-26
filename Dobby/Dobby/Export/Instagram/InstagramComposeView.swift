@@ -14,7 +14,7 @@ struct InstagramComposeView: View {
                     InstagramUploadCompletedHeader(onReportProblem: onReportProblem)
                 }
                 InstagramAccountCard(account: account)
-                InstagramPhotoEditor(draft: $draft)
+                InstagramPhotoEditor(photos: draft.photos)
                     .disabled(isDisabled)
                 InstagramCaptionEditor(draft: $draft)
                     .disabled(isDisabled)
@@ -74,20 +74,20 @@ private struct InstagramAccountCard: View {
 }
 
 private struct InstagramPhotoEditor: View {
-    @Binding var draft: InstagramExportDraft
+    let photos: [InstagramDraftPhoto]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            InstagramEditorHeader(title: "업로드할 사진", resetAction: { draft.resetPhotos() })
-            if draft.photos.isEmpty {
-                ContentUnavailableView("업로드할 사진이 없어요", systemImage: "photo.badge.exclamationmark",
-                                       description: Text("초기화를 누르면 상품 사진을 다시 불러옵니다."))
+            Text("업로드할 사진")
+                .font(.body.weight(.medium))
+            if photos.isEmpty {
+                ContentUnavailableView("업로드할 사진이 없어요", systemImage: "photo.badge.exclamationmark")
                     .frame(maxWidth: .infinity, minHeight: 180)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 8) {
-                        ForEach(draft.photos) { photo in
-                            InstagramDraftPhotoCell(photo: photo) { draft.removePhoto(id: photo.id) }
+                        ForEach(photos) { photo in
+                            InstagramDraftPhotoCell(photo: photo)
                         }
                     }
                 }
@@ -98,7 +98,6 @@ private struct InstagramPhotoEditor: View {
 
 private struct InstagramDraftPhotoCell: View {
     let photo: InstagramDraftPhoto
-    let onRemove: () -> Void
 
     var body: some View {
         Group {
@@ -111,18 +110,6 @@ private struct InstagramDraftPhotoCell: View {
         .frame(width: 152, height: 212)
         .background(Color(.brandNeutral100))
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(alignment: .topTrailing) {
-            Button(action: onRemove) {
-                Image(systemName: "xmark")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(.black.opacity(0.35), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(10)
-            .accessibilityLabel("업로드 목록에서 사진 삭제")
-        }
     }
 }
 
@@ -155,19 +142,6 @@ private struct InstagramCaptionEditor: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
-        }
-    }
-}
-
-private struct InstagramEditorHeader: View {
-    let title: String
-    let resetAction: () -> Void
-
-    var body: some View {
-        HStack {
-            Text(title).font(.body.weight(.medium))
-            Spacer()
-            InstagramResetButton(action: resetAction)
         }
     }
 }

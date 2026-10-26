@@ -13,9 +13,8 @@ struct InstagramDraftPhoto: Identifiable {
 struct InstagramExportDraft {
     static let maximumCaptionLength = 2200
 
-    private let originalPhotos: [InstagramDraftPhoto]
     private let originalCaption: String
-    var photos: [InstagramDraftPhoto]
+    let photos: [InstagramDraftPhoto]
     var caption: String
 
     var validationMessage: String? {
@@ -41,18 +40,9 @@ struct InstagramExportDraft {
                        payload.measurements, payload.price.isEmpty ? "" : "가격: \(payload.price)원"]
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
-        originalPhotos = photos
         originalCaption = caption
         self.photos = photos
         self.caption = caption
-    }
-
-    mutating func removePhoto(id: UUID) {
-        photos.removeAll { $0.id == id }
-    }
-
-    mutating func resetPhotos() {
-        photos = originalPhotos
     }
 
     mutating func resetCaption() {
