@@ -14,7 +14,7 @@ struct Cafe24ConnectionView: View {
                 Text("처음이신가요?")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text("먼저 카페24 계정과\n연결이 필요해요")
+                Text("먼저 카페24 계정과 연결이 필요해요")
                     .font(.title3.bold())
                     .fixedSize(horizontal: false, vertical: true)
                 Text("카페24 계정과 연결을 완료하면\n상품을 자동으로 업로드할 수 있어요")
