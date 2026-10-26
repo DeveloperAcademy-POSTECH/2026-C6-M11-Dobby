@@ -46,11 +46,14 @@ struct Cafe24ExportView: View {
                     .padding(16)
                     .background(ExportScreenStyle.field, in: RoundedRectangle(cornerRadius: ExportScreenStyle.fieldCornerRadius))
 
-                    Button("다른 쇼핑몰 연결") { self.connectedMallID = nil }
+                    Button("연결 해제") {
+                        Task { await disconnect() }
+                    }
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(ExportScreenStyle.accent)
                         .frame(maxWidth: .infinity, minHeight: 48)
                         .background(ExportScreenStyle.accent.opacity(0.08), in: Capsule())
+                        .disabled(isWorking)
                 } else {
                     ExportField(label: "쇼핑몰 ID") {
                         TextField("예: myshop", text: $mallID)
@@ -115,6 +118,15 @@ struct Cafe24ExportView: View {
         do {
             try await client.connect(mallID: mallID)
             connectedMallID = try await client.connectionStatus().mallID
+        } catch { show(error) }
+    }
+
+    private func disconnect() async {
+        isWorking = true; defer { isWorking = false }
+        do {
+            try await client.disconnect()
+            connectedMallID = nil
+            mallID = ""
         } catch { show(error) }
     }
 
