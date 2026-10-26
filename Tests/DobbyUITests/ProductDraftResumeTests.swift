@@ -178,6 +178,7 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["product-flow.fixture"].waitForExistence(timeout: 10))
         let capture = app.buttons["captureGarment"]
         XCTAssertTrue(capture.waitForExistence(timeout: 10))
+        armSyntheticGarmentCapture(in: app)
         capture.tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
     }
@@ -186,6 +187,7 @@ final class ProductDraftResumeTests: XCTestCase {
         let guide = app.buttons["camera.startDetailCapture"]
         XCTAssertTrue(guide.waitForExistence(timeout: 10))
         guide.tap()
+        XCTAssertTrue(guide.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 15))
         let capture = app.buttons["camera.captureDetail"]
         for _ in 0..<2 {

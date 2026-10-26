@@ -98,6 +98,7 @@ struct ProductCreationFlowView: View {
                                     onLibrary: { Task { await finishFlow() } })
                             }
                         }.safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
+                            .preferredColorScheme(path.last == .photoSelection || path.last == .information || path.last == .completed ? .light : .dark)
                     }
                 }
         }
@@ -114,7 +115,6 @@ struct ProductCreationFlowView: View {
             }
         }
         .environment(\.modelContext, context)
-        .preferredColorScheme(path.last == .photoSelection || path.last == .information || path.last == .completed ? .light : .dark)
         .tint(path.last == .photoSelection ? .black
             : path.last == .information || path.last == .completed ? .orange : .white)
         .fullScreenCover(item: $exportProduct) { product in

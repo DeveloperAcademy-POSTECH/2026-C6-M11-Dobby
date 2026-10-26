@@ -16,6 +16,8 @@ final class AppRoutingTests: XCTestCase {
         // before shutter/confirmation, so no product or measurement is stored.
         app.buttons["product-flow.start"].tap()
         XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["captureGarment"].isEnabled)
+        XCTAssertEqual(app.buttons["captureGarment"].value as? String, "옷 인식 대기")
         XCTAssertTrue(app.staticTexts["product-flow.fixture"].exists)
         app.buttons["closeGarmentCapture"].tap()
         expectHome(in: app)

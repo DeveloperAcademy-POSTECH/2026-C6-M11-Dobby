@@ -61,7 +61,8 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
         attach(app, name: "point-present-depth-failure-explained")
         retake.tap()
         XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["captureGarment"].isEnabled)
+        XCTAssertFalse(app.buttons["captureGarment"].isEnabled)
+        XCTAssertEqual(app.buttons["captureGarment"].value as? String, "옷 인식 대기")
     }
 
     @MainActor
@@ -94,7 +95,8 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
         start.tap()
         let shutter = app.buttons["captureGarment"]
         XCTAssertTrue(shutter.waitForExistence(timeout: 10))
-        XCTAssertTrue(shutter.isEnabled, "Recognition must not gate the shutter")
+        XCTAssertFalse(shutter.isEnabled, "A synthetic failure fixture must still obtain recognition before capture")
+        armSyntheticGarmentCapture(in: app)
         shutter.tap()
         return app
     }

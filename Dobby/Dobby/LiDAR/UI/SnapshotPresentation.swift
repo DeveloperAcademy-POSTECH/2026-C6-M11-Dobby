@@ -46,6 +46,11 @@ enum SnapshotPresentation {
         return rotated ? CGFloat(size.height) / CGFloat(size.width) : CGFloat(size.width) / CGFloat(size.height)
     }
 
+    static func resultAspectRatio(for snapshot: CaptureSnapshot) -> CGFloat {
+        let crop = snapshot.presentationCrop.flatMap { $0.isValid ? $0 : nil } ?? .full
+        return aspectRatio(for: snapshot) * CGFloat(crop.width / crop.height)
+    }
+
     static var deviceIdentifier: String {
         if let model = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] { return "Simulator: " + model }
         var system = utsname()

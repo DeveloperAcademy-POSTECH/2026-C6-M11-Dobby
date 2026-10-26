@@ -104,6 +104,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
         start.tap()
         let capture = app.buttons["captureGarment"]
         XCTAssertTrue(capture.waitForExistence(timeout: 15))
+        armSyntheticGarmentCapture(in: app)
         capture.tap()
         waitEnabled(app.buttons["confirmGarmentMeasurement"])
         return app

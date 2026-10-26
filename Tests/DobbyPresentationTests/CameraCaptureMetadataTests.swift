@@ -6,6 +6,29 @@ import XCTest
 /// establish physical autofocus, exposure settling or real-device accuracy.
 @MainActor
 final class CameraCaptureMetadataTests: XCTestCase {
+    func testPresentationCropPreservesOriginalPhotoDepthCalibrationAndCameraZoom() throws {
+        let original = try snapshot(includeSettings: true)
+        var framed = original
+        framed.presentationCrop = .init(x: 0.2, y: 0.15, width: 0.6, height: 0.65)
+        let restored = try JSONDecoder().decode(CaptureSnapshot.self, from: JSONEncoder().encode(framed))
+        XCTAssertEqual(restored.presentationCrop, framed.presentationCrop)
+        XCTAssertEqual(restored.imageJPEG, original.imageJPEG)
+        XCTAssertEqual(restored.frame.sessionID, original.frame.sessionID)
+        XCTAssertEqual(restored.frame.frameID, original.frame.frameID)
+        XCTAssertEqual(restored.frame.imageSize, original.frame.imageSize)
+        XCTAssertEqual(restored.frame.orientation, original.frame.orientation)
+        XCTAssertEqual(restored.frame.depth.values, original.frame.depth.values)
+        XCTAssertEqual(restored.frame.depth.confidence, original.frame.depth.confidence)
+        XCTAssertEqual(restored.frame.intrinsics, original.frame.intrinsics)
+        XCTAssertEqual(restored.cameraSettings, original.cameraSettings)
+    }
+
+    func testInvalidPresentationCropFallsBackToOriginalPhotoAspect() throws {
+        var value = try snapshot(includeSettings: true)
+        value.presentationCrop = .init(x: 0.9, y: 0, width: 0.5, height: 1)
+        XCTAssertEqual(SnapshotPresentation.resultAspectRatio(for: value), SnapshotPresentation.aspectRatio(for: value))
+    }
+
     private func snapshot(includeSettings: Bool) throws -> CaptureSnapshot {
         let imageSize = PixelSize(width: 64, height: 48)
         let depthSize = PixelSize(width: 16, height: 12)

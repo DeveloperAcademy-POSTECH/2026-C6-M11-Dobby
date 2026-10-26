@@ -109,11 +109,6 @@ struct ContentView: View {
                 Button("확인", role: .cancel) { linkError = nil }
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
-#if DEBUG
-        .task {
-            try? SampleData.refreshExportSampleIfPresent(in: context)
-        }
-#endif
     }
 
     private func startCreation(resuming productID: UUID? = nil) {
@@ -258,6 +253,11 @@ struct StoredProductPhotoView: View {
     let maximumPixelSize: Int
     var contentMode: ContentMode = .fill
     @State private var image: CGImage?
+    @State private var imageRequestID: UUID?
+
+    private var thumbnailRequest: ProductThumbnailRequest {
+        .init(url: GarmentStore.url(for: photo), maximumPixelSize: maximumPixelSize)
+    }
 
     var body: some View {
         Group {
@@ -267,13 +267,14 @@ struct StoredProductPhotoView: View {
                 Rectangle().fill(.quaternary).overlay { Image(systemName: "photo") }
             }
         }
-        .task(id: photo.fileName) {
-            guard let source = CGImageSourceCreateWithURL(GarmentStore.url(for: photo) as CFURL, nil) else { return }
-            image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize
-            ] as CFDictionary)
+        .task(id: thumbnailRequest) {
+            let request = thumbnailRequest
+            let requestID = UUID()
+            imageRequestID = requestID
+            image = nil
+            let decoded = await ProductThumbnailLoader.shared.image(for: request)
+            guard !Task.isCancelled, imageRequestID == requestID, thumbnailRequest == request else { return }
+            image = decoded?.image
         }
     }
 }
