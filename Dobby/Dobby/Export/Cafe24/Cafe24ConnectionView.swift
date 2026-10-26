@@ -4,7 +4,6 @@ struct Cafe24ConnectionView: View {
     let isLoading: Bool
     let errorMessage: String?
     let onConnect: (String) -> Void
-    let onRefresh: () -> Void
     @State private var isShowingMallIDInput = false
     @State private var mallID = ""
 
@@ -13,7 +12,7 @@ struct Cafe24ConnectionView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("처음이신가요?")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(.exportConnectionIntro))
                 Text("먼저 카페24 계정과 연결이 필요해요")
                     .font(.title3.bold())
                     .fixedSize(horizontal: false, vertical: true)
@@ -27,6 +26,7 @@ struct Cafe24ConnectionView: View {
                 VStack(spacing: 16) {
                     Text("아래 버튼을 누르고, 카페24 계정으로\n로그인해주세요")
                         .font(.body.weight(.medium))
+                        .foregroundStyle(Color(.exportConnectionText))
                         .multilineTextAlignment(.center)
 
                     Button { isShowingMallIDInput = true } label: {
@@ -61,17 +61,6 @@ struct Cafe24ConnectionView: View {
             .padding(.top, 24)
         }
         .background(Color(.brandNeutral50).ignoresSafeArea())
-        .safeAreaInset(edge: .bottom) {
-            Button("연결을 완료했어요", action: onRefresh)
-                .font(.body.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 62)
-                .foregroundStyle(.white)
-                .background(Color(.brandMain), in: Capsule())
-                .padding(.horizontal, 33)
-                .padding(.vertical, 16)
-                .background(Color(.brandNeutral50))
-                .disabled(isLoading)
-        }
         .sheet(isPresented: $isShowingMallIDInput) {
             Cafe24MallIDInputView(
                 mallID: $mallID,
@@ -135,4 +124,3 @@ private struct Cafe24MallIDInputView: View {
         mallID.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
-

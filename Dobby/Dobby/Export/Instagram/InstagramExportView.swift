@@ -50,8 +50,7 @@ struct InstagramExportView: View {
                 InstagramConnectionView(
                     isLoading: busy || isLoadingAccount,
                     errorMessage: accountLoadError,
-                    onConnect: { Task { await connect() } },
-                    onRefresh: { Task { await loadAccount() } }
+                    onConnect: { Task { await connect() } }
                 )
             }
         }

@@ -4,7 +4,6 @@ struct InstagramConnectionView: View {
     let isLoading: Bool
     let errorMessage: String?
     let onConnect: () -> Void
-    let onRefresh: () -> Void
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -12,20 +11,22 @@ struct InstagramConnectionView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("처음이신가요?")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(.exportConnectionIntro))
                 Text("먼저 인스타그램 프로페셔널 계정과\n연결이 필요해요")
                     .font(.title3.bold())
                     .fixedSize(horizontal: false, vertical: true)
                 Text("인스타그램을 열고, 프로페셔널 계정으로\n연결을 완료하면 자동으로 업로드할 수 있어요")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(.exportConnectionText))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 92)
 
-                VStack(spacing: 16) {
-                    Text("인스타그램 계정을 연결해 주세요")
+                VStack(spacing: 18) {
+                    Text("아래 버튼을 누르고, 프로페셔널 계정으로\n로그인해주세요")
                         .font(.body.weight(.medium))
+                        .foregroundStyle(Color(.exportConnectionText))
+                        .multilineTextAlignment(.center)
 
                     Button(action: onConnect) {
                         HStack(spacing: 10) {
@@ -44,7 +45,7 @@ struct InstagramConnectionView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)
-                    .background(Color(.label), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color(.label), in: RoundedRectangle(cornerRadius: 60))
                     .disabled(isLoading)
 
                     Button("프로페셔널 계정으로 어떻게 설정하나요?") {
@@ -52,7 +53,7 @@ struct InstagramConnectionView: View {
                         openURL(url)
                     }
                     .font(.caption)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color(.exportConnectionText))
                     .underline()
                 }
                 .frame(maxWidth: .infinity)
@@ -71,16 +72,5 @@ struct InstagramConnectionView: View {
             .padding(.top, 24)
         }
         .background(Color(.brandNeutral50).ignoresSafeArea())
-        .safeAreaInset(edge: .bottom) {
-            Button("연결을 완료했어요", action: onRefresh)
-                .font(.body.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 62)
-                .foregroundStyle(.white)
-                .background(Color(.brandMain), in: Capsule())
-                .padding(.horizontal, 33)
-                .padding(.vertical, 16)
-                .background(Color(.brandNeutral50))
-                .disabled(isLoading)
-        }
     }
 }

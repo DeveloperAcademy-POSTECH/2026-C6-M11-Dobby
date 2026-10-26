@@ -47,8 +47,7 @@ struct Cafe24ExportView: View {
                 Cafe24ConnectionView(
                     isLoading: isConnecting || isLoadingConnection,
                     errorMessage: connectionError,
-                    onConnect: { mallID in Task { await connect(mallID: mallID) } },
-                    onRefresh: { Task { await loadStatus() } }
+                    onConnect: { mallID in Task { await connect(mallID: mallID) } }
                 )
             }
         }
