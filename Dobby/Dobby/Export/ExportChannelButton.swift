@@ -5,7 +5,6 @@ struct ExportChannelButton: View {
     let channel: ExportChannel
     let isComplete: Bool
     let action: () -> Void
-    var titleOverride: String? = nil
 
     var body: some View {
         Button(action: action) {
@@ -14,7 +13,7 @@ struct ExportChannelButton: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 48, height: 48)
-                Text(titleOverride ?? channel.shortTitle)
+                Text(channel.shortTitle)
                     .font(.body.weight(.medium))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -36,7 +35,7 @@ struct ExportChannelButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(titleOverride ?? channel.shortTitle)
+        .accessibilityLabel(channel.shortTitle)
         .accessibilityValue(isComplete ? "업로드 완료" : "업로드 전")
     }
 }
