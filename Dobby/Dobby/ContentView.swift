@@ -67,8 +67,7 @@ struct ContentView: View {
 #endif
                     .navigationDestination(for: UUID.self) { productID in
                         if let garment = garments.first(where: { $0.id == productID }) {
-                            ProductSavedDetailView(garment: garment, controller: controller,
-                                onLibrary: { libraryPath.removeAll() })
+                            ProductSavedDetailView(garment: garment, controller: controller)
                         }
                     }
                 }
@@ -180,8 +179,6 @@ struct ProductSavedDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var garment: Garment
     let controller: CopyActivityController
-    let onLibrary: () -> Void
-    @State private var showCompletion = false
     @State private var showInformation = false
     @State private var measurementInput = GarmentMeasurementInputState()
     @State private var exportProduct: ExportProduct?
@@ -220,10 +217,9 @@ struct ProductSavedDetailView: View {
             }
         }
         .navigationDestination(isPresented: $showInformation) {
-            InfoInputView(garment: garment, measurementInput: $measurementInput) { _ in showCompletion = true }
-        }
-        .navigationDestination(isPresented: $showCompletion) {
-            ProductInputCompletionView(garment: garment, onExport: openExport, onLibrary: onLibrary)
+            InfoInputView(garment: garment, measurementInput: $measurementInput) { _ in
+                showInformation = false
+            }
         }
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)

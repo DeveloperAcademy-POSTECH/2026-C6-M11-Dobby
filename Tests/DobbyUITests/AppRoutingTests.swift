@@ -155,52 +155,53 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
         app.buttons["library.edit"].tap()
         XCTAssertTrue(information.waitForExistence(timeout: 5))
+        let nameInput = app.descendants(matching: .any)["product-info.name"].firstMatch
+        reveal(nameInput, in: app)
+        tapVisibleInput(nameInput, in: app)
+        nameInput.typeText(" 수정")
+        let editedName = "90s 나이키 트랙탑 수정"
+        XCTAssertEqual(nameInput.value as? String, editedName)
         let done = app.buttons["product-info.done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 5))
         XCTAssertTrue(done.isEnabled)
         done.tap()
 
-        XCTAssertTrue(app.descendants(matching: .any)["product-complete.screen"].firstMatch
-            .waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
-        let completedPhotos = app.descendants(matching: .any)["product-detail.photos"].firstMatch
-        let completedName = app.descendants(matching: .any)["product-detail.name"].firstMatch
-        XCTAssertTrue(completedPhotos.exists)
-        XCTAssertTrue(completedName.exists)
-        XCTAssertLessThanOrEqual(completedPhotos.frame.maxY, completedName.frame.minY)
-        XCTAssertTrue(completedName.staticTexts["90s 나이키 트랙탑"].exists)
-        let completedExport = app.buttons["product-complete.export"]
-        let completedLibrary = app.buttons["product-complete.library"]
-        XCTAssertTrue(completedExport.isHittable)
-        XCTAssertTrue(completedLibrary.isHittable)
-        attachScreenshot(app, name: "debug-product-complete-top")
+        XCTAssertTrue(app.navigationBars[editedName].waitForExistence(timeout: 10))
+        XCTAssertFalse(information.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["product-complete.screen"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
+        XCTAssertFalse(app.buttons["product-complete.library"].exists)
+        XCTAssertTrue(app.buttons["library.edit"].isHittable)
+        XCTAssertTrue(exportButton.isHittable)
+        XCTAssertTrue(name.staticTexts[editedName].exists)
+        XCTAssertTrue(price.staticTexts["89,000 원"].exists)
+        attachScreenshot(app, name: "debug-library-detail-after-edit")
 
-        let completedPrice = app.descendants(matching: .any)["product-detail.price"].firstMatch
-        reveal(completedPrice, in: app)
-        XCTAssertTrue(completedPrice.staticTexts["89,000 원"].exists)
-        let completedMeasurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
-        for _ in 0..<8 where !completedMeasurements.exists
-            || completedMeasurements.frame.maxY > completedExport.frame.minY {
-            app.swipeUp()
-        }
-        XCTAssertTrue(completedMeasurements.exists)
-        XCTAssertLessThanOrEqual(completedMeasurements.frame.maxY, completedExport.frame.minY)
-        XCTAssertTrue(completedExport.isHittable)
-        XCTAssertTrue(completedLibrary.isHittable)
-        attachScreenshot(app, name: "debug-product-complete-measurements")
-        completedLibrary.tap()
+        app.navigationBars[editedName].buttons.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["보관함"].isHittable)
+        let cardID = "library.product.53E00000-0000-4000-8000-000000000053"
+        XCTAssertTrue(app.buttons[cardID].label.contains(editedName))
         XCTAssertEqual(app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "library.product."
         )).count, 1)
 
         app.buttons["debug.export-sample"].tap()
-        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
-        app.navigationBars["90s 나이키 트랙탑"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars[editedName].waitForExistence(timeout: 5))
+        app.navigationBars[editedName].buttons.firstMatch.tap()
         XCTAssertEqual(app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "library.product."
         )).count, 1)
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["보관함"].tap()
+        let savedCard = app.buttons[cardID]
+        XCTAssertTrue(savedCard.waitForExistence(timeout: 10))
+        XCTAssertTrue(savedCard.label.contains(editedName))
+        savedCard.tap()
+        XCTAssertTrue(app.navigationBars[editedName].waitForExistence(timeout: 5))
+        XCTAssertTrue(name.staticTexts[editedName].exists)
+        XCTAssertFalse(app.buttons["product-complete.library"].exists)
     }
 
     @MainActor
