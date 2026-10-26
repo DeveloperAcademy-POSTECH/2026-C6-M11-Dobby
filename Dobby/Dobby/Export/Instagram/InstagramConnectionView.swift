@@ -16,7 +16,7 @@ struct InstagramConnectionView: View {
                 Text("먼저 인스타그램 프로페셔널 계정과\n연결이 필요해요")
                     .font(.title3.bold())
                     .fixedSize(horizontal: false, vertical: true)
-                Text("상품을 자동으로 업로드하려면 프로페셔널 계정 연결이 필요합니다.")
+                Text("인스타그램을 열고, 프로페셔널 계정으로\n연결을 완료하면 자동으로 업로드할 수 있어요")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
