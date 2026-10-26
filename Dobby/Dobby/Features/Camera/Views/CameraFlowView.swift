@@ -18,6 +18,7 @@ struct CameraFlowView: View {
     let onComplete: (ProductPhotoOutput) async throws -> Void
     let onSelectPhotos: (() -> Void)?
     let onExit: (() -> Void)?
+    private let onSelectionVisibilityChange: (Bool) -> Void
     var previewSource: CapturedAsset.Source?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
@@ -31,6 +32,7 @@ struct CameraFlowView: View {
          previewSource: CapturedAsset.Source? = nil,
          onSelectPhotos: (() -> Void)? = nil,
          onExit: (() -> Void)? = nil,
+         onSelectionVisibilityChange: @escaping (Bool) -> Void = { _ in },
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
         self.camera = camera
@@ -38,6 +40,7 @@ struct CameraFlowView: View {
         self.onComplete = onComplete
         self.onSelectPhotos = onSelectPhotos
         self.onExit = onExit
+        self.onSelectionVisibilityChange = onSelectionVisibilityChange
         self.previewSource = previewSource
     }
 
@@ -151,7 +154,9 @@ struct CameraFlowView: View {
                 Button(action: onSelectPhotos) { selectionLabel }
             } else {
                 NavigationLink {
-                    ProductPhotoSelectionView(model: model, onComplete: onComplete)
+                    ProductPhotoSelectionView(model: model, onExit: onExit, onComplete: onComplete)
+                        .onAppear { onSelectionVisibilityChange(true) }
+                        .onDisappear { onSelectionVisibilityChange(false) }
                 } label: { selectionLabel }
             }
         }

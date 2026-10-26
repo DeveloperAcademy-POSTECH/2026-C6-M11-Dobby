@@ -98,13 +98,13 @@ final class ProductCreationFlowTests: XCTestCase {
         attachScreenshot(app, name: "flow-top-detail-captured-original")
         choose.tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        let detail = app.buttons["camera.thumbnail.1"]
+        let detail = app.buttons["camera.grid.select.1"]
         reveal(detail, in: app)
         XCTAssertTrue(detail.waitForExistence(timeout: 5))
         waitEnabled(detail)
         detail.tap()
         XCTAssertEqual(detail.value as? String, "2번째 선택")
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장")
+        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
         attachScreenshot(app, name: "flow-top-photo-selection-two-photos")
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
@@ -214,7 +214,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
         reveal(detail, in: app)
         XCTAssertEqual(detail.value as? String, "2번째 선택")
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장")
+        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
         app.buttons["product-info.done"].tap()
@@ -304,7 +304,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장")
+        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장 · 최대 10장")
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         replaceText(in: field("name", app: app), with: name, app: app)
@@ -477,7 +477,7 @@ final class ProductCreationFlowTests: XCTestCase {
         let selectPhotos = app.buttons["camera.selectPhotos"]
         if selectPhotos.isHittable { selectPhotos.tap() }
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장")
+        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
     }

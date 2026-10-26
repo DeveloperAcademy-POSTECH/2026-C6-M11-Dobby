@@ -86,6 +86,45 @@ final class ProductDraftPersistenceTests: XCTestCase {
         XCTAssertTrue(fixture.garment.isCreationDraft)
     }
 
+    func testSavedDraftRestoresSelectionLimitAndUnselectedOriginals() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let store = CameraPhotoStore(directory: fixture.directory.appending(path: "captures"))
+        var details: [CapturedAsset] = []
+        for _ in 0..<11 {
+            details.append(try await store.save(fixture.record.snapshot.imageJPEG,
+                sessionID: fixture.input.sessionID, garmentID: fixture.garment.id, capturedAt: .now))
+        }
+        let selected = [details[9].id, fixture.input.measurement.id] + details.prefix(8).map(\.id)
+        let model = try ProductPhotoModel(input: fixture.input, captureProvider: NoCapture(),
+            initialDetailPhotos: details, initialSelectedPhotoIDs: selected)
+        try ProductDraftStore.save(garment: fixture.garment, step: .photoSelection,
+            measurementRecordID: fixture.record.id, photoModel: model, measurementInputData: nil,
+            in: fixture.context)
+
+        let reader = ModelContext(fixture.container)
+        let saved = try XCTUnwrap(reader.fetch(FetchDescriptor<Garment>()).first)
+        let state = try XCTUnwrap(saved.creationDraft?.photoState)
+        let restored = try ProductPhotoModel(input: fixture.input, captureProvider: NoCapture(),
+            initialDetailPhotos: state.restoredDetailPhotos(for: fixture.input),
+            initialSelectedPhotoIDs: state.selectedPhotoIDs)
+        XCTAssertEqual(restored.detailPhotos, details)
+        XCTAssertEqual(restored.selectedPhotoIDs, selected)
+        XCTAssertEqual(restored.output?.selectedPhotos.map(\.id), selected)
+        XCTAssertEqual(restored.output?.representativePhotoID, selected.first)
+        XCTAssertEqual(restored.toggleSelection(details[10].id), .limitReached)
+        XCTAssertEqual(restored.selectedPhotoIDs, selected)
+        XCTAssertEqual(restored.toggleSelection(selected[0]), .updated)
+        XCTAssertEqual(restored.toggleSelection(details[10].id), .updated)
+        XCTAssertEqual(restored.selectedPhotoIDs, Array(selected.dropFirst()) + [details[10].id])
+        XCTAssertEqual(restored.output?.representativePhotoID, selected[1])
+        XCTAssertEqual(restored.detailPhotos, details, "The selection limit must retain unselected originals")
+        for detail in details {
+            guard case let .localFile(url, _) = detail.source else { return XCTFail("Expected owned original") }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+
     func testFailedSaveKeepsPreviousResumePointAndCurrentUnsavedTextAndFiles() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

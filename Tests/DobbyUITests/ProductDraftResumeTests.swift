@@ -67,26 +67,27 @@ final class ProductDraftResumeTests: XCTestCase {
         captureTwoDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
-            "camera.thumbnail.")).count, 3)
+            "camera.grid.select.")).count, 3)
 
         let completePhotos = app.buttons["camera.completePhotos"]
-        thumbnail(0, in: app).tap()
-        XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장")
+        selectionControl(0, in: app).tap()
+        XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
         XCTAssertFalse(completePhotos.isEnabled)
         let productID = exitToLibrary(stage: "제품 사진 선택 단계", app: app)
         attachScreenshot(app, name: "draft-library-photo-selection")
 
         relaunchAndResume(productID: productID, stage: "제품 사진 선택 단계", app: app)
         assertResumedStage("제품 사진 선택", app: app)
-        XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장")
+        XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
         XCTAssertFalse(completePhotos.isEnabled)
         for index in 0..<3 {
-            XCTAssertEqual(thumbnail(index, in: app).value as? String, "선택 안 됨")
+            XCTAssertEqual(selectionControl(index, in: app).value as? String, "선택 안 됨")
         }
         attachScreenshot(app, name: "draft-restored-zero-photo-selection")
 
-        for index in [2, 0, 1] { thumbnail(index, in: app).tap() }
+        for index in [2, 0, 1] { selectionControl(index, in: app).tap() }
         assertSelectionOrder(in: app)
         XCTAssertEqual(exitToLibrary(stage: "제품 사진 선택 단계", app: app), productID)
         relaunchAndResume(productID: productID, stage: "제품 사진 선택 단계", app: app)
@@ -189,17 +190,16 @@ final class ProductDraftResumeTests: XCTestCase {
         waitEnabled(choose)
         choose.tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "camera.thumbnail."))
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
+        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "camera.grid.select."))
         XCTAssertEqual(photos.count, 3)
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장")
+        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장 · 최대 10장")
         for index in 0..<3 {
-            let photo = thumbnail(index, in: app)
+            let photo = selectionControl(index, in: app)
+            // The preview is enabled only after this original photo decodes.
+            waitEnabled(app.buttons["camera.grid.preview.\(index)"])
             if index == 0 {
                 XCTAssertEqual(photo.value as? String, "1번째 선택")
-                photo.tap()
-                // An unselected thumbnail is enabled only after its original decodes.
-                waitEnabled(photo)
-                photo.tap()
             } else {
                 waitEnabled(photo)
                 XCTAssertEqual(photo.value as? String, "선택 안 됨")
@@ -259,18 +259,18 @@ final class ProductDraftResumeTests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "library.draft."))
     }
 
-    private func thumbnail(_ index: Int, in app: XCUIApplication) -> XCUIElement {
-        let thumbnail = app.buttons["camera.thumbnail.\(index)"]
-        XCTAssertTrue(thumbnail.waitForExistence(timeout: 5))
-        return thumbnail
+    private func selectionControl(_ index: Int, in app: XCUIApplication) -> XCUIElement {
+        let control = app.buttons["camera.grid.select.\(index)"]
+        XCTAssertTrue(control.waitForExistence(timeout: 5))
+        return control
     }
 
     private func assertSelectionOrder(in app: XCUIApplication) {
         for (captureIndex, order) in [(2, 1), (0, 2), (1, 3)] {
-            XCTAssertEqual(thumbnail(captureIndex, in: app).value as? String, "\(order)번째 선택")
+            XCTAssertEqual(selectionControl(captureIndex, in: app).value as? String, "\(order)번째 선택")
         }
         let complete = app.buttons["camera.completePhotos"]
-        XCTAssertEqual(complete.value as? String, "3장 선택 · 최소 1장")
+        XCTAssertEqual(complete.value as? String, "3장 선택 · 최소 1장 · 최대 10장")
         XCTAssertTrue(complete.isEnabled)
     }
 
