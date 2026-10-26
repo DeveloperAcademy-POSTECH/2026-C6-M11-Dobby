@@ -457,6 +457,8 @@ final class GarmentCaptureFlowTests: XCTestCase {
         app.buttons["확대"].tap()
         XCTAssertTrue(app.buttons["축소"].exists)
         app.navigationBars["촬영 사진"].buttons["닫기"].tap()
+        XCTAssertFalse(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists,
+                       "Returning from photo enlargement must not revive a loupe without a drag.")
         XCTAssertTrue(waist.waitForExistence(timeout: 5))
         waist.tap()
         XCTAssertTrue(app.navigationBars["허리"].waitForExistence(timeout: 5))
@@ -507,15 +509,15 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(point.frame.height, 56 - 0.001)
         let originalPoint = try XCTUnwrap(point.value as? String)
         let magnifier = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
-        XCTAssertTrue(magnifier.waitForExistence(timeout: 5))
+        XCTAssertFalse(magnifier.exists, "The initial selected point must not create a persistent loupe.")
         let rightShoulder = app.buttons["garmentMeasurementPoint_shoulder_right"]
+        let originalRightShoulder = try XCTUnwrap(rightShoulder.value as? String)
         rightShoulder.tap()
-        expectation(for: NSPredicate(format: "value == %@", try XCTUnwrap(rightShoulder.value as? String)),
-                    evaluatedWith: magnifier)
-        waitForExpectations(timeout: 5)
+        XCTAssertFalse(magnifier.exists, "A selection-only tap must not show the loupe.")
+        XCTAssertEqual(rightShoulder.value as? String, originalRightShoulder)
         point.tap()
-        expectation(for: NSPredicate(format: "value == %@", originalPoint), evaluatedWith: magnifier)
-        waitForExpectations(timeout: 5)
+        XCTAssertFalse(magnifier.exists, "Selecting another point is still not a drag.")
+        XCTAssertEqual(point.value as? String, originalPoint)
         XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: shoulder.label)), originalShoulder,
                        "Selecting a point must not change the measurement")
         let start = point.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
@@ -523,19 +525,14 @@ final class GarmentCaptureFlowTests: XCTestCase {
             CGVector(dx: photo.frame.width * 0.05, dy: photo.frame.height * 0.025)))
         waitForChangedCentimeters(shoulder, from: originalShoulder)
         XCTAssertNotEqual(point.value as? String, originalPoint)
-        XCTAssertTrue(magnifier.exists, "The selected point must remain available for inspection after dragging")
-        XCTAssertEqual(magnifier.value as? String, point.value as? String)
-        XCTAssertTrue(magnifier.label.contains("어깨"))
-        XCTAssertLessThanOrEqual(magnifier.frame.minX, photo.frame.minX + 20)
-        XCTAssertLessThanOrEqual(magnifier.frame.minY, photo.frame.minY + 20)
-        XCTAssertTrue(photo.frame.contains(magnifier.frame), "The loupe must fit inside the photo's upper-left corner")
+        XCTAssertFalse(magnifier.exists, "Releasing a point must hide its loupe even while that point stays selected.")
 
         let correctedShoulder = try XCTUnwrap(Self.centimeters(in: shoulder.label))
         XCTAssertLessThan(correctedShoulder, originalShoulder)
         XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: chest.label)), originalChest,
                        "Moving a shoulder must preserve an unrelated chest measurement")
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
-        attachScreenshot(app, name: "garment-top-drag-selected-magnifier-and-correction")
+        attachScreenshot(app, name: "garment-top-drag-released-loupe-hidden-and-correction")
         openResultDetails(in: app)
         let adjustment = app.descendants(matching: .any)["garmentMeasurementAdjustmentStatus"].firstMatch
         XCTAssertTrue(adjustment.waitForExistence(timeout: 5))
@@ -590,11 +587,11 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let originalChest = try XCTUnwrap(Self.centimeters(in: chest.label))
         let magnifier = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
 
-        // Select the opposite point first, so the peripheral drag must also
-        // select the intended left shoulder rather than retaining the loupe.
+        // Select the opposite point first. That selection must not open the
+        // loupe or change the other point before the peripheral drag.
         otherPoint.tap()
-        expectation(for: NSPredicate(format: "value == %@", originalOtherPoint), evaluatedWith: magnifier)
-        waitForExpectations(timeout: 5)
+        XCTAssertFalse(magnifier.exists)
+        XCTAssertEqual(otherPoint.value as? String, originalOtherPoint)
         // Seventeen points is outside the small visible ring and inside the
         // 28-point radius. There is no neighbouring handle at this grab site.
         let start = point.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
@@ -609,8 +606,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
         XCTAssertEqual(moved.y - originalPoint.y, 0.025, accuracy: 0.003)
         XCTAssertEqual(otherPoint.value as? String, originalOtherPoint)
         XCTAssertEqual(try XCTUnwrap(Self.centimeters(in: chest.label)), originalChest)
-        XCTAssertEqual(magnifier.value as? String, point.value as? String)
-        XCTAssertTrue(magnifier.label.contains("왼쪽 어깨"))
+        XCTAssertFalse(magnifier.exists, "The peripheral drag must dismiss its loupe on finger-up.")
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].isEnabled)
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
         attachScreenshot(app, name: "garment-top-small-point-peripheral-drag-without-jump")
@@ -668,8 +664,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
                            "The nearer left point must own the touch, preserving \(identifier)")
         }
         let magnifier = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
-        XCTAssertEqual(magnifier.value as? String, left.value as? String)
-        XCTAssertTrue(magnifier.label.contains("왼쪽 겨드랑이"))
+        XCTAssertFalse(magnifier.exists, "Moving nearby points must not leave a stale loupe after release.")
         XCTAssertTrue(confirm.isEnabled)
         attachScreenshot(app, name: "garment-close-armpit-points-select-and-drag-nearest-marker")
     }
@@ -693,7 +688,8 @@ final class GarmentCaptureFlowTests: XCTestCase {
             CGVector(dx: photo.frame.width * 0.05, dy: photo.frame.height * 0.025)))
         waitForChangedCentimeters(waist, from: originalWaist)
         XCTAssertNotEqual(point.value as? String, originalPoint)
-        XCTAssertTrue(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists,
+                       "The completed bottom-point drag must not leave a loupe.")
         openResultDetails(in: app)
         let reset = app.buttons["resetGarmentMeasurementPoints"]
         reveal(reset, in: app)
@@ -713,7 +709,8 @@ final class GarmentCaptureFlowTests: XCTestCase {
         recognize.tap()
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists,
+                       "A fresh capture starts idle with no active point drag.")
         XCTAssertEqual(point.value as? String, originalPoint)
         openResultDetails(in: app)
         XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementAdjustmentStatus"].firstMatch.exists)
@@ -809,8 +806,9 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let image = app.images["촬영한 옷과 측정점"].firstMatch
         XCTAssertTrue(image.waitForExistence(timeout: 5))
         let loupe = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
-        let frames = "Photo \(photo.frame), image \(image.frame), loupe \(loupe.frame)"
-        attachScreenshot(app, name: "garment-point-editor-initial-photo-and-loupe")
+        XCTAssertFalse(loupe.exists, "The idle photo editor must not expose an offscreen or persistent loupe.")
+        let frames = "Photo \(photo.frame), image \(image.frame)"
+        attachScreenshot(app, name: "garment-point-editor-initial-photo-without-loupe")
         XCTAssertEqual(photo.frame.minX, image.frame.minX, accuracy: 0.01)
         XCTAssertEqual(photo.frame.minY, image.frame.minY, accuracy: 0.01, frames)
         XCTAssertEqual(photo.frame.width, image.frame.width, accuracy: 0.01,
