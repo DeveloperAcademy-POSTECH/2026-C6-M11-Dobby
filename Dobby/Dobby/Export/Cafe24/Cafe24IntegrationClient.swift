@@ -6,6 +6,8 @@ import UIKit
 
 @MainActor
 final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let maximumImageCount = 20
+
     private static let logger = Logger(subsystem: "com.dobby.cafe24", category: "Cafe24API")
     private let session: URLSession
     private var authenticationSession: ASWebAuthenticationSession?
@@ -52,14 +54,19 @@ final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationCo
         }
     }
 
-    func publish(product: ExportProduct, price: Int) async throws -> Cafe24PublishResult {
+    func publish(productName rawProductName: String, description: String, price: Int,
+                 images: [Data]) async throws -> Cafe24PublishResult {
+        let productName = rawProductName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !productName.isEmpty else { throw Cafe24IntegrationError.invalidProductName }
         guard price >= 0 else { throw Cafe24IntegrationError.invalidPrice }
+        guard images.count <= Self.maximumImageCount else {
+            throw Cafe24IntegrationError.tooManyImages
+        }
         var request = try authorizedRequest(path: "/products", method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let description = [product.fruits.description, product.fruits.measurements].filter { !$0.isEmpty }.joined(separator: "\n\n")
         request.httpBody = try JSONEncoder().encode(Cafe24PublishRequest(
-            productName: product.name, description: description, price: price, supplyPrice: price,
-            imageBase64: product.imageData?.base64EncodedString()))
+            productName: productName, description: description, price: price, supplyPrice: price,
+            imagesBase64: images.map { $0.base64EncodedString() }))
         return try await send(request, as: Cafe24PublishResult.self)
     }
 

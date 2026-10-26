@@ -15,10 +15,9 @@ private enum Cafe24UploadState {
 }
 
 struct Cafe24ExportView: View {
-    let product: ExportProduct
     let onPublished: (Cafe24PublishResult) -> Void
     @State private var client = Cafe24IntegrationClient()
-    @State private var priceText: String
+    @State private var draft: Cafe24ExportDraft
     @State private var connectedMallID: String?
     @State private var isLoadingConnection = true
     @State private var connectionError: String?
@@ -28,18 +27,15 @@ struct Cafe24ExportView: View {
     @State private var isConfirmingRepublish = false
 
     init(product: ExportProduct, onPublished: @escaping (Cafe24PublishResult) -> Void = { _ in }) {
-        self.product = product
         self.onPublished = onPublished
-        _priceText = State(initialValue: product.fruits.price)
+        _draft = State(initialValue: Cafe24ExportDraft(product: product))
     }
 
     var body: some View {
         Group {
-            if let connectedMallID {
+            if connectedMallID != nil {
                 Cafe24ProductView(
-                    mallID: connectedMallID,
-                    product: product,
-                    priceText: $priceText,
+                    draft: $draft,
                     isCompleted: uploadState.isCompleted,
                     isDisabled: uploadState.isUploading,
                     onReportProblem: {
@@ -117,7 +113,7 @@ struct Cafe24ExportView: View {
     }
 
     private var canPublish: Bool {
-        !uploadState.isUploading && !priceText.filter(\.isNumber).isEmpty
+        !uploadState.isUploading && draft.canPublish
     }
 
     private func loadStatus() async {
@@ -147,13 +143,19 @@ struct Cafe24ExportView: View {
     }
 
     private func publish() async {
-        guard let price = Int(priceText.filter(\.isNumber)) else {
-            message = Cafe24IntegrationError.invalidPrice.errorDescription
+        if let validationMessage = draft.validationMessage {
+            message = validationMessage
             return
         }
+        guard let price = draft.price else { return }
         uploadState = .uploading
         do {
-            let result = try await client.publish(product: product, price: price)
+            let result = try await client.publish(
+                productName: draft.productName,
+                description: draft.productDescription,
+                price: price,
+                images: draft.photos
+            )
             uploadState = .completed(result)
             onPublished(result)
         } catch {

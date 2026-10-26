@@ -2,9 +2,7 @@ import SwiftUI
 import UIKit
 
 struct Cafe24ProductView: View {
-    let mallID: String
-    let product: ExportProduct
-    @Binding var priceText: String
+    @Binding var draft: Cafe24ExportDraft
     let isCompleted: Bool
     let isDisabled: Bool
     let onReportProblem: () -> Void
@@ -15,11 +13,19 @@ struct Cafe24ProductView: View {
                 if isCompleted {
                     Cafe24CompletionHeader(onReportProblem: onReportProblem)
                 }
-                Cafe24AccountCard(mallID: mallID)
-                Cafe24ProductPhoto(product: product)
-                Cafe24ReadOnlyField(title: "상품명", value: productName)
-                Cafe24ReadOnlyField(title: "상품 설명", value: productDescription, isMultiline: true)
-                Cafe24PriceField(priceText: $priceText, isDisabled: isDisabled || isCompleted)
+                Cafe24ProductPhotos(photos: draft.photos)
+                Cafe24ProductNameField(text: $draft.productName) {
+                    draft.resetProductName()
+                }
+                .disabled(areFieldsDisabled)
+                Cafe24ProductDescriptionField(text: $draft.productDescription) {
+                    draft.resetProductDescription()
+                }
+                .disabled(areFieldsDisabled)
+                Cafe24PriceField(priceText: $draft.priceText) {
+                    draft.resetPrice()
+                }
+                .disabled(areFieldsDisabled)
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -31,14 +37,7 @@ struct Cafe24ProductView: View {
         .background(Color(.brandNeutral50).ignoresSafeArea())
     }
 
-    private var productName: String {
-        product.name.isEmpty ? "이름 없는 상품" : product.name
-    }
-
-    private var productDescription: String {
-        let values = [product.fruits.description, product.fruits.measurements].filter { !$0.isEmpty }
-        return values.isEmpty ? "등록된 상품 설명이 없어요." : values.joined(separator: "\n\n")
-    }
+    private var areFieldsDisabled: Bool { isDisabled || isCompleted }
 }
 
 private struct Cafe24CompletionHeader: View {
@@ -65,72 +64,89 @@ private struct Cafe24CompletionHeader: View {
     }
 }
 
-private struct Cafe24AccountCard: View {
-    let mallID: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("이 계정으로 상품을 올릴게요")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                Image("Cafe24Logo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 48, height: 48)
-                    .background(.white, in: Circle())
-                Text("@\(mallID).cafe24.com")
-                    .font(.body.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-private struct Cafe24ProductPhoto: View {
-    let product: ExportProduct
+private struct Cafe24ProductPhotos: View {
+    let photos: [Data]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("업로드할 사진")
                 .font(.headline)
 
-            Group {
-                if let data = product.imageData, let image = UIImage(data: data) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    Image(systemName: "tshirt")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 152, height: 212)
-            .background(Color(.brandNeutral100))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            Cafe24PhotoStrip(photos: photos)
         }
     }
 }
 
-private struct Cafe24ReadOnlyField: View {
-    let title: String
-    let value: String
-    var isMultiline = false
+private struct Cafe24PhotoStrip: View {
+    let photos: [Data]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 8) {
+                if photos.isEmpty {
+                    Cafe24ProductPhoto(data: nil)
+                } else {
+                    ForEach(photos.indices, id: \.self) { index in
+                        Cafe24ProductPhoto(data: photos[index])
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct Cafe24ProductPhoto: View {
+    let data: Data?
+
+    var body: some View {
+        Group {
+            if let data, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "tshirt")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 152, height: 212)
+        .background(Color(.brandNeutral100))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+private struct Cafe24ProductNameField: View {
+    @Binding var text: String
+    let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-            Text(value)
+            Cafe24EditorHeader(title: "상품명", onReset: onReset)
+            TextField("상품명 입력", text: $text)
                 .font(.body)
                 .foregroundStyle(Color(.brandNeutral800))
-                .frame(maxWidth: .infinity, minHeight: isMultiline ? 108 : 52, alignment: .topLeading)
-                .padding(16)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 52)
+                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+}
+
+private struct Cafe24ProductDescriptionField: View {
+    @Binding var text: String
+    let onReset: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Cafe24EditorHeader(title: "상품 설명", onReset: onReset)
+            TextEditor(text: $text)
+                .font(.body)
+                .foregroundStyle(Color(.brandNeutral800))
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(minHeight: 140)
                 .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
         }
     }
@@ -138,26 +154,69 @@ private struct Cafe24ReadOnlyField: View {
 
 private struct Cafe24PriceField: View {
     @Binding var priceText: String
-    let isDisabled: Bool
+    let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("판매가")
-                .font(.headline)
-            Text("카페24에 등록할 판매가를 입력해 주세요")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                TextField("판매가 입력", text: $priceText)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .disabled(isDisabled)
-                Text("원")
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .frame(minHeight: 52)
-            .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+            Cafe24EditorHeader(title: "판매가", onReset: onReset)
+            Cafe24PriceInput(priceText: $priceText)
         }
+    }
+}
+
+private struct Cafe24PriceInput: View {
+    @Binding var priceText: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("판매가 입력", text: $priceText)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+            Text("원")
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 52)
+        .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct Cafe24EditorHeader: View {
+    let title: String
+    let onReset: () -> Void
+
+    var body: some View {
+        HStack(alignment: .bottom) {
+            Cafe24EditorTitle(title: title)
+            Spacer()
+            Cafe24ResetButton(action: onReset)
+        }
+    }
+}
+
+private struct Cafe24EditorTitle: View {
+    let title: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.body.weight(.medium))
+            Text("눌러서 직접 글을 수정할 수 있어요")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct Cafe24ResetButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("초기화", systemImage: "arrow.clockwise")
+                .font(.subheadline)
+                .foregroundStyle(Color(.brandNeutral800))
+        }
+        .buttonStyle(.plain)
     }
 }
