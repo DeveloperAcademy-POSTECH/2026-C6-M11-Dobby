@@ -193,6 +193,94 @@ extension View {
     }
 }
 
+struct ExportGlassNavigationButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    var isDisabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .foregroundStyle(Color(.exportCloseIcon))
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .disabled(isDisabled)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+struct ExportAccountMenu: View {
+    let accessibilityLabel: String
+    let onReconnect: () -> Void
+    let onDisconnect: () -> Void
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented = true
+        } label: {
+            Image(systemName: "ellipsis")
+                .foregroundStyle(Color(.exportCloseIcon))
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel(accessibilityLabel)
+        .popover(isPresented: $isPresented) {
+            GlassEffectContainer(spacing: 12) {
+                VStack(spacing: 12) {
+                    ExportAccountMenuButton(
+                        title: "다시 연결하기",
+                        systemImage: "arrow.clockwise",
+                        action: performReconnect
+                    )
+                    ExportAccountMenuButton(
+                        title: "연결 해제하기",
+                        systemImage: "personalhotspot.slash",
+                        tint: .red,
+                        action: performDisconnect
+                    )
+                }
+            }
+            .padding(12)
+            .frame(width: 240)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+            .padding(8)
+            .presentationCompactAdaptation(.popover)
+            .presentationBackground(.clear)
+        }
+    }
+
+    private func performReconnect() {
+        isPresented = false
+        onReconnect()
+    }
+
+    private func performDisconnect() {
+        isPresented = false
+        onDisconnect()
+    }
+}
+
+private struct ExportAccountMenuButton: View {
+    let title: String
+    let systemImage: String
+    var tint: Color = .primary
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.body.weight(.medium))
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .padding(.horizontal, 16)
+        }
+        .buttonStyle(.glass)
+        .foregroundStyle(tint)
+    }
+}
+
 struct ExportBottomAction: View {
     let title: String
     var isWorking = false

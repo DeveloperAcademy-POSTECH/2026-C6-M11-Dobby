@@ -16,6 +16,7 @@ private enum Cafe24UploadState {
 
 struct Cafe24ExportView: View {
     let onPublished: (Cafe24PublishResult) -> Void
+    @Environment(\.dismiss) private var dismiss
     @State private var client = Cafe24IntegrationClient()
     @State private var draft: Cafe24ExportDraft
     @State private var connectedMallID: String?
@@ -53,21 +54,25 @@ struct Cafe24ExportView: View {
         }
         .navigationTitle("카페24로 내보내기")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(uploadState.isUploading)
+        .navigationBarBackButtonHidden()
         .toolbar {
+            if !uploadState.isUploading {
+                ToolbarItem(placement: .topBarLeading) {
+                    ExportGlassNavigationButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "플랫폼 업로드로 돌아가기"
+                    ) {
+                        dismiss()
+                    }
+                }
+            }
             if connectedMallID != nil && !uploadState.isUploading {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("다시 연결하기", systemImage: "arrow.clockwise") {
-                            Task { await loadStatus() }
-                        }
-                        Button("연결 해제하기", systemImage: "personalhotspot.slash", role: .destructive) {
-                            Task { await disconnect() }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                    }
-                    .accessibilityLabel("카페24 계정 메뉴")
+                    ExportAccountMenu(
+                        accessibilityLabel: "카페24 계정 메뉴",
+                        onReconnect: { Task { await loadStatus() } },
+                        onDisconnect: { Task { await disconnect() } }
+                    )
                 }
             }
         }

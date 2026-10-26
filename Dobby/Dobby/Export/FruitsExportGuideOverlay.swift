@@ -145,7 +145,7 @@ private struct FruitsExportGuideContent: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color(.exportCloseIcon))
                 .disabled(opening || busy)
                 .accessibilityLabel("가이드 닫기")
                 .accessibilityIdentifier("export.fruits.overlay.close")

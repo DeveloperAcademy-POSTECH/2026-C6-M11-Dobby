@@ -17,6 +17,7 @@ private enum InstagramUploadState {
 struct InstagramExportView: View {
     let product: ExportProduct
     let onPublished: (InstagramPublishResult) -> Void
+    @Environment(\.dismiss) private var dismiss
     @State private var client = InstagramIntegrationClient()
     @State private var account: InstagramAccount?
     @State private var isLoadingAccount = true
@@ -56,28 +57,25 @@ struct InstagramExportView: View {
         }
         .navigationTitle("인스타그램으로 내보내기")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(uploadState.isUploading)
+        .navigationBarBackButtonHidden()
         .toolbar {
+            if !uploadState.isUploading {
+                ToolbarItem(placement: .topBarLeading) {
+                    ExportGlassNavigationButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "플랫폼 업로드로 돌아가기"
+                    ) {
+                        dismiss()
+                    }
+                }
+            }
             if account != nil && !uploadState.isUploading {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            Task { await connect() }
-                        } label: {
-                            Label("다시 연결하기", systemImage: "arrow.clockwise")
-                                .symbolRenderingMode(.monochrome)
-                                .foregroundStyle(.primary)
-                        }
-                        Button(role: .destructive) {
-                            Task { await disconnect() }
-                        } label: {
-                            Label("연결 해제하기", systemImage: "personalhotspot.slash")
-                                .foregroundStyle(.red)
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                    }
-                    .accessibilityLabel("Instagram 계정 메뉴")
+                    ExportAccountMenu(
+                        accessibilityLabel: "Instagram 계정 메뉴",
+                        onReconnect: { Task { await connect() } },
+                        onDisconnect: { Task { await disconnect() } }
+                    )
                 }
             }
         }
