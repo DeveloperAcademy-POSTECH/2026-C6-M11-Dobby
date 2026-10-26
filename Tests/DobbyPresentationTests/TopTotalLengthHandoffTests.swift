@@ -35,7 +35,8 @@ final class TopTotalLengthHandoffTests: XCTestCase {
         let garment = try GarmentStore.importMeasurement(record, in: ModelContext(container),
             photosDirectory: directory, allowsSynthetic: true)
         let stored = try XCTUnwrap(garment.measurement("totalLength"))
-        XCTAssertEqual(stored.valueCm, value.meters! * 100, accuracy: 1e-6)
+        XCTAssertEqual(stored.valueCm,
+            StoredMeasurementValue.centimeters(value.meters! * 100), accuracy: 1e-6)
         XCTAssertEqual(try XCTUnwrap(garment.lengthCm), stored.valueCm, accuracy: 1e-6)
         XCTAssertNil(stored.autoValueCm, "A missing automatic value must not be invented during correction")
         XCTAssertEqual(garment.visibleMeasurements.map(\.key), ["totalLength", "shoulderWidth", "chestWidth", "sleeveLengthLeft"])

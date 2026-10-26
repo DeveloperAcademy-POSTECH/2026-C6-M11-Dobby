@@ -13,10 +13,14 @@ import Observation
 @Observable
 final class ProductPhotoModel {
     let input: ProductPhotoInput
+    // 이전 화면의 확정 결과를 열람용으로 보관한다. 측정 계산·수정은 소유하지 않는다.
+    private(set) var measurementRecord: SavedMeasurement?
     private(set) var detailPhotos: [CapturedAsset] = []
     private(set) var selectedPhotoIDs: [UUID] = []
     private(set) var isCapturing = false
     private(set) var isDeleting = false
+    // 같은 사진 초안으로 재진입할 때 안내를 반복하지 않는다. 앱 전체 영구 설정은 아니다.
+    private(set) var hasAcknowledgedCaptureGuide = false
     private var isDiscardingDetails = false
     @ObservationIgnored private var deletionTask: Task<Void, Error>?
     @ObservationIgnored private var persistedDetailPhotoIDs: Set<UUID> = []
@@ -48,7 +52,7 @@ final class ProductPhotoModel {
 
     init(input: ProductPhotoInput, captureProvider: any CaptureProviding,
          initialDetailPhotos: [CapturedAsset] = [],
-         initialSelectedPhotoIDs: [UUID] = []) throws {
+         initialSelectedPhotoIDs: [UUID] = [], measurementRecord: SavedMeasurement? = nil) throws {
         guard input.measurement.purpose == .measurement,
               input.measurement.sessionID == input.sessionID,
               input.measurement.garmentID == input.garmentID,
@@ -68,6 +72,12 @@ final class ProductPhotoModel {
             throw CameraFailure.mismatchedCapture
         }
         self.input = input
+        if let measurementRecord {
+            guard measurementRecord.snapshot.frame.sessionID == input.sessionID else {
+                throw CameraFailure.mismatchedCapture
+            }
+        }
+        self.measurementRecord = measurementRecord
         self.captureProvider = captureProvider
         detailPhotos = initialDetailPhotos
         persistedDetailPhotoIDs = Set(initialDetailPhotos.map(\.id))
@@ -79,7 +89,17 @@ final class ProductPhotoModel {
             throw ProductDraftStore.DraftError.operationInProgress
         }
         return try ProductPhotoDraftSnapshot(input: input, detailPhotos: detailPhotos,
-            selectedPhotoIDs: selectedPhotoIDs)
+            selectedPhotoIDs: selectedPhotoIDs, hasAcknowledgedCaptureGuide: hasAcknowledgedCaptureGuide)
+    }
+
+    /// Point corrections keep the same frozen capture while replacing the
+    /// confirmed record that the photo-flow measurement preview displays.
+    func updateMeasurementRecord(_ record: SavedMeasurement) throws {
+        guard record.snapshot.frame.sessionID == input.sessionID,
+              measurementRecord.map({ $0.snapshot.frame.frameID == record.snapshot.frame.frameID }) ?? true else {
+            throw CameraFailure.mismatchedCapture
+        }
+        measurementRecord = record
     }
 
     /// Called only after the new payload is durable. A previous saved draft
@@ -100,6 +120,10 @@ final class ProductPhotoModel {
                 }
             }
         }
+    }
+
+    func acknowledgeCaptureGuide() {
+        hasAcknowledgedCaptureGuide = true
     }
 
     func captureDetail() async throws {

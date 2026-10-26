@@ -36,15 +36,17 @@ final class ProductDraftResumeTests: XCTestCase {
         waitEnabled(confirm)
         confirm.tap()
         captureTwoDetails(in: app)
-        let originalPhotoIDs = detailPhotoIdentifiers(in: app)
-        XCTAssertEqual(originalPhotoIDs.count, 3, "The measurement and both captured originals must be present")
+        let originalPhotoIndices = detailPhotoCaptureIndices(in: app)
+        XCTAssertEqual(originalPhotoIndices.count, 3, "The measurement and both captured originals must be present")
         XCTAssertEqual(exitToLibrary(stage: "상세 촬영 단계", app: app), productID)
         attachScreenshot(app, name: "draft-library-details")
 
         relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
         assertResumedStage("제품 상세 촬영", app: app)
+        XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists,
+                       "A saved photo draft must retain the acknowledged capture guide")
         XCTAssertTrue(app.buttons["camera.captureDetail"].isHittable)
-        XCTAssertEqual(detailPhotoIdentifiers(in: app), originalPhotoIDs)
+        XCTAssertEqual(detailPhotoCaptureIndices(in: app), originalPhotoIndices)
         XCTAssertFalse(app.buttons["camera.completePhotos"].exists)
         attachScreenshot(app, name: "draft-restored-detail-originals")
     }
@@ -65,6 +67,8 @@ final class ProductDraftResumeTests: XCTestCase {
         captureTwoDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "camera.thumbnail.")).count, 3)
 
         let completePhotos = app.buttons["camera.completePhotos"]
         thumbnail(0, in: app).tap()
@@ -106,6 +110,7 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertEqual(field("name", in: app).value as? String, name)
         XCTAssertEqual(field("detail", in: app).value as? String, description)
         XCTAssertEqual(field("brand", in: app).value as? String, brand)
+        assertPriceIsOmitted(in: app)
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "0", "Raw invalid input must survive exit and process restart")
         attachScreenshot(app, name: "draft-restored-partial-information-and-zero")
@@ -116,6 +121,12 @@ final class ProductDraftResumeTests: XCTestCase {
         assertSelectionOrder(in: app)
         completePhotos.tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        assertPriceIsOmitted(in: app)
+        let price = field("price", in: app)
+        reveal(price, in: app)
+        price.tap()
+        price.typeText("40000")
+        XCTAssertEqual(price.value as? String, "40,000")
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "0")
         app.buttons["product-info.done"].tap()
@@ -160,22 +171,44 @@ final class ProductDraftResumeTests: XCTestCase {
     }
 
     private func captureTwoDetails(in app: XCUIApplication) {
+        let guide = app.buttons["camera.startDetailCapture"]
+        XCTAssertTrue(guide.waitForExistence(timeout: 10))
+        guide.tap()
         XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 15))
         let capture = app.buttons["camera.captureDetail"]
-        for expectedCount in 2...3 {
+        for _ in 0..<2 {
             waitEnabled(capture)
             capture.tap()
-            let saved = expectation(for: NSPredicate { _, _ in
-                self.detailPhotoIdentifiers(in: app).count == expectedCount
-            }, evaluatedWith: app)
-            wait(for: [saved], timeout: 15)
+            waitEnabled(capture)
         }
         waitEnabled(app.buttons["camera.selectPhotos"])
     }
 
-    private func detailPhotoIdentifiers(in app: XCUIApplication) -> Set<String> {
-        Set(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@",
-            "camera.detailPhoto.")).allElementsBoundByIndex.map(\.identifier))
+    private func detailPhotoCaptureIndices(in app: XCUIApplication) -> Set<String> {
+        let choose = app.buttons["camera.selectPhotos"]
+        waitEnabled(choose)
+        choose.tap()
+        XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
+        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "camera.thumbnail."))
+        XCTAssertEqual(photos.count, 3)
+        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장")
+        for index in 0..<3 {
+            let photo = thumbnail(index, in: app)
+            if index == 0 {
+                XCTAssertEqual(photo.value as? String, "1번째 선택")
+                photo.tap()
+                // An unselected thumbnail is enabled only after its original decodes.
+                waitEnabled(photo)
+                photo.tap()
+            } else {
+                waitEnabled(photo)
+                XCTAssertEqual(photo.value as? String, "선택 안 됨")
+            }
+        }
+        let indices = Set(photos.allElementsBoundByIndex.map(\.identifier))
+        tapBack(in: app)
+        XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 10))
+        return indices
     }
 
     @discardableResult
@@ -246,6 +279,7 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 15))
         XCTAssertTrue(card.label.contains(name))
         XCTAssertTrue(card.label.contains(brand))
+        XCTAssertTrue(card.label.contains("40,000"))
         XCTAssertEqual(draftButtons(in: app).count, 0)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "library.product.")).count, 1)
@@ -255,10 +289,29 @@ final class ProductDraftResumeTests: XCTestCase {
         app.descendants(matching: .any)["product-info.\(key)"].firstMatch
     }
 
+    private func assertPriceIsOmitted(in app: XCUIApplication) {
+        let price = field("price", in: app)
+        XCTAssertTrue(price.exists)
+        let text = price.value as? String ?? ""
+        XCTAssertTrue(text.isEmpty || text == price.placeholderValue,
+                      "An unfinished draft must retain its omitted required price")
+    }
+
     private func replaceText(in field: XCUIElement, with text: String, app: XCUIApplication) {
         reveal(field, in: app)
         XCTAssertTrue(field.isHittable)
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        if field.identifier == "product-info.detail" {
+            let barBottom = app.navigationBars.allElementsBoundByIndex.filter(\.isHittable)
+                .map { $0.frame.maxY }.max() ?? 100
+            let keyboardTop = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY : app.frame.maxY
+            let visibleTop = max(field.frame.minY, barBottom + 12)
+            let visibleBottom = min(field.frame.maxY, keyboardTop - 12)
+            let tapY = (visibleTop + min(visibleBottom, visibleTop + 44)) / 2
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: field.frame.midX, dy: tapY)).tap()
+        } else {
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
         let current = (field.value as? String) ?? ""
         let placeholder = field.placeholderValue ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue,
@@ -300,7 +353,11 @@ final class ProductDraftResumeTests: XCTestCase {
             let top = bar.exists ? bar.frame.maxY + 12 : 80
             let keyboard = app.keyboards.firstMatch
             let bottom = keyboard.exists ? keyboard.frame.minY - 12 : app.frame.maxY - 60
-            if element.isHittable, element.frame.minY >= top, element.frame.maxY <= bottom { return }
+            if element.isHittable {
+                if element.identifier == "product-info.detail",
+                   min(element.frame.maxY, bottom) - max(element.frame.minY, top) >= 44 { return }
+                if element.frame.minY >= top, element.frame.maxY <= bottom { return }
+            }
             let frame = element.frame
             let validFrame = !frame.isEmpty && !frame.isNull && !frame.isInfinite
                 && frame.maxX > app.frame.minX && frame.minX < app.frame.maxX

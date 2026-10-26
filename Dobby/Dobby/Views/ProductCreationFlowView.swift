@@ -66,7 +66,8 @@ struct ProductCreationFlowView: View {
                 } else {
                     GarmentCaptureFlowView(archive: archive, preview: isFixture,
                         onConfirmedRecord: receiveMeasurement, onCancel: onCancel, embedsNavigation: false,
-                        restoredRecord: restoredRecord, onExitRecord: saveResultAndExit)
+                        restoredRecord: restoredRecord, onExitRecord: saveResultAndExit,
+                        allowsRetake: garment == nil)
                 }
             }
                 .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
@@ -180,6 +181,7 @@ struct ProductCreationFlowView: View {
                 try GarmentStore.refreshMeasurement(record, for: garment, in: context,
                     allowsSynthetic: isFixture, allowsUnavailableDraft: allowsUnavailableDraft, save: { _ in })
             }
+            try photoModel.updateMeasurementRecord(record)
             measurementRecordID = record.id
             permission.refresh()
             return garment
@@ -216,23 +218,26 @@ struct ProductCreationFlowView: View {
             model = try ProductPhotoModel(input: input,
                 captureProvider: ProductPhotoFixtureCaptureProvider(seed: input.measurement.source,
                     directory: ProductAppStorage.fixtureDirectory?.appending(path: "detail-captures")),
-                initialDetailPhotos: details, initialSelectedPhotoIDs: selected)
+                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
             permission = CameraPermission(authorizer: MockCameraAuthorization())
             camera = nil
         } else {
             let session = CameraPreviewSession()
             model = try ProductPhotoModel(input: input, captureProvider: session,
-                initialDetailPhotos: details, initialSelectedPhotoIDs: selected)
+                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
             camera = session
             permission = CameraPermission(authorizer: SystemCameraAuthorization())
         }
 #else
         let session = CameraPreviewSession()
         model = try ProductPhotoModel(input: input, captureProvider: session,
-            initialDetailPhotos: details, initialSelectedPhotoIDs: selected)
+            initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
         camera = session
         permission = CameraPermission(authorizer: SystemCameraAuthorization())
 #endif
+        if snapshot?.hasAcknowledgedCaptureGuide == true {
+            model.acknowledgeCaptureGuide()
+        }
         photoModel = model
     }
 
@@ -340,31 +345,5 @@ struct ProductCreationFlowView: View {
             restorationError = "저장한 작업은 보관함에 남아 있어요. \(error.localizedDescription)"
         }
         isRestoring = false
-    }
-}
-
-struct ProductInputCompletionView: View {
-    let garment: Garment
-    let onExport: () -> Void
-    let onLibrary: () -> Void
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image("CameraShutter").resizable().scaledToFit().frame(width: 180, height: 150)
-                .accessibilityHidden(true)
-            Text("제품 정보 입력 완료!").font(.title2.bold())
-            Text(garment.name.isEmpty ? "제품의 사진과 실측값을 저장했어요." : "\(garment.name)의 사진과 실측값을 저장했어요.")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Spacer()
-            Button("내보내기", action: onExport)
-                .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).controlSize(.large)
-                .frame(maxWidth: .infinity).accessibilityIdentifier("product-complete.export")
-            Button("보관함으로 이동하기", action: onLibrary)
-                .buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.large)
-                .accessibilityIdentifier("product-complete.library")
-        }.padding(24).navigationTitle("제품 정보 입력 완료").navigationBarTitleDisplayMode(.inline)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("product-complete.screen")
     }
 }

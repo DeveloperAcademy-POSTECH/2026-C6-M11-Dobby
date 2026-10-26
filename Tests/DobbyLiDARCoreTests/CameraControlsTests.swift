@@ -63,4 +63,46 @@ final class CameraControlsTests: XCTestCase {
         XCTAssertFalse(receipt.matches(sessionID: nil, requestID: request, revision: 7))
         XCTAssertFalse(receipt.matches(sessionID: session, requestID: nil, revision: 7))
     }
+
+    func testExposureDragBrightensUpDarkensDownAndClampsToActualDeviceRange() throws {
+        let range = try XCTUnwrap(CameraExposureRange(minimum: -2, maximum: 2))
+        XCTAssertEqual(CameraExposureGesture.bias(start: 0, translationY: -100, viewportHeight: 400, range: range), 1)
+        XCTAssertEqual(CameraExposureGesture.bias(start: 0, translationY: 100, viewportHeight: 400, range: range), -1)
+        XCTAssertEqual(CameraExposureGesture.bias(start: 1.5, translationY: -300, viewportHeight: 400, range: range), 2)
+        XCTAssertEqual(CameraExposureGesture.bias(start: -1.5, translationY: 300, viewportHeight: 400, range: range), -2)
+        XCTAssertNil(CameraExposureGesture.bias(start: 0, translationY: .nan, viewportHeight: 400, range: range))
+        XCTAssertNil(CameraExposureGesture.bias(start: 0, translationY: 10, viewportHeight: 0, range: range))
+        XCTAssertNil(CameraExposureGesture.bias(start: .infinity, translationY: 10, viewportHeight: 400, range: range))
+    }
+
+    func testLockConfirmationRequiresBothObservedLockedModesAndSettledFlags() {
+        var observation = CameraHardwareObservation(observedAtUptime: 10, focusMode: .locked,
+            exposureMode: .locked, isAdjustingFocus: false, isAdjustingExposure: false,
+            lensPosition: 0.5, exposureDurationSeconds: 0.01, iso: 100, exposureTargetBias: 0)
+        XCTAssertTrue(observation.hasObservedAEAFLock)
+        observation.focusMode = .single
+        XCTAssertFalse(observation.hasObservedAEAFLock)
+        observation.focusMode = .locked
+        observation.exposureMode = .continuous
+        XCTAssertFalse(observation.hasObservedAEAFLock)
+        observation.exposureMode = .locked
+        observation.isAdjustingExposure = true
+        XCTAssertFalse(observation.hasObservedAEAFLock)
+        observation.isAdjustingExposure = false
+        observation.isAdjustingFocus = true
+        XCTAssertFalse(observation.hasObservedAEAFLock)
+    }
+
+    func testWideRangeCameraKeepsFineDragSensitivityAndStillReachesItsLimits() throws {
+        let wide = try XCTUnwrap(CameraExposureRange(minimum: -8, maximum: 8))
+        let standard = try XCTUnwrap(CameraExposureRange(minimum: -2, maximum: 2))
+        let wideStep = try XCTUnwrap(CameraExposureGesture.bias(start: 0, translationY: -100, viewportHeight: 400, range: wide))
+        XCTAssertEqual(wideStep, CameraExposureGesture.bias(start: 0, translationY: -100, viewportHeight: 400, range: standard),
+            "The same finger movement must not be four times stronger on a wide-range camera.")
+        XCTAssertEqual(wideStep, 1)
+        XCTAssertEqual(CameraExposureGesture.bias(start: 7, translationY: -200, viewportHeight: 400, range: wide), 8)
+        XCTAssertEqual(CameraExposureGesture.bias(start: -7, translationY: 200, viewportHeight: 400, range: wide), -8)
+        let narrow = try XCTUnwrap(CameraExposureRange(minimum: -1, maximum: 1))
+        XCTAssertEqual(CameraExposureGesture.bias(start: 0, translationY: -100, viewportHeight: 400, range: narrow), 0.5)
+    }
 }

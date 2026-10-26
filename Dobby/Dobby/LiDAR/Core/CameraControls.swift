@@ -51,14 +51,61 @@ nonisolated struct CameraExposureRange: Codable, Sendable, Equatable {
 /// particular, an enum case does not establish an available camera/lens.
 nonisolated struct CameraControlCapabilities: Sendable, Equatable {
     var focusSupported = false
+    var meteringSupported = false
+    var aeafLockSupported = false
     var exposureRange: CameraExposureRange? = nil
     var availableZooms: [CameraZoom] = [.standard]
 
     static let unavailable = Self(focusSupported: false, exposureRange: nil, availableZooms: [])
+
+    var pointAdjustmentSupported: Bool { focusSupported || meteringSupported }
 }
 
 nonisolated enum CameraFocusStatus: String, Codable, Sendable, Equatable {
     case idle, requested, accepted, unavailable, failed
+}
+
+nonisolated enum CameraAEAFStatus: String, Codable, Sendable, Equatable {
+    case unlocked, locking, locked, failed
+}
+
+nonisolated enum CameraObservedFocusMode: String, Codable, Sendable, Equatable {
+    case continuous, single, locked, unavailable
+}
+
+nonisolated enum CameraObservedExposureMode: String, Codable, Sendable, Equatable {
+    case continuous, single, locked, custom, unavailable
+}
+
+/// This observation is read from the configured device, independently of the
+/// copied ARFrame. Its uptime is not an ARFrame timestamp or a sharpness test.
+nonisolated struct CameraHardwareObservation: Codable, Sendable, Equatable {
+    var observedAtUptime: Double
+    var focusMode: CameraObservedFocusMode
+    var exposureMode: CameraObservedExposureMode
+    var isAdjustingFocus: Bool
+    var isAdjustingExposure: Bool
+    var lensPosition: Double?
+    var exposureDurationSeconds: Double?
+    var iso: Double?
+    var exposureTargetBias: Double?
+
+    var hasObservedAEAFLock: Bool {
+        focusMode == .locked && exposureMode == .locked && !isAdjustingFocus && !isAdjustingExposure
+    }
+}
+
+/// A translation from an on-screen drag, independent of preview zoom or sensor
+/// orientation. Moving up brightens. Cap sensitivity at four EV per visible
+/// preview height so wide-range devices do not turn a small drag into a huge
+/// brightness jump. Repeated drags still reach the actual hardware limits.
+nonisolated enum CameraExposureGesture {
+    static func bias(start: Double, translationY: Double, viewportHeight: Double,
+                     range: CameraExposureRange) -> Double? {
+        guard start.isFinite, translationY.isFinite, viewportHeight.isFinite, viewportHeight > 0 else { return nil }
+        let gestureSpan = min(4, range.maximum - range.minimum)
+        return range.clamp(start - translationY / max(120, viewportHeight) * gestureSpan)
+    }
 }
 
 /// Presentation facts only. `accepted` means a supported configuration request
@@ -67,8 +114,12 @@ nonisolated struct CameraControlState: Sendable, Equatable {
     var focusPoint: ImagePoint? = nil
     var focusRequestID: UUID? = nil
     var focusStatus: CameraFocusStatus = .idle
+    var aeafStatus: CameraAEAFStatus = .unlocked
+    var hardwareObservation: CameraHardwareObservation? = nil
     var exposureBias: Double = 0
     var requestedExposureBias: Double = 0
+    /// Also changes when a failed request returns to the same published EV.
+    var requestedExposureRevision: UInt64 = 0
     var selectedZoom: CameraZoom = .standard
     var settingsRevision: UInt64 = 0
     var sessionID: UUID? = nil

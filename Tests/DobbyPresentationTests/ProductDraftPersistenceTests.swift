@@ -32,6 +32,7 @@ final class ProductDraftPersistenceTests: XCTestCase {
             garment.detail = "마저 적을 설명"
             let model = try ProductPhotoModel(input: input, captureProvider: NoCapture(),
                 initialDetailPhotos: [first, second], initialSelectedPhotoIDs: [second.id, input.measurement.id, first.id])
+            model.acknowledgeCaptureGuide()
             try ProductDraftStore.save(garment: garment, step: .photoSelection,
                 measurementRecordID: record.id, photoModel: model, measurementInputData: inputData, in: context)
         }
@@ -52,10 +53,22 @@ final class ProductDraftPersistenceTests: XCTestCase {
             let restored = try ProductPhotoModel(input: input, captureProvider: NoCapture(),
                 initialDetailPhotos: state.restoredDetailPhotos(for: input),
                 initialSelectedPhotoIDs: state.selectedPhotoIDs)
+            XCTAssertEqual(state.hasAcknowledgedCaptureGuide, true)
+            if state.hasAcknowledgedCaptureGuide == true { restored.acknowledgeCaptureGuide() }
+            XCTAssertTrue(restored.hasAcknowledgedCaptureGuide)
             XCTAssertEqual(restored.detailPhotos, [first, second])
             XCTAssertEqual(restored.selectedPhotoIDs, [second.id, measuredPhotoID!, first.id])
             XCTAssertEqual(restored.output?.representativePhotoID, second.id)
             XCTAssertEqual(restored.output?.selectedPhotos.map(\.id), restored.selectedPhotoIDs)
+            var legacyJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
+            legacyJSON.removeValue(forKey: "hasAcknowledgedCaptureGuide")
+            let legacy = try JSONDecoder().decode(ProductPhotoDraftSnapshot.self,
+                from: JSONSerialization.data(withJSONObject: legacyJSON))
+            XCTAssertNil(legacy.hasAcknowledgedCaptureGuide)
+            let legacyModel = try ProductPhotoModel(input: input, captureProvider: NoCapture(),
+                initialDetailPhotos: legacy.restoredDetailPhotos(for: input), initialSelectedPhotoIDs: legacy.selectedPhotoIDs)
+            if legacy.hasAcknowledgedCaptureGuide == true { legacyModel.acknowledgeCaptureGuide() }
+            XCTAssertFalse(legacyModel.hasAcknowledgedCaptureGuide)
         }
     }
 
@@ -195,6 +208,15 @@ final class ProductDraftPersistenceTests: XCTestCase {
         let previousChest = try XCTUnwrap(corrected.result.values[chestIndex].meters)
         corrected.result.values[chestIndex].meters = previousChest + 0.03
         try GarmentStore.refreshMeasurement(corrected, for: fixture.garment, in: fixture.context, allowsSynthetic: true)
+        let photoModel = try ProductPhotoModel(input: fixture.input, captureProvider: NoCapture(),
+            measurementRecord: fixture.record)
+        try photoModel.updateMeasurementRecord(corrected)
+        XCTAssertEqual(photoModel.measurementRecord?.id, corrected.id)
+        XCTAssertEqual(photoModel.measurementRecord?.result.values[chestIndex].meters, previousChest + 0.03)
+        var foreignFrame = corrected
+        foreignFrame.snapshot.frame.frameID = UUID()
+        XCTAssertThrowsError(try photoModel.updateMeasurementRecord(foreignFrame))
+        XCTAssertEqual(photoModel.measurementRecord?.id, corrected.id)
         XCTAssertEqual(fixture.garment.id, garmentID)
         XCTAssertEqual(fixture.garment.measurementPhoto?.id, photoID)
         XCTAssertEqual(fixture.garment.measurementPhoto?.fileName, fileName)
@@ -203,7 +225,8 @@ final class ProductDraftPersistenceTests: XCTestCase {
         XCTAssertEqual(fixture.garment.name, "정보와 사진은 유지")
         XCTAssertEqual(fixture.garment.brand, "테스트 브랜드")
         XCTAssertEqual(Dictionary(uniqueKeysWithValues: fixture.garment.measurements.map { ($0.key, $0.id) }), measurementIDs)
-        XCTAssertEqual(try XCTUnwrap(fixture.garment.measurement("chestWidth")?.valueCm), (previousChest + 0.03) * 100, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(fixture.garment.measurement("chestWidth")?.valueCm),
+            StoredMeasurementValue.centimeters((previousChest + 0.03) * 100), accuracy: 1e-9)
         XCTAssertEqual(try XCTUnwrap(fixture.garment.measurement("chestWidth")?.autoValueCm), previousChest * 100, accuracy: 1e-9)
         XCTAssertTrue(fixture.garment.measurementPhoto?.landmark("armpit_left")?.isMoved == true)
         XCTAssertEqual(try fixture.context.fetchCount(FetchDescriptor<Garment>()), 1)

@@ -69,6 +69,11 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
 
     /// Imported results are replayed with the current engine, but cannot be
     /// replaced by another capture or by a different set of measurement items.
+    mutating func requestRecalculation() {
+        calculationRevision = UUID()
+        persistenceRevision = UUID()
+    }
+
     @discardableResult
     mutating func apply(_ updated: GarmentMeasurementResult) -> Bool {
         guard !needsRecalculation else { return false }

@@ -5,6 +5,105 @@ import CoreImage
 import Foundation
 import ImageIO
 
+extension CameraControlState {
+    /// Requested EV belongs to the finger, accepted EV to the device queue.
+    /// An asynchronous receipt must never move the requested value backwards.
+    nonisolated func acceptingExposureReceipt(_ receipt: CameraHardwareReceipt) -> Self {
+        guard receipt.revision >= settingsRevision else { return self }
+        var controls = self
+        controls.exposureBias = receipt.exposureBias
+        let newerConfiguration = receipt.revision > controls.settingsRevision
+        controls.settingsRevision = receipt.revision
+        if newerConfiguration || (receipt.observation?.observedAtUptime ?? -.infinity)
+            >= (controls.hardwareObservation?.observedAtUptime ?? -.infinity) {
+            controls.aeafStatus = receipt.aeafStatus
+            controls.hardwareObservation = receipt.observation
+        }
+        return controls
+    }
+
+    nonisolated func reconcilingFailedExposure(_ error: Error) -> Self {
+        var controls = self
+        if let receipt = (error as? CameraHardwareControlError)?.exposureFailureReceipt {
+            controls = controls.acceptingExposureReceipt(receipt)
+        }
+        controls.requestedExposureBias = controls.exposureBias
+        return controls
+    }
+
+    /// Focus and neutral EV share one hardware revision. A newer EV receipt
+    /// may reach the main actor first; the late focus receipt must not undo it
+    /// or the user's newer requested drag value.
+    nonisolated func acceptingFocusReceipt(_ receipt: CameraHardwareReceipt, isCapturing: Bool) -> Self {
+        var controls = self
+        controls.focusStatus = isCapturing ? .idle : .accepted
+        guard receipt.revision >= controls.settingsRevision else { return controls }
+        let newerConfiguration = receipt.revision > controls.settingsRevision
+        controls.exposureBias = receipt.exposureBias
+        controls.settingsRevision = receipt.revision
+        if newerConfiguration || (receipt.observation?.observedAtUptime ?? -.infinity)
+            >= (controls.hardwareObservation?.observedAtUptime ?? -.infinity) {
+            controls.aeafStatus = receipt.aeafStatus
+            controls.hardwareObservation = receipt.observation
+        }
+        return controls
+    }
+
+    nonisolated func reconcilingFailedFocus(_ error: Error, lock: Bool, hasNewerExposureRequest: Bool) -> Self {
+        var controls = self
+        if let receipt = (error as? CameraHardwareControlError)?.focusFailureReceipt,
+           receipt.revision >= controls.settingsRevision {
+            controls.exposureBias = receipt.exposureBias
+            controls.settingsRevision = receipt.revision
+            controls.hardwareObservation = receipt.observation
+        }
+        if !hasNewerExposureRequest { controls.requestedExposureBias = controls.exposureBias }
+        controls.focusStatus = .failed
+        controls.aeafStatus = lock ? .failed : .unlocked
+        return controls
+    }
+}
+
+/// UIKit draws EV feedback directly during a gesture. Buffer numeric state so
+/// those inputs/receipts do not invalidate the whole SwiftUI camera hierarchy.
+/// Focus, gesture end and capture still reconcile one authoritative state.
+nonisolated struct CameraControlPresentationBuffer {
+    private(set) var deferred: CameraControlState?
+    private var scheduledEndID: UUID?
+
+    func current(published: CameraControlState) -> CameraControlState { deferred ?? published }
+
+    mutating func begin(published: CameraControlState) {
+        scheduledEndID = nil
+        if deferred == nil { deferred = published }
+    }
+
+    mutating func stage(_ controls: CameraControlState) -> CameraControlState? {
+        guard deferred != nil else { return controls }
+        deferred = controls
+        return nil
+    }
+
+    mutating func end() -> CameraControlState? {
+        defer { deferred = nil; scheduledEndID = nil }
+        return deferred
+    }
+
+    mutating func scheduleEnd() -> UUID? {
+        guard deferred != nil else { return nil }
+        let identifier = UUID()
+        scheduledEndID = identifier
+        return identifier
+    }
+
+    mutating func finishScheduledEnd(_ identifier: UUID) -> CameraControlState? {
+        guard scheduledEndID == identifier else { return nil }
+        return end()
+    }
+
+    mutating func reset() { deferred = nil; scheduledEndID = nil }
+}
+
 nonisolated enum CaptureState: Equatable, Sendable {
     case idle
     case requestingPermission
@@ -97,6 +196,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     private let cameraControlWorker = ARKitCameraControlWorker()
     private var focusToken: CameraControlRequest?
     private var exposureToken: CameraControlRequest?
+    private var controlPresentation = CameraControlPresentationBuffer()
     private var controlSequence: UInt64 = 0
     private var controlDeviceAttached = false
     private var controlAttachmentSessionID: UUID?
@@ -119,7 +219,8 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         guard orientation != imageOrientation else { return }
         imageOrientation = orientation
         liveAnalyzer.setOrientation(orientation)
-        clearFocusIndicator(clearExposureRequest: false)
+        // Sensor points remain valid across a display rotation. Keep the lock
+        // intent; the preview remaps its marker through the new transform.
         resetReadiness()
     }
 
@@ -167,6 +268,8 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             configuration.frameSemantics.insert(.smoothedSceneDepth)
         }
         configuration.environmentTexturing = .none
+        // This screen displays camera pixels and 2D outlines, not lit AR objects.
+        configuration.isLightEstimationEnabled = false
         configuration.isAutoFocusEnabled = true
         worker.activate(sessionID: identifier)
         liveAnalyzer.reset(sessionID: identifier)
@@ -211,22 +314,27 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     }
 
     /// Invalidate both pending UI callbacks and queued hardware commands when
-    /// ARKit loses its camera. Exposure/zoom preferences survive a retake.
+    /// ARKit loses its camera. Only the zoom preference survives a retake.
     private func resetCameraControlConnection() {
         cameraControlWorker.deactivate()
+        exposureToken = nil
+        controlPresentation.reset()
         cameraCapabilities = .unavailable
         cameraControls.sessionID = nil
-        cameraControls.requestedExposureBias = cameraControls.exposureBias
+        cameraControls.exposureBias = 0
+        cameraControls.requestedExposureBias = 0
+        cameraControls.requestedExposureRevision = 0
         cameraControls.settingsRevision = 0
+        cameraControls.aeafStatus = .unlocked
+        cameraControls.hardwareObservation = nil
         controlDeviceAttached = false
         controlAttachmentSessionID = nil
         clearFocusIndicator()
         controlError = nil
     }
 
-    private func clearFocusIndicator(clearExposureRequest: Bool = true) {
+    private func clearFocusIndicator() {
         focusToken = nil
-        if clearExposureRequest { exposureToken = nil }
         cameraControls.focusPoint = nil
         cameraControls.focusRequestID = nil
         cameraControls.focusStatus = .idle
@@ -238,12 +346,29 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         controlAttachmentSessionID = sessionID
         let device = ARWorldTrackingConfiguration.configurableCaptureDeviceForPrimaryCamera
         let capabilities = await cameraControlWorker.activate(sessionID: sessionID, device: device,
-                                                               exposureBias: cameraControls.exposureBias)
+            exposureBias: 0) { [weak self] observedSession, receipt, error in
+                Task { @MainActor [weak self] in
+                    guard let self, generation == observedSession, isRunning,
+                          receipt.focusRequestID == focusToken?.requestID,
+                          receipt.revision >= currentCameraControls.settingsRevision else { return }
+                    var controls = currentCameraControls.acceptingExposureReceipt(receipt)
+                    if receipt.focusPoint == nil {
+                        focusToken = nil
+                        controls.focusPoint = nil
+                        controls.focusRequestID = nil
+                        controls.focusStatus = .idle
+                    }
+                    applyCameraControls(controls)
+                    if let error, state != .capturing { controlError = error.localizedDescription }
+                }
+            }
         guard generation == sessionID, isRunning, controlAttachmentSessionID == sessionID else { return }
         controlAttachmentSessionID = nil
-        controlDeviceAttached = device != nil
+        // A non-nil device can still reject configuration while ARKit starts.
+        // Let later preview frames retry instead of freezing unavailable controls.
+        controlDeviceAttached = device != nil && capabilities != .unavailable
         cameraCapabilities = capabilities
-        cameraControls.exposureBias = capabilities.exposureRange?.clamp(cameraControls.exposureBias) ?? 0
+        cameraControls.exposureBias = 0
         cameraControls.requestedExposureBias = cameraControls.exposureBias
         updateZoomCapabilities()
     }
@@ -256,75 +381,132 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             depthSize: .init(width: CVPixelBufferGetWidth(depth), height: CVPixelBufferGetHeight(depth)), zoomFactor: 2) != nil {
             zooms.append(.double)
         }
-        cameraCapabilities.availableZooms = zooms
+        if cameraCapabilities.availableZooms != zooms {
+            cameraCapabilities.availableZooms = zooms
+        }
         if state != .capturing, !zooms.contains(cameraControls.selectedZoom) {
             cameraControls.selectedZoom = .standard
-            clearFocusIndicator(clearExposureRequest: false)
             controlError = "현재 카메라 형식에 맞춰 기본 화각으로 돌아왔어요."
         }
     }
 
-    func requestFocus(at point: ImagePoint) {
+    func requestFocus(at point: ImagePoint, requestID: UUID = UUID()) {
         guard isRunning, state != .capturing, let identifier = generation, point.isValid,
               cameraCapabilities.focusSupported else { return }
         controlSequence &+= 1
-        let token = CameraControlRequest(sessionID: identifier, requestID: UUID(), revision: controlSequence)
+        let token = CameraControlRequest(sessionID: identifier, requestID: requestID, revision: controlSequence)
+        // Queue the gesture boundary before focus. Old EV completions cannot
+        // replace the new tap's neutral target or a subsequent drag.
+        setExposureAdjustmentActive(false)
+        exposureToken = nil
         focusToken = token
-        cameraControls.focusPoint = point
-        cameraControls.focusRequestID = token.requestID
-        cameraControls.focusStatus = .requested
-        controlError = nil
-        cameraControlWorker.submitFocus(at: point, sessionID: identifier) { [weak self] result in
+        var controls = currentCameraControls
+        controlPresentation.reset()
+        // Reset EV and AF/AE point together on the device's serial queue.
+        controls.requestedExposureBias = 0
+        controls.requestedExposureRevision = token.revision
+        controls.focusPoint = point
+        controls.focusRequestID = token.requestID
+        controls.focusStatus = .requested
+        controls.aeafStatus = .unlocked
+        controls.hardwareObservation = nil
+        cameraControlWorker.submitFocus(at: point, sessionID: identifier, requestID: token.requestID) { [weak self] result in
             Task { @MainActor [weak self] in
                 guard let self, token.matches(sessionID: generation, requestID: focusToken?.requestID,
                                                revision: focusToken?.revision ?? 0), isRunning else { return }
                 switch result {
                 case .success(let receipt):
-                    cameraControls.settingsRevision = max(cameraControls.settingsRevision, receipt.revision)
-                    cameraControls.focusStatus = state == .capturing ? .idle : .accepted
-                    liveAnalyzer.invalidateReadiness()
-                    resetReadiness()
+                    applyCameraControls(currentCameraControls.acceptingFocusReceipt(receipt, isCapturing: state == .capturing))
                 case .failure(let error):
-                    cameraControls.focusStatus = .failed
+                    applyCameraControls(currentCameraControls.reconcilingFailedFocus(error, lock: false,
+                        hasNewerExposureRequest: (exposureToken?.revision ?? 0) > token.revision))
                     if state != .capturing { controlError = error.localizedDescription }
                 }
             }
         }
+        // Hardware admission precedes optional analysis cancellation and UI
+        // publication. The preview already drew this same request ID in UIKit.
+        liveAnalyzer.prioritizeCameraInteraction(sessionID: identifier, duration: 0.6)
+        cameraControls = controls
+        if controlError != nil { controlError = nil }
     }
 
-    func setExposureBias(_ bias: Double) {
+    private var currentCameraControls: CameraControlState {
+        controlPresentation.current(published: cameraControls)
+    }
+
+    private func applyCameraControls(_ controls: CameraControlState) {
+        if let published = controlPresentation.stage(controls), published != cameraControls {
+            cameraControls = published
+        }
+    }
+
+    func setExposureAdjustmentActive(_ active: Bool) {
+        guard let identifier = generation, isRunning else { return }
+        if active {
+            guard state != .capturing, cameraCapabilities.exposureRange != nil else { return }
+        }
+        cameraControlWorker.setExposureAdjustmentActive(active, sessionID: identifier)
+        liveAnalyzer.setExposureAdjustmentActive(active, sessionID: identifier)
+        if active {
+            controlPresentation.begin(published: cameraControls)
+        } else if let ending = controlPresentation.scheduleEnd() {
+            // Rotation/capability changes can cancel a UIKit pan from inside
+            // updateUIView. Keep the authoritative state and hardware ordering
+            // synchronous, but never publish back into that SwiftUI update.
+            Task { @MainActor [weak self] in
+                guard let self, generation == identifier, isRunning,
+                      let published = controlPresentation.finishScheduledEnd(ending),
+                      published != cameraControls else { return }
+                cameraControls = published
+            }
+        }
+    }
+
+    /// Called synchronously by UIKit; never wait for SwiftUI, an AF/AE getter,
+    /// Vision, or an earlier sensor completion before admitting the next input.
+    func requestExposureBias(_ bias: Double) {
         guard isRunning, state != .capturing, let identifier = generation,
               let target = cameraCapabilities.exposureRange?.clamp(bias) else { return }
         controlSequence &+= 1
         let token = CameraControlRequest(sessionID: identifier, requestID: UUID(), revision: controlSequence)
         exposureToken = token
-        cameraControls.requestedExposureBias = target
-        controlError = nil
+        var controls = currentCameraControls
+        controls.requestedExposureBias = target
+        controls.requestedExposureRevision = token.revision
+        applyCameraControls(controls)
+        if controlError != nil { controlError = nil }
+        #if DEBUG
+        CameraExposureTrace.input(target)
+        #endif
         cameraControlWorker.submitExposure(target, sessionID: identifier) { [weak self] result in
+            // Coalesced raw touch events need no MainActor task or UI update.
+            if case .failure(CameraHardwareControlError.superseded) = result { return }
             Task { @MainActor [weak self] in
                 guard let self, token.matches(sessionID: generation, requestID: exposureToken?.requestID,
                                                revision: exposureToken?.revision ?? 0), isRunning else { return }
                 switch result {
                 case .success(let receipt):
-                    cameraControls.exposureBias = receipt.exposureBias
-                    cameraControls.settingsRevision = max(cameraControls.settingsRevision, receipt.revision)
-                    liveAnalyzer.invalidateReadiness()
-                    resetReadiness()
+                    applyCameraControls(currentCameraControls.acceptingExposureReceipt(receipt))
+                    #if DEBUG
+                    CameraExposureTrace.receipt(revision: receipt.revision, bias: receipt.exposureBias)
+                    #endif
                 case .failure(let error):
-                    cameraControls.requestedExposureBias = cameraControls.exposureBias
-                    if state != .capturing { controlError = error.localizedDescription }
+                    // Capture owns its barrier receipt. A later busy response
+                    // must not roll back its requested/accepted metadata.
+                    guard state != .capturing else { return }
+                    applyCameraControls(currentCameraControls.reconcilingFailedExposure(error))
+                    controlError = "노출을 적용하지 못했어요. \(error.localizedDescription)"
                 }
             }
         }
     }
 
-    func resetExposure() { setExposureBias(0) }
-
     func setZoom(_ zoom: CameraZoom) {
         guard isRunning, state != .capturing, cameraCapabilities.availableZooms.contains(zoom),
               cameraControls.selectedZoom != zoom else { return }
         cameraControls.selectedZoom = zoom
-        clearFocusIndicator(clearExposureRequest: false)
+        // Digital cropping does not change the physical AF/AE point or lock.
         liveAnalyzer.invalidateReadiness()
         resetReadiness()
         controlError = nil
@@ -336,6 +518,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             throw ARKitCaptureError.sessionNotRunning
         }
         guard state != .capturing else { throw ARKitCaptureError.captureInProgress }
+        // Retain the last finger target even if the shutter arrives before the
+        // next UIView update or an asynchronous EV receipt.
+        setExposureAdjustmentActive(false)
         state = .capturing
         defer { cameraControlWorker.endCapture(sessionID: identifier) }
         liveAnalyzer.suspend(sessionID: identifier)
@@ -354,9 +539,19 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             let receipt = try await cameraControlWorker.beginCapture(sessionID: identifier)
             try Task.checkCancellation()
             guard generation == identifier, isRunning else { throw ARKitCaptureError.stopped }
+            // The barrier submits the newest target without waiting for AE to
+            // settle. Preserve that submitted value for a retake; frame exposure
+            // remains a separate observation in the snapshot metadata.
+            var controls = controlPresentation.end() ?? cameraControls
+            controls.exposureBias = receipt.exposureBias
+            controls.settingsRevision = max(controls.settingsRevision, receipt.revision)
+            controls.aeafStatus = receipt.aeafStatus
+            controls.hardwareObservation = receipt.observation
+            cameraControls = controls
             let settings = CameraCaptureSettings(settingsRevision: receipt.revision,
                 focusSensorPoint: receipt.focusPoint, requestedExposureBias: cameraControls.requestedExposureBias,
-                acceptedExposureBias: receipt.exposureBias, requestedZoomFactor: cameraControls.selectedZoom.rawValue)
+                acceptedExposureBias: receipt.exposureBias, requestedZoomFactor: cameraControls.selectedZoom.rawValue,
+                requestedAEAFStatus: receipt.aeafStatus, hardwareObservation: receipt.observation)
             let request = SnapshotRequest(sessionID: identifier, orientation: orientation,
                 minimumFrameTimestamp: session.currentFrame?.timestamp, cameraSettings: settings)
             let snapshot = try await withTaskCancellationHandler {
@@ -388,7 +583,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
               lastCameraTimestamp.map({ update.timestamp > $0 }) ?? true else { return }
         lastCameraTimestamp = update.timestamp
         lastCameraReceivedAt = ProcessInfo.processInfo.systemUptime
-        frameStatus = update.status
+        if frameStatus != update.status { frameStatus = update.status }
         // An RGB preview frame enables the shutter. Snapshot selection still
         // validates synchronized depth and camera quality after the tap.
         if state == .starting { state = .ready }
@@ -445,6 +640,12 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
 
 extension ARKitCaptureProvider: ARSessionDelegate {
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        #if DEBUG
+        // Read the already-delivered frame, never synchronously query the
+        // capture device merely to profile exposure during a drag.
+        CameraExposureTrace.frame(timestamp: frame.timestamp,
+            exposureDuration: frame.camera.exposureDuration, exposureOffset: Double(frame.camera.exposureOffset))
+        #endif
         let update = worker.consume(frame)
         if let identifier = worker.sessionID {
             liveAnalyzer.submit(frame: frame, sessionID: identifier) { [weak self] sessionID, readiness in

@@ -27,6 +27,22 @@ nonisolated struct CameraAffineTransform: Sendable, Equatable {
 }
 
 nonisolated enum CameraPreviewGeometry {
+    /// Layout is in preview points, using the actually VISIBLE crop instead of
+    /// the enlarged 2x ARSCNView. The icon may move; the focus point never does.
+    static func exposureHandleCenter(focusPoint: ImagePoint, viewportOrigin: ImagePoint,
+                                     viewportWidth: Double, viewportHeight: Double) -> ImagePoint? {
+        guard validViewport(width: viewportWidth, height: viewportHeight),
+              [focusPoint.x, focusPoint.y, viewportOrigin.x, viewportOrigin.y].allSatisfy(\.isFinite),
+              viewportWidth >= 28, viewportHeight >= 28,
+              focusPoint.x >= viewportOrigin.x, focusPoint.x <= viewportOrigin.x + viewportWidth,
+              focusPoint.y >= viewportOrigin.y, focusPoint.y <= viewportOrigin.y + viewportHeight else { return nil }
+        let minimumX = viewportOrigin.x + 14, maximumX = viewportOrigin.x + viewportWidth - 14
+        let minimumY = viewportOrigin.y + 14, maximumY = viewportOrigin.y + viewportHeight - 14
+        let proposedX = focusPoint.x + 64 <= viewportOrigin.x + viewportWidth ? focusPoint.x + 54 : focusPoint.x - 54
+        return .init(x: min(maximumX, max(minimumX, proposedX)),
+                     y: min(maximumY, max(minimumY, focusPoint.y)))
+    }
+
     /// `viewPoint` is in PIXELS relative to the actual ARSCNView bounds, including
     /// any enlarged view used for zoom. `displayTransform` already contains
     /// orientation, mirroring and aspect-fill crop; none is applied a second time.

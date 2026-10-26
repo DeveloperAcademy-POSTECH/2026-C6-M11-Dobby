@@ -11,6 +11,7 @@ struct GarmentMeasurementResultView: View {
     let onConfirm: () -> Void
     let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
     let onExitRecord: ((SavedMeasurement) async throws -> Void)?
+    let allowsRetake: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var headingTitleSize: CGFloat = 22
     @ScaledMetric(relativeTo: .subheadline) private var headingSubtitleSize: CGFloat = 14
@@ -38,7 +39,8 @@ struct GarmentMeasurementResultView: View {
          onConfirm: @escaping () -> Void,
          onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
          onExitRecord: ((SavedMeasurement) async throws -> Void)? = nil,
-         initialRecord: SavedMeasurement? = nil) {
+         initialRecord: SavedMeasurement? = nil,
+         allowsRetake: Bool = true) {
         _model = State(initialValue: model)
         self.archive = archive
         self.recordingError = recordingError
@@ -46,6 +48,7 @@ struct GarmentMeasurementResultView: View {
         self.onConfirm = onConfirm
         self.onConfirmedRecord = onConfirmedRecord
         self.onExitRecord = onExitRecord
+        self.allowsRetake = allowsRetake
         _image = State(initialValue: initialImage)
         _pendingRecord = State(initialValue: initialRecord)
         _pendingRecordRevision = State(initialValue: initialRecord == nil ? nil : model.persistenceRevision)
@@ -53,12 +56,15 @@ struct GarmentMeasurementResultView: View {
     }
 
     private var isSynthetic: Bool { model.snapshot.frame.source == .synthetic }
-    private var incompleteCount: Int { model.visibleValues.filter { $0.status == .unavailable }.count }
-    private var uncertainCount: Int { model.visibleValues.filter { $0.status == .uncertain }.count }
-    private var totalLengthUnavailable: Bool {
-        model.canCorrectTotalLength && model.visibleValues.contains {
-            $0.id == "top.totalLength" && $0.status == .unavailable
-        }
+    private var failedValues: [MeasurementValue] {
+        model.needsRecalculation ? [] : model.visibleValues.filter { !$0.hasUsableMeasurement }
+    }
+    private var incompleteCount: Int { failedValues.count }
+    private var canCorrectSingleTotalLengthFailure: Bool {
+        guard model.canCorrectTotalLength, failedValues.count == 1,
+              let value = failedValues.first, value.id == "top.totalLength",
+              let feedback = value.failureFeedback, !feedback.isCaptureFailure else { return false }
+        return feedback.suggestedAction == .editPoints || feedback.suggestedAction == .correctTotalLength
     }
 
     var body: some View {
@@ -84,11 +90,11 @@ struct GarmentMeasurementResultView: View {
                         .accessibilityIdentifier("product-flow.exit")
                         .disabled(isSaving || isEditingPoint || model.needsRecalculation)
                 } else {
-                    Button(action: onRetake) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
+                    Button(action: retakeIfAllowed) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
                         .buttonStyle(.plain)
                         .accessibilityLabel("다시 촬영")
                         .accessibilityIdentifier("retakeGarmentMeasurement")
-                        .disabled(isSaving || isEditingPoint)
+                        .disabled(!allowsRetake || isSaving || isEditingPoint)
                 }
             }.sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .topBarTrailing) { resultActions }
@@ -198,7 +204,9 @@ struct GarmentMeasurementResultView: View {
 
     private var heading: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(model.hasPointAdjustments ? "측정 위치를 조정했어요" : incompleteCount == 0 && uncertainCount == 0 ? "자동으로 실측을 완료했어요" : "측정 결과를 확인해 주세요")
+            Text(model.needsRecalculation ? "수정한 위치로 다시 측정하고 있어요"
+                 : incompleteCount > 0 ? "\(incompleteCount)개 항목을 측정하지 못했어요"
+                 : model.hasPointAdjustments ? "측정 위치를 조정했어요" : "자동으로 실측을 완료했어요")
                 .font(.system(size: headingTitleSize, weight: .bold))
                 .frame(minHeight: 28, alignment: .leading)
             Text("필요하면 측정 위치와 길이를 수정할 수 있어요")
@@ -212,21 +220,29 @@ struct GarmentMeasurementResultView: View {
 
     @ViewBuilder
     private var reviewNotice: some View {
-        if incompleteCount > 0 || uncertainCount > 0 {
+        if incompleteCount > 0 {
             Button {
-                if totalLengthUnavailable { openManualReview(for: "top.totalLength") }
+                if canCorrectSingleTotalLengthFailure { openManualReview(for: "top.totalLength") }
                 else { openAuxiliaryDetails() }
             } label: {
-                Label(totalLengthUnavailable ? "총장 위치 확인" : incompleteCount > 0 ? "\(incompleteCount)개 측정 불가" : "\(uncertainCount)개 확인 필요",
-                      systemImage: "exclamationmark.circle")
-                    .font(.caption.weight(.semibold)).foregroundStyle(GarmentCaptureStyle.accent)
-                    .padding(.horizontal, 10).padding(.vertical, 7)
-                    .background(GarmentCaptureStyle.background.opacity(0.9), in: Capsule())
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(incompleteCount == 1 ? "\(failedValues[0].title) 측정 불가" : "\(incompleteCount)개 측정 불가",
+                          systemImage: "exclamationmark.circle")
+                        .font(.caption.weight(.semibold)).foregroundStyle(GarmentCaptureStyle.accent)
+                    if let feedback = failedValues.first?.failureFeedback {
+                        Text(feedback.reason).font(.caption2).foregroundStyle(.white).lineLimit(3)
+                    }
+                    Text("이유와 해결 방법 보기").font(.caption2).foregroundStyle(.white.opacity(0.8))
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .frame(maxWidth: 270, minHeight: 44, alignment: .leading)
+                .background(GarmentCaptureStyle.background.opacity(0.94), in: RoundedRectangle(cornerRadius: 14))
+                .contentShape(Rectangle())
             }.buttonStyle(.plain)
-                .accessibilityHint("측정 항목 상세에서 이유를 확인하고 측정점을 수정할 수 있어요")
-                .accessibilityIdentifier(incompleteCount > 0 ? "garmentUnavailableNotice" : "garmentUncertainNotice")
+                .accessibilityHint(canCorrectSingleTotalLengthFailure
+                    ? "사진에서 총장 상단과 밑단 위치를 직접 지정합니다"
+                    : "실패한 항목과 원인, 다시 촬영하거나 측정점을 수정하는 방법을 확인합니다")
+                .accessibilityIdentifier("garmentUnavailableNotice")
         }
     }
 
@@ -348,11 +364,7 @@ struct GarmentMeasurementResultView: View {
                     .font(.subheadline).foregroundStyle(GarmentCaptureStyle.accent)
                     .accessibilityIdentifier("garmentUnavailableSummary")
             }
-            if uncertainCount > 0 {
-                Label("\(uncertainCount)개 항목은 확인이 필요해요. 줄자와 비교해 주세요.", systemImage: "exclamationmark.circle")
-                    .font(.subheadline).foregroundStyle(GarmentCaptureStyle.accent)
-            }
-            if !reviewDefinitions.isEmpty {
+            if !failedValues.isEmpty {
                 reviewNeededMeasurements
                     .disabled(isSaving || isEditingPoint || model.needsRecalculation)
             }
@@ -392,7 +404,8 @@ struct GarmentMeasurementResultView: View {
 
     private func totalLengthCorrectionSheet(_ measurement: ManualMeasurement) -> some View {
         GarmentTotalLengthCorrectionView(model: measurement, initialImage: image,
-            failure: model.result.values.first { $0.id == "top.totalLength" }?.failure) { correction in
+            failure: model.result.values.first { $0.id == "top.totalLength" }?.failure,
+            failureFeedback: model.result.values.first { $0.id == "top.totalLength" }?.failureFeedback) { correction in
                 guard !isSaving, !isEditingPoint, !model.needsRecalculation else { return false }
                 return model.applyTotalLengthCorrection(from: correction)
             }
@@ -411,39 +424,101 @@ struct GarmentMeasurementResultView: View {
     }
 
     private var reviewDefinitions: [MeasurementDefinition] {
-        let ids = Set(model.visibleValues.filter { $0.status != .valid }.map(\.id))
+        let ids = Set(failedValues.filter { $0.failureFeedback?.isCaptureFailure != true }.map(\.id))
         return model.visibleDefinitions.filter { ids.contains($0.id) && $0.landmarkIDs.count == 2 }
+    }
+
+    /// One frozen-capture failure can affect every length. Explain it once
+    /// instead of repeating the same instruction for each measurement.
+    private var captureFailureGroups: [MeasurementCaptureFailureGroup] {
+        var groups: [MeasurementCaptureFailureGroup] = []
+        for value in failedValues {
+            guard let feedback = value.failureFeedback, feedback.isCaptureFailure else { continue }
+            if let index = groups.firstIndex(where: {
+                $0.feedback.reason == feedback.reason && $0.feedback.recovery == feedback.recovery
+            }) {
+                groups[index].titles.append(value.title)
+            } else {
+                groups.append(.init(id: value.id, titles: [value.title], feedback: feedback))
+            }
+        }
+        return groups
+    }
+
+    @ViewBuilder
+    private func failureRecoveryButton(for definition: MeasurementDefinition,
+                                       feedback: MeasurementFailureFeedback) -> some View {
+        switch feedback.suggestedAction {
+        case .editPoints, .correctTotalLength:
+            Button(definition.id == "top.totalLength" && model.canCorrectTotalLength
+                   ? "총장 위치 지정하고 다시 측정" : "이 사진에서 측정점 직접 확인") {
+                openManualReview(for: definition.id)
+            }.buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
+                .accessibilityLabel("\(definition.title) 측정점 직접 확인")
+                .accessibilityIdentifier("reviewGarmentMeasurement_\(definition.id)")
+        case .retry:
+            Button("다시 계산") { model.requestRecalculation() }
+                .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
+                .accessibilityIdentifier("retryGarmentMeasurement_\(definition.id)")
+        case .retake, .none:
+            if allowsRetake {
+                Button("다시 촬영", action: retakeIfAllowed)
+                    .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
+                    .accessibilityIdentifier("retakeForMeasurementFailure_\(definition.id)")
+            }
+        }
     }
 
     private var reviewNeededMeasurements: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("확인이 필요한 측정점").font(.subheadline.weight(.semibold))
+            Text("측정하지 못한 항목과 해결 방법").font(.subheadline.weight(.semibold))
+            ForEach(captureFailureGroups) { group in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(group.titles.joined(separator: ", ")).font(.subheadline.weight(.medium))
+                    Text(group.feedback.reason).font(.caption)
+                    Text(group.feedback.recovery).font(.caption).foregroundStyle(.secondary)
+                    if group.feedback.suggestedAction == .retry {
+                        Button("다시 계산") { model.requestRecalculation() }
+                            .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
+                            .accessibilityIdentifier("retryGarmentMeasurement_\(group.id)")
+                    } else if allowsRetake {
+                        Button("다시 촬영", action: retakeIfAllowed)
+                            .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
+                            .accessibilityIdentifier("retakeForMeasurementFailure_\(group.id)")
+                    }
+                }.accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("garmentCaptureFailureReason")
+            }
             ForEach(reviewDefinitions) { definition in
                 VStack(alignment: .leading, spacing: 6) {
                     if let value = model.result.values.first(where: { $0.id == definition.id }) {
                         Text("\(definition.title) · \(GarmentMeasurementText.value(value))")
                             .font(.subheadline.weight(.medium))
-                        if let failure = value.failure {
-                            Text(failure.message).font(.caption).foregroundStyle(.secondary)
+                        MeasurementFailureFeedbackView(value: value)
+                        if let feedback = value.failureFeedback {
+                            failureRecoveryButton(for: definition, feedback: feedback)
                         }
-                        MeasurementPointFailureDetails(value: value)
                     }
-                    Button(definition.id == "top.totalLength" && model.canCorrectTotalLength
-                           ? "총장 위치 지정하고 다시 측정" : "이 사진에서 측정점 직접 확인") {
-                        openManualReview(for: definition.id)
-                    }.buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
-                        .accessibilityLabel("\(definition.title) 측정점 직접 확인")
-                        .accessibilityIdentifier("reviewGarmentMeasurement_\(definition.id)")
                 }
             }
-            Text(model.canCorrectTotalLength
-                 ? "총장 위치 지정은 현재 결과에 반영돼요. 다른 항목의 수동 검증은 별도 기록으로 저장돼요."
-                 : "두 점을 직접 확인하면 별도의 수동 측정으로 저장돼요. 자동 측정 기록은 그대로 유지돼요.")
-                .font(.caption).foregroundStyle(.secondary)
+            if reviewDefinitions.contains(where: { definition in
+                let action = failedValues.first { $0.id == definition.id }?.failureFeedback?.suggestedAction
+                return action == .editPoints || action == .correctTotalLength
+            }) {
+                Text(model.canCorrectTotalLength
+                     ? "총장 위치 지정은 현재 결과에 반영돼요. 다른 항목의 수동 검증은 별도 기록으로 저장돼요."
+                     : "두 점을 직접 확인하면 별도의 수동 측정으로 저장돼요. 자동 측정 기록은 그대로 유지돼요.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("garmentMeasurementReviewActions")
+    }
+
+    private func retakeIfAllowed() {
+        guard allowsRetake else { return }
+        onRetake()
     }
 
     private func measurementRow(_ value: MeasurementValue) -> some View {
@@ -459,10 +534,13 @@ struct GarmentMeasurementResultView: View {
                     Text(GarmentMeasurementText.value(value)).monospacedDigit()
                 }
             }.font(.subheadline.weight(.medium))
-            if value.status != .valid {
-                Text(value.failure?.message ?? "확인 필요 · 줄자로 비교해 주세요")
-                    .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
-                MeasurementPointFailureDetails(value: value)
+            if !model.needsRecalculation, !value.hasUsableMeasurement {
+                if value.failureFeedback?.isCaptureFailure == true {
+                    Text("촬영 데이터 문제 · 위의 공통 원인 안내를 확인해 주세요")
+                        .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
+                } else {
+                    MeasurementFailureFeedbackView(value: value)
+                }
             }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
             .contentShape(Rectangle())
@@ -524,10 +602,15 @@ struct GarmentMeasurementResultView: View {
     }
 }
 
+private struct MeasurementCaptureFailureGroup: Identifiable {
+    let id: String
+    var titles: [String]
+    let feedback: MeasurementFailureFeedback
+}
+
 enum GarmentMeasurementText {
     static func value(_ value: MeasurementValue) -> String {
-        guard value.status != .unavailable, let meters = value.meters,
-              meters.isFinite, meters > 0 else { return "측정 불가" }
+        guard value.hasUsableMeasurement, let meters = value.meters else { return "측정 불가" }
         return MeasurementDisplayText.centimeters(meters * 100) + " cm"
     }
 
@@ -560,13 +643,9 @@ private struct GarmentMeasurementItemSheet: View {
                 if let value = model.result.values.first(where: { $0.id == definition.id }) {
                     Section {
                         Text(GarmentMeasurementText.value(value)).font(.largeTitle.bold()).monospacedDigit()
-                        Text(value.status.label)
-                            .foregroundStyle(value.status == .valid ? Color.primary : GarmentCaptureStyle.accent)
-                        if let failure = value.failure { Text(failure.message).font(.subheadline) }
-                        MeasurementPointFailureDetails(value: value)
-                        if value.status == .uncertain {
-                            Text("측정점 또는 깊이 품질을 확인한 뒤 줄자로 비교해 주세요.").font(.subheadline)
-                        }
+                        Text(value.hasUsableMeasurement ? "계산 완료" : "측정 불가")
+                            .foregroundStyle(value.hasUsableMeasurement ? Color.primary : GarmentCaptureStyle.accent)
+                        MeasurementFailureFeedbackView(value: value)
                     }
                 }
                 Section {

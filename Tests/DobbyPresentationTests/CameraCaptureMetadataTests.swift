@@ -76,4 +76,26 @@ final class CameraCaptureMetadataTests: XCTestCase {
         let altered = try JSONSerialization.data(withJSONObject: object)
         XCTAssertThrowsError(try JSONDecoder().decode(CaptureSnapshot.self, from: altered))
     }
+
+    func testCameraHardwareObservationsPersistSeparatelyFromFrameExposureAndOldMetadataDecodes() throws {
+        let old = CameraCaptureSettings(settingsRevision: 2, focusSensorPoint: .init(x: 0.3, y: 0.7),
+            requestedExposureBias: 1, acceptedExposureBias: 0.9, requestedZoomFactor: 1,
+            frameExposureDurationSeconds: 0.004, frameExposureOffsetEV: 0.2)
+        let legacyDecoded = try JSONDecoder().decode(CameraCaptureSettings.self, from: JSONEncoder().encode(old))
+        XCTAssertNil(legacyDecoded.requestedAEAFStatus)
+        XCTAssertNil(legacyDecoded.hardwareObservation)
+        var current = old
+        current.requestedAEAFStatus = .locking
+        current.hardwareObservation = .init(observedAtUptime: 111, focusMode: .single,
+            exposureMode: .single, isAdjustingFocus: true, isAdjustingExposure: true,
+            lensPosition: 0.4, exposureDurationSeconds: 0.008, iso: 160, exposureTargetBias: 0.8)
+        let decoded = try JSONDecoder().decode(CameraCaptureSettings.self, from: JSONEncoder().encode(current))
+        XCTAssertEqual(decoded, current)
+        XCTAssertEqual(decoded.frameExposureDurationSeconds, 0.004)
+        XCTAssertEqual(decoded.hardwareObservation?.exposureDurationSeconds, 0.008)
+        XCTAssertFalse(decoded.hardwareObservation?.hasObservedAEAFLock ?? true)
+        XCTAssertEqual(decoded.requestedExposureBias, 1)
+        XCTAssertEqual(decoded.acceptedExposureBias, 0.9)
+        XCTAssertEqual(decoded.hardwareObservation?.exposureTargetBias, 0.8)
+    }
 }

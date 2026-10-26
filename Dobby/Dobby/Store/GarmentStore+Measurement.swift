@@ -74,7 +74,8 @@ extension GarmentStore {
                 $0.isFinite && $0 > 0 ? $0 * 100 : nil
             }
             let measured = MeasuredValue(key: key, label: value.title, displayOrder: index,
-                                         valueCm: usableMeters.map { $0 * 100 } ?? 0, autoValueCm: originalCm)
+                valueCm: usableMeters.map { StoredMeasurementValue.centimeters($0 * 100) } ?? 0,
+                autoValueCm: originalCm)
             measured.sourceStatusRaw = value.status.rawValue
             measured.garment = garment
             insertionContext.insert(measured)
@@ -156,7 +157,7 @@ extension GarmentStore {
                 $0.isFinite && $0 > 0 ? $0 * 100 : nil
             }
             if let existing = garment.measurement(key) {
-                existing.valueCm = centimeters ?? 0
+                existing.valueCm = centimeters.map(StoredMeasurementValue.centimeters) ?? 0
                 existing.autoValueCm = automatic
                 existing.isEdited = false
                 existing.sourceStatusRaw = result.status.rawValue
@@ -165,7 +166,7 @@ extension GarmentStore {
             } else {
                 guard centimeters != nil || GarmentMeasurementPresentation.isVisibleMeasurementID(definition.id, kind: kind) else { continue }
                 let value = MeasuredValue(key: key, label: result.title, displayOrder: index,
-                    valueCm: centimeters ?? 0, autoValueCm: automatic)
+                    valueCm: centimeters.map(StoredMeasurementValue.centimeters) ?? 0, autoValueCm: automatic)
                 value.sourceStatusRaw = result.status.rawValue
                 value.garment = garment
                 context.insert(value)

@@ -87,6 +87,8 @@ final class ProductCreationFlowTests: XCTestCase {
         attachScreenshot(app, name: "flow-top-measurement-result-corrected-point")
         confirm.tap()
 
+        acknowledgeDetailCaptureGuide(in: app)
+
         let captureDetail = app.buttons["camera.captureDetail"]
         XCTAssertTrue(captureDetail.waitForExistence(timeout: 15))
         waitEnabled(captureDetail)
@@ -110,6 +112,13 @@ final class ProductCreationFlowTests: XCTestCase {
         replaceText(in: field("name", app: app), with: name, app: app)
         replaceText(in: field("detail", app: app), with: description, app: app)
         replaceText(in: field("brand", app: app), with: brand, app: app)
+        XCTAssertTrue(app.buttons["product-info.done"].isEnabled)
+        let price = field("price", app: app)
+        reveal(price, in: app)
+        price.tap()
+        price.typeText("40000")
+        XCTAssertEqual(price.value as? String, "40,000")
+        XCTAssertTrue(app.buttons["product-info.done"].isEnabled)
         let shoulder = app.textFields["product-info.measurement.shoulderWidth"]
         reveal(shoulder, in: app)
         let topTable = app.scrollViews["product-info.measurements"]
@@ -291,6 +300,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_right_outer"].exists)
         waitEnabled(confirm)
         confirm.tap()
+        acknowledgeDetailCaptureGuide(in: app)
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 5))
@@ -298,6 +308,13 @@ final class ProductCreationFlowTests: XCTestCase {
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         replaceText(in: field("name", app: app), with: name, app: app)
+        replaceText(in: field("detail", app: app), with: "바지 설명", app: app)
+        let price = field("price", app: app)
+        reveal(price, in: app)
+        price.tap()
+        price.typeText("40000")
+        XCTAssertTrue(app.buttons["product-info.done"].isEnabled)
+
         let first = app.textFields["product-info.measurement.waistWidth"]
         reveal(first, in: app)
         let expected = Set(["waistWidth", "frontRise", "totalLengthLeft", "hemWidthLeft"])
@@ -345,6 +362,87 @@ final class ProductCreationFlowTests: XCTestCase {
     }
 
     @MainActor
+    func testRequiredInformationAndCompletionSummary() throws {
+        continueAfterFailure = false
+        let app = fixtureApp(token: UUID().uuidString, top: true)
+        app.launch()
+        openCapture(in: app)
+        app.buttons["captureGarment"].tap()
+        let confirm = app.buttons["confirmGarmentMeasurement"]
+        waitEnabled(confirm)
+        confirm.tap()
+        acknowledgeDetailCaptureGuide(in: app)
+        XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
+        app.buttons["camera.selectPhotos"].tap()
+        XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 10))
+        app.buttons["camera.completePhotos"].tap()
+        let done = app.buttons["product-info.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10))
+        XCTAssertFalse(done.isEnabled)
+        attachScreenshot(app, name: "product-info-empty")
+        replaceText(in: field("name", app: app), with: "Design validation", app: app)
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.staticTexts["설명을 입력해주세요"].exists)
+        XCTAssertTrue(app.staticTexts["가격을 입력해주세요"].exists)
+        XCTAssertFalse(app.staticTexts["제품명을 입력해주세요"].exists)
+        let detail = "Vintage jacket. Good condition.\n\n"
+            + "The fabric has light signs of wear. Please review all product photos for details. "
+            + "Measurements are shown below the description and price."
+        replaceText(in: field("detail", app: app), with: detail, app: app)
+        XCTAssertTrue(done.isEnabled)
+        let price = field("price", app: app)
+        reveal(price, in: app)
+        XCTAssertFalse(app.staticTexts["product-info.price.unit"].exists)
+        price.tap()
+        price.typeText("40000")
+        XCTAssertEqual(price.value as? String, "40,000")
+        let priceUnit = app.staticTexts["product-info.price.unit"]
+        XCTAssertTrue(priceUnit.exists)
+        app.swipeDown()
+        XCTAssertTrue(priceUnit.exists)
+        XCTAssertTrue(done.isEnabled, "Brand is optional")
+        price.tap()
+        price.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 6))
+        XCTAssertTrue(done.isEnabled)
+        XCTAssertFalse(priceUnit.exists)
+        XCTAssertTrue(app.staticTexts["가격을 입력해주세요"].exists)
+        price.typeText("40000")
+        XCTAssertTrue(done.isEnabled)
+        attachScreenshot(app, name: "product-info-valid")
+        done.tap()
+        XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
+        XCTAssertTrue(app.staticTexts["Design validation"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", detail)).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["브랜드"].exists, "An omitted brand must not leave an empty section")
+        attachScreenshot(app, name: "product-complete-summary")
+        let photo = app.buttons["제품 사진 확대"].firstMatch
+        reveal(photo, in: app)
+        photo.tap()
+        XCTAssertTrue(app.navigationBars["제품 사진"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["닫기"].exists)
+        app.buttons["닫기"].tap()
+        let measurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
+        let actions = app.buttons["product-complete.export"]
+        for _ in 0..<5 {
+            if measurements.exists && measurements.frame.maxY <= actions.frame.minY { break }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.65))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.3)))
+        }
+        XCTAssertTrue(measurements.exists)
+        XCTAssertLessThanOrEqual(measurements.frame.maxY, actions.frame.minY)
+        attachScreenshot(app, name: "product-complete-measurements")
+        actions.tap()
+        XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Design validation"].exists)
+        app.buttons["export.close"].tap()
+        XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
+        app.buttons["product-complete.library"].tap()
+        openLibraryProduct(named: "Design validation", app: app)
+    }
+
+    @MainActor
     private func fixtureApp(token: String, top: Bool) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", token]
@@ -359,6 +457,13 @@ final class ProductCreationFlowTests: XCTestCase {
         start.tap()
         XCTAssertTrue(app.staticTexts["product-flow.fixture"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    private func acknowledgeDetailCaptureGuide(in app: XCUIApplication) {
+        let guide = app.buttons["camera.startDetailCapture"]
+        XCTAssertTrue(guide.waitForExistence(timeout: 10))
+        guide.tap()
     }
 
     @MainActor
@@ -381,7 +486,18 @@ final class ProductCreationFlowTests: XCTestCase {
     private func replaceText(in field: XCUIElement, with text: String, app: XCUIApplication) {
         reveal(field, in: app)
         XCTAssertTrue(field.isHittable)
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        if field.identifier == "product-info.detail" {
+            let barBottom = app.navigationBars.allElementsBoundByIndex.filter(\.isHittable)
+                .map { $0.frame.maxY }.max() ?? 100
+            let keyboardTop = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY : app.frame.maxY
+            let visibleTop = max(field.frame.minY, barBottom + 12)
+            let visibleBottom = min(field.frame.maxY, keyboardTop - 12)
+            let tapY = (visibleTop + min(visibleBottom, visibleTop + 44)) / 2
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: field.frame.midX, dy: tapY)).tap()
+        } else {
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
         let current = (field.value as? String) ?? ""
         let placeholder = field.placeholderValue ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current == placeholder ? 0 : current.count) + text)
@@ -391,7 +507,7 @@ final class ProductCreationFlowTests: XCTestCase {
     @MainActor
     private func openLibraryProduct(named name: String, app: XCUIApplication) {
         XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10))
-        let product = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "library.product.", name)).firstMatch
+        let product = app.staticTexts[name].firstMatch
         reveal(product, in: app)
         XCTAssertTrue(product.waitForExistence(timeout: 10))
         product.tap()
@@ -474,7 +590,11 @@ final class ProductCreationFlowTests: XCTestCase {
             let top = bar.exists ? bar.frame.maxY + 12 : 80
             let keyboard = app.keyboards.firstMatch
             let bottom = keyboard.exists ? keyboard.frame.minY - 12 : app.frame.maxY - 60
-            if element.isHittable, element.frame.minY >= top, element.frame.maxY <= bottom { return }
+            if element.isHittable {
+                if element.identifier == "product-info.detail",
+                   min(element.frame.maxY, bottom) - max(element.frame.minY, top) >= 44 { return }
+                if element.frame.minY >= top, element.frame.maxY <= bottom { return }
+            }
             let frame = element.frame
             let hasValidHorizontalFrame = !frame.isEmpty && !frame.isNull && !frame.isInfinite
                 && frame.maxX > app.frame.minX && frame.minX < app.frame.maxX

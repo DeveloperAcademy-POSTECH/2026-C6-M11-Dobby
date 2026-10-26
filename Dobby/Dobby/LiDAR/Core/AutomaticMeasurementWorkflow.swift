@@ -29,6 +29,9 @@ nonisolated struct AutomaticMeasurementWorkflowFailure: Error, LocalizedError, C
     var stage: AutomaticMeasurementStage
     var code: AutomaticMeasurementFailureCode
     var message: String
+    /// Typed adapter evidence survives the workflow boundary. Older records
+    /// omit this field; their stage/code/message remain authoritative.
+    var cause: AutomaticMeasurementFailureCause? = nil
     var errorDescription: String? { message }
     var automaticMeasurementFailureCode: AutomaticMeasurementFailureCode { code }
 }
@@ -275,7 +278,8 @@ final class AutomaticMeasurementWorkflow {
                 let classified = (error as? any AutomaticMeasurementFailureClassifying)?.automaticMeasurementFailureCode
                 self?.finish(run, failure: .init(stage: run.stage,
                     code: cancelled ? .cancelled : (classified ?? .providerFailure),
-                    message: cancelled ? "자동 측정을 취소했습니다." : error.localizedDescription))
+                    message: cancelled ? "자동 측정을 취소했습니다." : error.localizedDescription,
+                    cause: (error as? any AutomaticMeasurementFailureCauseProviding)?.automaticMeasurementFailureCause))
             }
         }
         let nanoseconds = UInt64(timeoutSeconds * 1_000_000_000)

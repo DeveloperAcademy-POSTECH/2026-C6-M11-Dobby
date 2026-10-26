@@ -32,6 +32,8 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
     let measurementPhotoID: UUID
     let detailPhotos: [Photo]
     let selectedPhotoIDs: [UUID]
+    /// Older saved drafts omit this session-level guide state.
+    let hasAcknowledgedCaptureGuide: Bool?
 
     struct Photo: Codable, Sendable, Equatable {
         let id: UUID
@@ -71,7 +73,8 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
         }
     }
 
-    init(input: ProductPhotoInput, detailPhotos: [CapturedAsset], selectedPhotoIDs: [UUID]) throws {
+    init(input: ProductPhotoInput, detailPhotos: [CapturedAsset], selectedPhotoIDs: [UUID],
+         hasAcknowledgedCaptureGuide: Bool = false) throws {
         guard Set(detailPhotos.map(\.id)).count == detailPhotos.count,
               detailPhotos.allSatisfy({ $0.sessionID == input.sessionID && $0.garmentID == input.garmentID
                   && $0.id != input.measurement.id && $0.purpose == .detail }),
@@ -84,6 +87,7 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
         measurementPhotoID = input.measurement.id
         self.detailPhotos = try detailPhotos.map(Photo.init)
         self.selectedPhotoIDs = selectedPhotoIDs
+        self.hasAcknowledgedCaptureGuide = hasAcknowledgedCaptureGuide
         _ = try restoredDetailPhotos(for: input)
     }
 

@@ -347,8 +347,11 @@ final class GarmentCaptureFlowTests: XCTestCase {
         openResultDetails(in: app)
         XCTAssertFalse(app.descendants(matching: .any)["garmentUnavailableSummary"].firstMatch.exists,
                        "An unavailable duplicate on the unused side must not prompt manual review")
-        // Other visible values may still be uncertain and need review. Only
-        // the hidden right-side failures must disappear from review actions.
+        XCTAssertFalse(app.buttons["garmentUncertainNotice"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementReviewActions"].firstMatch.exists,
+                       "Usable numbers must not require review, even if internal quality is uncertain")
+        // Only actual missing values appear as failures; hidden right-side
+        // failures and quality-only advisories must not add review actions.
         for id in ["bottom.hem_right_inner.hem_right_outer", "bottom.crotch.hem_right_inner", "bottom.crotch.hem_left_inner"] {
             XCTAssertFalse(app.buttons["reviewGarmentMeasurement_" + id].exists)
         }
