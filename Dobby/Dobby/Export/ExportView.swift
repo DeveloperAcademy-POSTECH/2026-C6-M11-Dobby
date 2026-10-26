@@ -33,7 +33,10 @@ struct ExportView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .foregroundStyle(Color(.exportCloseIcon))
+                    }
                         .accessibilityLabel("닫기").accessibilityIdentifier("export.close")
                 }
             }

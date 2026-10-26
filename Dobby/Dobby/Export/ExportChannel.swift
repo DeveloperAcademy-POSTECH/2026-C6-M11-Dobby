@@ -28,13 +28,13 @@ enum ExportChannel: String, CaseIterable, Identifiable, Codable {
     var shortTitle: String {
         switch self {
         case .instagram:
-            return "Instagram"
+            return "인스타그램에 업로드하기"
         case .naverStore:
             return "네이버스토어"
         case .cafe24:
-            return "Cafe24"
+            return "카페24에 업로드하기"
         case .fruitsFamily:
-            return "후루츠패밀리"
+            return "후르츠패밀리에 업로드하기"
         }
     }
 
