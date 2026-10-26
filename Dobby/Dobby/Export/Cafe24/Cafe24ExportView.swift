@@ -24,6 +24,7 @@ struct Cafe24ExportView: View {
     @State private var connectionError: String?
     @State private var uploadState: Cafe24UploadState = .idle
     @State private var isConnecting = false
+    @State private var isDisconnecting = false
     @State private var message: String?
     @State private var isConfirmingRepublish = false
 
@@ -65,7 +66,7 @@ struct Cafe24ExportView: View {
                     }
                 }
             }
-            if connectedMallID != nil && !uploadState.isUploading {
+            if connectedMallID != nil && !uploadState.isUploading && !isDisconnecting {
                 ToolbarItem(placement: .topBarTrailing) {
                     ExportAccountMenu(
                         accessibilityLabel: "카페24 계정 메뉴",
@@ -81,7 +82,7 @@ struct Cafe24ExportView: View {
                     ExportBottomAction(
                         title: "업로드하기",
                         isWorking: uploadState.isUploading,
-                        isEnabled: uploadState.isCompleted || canPublish
+                        isEnabled: !isDisconnecting && (uploadState.isCompleted || canPublish)
                     ) {
                         if uploadState.isCompleted {
                             isConfirmingRepublish = true
@@ -95,6 +96,8 @@ struct Cafe24ExportView: View {
         .overlay {
             if isConnecting {
                 ExportLoadingOverlay(message: "카페24와 연결 중…")
+            } else if isDisconnecting {
+                ExportLoadingOverlay(message: "카페24 연결을 해제하고 있어요…")
             } else if uploadState.isUploading {
                 ExportLoadingOverlay(message: "카페24에 상품을 업로드하고 있어요…")
             }
@@ -169,9 +172,9 @@ struct Cafe24ExportView: View {
     }
 
     private func disconnect() async {
-        guard !isConnecting else { return }
-        isConnecting = true
-        defer { isConnecting = false }
+        guard !isConnecting, !isDisconnecting else { return }
+        isDisconnecting = true
+        defer { isDisconnecting = false }
         do {
             try await client.disconnect()
             connectedMallID = nil
