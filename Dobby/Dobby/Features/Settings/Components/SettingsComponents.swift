@@ -36,6 +36,7 @@ struct SettingsTextGroup: View {
                 .tracking(SettingsTypography.labelMediumTracking)
                 .foregroundStyle(SettingsStyle.primaryText)
                 .frame(height: 20, alignment: .leading)
+                .lineLimit(1)
 
             if let subtitle {
                 Text(subtitle)
@@ -43,6 +44,8 @@ struct SettingsTextGroup: View {
                     .tracking(SettingsTypography.labelSmallTracking)
                     .foregroundStyle(SettingsStyle.secondaryText)
                     .frame(height: 16, alignment: .leading)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
         }
     }
@@ -113,19 +116,31 @@ struct ConnectedAccountRow: View {
     let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(imageName)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 24, height: 24)
-
-            SettingsTextGroup(title: title, subtitle: subtitle)
-
-            Spacer()
+        HStack(spacing: 27) {
+            ConnectedAccountIdentity(imageName: imageName, title: title, subtitle: subtitle)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             AccountConnectionButton(state: actionState, isWorking: isWorking, action: action)
         }
-        .padding(.vertical, 16)
+    }
+}
+
+struct ConnectedAccountIdentity: View {
+    let imageName: String
+    let title: String
+    let subtitle: String?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(imageName)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 15))
+
+            SettingsTextGroup(title: title, subtitle: subtitle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
@@ -135,18 +150,25 @@ struct AccountConnectionButton: View {
     let action: () -> Void
 
     var body: some View {
-        Group {
+        Button(action: action) {
             if isWorking {
                 ProgressView()
+                    .controlSize(.small)
             } else {
-                Button(state.title, action: action)
+                Text(state.title)
                     .font(SettingsTypography.labelSmall)
                     .tracking(SettingsTypography.labelSmallTracking)
                     .foregroundStyle(state.foregroundStyle)
             }
         }
-        .frame(width: 68)
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        .frame(minWidth: 66, minHeight: 34)
+        .background(SettingsStyle.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(SettingsStyle.separator, lineWidth: 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isWorking)
     }
 }
