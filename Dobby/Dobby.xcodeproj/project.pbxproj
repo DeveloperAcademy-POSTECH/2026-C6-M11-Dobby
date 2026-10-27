@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DD0000000000000000000001 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = DD0000000000000000000003 /* Lottie */; };
 		BB0000000000000000000005 /* QuickCopyWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000004 /* QuickCopyWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -87,6 +88,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DD0000000000000000000001 /* Lottie in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -151,6 +153,7 @@
 			);
 			name = Dobby;
 			packageProductDependencies = (
+				DD0000000000000000000003 /* Lottie */,
 			);
 			productName = Dobby;
 			productReference = 96ABF148305C239A009CB38B /* Dobby.app */;
@@ -203,6 +206,9 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 96ABF149305C239A009CB38B /* Products */;
+			packageReferences = (
+				DD0000000000000000000002 /* XCRemoteSwiftPackageReference "lottie-ios" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -561,6 +567,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DD0000000000000000000002 /* XCRemoteSwiftPackageReference "lottie-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airbnb/lottie-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DD0000000000000000000003 /* Lottie */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DD0000000000000000000002 /* XCRemoteSwiftPackageReference "lottie-ios" */;
+			productName = Lottie;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 96ABF140305C239A009CB38B /* Project object */;
 }
