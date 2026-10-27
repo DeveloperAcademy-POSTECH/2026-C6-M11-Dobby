@@ -25,7 +25,6 @@ struct InstagramExportView: View {
     @State private var draft: InstagramExportDraft
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
-    @State private var confirming = false
     @State private var confirmingRepublish = false
     @State private var message: String?
     @State private var requestID = UUID().uuidString
@@ -90,7 +89,7 @@ struct InstagramExportView: View {
                         if uploadState.isCompleted {
                             confirmingRepublish = true
                         } else {
-                            confirming = true
+                            Task { await publish() }
                         }
                     }
                 }
@@ -104,13 +103,6 @@ struct InstagramExportView: View {
         }
         .interactiveDismissDisabled(uploadState.isUploading)
         .task { await loadAccount() }
-        .confirmationDialog("@\(account?.username ?? "")에 실제로 게시할까요?", isPresented: $confirming,
-                            titleVisibility: .visible) {
-            Button("공개 게시하기") { Task { await publish() } }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text("선택한 사진과 내용이 Instagram에 공개됩니다.")
-        }
         .confirmationDialog("게시물을 한 번 더 올릴까요?", isPresented: $confirmingRepublish,
                             titleVisibility: .visible) {
             Button("다시 업로드하기") { Task { await republish() } }
