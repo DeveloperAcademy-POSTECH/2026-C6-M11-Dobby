@@ -4,6 +4,109 @@ import XCTest
 /// Relaunches prove that a new flow restores saved state rather than live view state.
 @MainActor
 final class ProductDraftResumeTests: XCTestCase {
+    func testClosingAndDiscardingNewMeasurementResultKeepsWorkUntilDiscardAndLeavesNoDraft() throws {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openMeasurementResult(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        let point = app.buttons["garmentMeasurementPoint_shoulder_left"]
+        XCTAssertTrue(point.waitForExistence(timeout: 5))
+        let originalPoint = try XCTUnwrap(point.value as? String)
+
+        cancelExitAndStay(title: "실측 결과", screenshot: "draft-exit-three-actions-measurement", app: app)
+        XCTAssertEqual(point.value as? String, originalPoint,
+                       "Closing the confirmation must keep the current measurement result")
+        presentExitConfirmation(in: app)
+        app.buttons["product-flow.exit-discard"].tap()
+        expectHomeAfterDiscard(in: app)
+        XCTAssertFalse(app.buttons["home.resume"].exists)
+        app.tabBars.buttons["보관함"].tap()
+        XCTAssertTrue(app.staticTexts["library.empty.title"].waitForExistence(timeout: 10))
+        XCTAssertEqual(draftButtons(in: app).count, 0)
+        XCTAssertEqual(savedProductButtons(in: app).count, 0)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["home.resume"].exists)
+        app.tabBars.buttons["보관함"].tap()
+        XCTAssertTrue(app.staticTexts["library.empty.title"].waitForExistence(timeout: 10))
+        XCTAssertEqual(draftButtons(in: app).count, 0)
+        XCTAssertEqual(savedProductButtons(in: app).count, 0)
+    }
+
+    func testDiscardingResumedInformationDraftReturnsHomeAndPreservesOtherProductsAfterRelaunch() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        openMeasurementResult(in: app)
+        let retainedID = saveDraftViaHome(stage: "실측 결과 단계", app: app)
+        let sample = app.buttons["debug.export-sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5))
+        sample.tap()
+        let sampleTitle = "90s 나이키 트랙탑"
+        XCTAssertTrue(app.navigationBars[sampleTitle].waitForExistence(timeout: 10))
+        app.navigationBars[sampleTitle].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["홈"].tap()
+
+        openMeasurementResult(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        app.buttons["confirmGarmentMeasurement"].tap()
+        captureTwoDetails(in: app)
+        app.buttons["camera.selectPhotos"].tap()
+        XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
+        selectionControl(1, in: app).tap()
+        selectionControl(2, in: app).tap()
+        waitEnabled(app.buttons["camera.completePhotos"])
+        app.buttons["camera.completePhotos"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
+        let draftName = "Discard this unfinished product"
+        replaceText(in: field("name", in: app), with: draftName, app: app)
+        saveAndReturnHome(app: app)
+        expectHomeResume(stage: "제품 정보 입력 단계", app: app)
+        app.tabBars.buttons["보관함"].tap()
+        XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10))
+        let drafts = draftButtons(in: app)
+        XCTAssertEqual(drafts.count, 2)
+        guard let discarded = drafts.allElementsBoundByIndex.first(where: { !$0.identifier.hasSuffix(retainedID) }) else {
+            XCTFail("The second registration must have its own saved draft")
+            return
+        }
+        let discardedID = String(discarded.identifier.dropFirst("library.draft.".count))
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["보관함"].tap()
+        let restored = app.buttons["library.draft.\(discardedID)"]
+        XCTAssertTrue(restored.waitForExistence(timeout: 10))
+        restored.tap()
+        assertResumedStage("제품 정보 입력", app: app)
+        XCTAssertEqual(field("name", in: app).value as? String, draftName)
+        let editedName = draftName + " edited"
+        replaceText(in: field("name", in: app), with: editedName, app: app)
+        cancelExitAndStay(title: "제품 정보 입력", screenshot: "draft-exit-three-actions-information", app: app)
+        XCTAssertEqual(field("name", in: app).value as? String, editedName,
+                       "Closing the confirmation must keep unsaved input in the resumed draft")
+
+        presentExitConfirmation(in: app)
+        app.buttons["product-flow.exit-discard"].tap()
+        expectHomeAfterDiscard(in: app)
+        expectHomeResume(stage: "실측 결과 단계", app: app)
+        app.tabBars.buttons["보관함"].tap()
+        assertOtherProductsSurviveDiscard(retainedID: retainedID, discardedID: discardedID, app: app)
+        attachScreenshot(app, name: "draft-discard-preserves-other-products")
+
+        app.terminate()
+        app.launch()
+        expectHomeResume(stage: "실측 결과 단계", app: app)
+        app.tabBars.buttons["보관함"].tap()
+        assertOtherProductsSurviveDiscard(retainedID: retainedID, discardedID: discardedID, app: app)
+    }
+
     func testHomeCardResumesSavedDetailDraftAfterRelaunch() {
         continueAfterFailure = false
         let app = fixtureApp()
@@ -370,10 +473,43 @@ final class ProductDraftResumeTests: XCTestCase {
         waitEnabled(back)
         back.tap()
         XCTAssertTrue(exitConfirmation(in: app).waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["product-flow.exit-title"].label, "작성 중인 상품이 있어요")
         let message = app.staticTexts["product-flow.exit-message"]
-        XCTAssertEqual(message.label, "메인화면으로 나갈까요?\n작성된 내용은 자동으로 임시저장되고\n사라지지 않아요.")
-        XCTAssertTrue(app.buttons["product-flow.exit-cancel"].isEnabled)
-        XCTAssertTrue(app.buttons["product-flow.exit-save"].isEnabled)
+        XCTAssertEqual(message.label, "나중에 이어서 작성할 수 있도록 임시 저장할까요?")
+        let save = app.buttons["product-flow.exit-save"]
+        let discard = app.buttons["product-flow.exit-discard"]
+        let close = app.buttons["product-flow.exit-cancel"]
+        for (button, label) in [(save, "임시저장하고 나가기"), (discard, "삭제하고 나가기"), (close, "닫기")] {
+            XCTAssertTrue(button.isEnabled)
+            XCTAssertEqual(button.label, label)
+        }
+        XCTAssertLessThanOrEqual(save.frame.maxY, discard.frame.minY)
+        XCTAssertLessThanOrEqual(discard.frame.maxY, close.frame.minY)
+    }
+
+    private func expectHomeAfterDiscard(in app: XCUIApplication) {
+        let start = app.buttons["product-flow.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 20))
+        wait(for: NSPredicate(format: "hittable == true"), on: start)
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected,
+                      "Discarding a registration resumed from Library must return to Home")
+        XCTAssertFalse(exitConfirmation(in: app).exists)
+    }
+
+    private func assertOtherProductsSurviveDiscard(retainedID: String, discardedID: String, app: XCUIApplication) {
+        XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["library.draft.\(retainedID)"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["library.draft.\(discardedID)"].exists)
+        XCTAssertEqual(draftButtons(in: app).count, 1)
+        let sample = app.buttons["library.product.53E00000-0000-4000-8000-000000000053"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 10))
+        XCTAssertTrue(sample.label.contains("90s 나이키 트랙탑"))
+        XCTAssertTrue(sample.label.contains("89,000"))
+        XCTAssertEqual(savedProductButtons(in: app).count, 1)
+    }
+
+    private func savedProductButtons(in app: XCUIApplication) -> XCUIElementQuery {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "library.product."))
     }
 
     private func exitConfirmation(in app: XCUIApplication) -> XCUIElement {

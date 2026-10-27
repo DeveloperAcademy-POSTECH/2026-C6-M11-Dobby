@@ -34,7 +34,7 @@ private struct ProductCompletionContent: View {
     var body: some View {
         VStack(spacing: 24) {
             ProductCompletionHeader()
-            ProductDetailCard(garment: garment)
+            ProductDetailCard(garment: garment, photoPresentation: .compact)
         }
     }
 }
