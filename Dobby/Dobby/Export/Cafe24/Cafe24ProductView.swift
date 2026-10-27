@@ -5,13 +5,12 @@ struct Cafe24ProductView: View {
     @Binding var draft: Cafe24ExportDraft
     let isCompleted: Bool
     let isDisabled: Bool
-    let onReportProblem: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 if isCompleted {
-                    Cafe24CompletionHeader(onReportProblem: onReportProblem)
+                    Cafe24CompletionHeader()
                 }
                 Cafe24ProductPhotos(photos: draft.photos)
                 Cafe24ProductNameField(text: $draft.productName) {
@@ -41,8 +40,6 @@ struct Cafe24ProductView: View {
 }
 
 private struct Cafe24CompletionHeader: View {
-    let onReportProblem: () -> Void
-
     var body: some View {
         VStack(spacing: 12) {
             Text("카페24에 업로드 완료 🎉")
@@ -54,10 +51,6 @@ private struct Cafe24CompletionHeader: View {
                 Text("했어요")
             }
             .font(.body)
-            Button("정상적으로 업로드가 안됐어요", action: onReportProblem)
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .underline()
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)

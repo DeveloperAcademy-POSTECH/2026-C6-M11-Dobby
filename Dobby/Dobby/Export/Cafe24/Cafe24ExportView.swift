@@ -39,10 +39,7 @@ struct Cafe24ExportView: View {
                 Cafe24ProductView(
                     draft: $draft,
                     isCompleted: uploadState.isCompleted,
-                    isDisabled: uploadState.isUploading,
-                    onReportProblem: {
-                        message = "카페24 관리자에서 상품을 먼저 확인해 주세요. 상품이 없다면 다시 업로드할 수 있습니다."
-                    }
+                    isDisabled: uploadState.isUploading
                 )
             } else {
                 Cafe24ConnectionView(
