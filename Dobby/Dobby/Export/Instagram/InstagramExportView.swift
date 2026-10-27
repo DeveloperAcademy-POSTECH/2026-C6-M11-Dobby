@@ -26,6 +26,7 @@ struct InstagramExportView: View {
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
     @State private var confirmingRepublish = false
+    @State private var isShowingUploadFailure = false
     @State private var message: String?
     @State private var requestID = UUID().uuidString
 
@@ -98,6 +99,15 @@ struct InstagramExportView: View {
             if uploadState.isUploading {
                 PlatformUploadingOverlay(platformName: "인스타그램")
                     .zIndex(10)
+            } else if isShowingUploadFailure {
+                InstagramUploadFailureOverlay(
+                    onCancel: { isShowingUploadFailure = false },
+                    onRetry: {
+                        isShowingUploadFailure = false
+                        Task { await republish() }
+                    }
+                )
+                .zIndex(10)
             }
         }
         .interactiveDismissDisabled(uploadState.isUploading)
@@ -172,7 +182,7 @@ struct InstagramExportView: View {
             onPublished(result)
         } catch {
             uploadState = .idle
-            message = error.localizedDescription
+            isShowingUploadFailure = true
         }
     }
 
