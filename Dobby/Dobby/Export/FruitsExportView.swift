@@ -76,7 +76,7 @@ struct FruitsExportView: View {
         .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                ExportGlassNavigationButton(
+                ExportNavigationButton(
                     systemImage: "xmark",
                     accessibilityLabel: "채널 선택으로 돌아가기",
                     isDisabled: opening || controller.busy

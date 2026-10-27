@@ -99,7 +99,7 @@ private struct Cafe24MallIDInputView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    ExportGlassNavigationButton(
+                    ExportNavigationButton(
                         systemImage: "xmark",
                         accessibilityLabel: "닫기"
                     ) {

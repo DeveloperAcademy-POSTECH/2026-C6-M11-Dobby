@@ -193,7 +193,7 @@ extension View {
     }
 }
 
-struct ExportGlassNavigationButton: View {
+struct ExportNavigationButton: View {
     let systemImage: String
     let accessibilityLabel: String
     var isDisabled = false
@@ -204,8 +204,6 @@ struct ExportGlassNavigationButton: View {
             Image(systemName: systemImage)
                 .foregroundStyle(Color(.exportCloseIcon))
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
         .disabled(isDisabled)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -224,31 +222,24 @@ struct ExportAccountMenu: View {
             Image(systemName: "ellipsis")
                 .foregroundStyle(Color(.exportCloseIcon))
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
         .accessibilityLabel(accessibilityLabel)
         .popover(isPresented: $isPresented) {
-            GlassEffectContainer(spacing: 12) {
-                VStack(spacing: 12) {
-                    ExportAccountMenuButton(
-                        title: "다시 연결하기",
-                        systemImage: "arrow.clockwise",
-                        action: performReconnect
-                    )
-                    ExportAccountMenuButton(
-                        title: "연결 해제하기",
-                        systemImage: "personalhotspot.slash",
-                        tint: .red,
-                        action: performDisconnect
-                    )
-                }
+            VStack(spacing: 0) {
+                ExportAccountMenuButton(
+                    title: "다시 연결하기",
+                    systemImage: "arrow.clockwise",
+                    action: performReconnect
+                )
+                ExportAccountMenuButton(
+                    title: "연결 해제하기",
+                    systemImage: "personalhotspot.slash",
+                    tint: .red,
+                    action: performDisconnect
+                )
             }
             .padding(12)
             .frame(width: 240)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-            .padding(8)
             .presentationCompactAdaptation(.popover)
-            .presentationBackground(.clear)
         }
     }
 
@@ -271,12 +262,21 @@ private struct ExportAccountMenuButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.body.weight(.medium))
-                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                .padding(.horizontal, 16)
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 24, height: 24, alignment: .center)
+
+                Text(title)
+                    .font(.system(size: 17, weight: .regular))
+
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(.plain)
         .foregroundStyle(tint)
     }
 }

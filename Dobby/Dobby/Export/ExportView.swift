@@ -34,7 +34,7 @@ struct ExportView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    ExportGlassNavigationButton(systemImage: "xmark", accessibilityLabel: "닫기") {
+                    ExportNavigationButton(systemImage: "xmark", accessibilityLabel: "닫기") {
                         dismiss()
                     }
                     .accessibilityIdentifier("export.close")

@@ -55,7 +55,7 @@ struct Cafe24ExportView: View {
         .toolbar {
             if !uploadState.isUploading {
                 ToolbarItem(placement: .topBarLeading) {
-                    ExportGlassNavigationButton(
+                    ExportNavigationButton(
                         systemImage: "chevron.left",
                         accessibilityLabel: "플랫폼 업로드로 돌아가기"
                     ) {
