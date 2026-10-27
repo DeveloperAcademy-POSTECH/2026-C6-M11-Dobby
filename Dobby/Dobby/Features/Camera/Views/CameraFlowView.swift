@@ -78,17 +78,29 @@ struct CameraFlowView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(background.ignoresSafeArea())
+        .overlay(alignment: .top) {
+            GeometryReader { geometry in
+                // 시스템 내비게이션은 유지하고 상태 표시줄까지 같은 글라스 띠를 깐다.
+                DetailCaptureGlassBackground()
+                    .frame(height: geometry.safeAreaInsets.top)
+                    .offset(y: -geometry.safeAreaInsets.top)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil)
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { requestExit(onExit) } label: {
                         Image(systemName: "chevron.left")
+                            .foregroundStyle(.white)
                     }
                         .disabled(isExitDisabled)
                         .accessibilityLabel("뒤로가기")
@@ -227,7 +239,7 @@ struct CameraFlowView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 148)
-        .background(.ultraThinMaterial)
+        .background { DetailCaptureGlassBackground() }
     }
 
     private var canCapture: Bool {
