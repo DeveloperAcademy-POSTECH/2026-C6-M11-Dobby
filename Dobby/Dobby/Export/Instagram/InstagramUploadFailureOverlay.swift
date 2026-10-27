@@ -90,3 +90,10 @@ private struct InstagramUploadFailureButton: View {
         .background(backgroundColor, in: Capsule())
     }
 }
+
+#Preview("인스타그램 자동 업로드 실패") {
+    InstagramUploadFailureOverlay(
+        onCancel: {},
+        onRetry: {}
+    )
+}
