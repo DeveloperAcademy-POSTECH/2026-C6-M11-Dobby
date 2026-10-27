@@ -4,11 +4,14 @@ import UIKit
 struct ProductDraftExitConfirmation: View {
     let onCancel: () -> Void
     let onSave: () -> Void
+    let onDiscard: () -> Void
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title3) private var titleFontSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .title3) private var titleLineHeight: CGFloat = 29
     @ScaledMetric(relativeTo: .callout) private var messageFontSize: CGFloat = 16
     @ScaledMetric(relativeTo: .callout) private var messageLineHeight: CGFloat = 24
     @ScaledMetric(relativeTo: .callout) private var buttonFontSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .callout) private var buttonLineHeight: CGFloat = 20
     @AccessibilityFocusState private var messageIsFocused: Bool
 
     var body: some View {
@@ -45,81 +48,70 @@ struct ProductDraftExitConfirmation: View {
             message
                 .padding(.vertical, 12)
 
-            if dynamicTypeSize.isAccessibilitySize {
-                stackedActions
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
-                        cancelButton(wraps: false)
-                            .frame(width: 110)
-                        saveButton(wraps: false)
-                    }
-
-                    stackedActions
+            VStack(spacing: 12) {
+                Button(action: onSave) {
+                    actionLabel("임시저장하고 나가기")
+                        .foregroundStyle(.white)
+                        .background(LibraryStyle.editAccent, in: Capsule())
                 }
+                .accessibilityIdentifier("product-flow.exit-save")
+
+                Button(role: .destructive, action: onDiscard) {
+                    actionLabel("삭제하고 나가기")
+                        .foregroundStyle(Color("AccentsRed"))
+                        .background(Color("DraftExitSecondaryBackground"), in: Capsule())
+                }
+                .accessibilityIdentifier("product-flow.exit-discard")
+
+                Button(role: .cancel, action: onCancel) {
+                    actionLabel("닫기")
+                        .foregroundStyle(Color("BrandNeutral900"))
+                        .background(Color("DraftExitSecondaryBackground"), in: Capsule())
+                }
+                .accessibilityIdentifier("product-flow.exit-cancel")
             }
+            .buttonStyle(.plain)
         }
         .padding(16)
-        .frame(maxWidth: 360)
+        .frame(maxWidth: 358)
         .background(.white, in: RoundedRectangle(cornerRadius: 16))
         .environment(\.colorScheme, .light)
     }
 
     private var message: some View {
-        let font = UIFont(name: "Pretendard-Regular", size: messageFontSize)
-            ?? UIFont.systemFont(ofSize: messageFontSize)
-        let lineHeightAdjustment = messageLineHeight - font.lineHeight
-
-        return Text("메인화면으로 나갈까요?\n작성된 내용은 자동으로 임시저장되고\n사라지지 않아요.")
-            .font(.custom("Pretendard-Regular", fixedSize: messageFontSize))
-            .tracking(-messageFontSize * 0.01)
-            .lineSpacing(lineHeightAdjustment)
-            .padding(.vertical, lineHeightAdjustment / 2)
-            .foregroundStyle(.black)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity)
-            .accessibilityIdentifier("product-flow.exit-message")
-            .accessibilityFocused($messageIsFocused)
-    }
-
-    private var stackedActions: some View {
-        VStack(spacing: 12) {
-            cancelButton(wraps: true)
-            saveButton(wraps: true)
+        VStack(spacing: 8) {
+            styledText("작성 중인 상품이 있어요", fontName: "Pretendard-Bold",
+                       size: titleFontSize, lineHeight: titleLineHeight)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("product-flow.exit-title")
+                .accessibilityFocused($messageIsFocused)
+            styledText("나중에 이어서 작성할 수 있도록 임시 저장할까요?", fontName: "Pretendard-Regular",
+                       size: messageFontSize, lineHeight: messageLineHeight)
+                .accessibilityIdentifier("product-flow.exit-message")
         }
+        .foregroundStyle(.black)
+        .frame(maxWidth: .infinity)
     }
 
-    private func cancelButton(wraps: Bool) -> some View {
-        Button(role: .cancel, action: onCancel) {
-            actionLabel("취소", wraps: wraps)
-                .foregroundStyle(Color(red: 32.0 / 255, green: 30.0 / 255, blue: 27.0 / 255))
-                .background(Color(red: 226.0 / 255, green: 225.0 / 255, blue: 223.0 / 255), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("product-flow.exit-cancel")
-    }
-
-    private func saveButton(wraps: Bool) -> some View {
-        Button(action: onSave) {
-            actionLabel("임시저장하고 나가기", wraps: wraps)
-                .foregroundStyle(.white)
-                .background(LibraryStyle.editAccent, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("product-flow.exit-save")
-    }
-
-    private func actionLabel(_ title: String, wraps: Bool) -> some View {
-        Text(title)
-            .font(.system(size: buttonFontSize, weight: .semibold).italic())
-            .tracking(-buttonFontSize * 0.31 / 16)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: !wraps, vertical: true)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+    private func actionLabel(_ title: String) -> some View {
+        styledText(title, fontName: "Pretendard-Medium", size: buttonFontSize, lineHeight: buttonLineHeight)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 17)
             .frame(maxWidth: .infinity, minHeight: 54)
             .contentShape(Capsule())
+    }
+
+    private func styledText(_ value: String, fontName: String, size: CGFloat, lineHeight: CGFloat) -> some View {
+        let font = UIFont(name: fontName, size: size) ?? UIFont.systemFont(ofSize: size)
+        let lineHeightAdjustment = max(0, lineHeight - font.lineHeight)
+
+        return Text(value)
+            .font(.custom(fontName, fixedSize: size))
+            .tracking(-size * 0.01)
+            .lineSpacing(lineHeightAdjustment)
+            .padding(.vertical, lineHeightAdjustment / 2)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -127,12 +119,12 @@ struct ProductDraftExitConfirmation: View {
 #Preview("임시저장 후 나가기") {
     Color.black
         .overlay {
-            ProductDraftExitConfirmation(onCancel: { }, onSave: { })
+            ProductDraftExitConfirmation(onCancel: { }, onSave: { }, onDiscard: { })
         }
 }
 
 #Preview("임시저장 후 나가기 · 큰 글자") {
-    ProductDraftExitConfirmation(onCancel: { }, onSave: { })
+    ProductDraftExitConfirmation(onCancel: { }, onSave: { }, onDiscard: { })
         .environment(\.dynamicTypeSize, .accessibility3)
 }
 #endif
