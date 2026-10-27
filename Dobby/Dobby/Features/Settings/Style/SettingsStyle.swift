@@ -7,6 +7,7 @@ enum SettingsStyle {
     static let secondaryText = Color("BrandNeutral500")
     static let buttonText = Color("BrandNeutral950")
     static let separator = Color("BrandNeutral200")
+    static let sectionSeparator = Color("BrandNeutral100")
     static let destructive = Color("AccentsRed")
 }
 

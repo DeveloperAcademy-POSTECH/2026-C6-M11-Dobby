@@ -45,6 +45,7 @@ struct ConnectedAccountsView: View {
         .background(SettingsStyle.surface)
         .navigationTitle("연결된 계정 관리")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .task { await model.requestAccounts() }
         .alert("카페24 계정 연결", isPresented: $isEnteringCafe24MallID) {
             TextField("쇼핑몰 ID", text: $cafe24MallID)

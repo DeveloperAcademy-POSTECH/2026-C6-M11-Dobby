@@ -5,41 +5,21 @@ struct SettingsView: View {
     @State private var message: String?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 6) {
-                SettingsSection(title: "기본 설정") {
-                    NavigationLink {
-                        ConnectedAccountsView()
-                    } label: {
-                        SettingsNavigationRow(title: "연결된 계정 관리", systemImage: "chevron.right")
-                    }
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsHeader()
 
-                SettingsSection(title: "정책") {
-                    Button(action: openPrivacyPolicy) {
-                        SettingsNavigationRow(title: "개인정보 처리방침", systemImage: "arrow.up.right")
-                    }
-                }
+            SettingsContent(
+                onPrivacyPolicy: openPrivacyPolicy,
+                onSupportMail: openSupportMail
+            )
+            .padding(.top, 29)
 
-                SettingsSection(title: "지원") {
-                    Button(action: openSupportMail) {
-                        SettingsNavigationRow(
-                            title: "문의하기",
-                            subtitle: "chak 이용 중 궁금한 점이나 불편한 점을 알려주세요.",
-                            systemImage: "arrow.up.right"
-                        )
-                    }
-                }
-
-                SettingsSection(title: "앱 정보") {
-                    SettingsTextGroup(title: SettingsInformation.versionText)
-                }
-            }
-            .padding(.vertical, 8)
+            Spacer(minLength: 0)
         }
-        .background(SettingsStyle.background)
-        .navigationTitle("설정")
-        .navigationBarTitleDisplayMode(.large)
+        .padding(.horizontal, 20)
+        .padding(.top, 3)
+        .background(SettingsStyle.background.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .alert("설정 안내", isPresented: Binding(
             get: { message != nil },
             set: { if !$0 { message = nil } }
@@ -70,6 +50,52 @@ struct SettingsView: View {
         openURL(url) { accepted in
             guard !accepted else { return }
             message = failureMessage
+        }
+    }
+}
+
+private struct SettingsContent: View {
+    let onPrivacyPolicy: () -> Void
+    let onSupportMail: () -> Void
+
+    var body: some View {
+        VStack(spacing: 28) {
+            SettingsSection(title: "기본 설정") {
+                NavigationLink {
+                    ConnectedAccountsView()
+                } label: {
+                    SettingsNavigationRow(title: "연결된 계정 관리", systemImage: "chevron.right")
+                }
+                .buttonStyle(.plain)
+            }
+
+            SettingsSectionSeparator()
+
+            SettingsSection(title: "정책") {
+                Button(action: onPrivacyPolicy) {
+                    SettingsNavigationRow(title: "개인정보 처리방침", systemImage: "arrow.up.right")
+                }
+                .buttonStyle(.plain)
+            }
+
+            SettingsSectionSeparator()
+
+            SettingsSection(title: "지원") {
+                Button(action: onSupportMail) {
+                    SettingsNavigationRow(
+                        title: "문의하기",
+                        subtitle: "chak 이용 중 궁금한 점이나 불편한 점을 알려주세요.",
+                        systemImage: "arrow.up.right"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            SettingsSectionSeparator()
+
+            SettingsSection(title: "앱 정보", spacing: 12) {
+                SettingsTextGroup(title: SettingsInformation.versionText)
+            }
         }
     }
 }
