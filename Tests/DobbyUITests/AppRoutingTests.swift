@@ -92,13 +92,55 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(sampleButton.waitForExistence(timeout: 5))
         sampleButton.tap()
 
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["90s 나이키 트랙탑"].exists)
-        XCTAssertTrue(app.staticTexts["나이키"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["library.measurement.shoulderWidth"].exists)
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
+        let photos = app.descendants(matching: .any)["product-detail.photos"].firstMatch
+        let name = app.descendants(matching: .any)["product-detail.name"].firstMatch
+        XCTAssertTrue(photos.waitForExistence(timeout: 5))
+        XCTAssertTrue(name.exists)
+        XCTAssertLessThanOrEqual(photos.frame.maxY, name.frame.minY)
+        XCTAssertTrue(name.staticTexts["90s 나이키 트랙탑"].exists)
 
         let exportButton = app.buttons["library.export"]
-        reveal(exportButton, in: app)
+        XCTAssertTrue(exportButton.isHittable, "The upload action stays fixed below the detail content")
+        attachScreenshot(app, name: "debug-library-detail-top")
+
+        let photo = app.buttons["제품 사진 확대"].firstMatch
+        XCTAssertTrue(photo.isHittable)
+        photo.tap()
+        XCTAssertTrue(app.navigationBars["제품 사진"].waitForExistence(timeout: 5))
+        app.buttons["닫기"].tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+
+        app.buttons["library.edit"].tap()
+        let information = app.navigationBars["제품 정보 입력"]
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        information.buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+
+        let price = app.descendants(matching: .any)["product-detail.price"].firstMatch
+        reveal(price, in: app)
+        XCTAssertTrue(price.staticTexts["89,000 원"].exists)
+        XCTAssertTrue(app.staticTexts["나이키"].exists)
+        let measurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
+        for _ in 0..<8 where !measurements.exists || measurements.frame.maxY > exportButton.frame.minY {
+            app.swipeUp()
+        }
+        XCTAssertTrue(measurements.exists)
+        XCTAssertLessThanOrEqual(measurements.frame.maxY, exportButton.frame.minY)
+        for (key, title, value) in [
+            ("shoulderWidth", "어깨", "56cm"),
+            ("chestWidth", "가슴", "55cm"),
+            ("totalLength", "기장", "68cm"),
+            ("sleeveLengthLeft", "소매", "52cm")
+        ] {
+            let column = app.descendants(matching: .any)["library.measurement.\(key)"].firstMatch
+            XCTAssertTrue(column.exists, key)
+            XCTAssertTrue(column.staticTexts[title].exists, key)
+            XCTAssertTrue(column.staticTexts[value].exists, key)
+        }
+        XCTAssertTrue(exportButton.isHittable)
+        attachScreenshot(app, name: "debug-library-detail-measurements")
         exportButton.tap()
 
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
@@ -110,19 +152,135 @@ final class AppRoutingTests: XCTestCase {
         attachScreenshot(app, name: "debug-library-sample-export-channels")
 
         app.buttons["export.close"].tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 5))
-        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+        app.buttons["library.edit"].tap()
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        let nameInput = app.descendants(matching: .any)["product-info.name"].firstMatch
+        reveal(nameInput, in: app)
+        tapVisibleInput(nameInput, in: app)
+        nameInput.typeText(" 수정")
+        let editedName = "90s 나이키 트랙탑 수정"
+        XCTAssertEqual(nameInput.value as? String, editedName)
+        let done = app.buttons["product-info.done"]
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+
+        XCTAssertTrue(app.navigationBars[editedName].waitForExistence(timeout: 10))
+        XCTAssertFalse(information.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["product-complete.screen"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
+        XCTAssertFalse(app.buttons["product-complete.library"].exists)
+        XCTAssertTrue(app.buttons["library.edit"].isHittable)
+        XCTAssertTrue(exportButton.isHittable)
+        XCTAssertTrue(name.staticTexts[editedName].exists)
+        XCTAssertTrue(price.staticTexts["89,000 원"].exists)
+        attachScreenshot(app, name: "debug-library-detail-after-edit")
+
+        app.navigationBars[editedName].buttons.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["보관함"].isHittable)
+        let cardID = "library.product.53E00000-0000-4000-8000-000000000053"
+        XCTAssertTrue(app.buttons[cardID].label.contains(editedName))
         XCTAssertEqual(app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "library.product."
         )).count, 1)
 
         app.buttons["debug.export-sample"].tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 5))
-        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars[editedName].waitForExistence(timeout: 5))
+        app.navigationBars[editedName].buttons.firstMatch.tap()
         XCTAssertEqual(app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "library.product."
         )).count, 1)
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["보관함"].tap()
+        let savedCard = app.buttons[cardID]
+        XCTAssertTrue(savedCard.waitForExistence(timeout: 10))
+        XCTAssertTrue(savedCard.label.contains(editedName))
+        savedCard.tap()
+        XCTAssertTrue(app.navigationBars[editedName].waitForExistence(timeout: 5))
+        XCTAssertTrue(name.staticTexts[editedName].exists)
+        XCTAssertFalse(app.buttons["product-complete.library"].exists)
+    }
+
+    @MainActor
+    func testProductInformationBackgroundTapDismissesKeyboardsWithoutLosingInput() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        app.tabBars.buttons["보관함"].tap()
+        app.buttons["debug.export-sample"].tap()
+        XCTAssertTrue(app.buttons["library.edit"].waitForExistence(timeout: 10))
+        app.buttons["library.edit"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 5))
+
+        let name = app.descendants(matching: .any)["product-info.name"].firstMatch
+        let detail = app.descendants(matching: .any)["product-info.detail"].firstMatch
+        let price = app.textFields["product-info.price"]
+        let shoulder = app.textFields["product-info.measurement.shoulderWidth"]
+        let keyboard = app.keyboards.firstMatch
+
+        reveal(name, in: app)
+        tapVisibleInput(name, in: app)
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        name.typeText("X")
+        let editedName = name.value as? String
+        XCTAssertTrue(editedName?.contains("X") == true)
+        dismissKeyboardByTappingBackground(beside: name, in: app)
+        XCTAssertEqual(name.value as? String, editedName)
+
+        tapVisibleInput(name, in: app)
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        // Switch inputs while the keyboard is already open. A background
+        // gesture must not consume the editor's tap or prevent typing.
+        XCTAssertTrue(detail.isHittable)
+        tapVisibleInput(detail, in: app)
+        detail.typeText("Y")
+        let editedDetail = detail.value as? String
+        XCTAssertTrue(editedDetail?.contains("Y") == true)
+        XCTAssertTrue(keyboard.exists)
+        dismissKeyboardByTappingBackground(beside: detail, in: app)
+        XCTAssertEqual(detail.value as? String, editedDetail)
+
+        for input in [price, shoulder] {
+            reveal(input, in: app)
+            let value = input.value as? String
+            tapVisibleInput(input, in: app)
+            XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+            dismissKeyboardByTappingBackground(beside: input, in: app)
+            XCTAssertEqual(input.value as? String, value)
+            tapVisibleInput(input, in: app)
+            XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+            dismissKeyboardByTappingBackground(beside: input, in: app)
+        }
+        XCTAssertEqual(name.value as? String, editedName)
+        XCTAssertEqual(detail.value as? String, editedDetail)
+        attachScreenshot(app, name: "product-info-background-dismissed-keyboard")
+    }
+
+    @MainActor
+    private func tapVisibleInput(_ input: XCUIElement, in app: XCUIApplication) {
+        let barBottom = app.navigationBars.firstMatch.frame.maxY
+        let keyboardTop = app.keyboards.firstMatch.exists
+            ? app.keyboards.firstMatch.frame.minY : app.frame.maxY
+        let top = max(input.frame.minY, barBottom + 12)
+        let bottom = min(input.frame.maxY, keyboardTop - 12)
+        XCTAssertGreaterThan(bottom, top)
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: input.frame.maxX - min(4, input.frame.width / 2),
+                                 dy: (top + min(bottom, top + 44)) / 2)).tap()
+    }
+
+    @MainActor
+    private func dismissKeyboardByTappingBackground(beside input: XCUIElement, in app: XCUIApplication) {
+        let keyboard = app.keyboards.firstMatch
+        let top = app.navigationBars.firstMatch.frame.maxY + 20
+        let bottom = keyboard.frame.minY - 20
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: 8, dy: min(max(input.frame.midY, top), bottom))).tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
     }
 
     @MainActor

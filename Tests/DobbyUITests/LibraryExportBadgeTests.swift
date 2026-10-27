@@ -15,8 +15,8 @@ final class LibraryExportBadgeTests: XCTestCase {
         let sample = app.buttons["debug.export-sample"]
         XCTAssertTrue(sample.waitForExistence(timeout: 10))
         sample.tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
-        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        app.navigationBars["90s 나이키 트랙탑"].buttons.firstMatch.tap()
 
         let cardID = "library.product.53E00000-0000-4000-8000-000000000053"
         let card = app.buttons[cardID]
@@ -42,8 +42,8 @@ final class LibraryExportBadgeTests: XCTestCase {
         XCTAssertTrue(closeGuide.waitForExistence(timeout: 10))
         closeGuide.tap()
         app.buttons["export.close"].tap()
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
-        app.navigationBars["제품 상세"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        app.navigationBars["90s 나이키 트랙탑"].buttons.firstMatch.tap()
         assertOnlyFruitsBadge(on: app.buttons[cardID])
 
         app.terminate()
