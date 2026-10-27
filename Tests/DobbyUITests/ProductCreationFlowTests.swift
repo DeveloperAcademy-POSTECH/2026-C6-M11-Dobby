@@ -374,9 +374,17 @@ final class ProductCreationFlowTests: XCTestCase {
         waitEnabled(confirm)
         confirm.tap()
         acknowledgeDetailCaptureGuide(in: app)
+        let captureDetail = app.buttons["camera.captureDetail"]
+        waitEnabled(captureDetail)
+        captureDetail.tap()
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
+        waitEnabled(app.buttons["camera.selectPhotos"])
         app.buttons["camera.selectPhotos"].tap()
+        let secondSelection = app.buttons["camera.grid.select.1"]
+        waitEnabled(secondSelection)
+        secondSelection.tap()
         XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
         app.buttons["camera.completePhotos"].tap()
         let done = app.buttons["product-info.done"]
         XCTAssertTrue(done.waitForExistence(timeout: 10))
@@ -385,6 +393,31 @@ final class ProductCreationFlowTests: XCTestCase {
             "product-info.delete-photo.")).count, 0)
         attachScreenshot(app, name: "product-info-empty")
         replaceText(in: field("name", app: app), with: "Design validation", app: app)
+        let inputPhotos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-info.photo."))
+        XCTAssertEqual(inputPhotos.count, 2)
+        let secondInputPhoto = inputPhotos.element(boundBy: 1)
+        reveal(secondInputPhoto, in: app)
+        secondInputPhoto.tap()
+        let inputPager = app.descendants(matching: .any)["product-gallery.pager"].firstMatch
+        XCTAssertTrue(inputPager.waitForExistence(timeout: 5))
+        wait(for: NSPredicate(format: "value == %@", "2 / 2"), on: inputPager)
+        XCTAssertFalse(app.buttons["product-gallery.delete"].exists,
+                       "New registration allows photo viewing without enabling saved-product deletion")
+        attachScreenshot(app, name: "product-info-expanded-second-photo")
+        inputPager.swipeRight()
+        wait(for: NSPredicate(format: "value == %@", "1 / 2"), on: inputPager)
+        let firstExpandedPhoto = app.descendants(matching: .any)["product-gallery.photo.1"].firstMatch
+        XCTAssertTrue(firstExpandedPhoto.waitForExistence(timeout: 5))
+        XCTAssertEqual(firstExpandedPhoto.frame.minX, inputPager.frame.minX, accuracy: 1)
+        XCTAssertEqual(firstExpandedPhoto.frame.maxX, inputPager.frame.maxX, accuracy: 1)
+        app.buttons["product-gallery.close"].tap()
+        XCTAssertTrue(inputPager.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 5))
+        XCTAssertEqual(field("name", app: app).value as? String, "Design validation")
+        XCTAssertEqual(inputPhotos.count, 2)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-info.delete-photo.")).count, 0)
         XCTAssertTrue(done.isEnabled)
         done.tap()
         XCTAssertTrue(app.staticTexts["설명을 입력해주세요"].exists)

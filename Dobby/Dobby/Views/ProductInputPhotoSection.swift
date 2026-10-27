@@ -43,7 +43,12 @@ struct ProductInputPhotoSection: View {
                         ProductInputEditablePhoto(photo: photo, onExpand: { expand(photo) },
                                                   onDelete: { deletePhoto(photo.id) })
                     } else {
-                        ProductInputPhotoImage(photo: photo)
+                        Button { expand(photo) } label: {
+                            ProductInputPhotoImage(photo: photo)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("제품 사진 확대")
+                        .accessibilityIdentifier("product-info.photo.\(photo.id)")
                     }
                 }
             }
