@@ -29,81 +29,45 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         }
     }
 
-    func testRatioTransitionDeliversIntermediateSizesWithoutRecreatingPreview() async throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled, "중간 크기 검증은 동작 줄이기가 꺼진 환경에서 실행합니다.")
-        let fixture = try host()
-        defer { fixture.close() }
-        try await waitForSize(fixture, height: 400 * 4 / 3)
-        fixture.samples.sizes.removeAll()
-        fixture.options.photoAspectRatio = .sixteenNine
-        try await waitForSize(fixture, height: 400 * 16 / 9)
-        XCTAssertTrue(fixture.samples.sizes.contains { $0.height > 535 && $0.height < 710 },
-                      "최종 크기로 즉시 교체하지 않고 UIKit에 중간 크기를 전달해야 합니다.")
-        fixture.options.photoAspectRatio = .square
-        try await waitForSize(fixture, height: 400)
-        fixture.options.photoAspectRatio = .fourThree
-        try await waitForSize(fixture, height: 400 * 4 / 3)
-        XCTAssertEqual(fixture.samples.creations, 1)
-        XCTAssertEqual(fixture.options.photoAspectRatio, .fourThree)
-    }
-
-    func testSelectionDuringTransitionFinishesAtLatestRatio() async throws {
-        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled, "전환 중 재선택 검증은 동작 줄이기가 꺼진 환경에서 실행합니다.")
-        let fixture = try host()
-        defer { fixture.close() }
-        try await waitForSize(fixture, height: 400 * 4 / 3)
-        fixture.samples.sizes.removeAll()
-        fixture.options.photoAspectRatio = .sixteenNine
-        // 고정 시간 대신 실제 중간 프레임이 도착한 뒤 재선택한다.
-        try await eventually("16:9 전환 중간 크기가 전달되어야 합니다.") {
-            fixture.samples.sizes.last.map { $0.height > 535 && $0.height < 710 } ?? false
-        }
-        fixture.options.photoAspectRatio = .square
-        XCTAssertEqual(fixture.options.photoAspectRatio, .square, "저장에 쓰는 비율은 즉시 최신 선택값이어야 합니다.")
-        try await waitForSize(fixture, height: 400)
-        XCTAssertEqual(fixture.samples.creations, 1)
-    }
-
-    func testInitialSelectedRatioDoesNotStartAtDefaultFourThree() async throws {
-        let fixture = try host(ratio: .square)
-        defer { fixture.close() }
-        try await waitForSize(fixture, height: 400)
-        XCTAssertTrue(fixture.samples.sizes.filter { $0.height > 0 }.allSatisfy { abs($0.height - 400) < 0.5 })
-        XCTAssertEqual(fixture.options.photoAspectRatio, .square)
-        XCTAssertEqual(fixture.samples.creations, 1)
-    }
-
-    func testBackdropFillsContainerWithoutFollowingCaptureRatio() async throws {
+    func testRatioChangesKeepOneFullscreenPreview() async throws {
         let fixture = try host()
         defer { fixture.close() }
         for ratio in DetailPhotoAspectRatio.allCases {
             fixture.options.photoAspectRatio = ratio
-            let frame = DetailAspectRatioPreviewLayout(containerSize: CGSize(width: 400, height: 800),
-                                                       aspectRatio: ratio).frame
-            try await waitForSize(fixture, height: frame.height)
-            XCTAssertEqual(fixture.backdrop.sizes.last, CGSize(width: 400, height: 800))
+            try await waitForSize(fixture, height: 800)
+            try await Task.sleep(for: .milliseconds(400))
         }
         XCTAssertEqual(fixture.samples.creations, 1)
-        XCTAssertEqual(fixture.backdrop.creations, 1)
-        XCTAssertTrue(fixture.backdrop.sizes.filter { $0 != .zero }
+        XCTAssertTrue(fixture.samples.sizes.filter { $0 != .zero }
             .allSatisfy { $0 == CGSize(width: 400, height: 800) })
     }
 
-    func testContainerResizeKeepsBackdropAndCaptureViewportIndependent() async throws {
-        let fixture = try host()
+    func testResizeChangesSinglePreviewBounds() async throws {
+        let fixture = try host(ratio: .square)
         defer { fixture.close() }
-        try await waitForSize(fixture, height: 400 * 4 / 3)
+        try await waitForSize(fixture, height: 800)
         let host = try XCTUnwrap(fixture.window.rootViewController as? UIHostingController<PreviewHarness>)
         host.rootView = PreviewHarness(options: fixture.options, samples: fixture.samples,
-                                      backdrop: fixture.backdrop, size: CGSize(width: 800, height: 400))
-        try await eventually("가로 컨테이너에도 배경과 4:3 촬영 영역이 맞아야 합니다.") {
-            guard let viewport = fixture.samples.sizes.last else { return false }
-            return abs(viewport.width - 400 * 4 / 3) < 0.5 && abs(viewport.height - 400) < 0.5
-                && fixture.backdrop.sizes.last == CGSize(width: 800, height: 400)
+                                      size: CGSize(width: 800, height: 400))
+        try await eventually("회전 후에도 단일 프리뷰가 화면을 채워야 합니다.") {
+            fixture.samples.sizes.last == CGSize(width: 800, height: 400)
         }
         XCTAssertEqual(fixture.samples.creations, 1)
-        XCTAssertEqual(fixture.backdrop.creations, 1)
-        XCTAssertEqual(fixture.options.photoAspectRatio, .fourThree)
+    }
+
+    func testGlassLeavesOnlyRatioViewportClearAndProtectsControls() {
+        let size = CGSize(width: 390, height: 844)
+        for ratio in DetailPhotoAspectRatio.allCases {
+            let frame = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: ratio,
+                                                       topInset: 110, bottomInset: 148).frame
+            XCTAssertGreaterThanOrEqual(frame.minY, 110)
+            XCTAssertLessThanOrEqual(frame.maxY, 696)
+            XCTAssertEqual(frame.width / frame.height, ratio.previewRatio(isLandscape: false), accuracy: 0.0001)
+            let mask = DetailPreviewGlassMask(viewport: frame).path(in: CGRect(origin: .zero, size: size))
+            XCTAssertFalse(mask.contains(CGPoint(x: frame.midX, y: frame.midY), eoFill: true))
+            XCTAssertTrue(mask.contains(CGPoint(x: 195, y: 55), eoFill: true))
+            XCTAssertTrue(mask.contains(CGPoint(x: 195, y: 770), eoFill: true))
+        }
     }
 
     private struct Fixture {
@@ -111,7 +75,6 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         let previousKeyWindow: UIWindow?
         let options: DetailCameraOptions
         let samples: PreviewSamples
-        let backdrop: PreviewSamples
         func close() {
             window.isHidden = true
             window.rootViewController = nil
@@ -126,12 +89,11 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         let options = DetailCameraOptions()
         options.photoAspectRatio = ratio
         let samples = PreviewSamples()
-        let backdrop = PreviewSamples()
         window.rootViewController = UIHostingController(rootView:
-            PreviewHarness(options: options, samples: samples, backdrop: backdrop))
+            PreviewHarness(options: options, samples: samples))
         window.makeKeyAndVisible()
         return Fixture(window: window, previousKeyWindow: previousKeyWindow, options: options,
-                       samples: samples, backdrop: backdrop)
+                       samples: samples)
     }
 
     private func waitForSize(_ fixture: Fixture, height: CGFloat,
@@ -162,13 +124,10 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
 private struct PreviewHarness: View {
     let options: DetailCameraOptions
     let samples: PreviewSamples
-    let backdrop: PreviewSamples
     var size = CGSize(width: 400, height: 800)
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio) {
+        DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio) { _ in
             PreviewProbe(samples: samples)
-        } backdrop: {
-            PreviewProbe(samples: backdrop)
         }
         .frame(width: size.width, height: size.height)
     }

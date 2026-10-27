@@ -11,8 +11,7 @@ struct DetailCaptureGlassBackground: View {
                 Color(white: 0.1)
             } else {
                 Color.clear
-                    .glassEffect(.clear, in: Rectangle())
-                    .background(.black.opacity(0.2))
+                    .glassEffect(.regular, in: Rectangle())
             }
         }
         .allowsHitTesting(false)

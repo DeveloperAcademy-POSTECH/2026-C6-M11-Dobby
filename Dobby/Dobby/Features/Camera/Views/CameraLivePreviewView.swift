@@ -14,14 +14,15 @@ struct CameraLivePreviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     let camera: CameraPreviewSession
     var aspectRatio: DetailPhotoAspectRatio = .fourThree
+    var topInset: CGFloat = 0
+    var bottomInset: CGFloat = 0
     @State private var isVisible = false
 
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: aspectRatio) {
-            CameraPreviewSurface(session: camera.session) { camera.rotationAngle = $0 }
-        } backdrop: {
-            // 동일 세션에 배경용 표시 레이어만 추가한다. 세션 수명은 이 뷰 한 곳에서 관리한다.
-            CameraPreviewSurface(session: camera.session)
+        DetailAspectRatioPreview(aspectRatio: aspectRatio, topInset: topInset, bottomInset: bottomInset) { viewport in
+            CameraPreviewSurface(session: camera.session, viewport: viewport,
+                onRotationChange: { camera.rotationAngle = $0 },
+                onFramingReady: { camera.previewCrop = $0 })
         }
             .accessibilityLabel("후면 카메라 실시간 미리보기")
             .overlay {
@@ -39,6 +40,11 @@ struct CameraLivePreviewView: View {
                 }
             }
             .clipped()
+            .task(id: aspectRatio) {
+                camera.isPreviewTransitioning = true
+                do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+                camera.isPreviewTransitioning = false
+            }
             .onAppear {
                 isVisible = true
                 camera.setActive(scenePhase == .active)
@@ -46,6 +52,7 @@ struct CameraLivePreviewView: View {
             .onChange(of: scenePhase) { _, phase in camera.setActive(isVisible && phase == .active) }
             .onDisappear {
                 isVisible = false
+                camera.previewCrop = nil
                 camera.setActive(false)
             }
             .onReceive(NotificationCenter.default.publisher(for: AVCaptureSession.runtimeErrorNotification, object: camera.session).receive(on: DispatchQueue.main)) { _ in

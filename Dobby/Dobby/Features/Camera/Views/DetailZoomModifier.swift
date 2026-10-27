@@ -31,7 +31,7 @@ struct DetailZoomModifier: ViewModifier {
                         } label: {
                             Text(label).font(.footnote.weight(.semibold)).monospacedDigit()
                                 .foregroundStyle(label == "1x" ? .white : .yellow)
-                                .frame(width: 44, height: 44)
+                                .frame(width: 48, height: 48)
                                 .background(.black.opacity(0.55), in: Circle())
                         }
                         .buttonStyle(.plain).disabled(options.isApplying || pinching)
@@ -39,7 +39,8 @@ struct DetailZoomModifier: ViewModifier {
                         .accessibilityHint("탭하여 배율을 변경하거나 미리보기를 두 손가락으로 확대하세요.")
                         .accessibilityIdentifier("camera.zoom")
                     }
-                    .padding(.bottom, 156)
+                    // 실측 촬영의 하단 조작 영역(192pt) + 간격(17pt)과 같은 위치를 유지한다.
+                    .padding(.bottom, 209)
                 }
             }
     }

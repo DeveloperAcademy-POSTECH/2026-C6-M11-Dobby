@@ -46,48 +46,40 @@ struct CameraFlowView: View {
 
     var body: some View {
         CameraPermissionGate(permission: permission) {
-            ratioPreview
-                .modifier(DetailZoomModifier(options: camera?.options,
-                    enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
-                        && (previewSource != nil || camera?.state == .running)))
-                .overlay {
-                    if isMoreOptionsPresented {
-                        Button { isMoreOptionsPresented = false } label: {
-                            Color.clear.contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
-                        .accessibilityIdentifier("camera.dismissOptions")
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    VStack(spacing: 0) {
-                        if let failureMessage {
-                            Text(failureMessage).padding().background(.ultraThinMaterial)
-                        } else if model.isCapturing {
-                            ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
-                        }
+            GeometryReader { geometry in
+                ratioPreview(topInset: geometry.safeAreaInsets.top)
+                    .modifier(DetailZoomModifier(options: camera?.options,
+                        enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
+                            && (previewSource != nil || camera?.state == .running)))
+                    .overlay {
                         if isMoreOptionsPresented {
-                            DetailCaptureOptionsView(options: camera?.options) { isMoreOptionsPresented = false }
-                        } else {
-                            captureControls
+                            Button { isMoreOptionsPresented = false } label: {
+                                Color.clear.contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
+                            .accessibilityIdentifier("camera.dismissOptions")
                         }
                     }
-                }
-                .ignoresSafeArea()
+                    .overlay(alignment: .bottom) {
+                        VStack(spacing: 0) {
+                            if let failureMessage {
+                                Text(failureMessage).padding().background(.ultraThinMaterial)
+                            } else if model.isCapturing {
+                                ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
+                            }
+                            if isMoreOptionsPresented {
+                                DetailCaptureOptionsView(options: camera?.options) { isMoreOptionsPresented = false }
+                            } else {
+                                captureControls
+                            }
+                        }
+                    }
+                    .ignoresSafeArea()
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(background.ignoresSafeArea())
-        .overlay(alignment: .top) {
-            GeometryReader { geometry in
-                // 시스템 내비게이션은 유지하고 상태 표시줄까지 같은 글라스 띠를 깐다.
-                DetailCaptureGlassBackground()
-                    .frame(height: geometry.safeAreaInsets.top)
-                    .offset(y: -geometry.safeAreaInsets.top)
-            }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
@@ -159,18 +151,18 @@ struct CameraFlowView: View {
     }
 
     @ViewBuilder
-    private var ratioPreview: some View {
+    private func ratioPreview(topInset: CGFloat) -> some View {
         let ratio = camera?.options.photoAspectRatio ?? .fourThree
-        if let previewSource {
-            DetailAspectRatioPreview(aspectRatio: ratio) {
-                CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
-            } backdrop: {
-                CameraPhotoView(source: previewSource)
+        Group {
+            if let previewSource {
+                DetailAspectRatioPreview(aspectRatio: ratio, topInset: topInset, bottomInset: 148) { _ in
+                    CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
+                }
+            } else if let camera {
+                CameraLivePreviewView(camera: camera, aspectRatio: ratio, topInset: topInset, bottomInset: 148)
+            } else {
+                ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
             }
-        } else if let camera {
-            CameraLivePreviewView(camera: camera, aspectRatio: ratio)
-        } else {
-            ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
         }
     }
 
@@ -239,7 +231,6 @@ struct CameraFlowView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 148)
-        .background { DetailCaptureGlassBackground() }
     }
 
     private var canCapture: Bool {

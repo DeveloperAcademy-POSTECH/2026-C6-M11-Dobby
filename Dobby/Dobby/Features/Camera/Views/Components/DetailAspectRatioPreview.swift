@@ -1,78 +1,63 @@
 // Created by mason on 10/24/26.
 import SwiftUI
 
-/// 비율별 표시 영역과 중앙 배치를 담당한다. 실제 영상·샘플 표시는 호출자가 제공한다.
-struct DetailAspectRatioPreview<Content: View, Backdrop: View>: View {
+/// 하나의 전체 화면 영상 위에서 저장 영역 밖만 글라스로 구분한다.
+struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
-    @ViewBuilder var content: () -> Content
-    @ViewBuilder var backdrop: () -> Backdrop
+    var topInset: CGFloat = 0
+    var bottomInset: CGFloat = 0
+    @ViewBuilder var content: (CGRect) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
-            let layout = DetailAspectRatioPreviewLayout(
-                containerSize: geometry.size, aspectRatio: aspectRatio
-            )
-            content()
-                .modifier(DetailPreviewViewport(size: layout.frame.size))
-                .position(x: layout.frame.midX, y: layout.frame.midY)
-                .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
-                // 회전·창 크기 변경은 비율 선택 애니메이션과 섞지 않는다.
-                .animation(nil, value: geometry.size)
-                .animation(nil, value: reduceMotion)
-        }
-        // 배경은 저장 구도에 포함되지 않는다. 비율 변경에도 화면 전체 크기를 유지한다.
-        .background {
-            backdrop()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            let layout = DetailAspectRatioPreviewLayout(containerSize: geometry.size,
+                aspectRatio: aspectRatio, topInset: topInset, bottomInset: bottomInset)
+            content(layout.frame)
+                .frame(width: geometry.size.width, height: geometry.size.height)
                 .clipped()
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+                .overlay {
+                    DetailCaptureGlassBackground()
+                        .mask {
+                            DetailPreviewGlassMask(viewport: layout.frame)
+                                .fill(style: FillStyle(eoFill: true))
+                        }
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
+                        .animation(nil, value: geometry.size)
+                        .animation(nil, value: reduceMotion)
+                }
         }
-        .background(.black)
         .clipped()
     }
 }
 
-extension DetailAspectRatioPreview where Backdrop == EmptyView {
-    init(aspectRatio: DetailPhotoAspectRatio, @ViewBuilder content: @escaping () -> Content) {
-        self.init(aspectRatio: aspectRatio, content: content, backdrop: { EmptyView() })
+/// 영상의 크기와 화각은 고정하고, 글라스 안쪽 경계만 보간한다.
+struct DetailPreviewGlassMask: Shape {
+    var viewport: CGRect
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get { .init(.init(viewport.minX, viewport.minY), .init(viewport.width, viewport.height)) }
+        set { viewport = CGRect(x: newValue.first.first, y: newValue.first.second,
+                                width: newValue.second.first, height: newValue.second.second) }
+    }
+    func path(in rect: CGRect) -> Path {
+        var path = Path(rect)
+        path.addRect(viewport)
+        return path
     }
 }
 
-/// UIKit 프리뷰도 보간된 크기로 배치해 영상의 aspect-fill과 클리핑을 함께 갱신한다.
-private struct DetailPreviewViewport: AnimatableModifier {
-    var size: CGSize
-
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(size.width, size.height) }
-        set { size = CGSize(width: newValue.first, height: newValue.second) }
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .frame(width: size.width, height: size.height)
-            .clipped()
-            // 이 크기는 이미 보간 중이므로 내부 뷰에서 다시 애니메이션하지 않는다.
-            .transaction { $0.animation = nil }
-    }
-}
-
-/// 저장 크롭과 공유하는 비율을 사용해 컨테이너 안에 들어가는 표시 영역을 계산한다.
+/// 컨트롤을 가리지 않는 최대 크기의 저장 영역. 가로 화면에서는 좌우에도 글라스가 남을 수 있다.
 nonisolated struct DetailAspectRatioPreviewLayout {
     let frame: CGRect
 
-    init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio) {
-        let ratio = aspectRatio.previewRatio(
-            isLandscape: containerSize.width > containerSize.height
-        )
-        let width = min(containerSize.width, containerSize.height * ratio)
+    init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio,
+         topInset: CGFloat = 0, bottomInset: CGFloat = 0) {
+        let top = min(max(0, topInset), containerSize.height)
+        let availableHeight = max(0, containerSize.height - top - max(0, bottomInset))
+        let ratio = aspectRatio.previewRatio(isLandscape: containerSize.width > containerSize.height)
+        let width = min(containerSize.width, availableHeight * ratio)
         let height = width / ratio
-        frame = CGRect(
-            x: (containerSize.width - width) / 2,
-            y: (containerSize.height - height) / 2,
-            width: width,
-            height: height
-        )
+        frame = CGRect(x: (containerSize.width - width) / 2,
+                       y: top + (availableHeight - height) / 2, width: width, height: height)
     }
 }
