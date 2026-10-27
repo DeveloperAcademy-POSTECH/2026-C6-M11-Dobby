@@ -55,48 +55,77 @@ extension ExportProduct {
                                     fruits: .sample(for: .fruits), instagram: .sample(for: .instagram))
 }
 
-struct ExportProductHeader: View {
+struct ExportProductItem: View {
     let product: ExportProduct
+
     var body: some View {
-        VStack(spacing: 0) {
-            if let data = product.imageData, let image = UIImage(data: data) {
+        ZStack {
+            VStack {
+                Color.clear
+                    .frame(width: 175, height: 232)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(product.name)
+                        .font(.system(size: 14))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !product.brand.isEmpty {
+                        Text(product.brand)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    if !product.displayPrice.isEmpty {
+                        Text(product.displayPrice)
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                }
+                .padding(10)
+                .frame(alignment: .leading)
+                .background(Color(.white))
+
+                Spacer()
+            }
+            .frame(width: 174, height: 375)
+
+            VStack {
+                ExportProductImage(imageData: product.imageData)
+
+                Spacer()
+            }
+            .frame(width: 174, height: 375)
+        }
+        .frame(width: 174, height: 375)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+}
+
+private struct ExportProductImage: View {
+    let imageData: Data?
+
+    var body: some View {
+        Group {
+            if let imageData, let image = UIImage(data: imageData) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 175, height: 200)
-                    .clipped()
             } else {
                 Image(systemName: "tshirt")
                     .resizable()
                     .scaledToFit()
-                    .padding(42)
+                    .padding(60)
                     .foregroundStyle(.secondary)
-                    .frame(width: 175, height: 200)
-                    .background(Color(.secondarySystemBackground))
                     .accessibilityLabel("상품 사진 없음")
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(product.name)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                if !product.brand.isEmpty {
-                    Text(product.brand)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                if !product.displayPrice.isEmpty {
-                    Text(product.displayPrice)
-                        .font(.subheadline.weight(.medium))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color(.systemBackground))
         }
-        .frame(width: 175)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .frame(width: 175, height: 232)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
+}
+
+#Preview("상품 아이템", traits: .sizeThatFitsLayout) {
+    ExportProductItem(product: .demo)
+        .background(Color(.brandNeutral50))
 }

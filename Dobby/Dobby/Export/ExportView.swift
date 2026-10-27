@@ -23,7 +23,7 @@ struct ExportView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    ExportProductHeader(product: product)
+                    ExportProductItem(product: product)
                     ExportChannelListView(completedChannels: completedChannels,
                                           onSelectChannel: didSelectChannel)
                 }.padding(.horizontal, 33).padding(.bottom, 32)
