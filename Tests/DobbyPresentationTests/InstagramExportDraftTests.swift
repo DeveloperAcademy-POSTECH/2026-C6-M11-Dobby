@@ -7,7 +7,7 @@ final class InstagramExportDraftTests: XCTestCase {
         let first = Data([1])
         let second = Data([2])
         var product = ExportProduct.demo
-        product.photoData = [first, second]
+        product.photos = [first, second]
         var draft = InstagramExportDraft(product: product)
         let originalCaption = draft.caption
 

@@ -136,7 +136,7 @@ struct ExportProductSummary: View {
     var body: some View {
         HStack(spacing: 14) {
             Group {
-                if let data = product.imageData, let image = UIImage(data: data) {
+                if let data = product.thumbnailData, let image = UIImage(data: data) {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
@@ -154,7 +154,7 @@ struct ExportProductSummary: View {
                 Text(product.name.isEmpty ? "이름 없는 상품" : product.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
-                Label("사진 \(photoCount ?? product.displayPhotos.count)장", systemImage: "photo")
+                Label("사진 \(photoCount ?? product.exportPhotos.count)장", systemImage: "photo")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

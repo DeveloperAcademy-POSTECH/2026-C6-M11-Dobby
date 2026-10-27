@@ -34,8 +34,8 @@ struct InstagramExportDraft {
     var canPublish: Bool { validationMessage == nil }
 
     init(product: ExportProduct) {
-        let photos = product.displayPhotos.map { InstagramDraftPhoto(data: $0) }
-        let payload = product.instagram
+        let photos = product.exportPhotos.map { InstagramDraftPhoto(data: $0) }
+        let payload = product.instagramPayload
         let caption = [payload.productName, payload.description, payload.brand,
                        payload.measurements, payload.price.isEmpty ? "" : "가격: \(payload.price)원"]
             .filter { !$0.isEmpty }

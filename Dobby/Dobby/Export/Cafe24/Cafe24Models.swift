@@ -45,16 +45,16 @@ struct Cafe24ExportDraft {
 
     init(product: ExportProduct) {
         let productName = product.name.isEmpty ? "이름 없는 상품" : product.name
-        let productDescription = [product.fruits.description, product.fruits.measurements]
+        let productDescription = [product.marketplacePayload.description, product.marketplacePayload.measurements]
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
         originalProductName = productName
         originalProductDescription = productDescription
-        originalPriceText = product.fruits.price
-        photos = product.displayPhotos
+        originalPriceText = product.marketplacePayload.price
+        photos = product.exportPhotos
         self.productName = productName
         self.productDescription = productDescription
-        priceText = product.fruits.price
+        priceText = product.marketplacePayload.price
     }
 
     mutating func resetProductName() {

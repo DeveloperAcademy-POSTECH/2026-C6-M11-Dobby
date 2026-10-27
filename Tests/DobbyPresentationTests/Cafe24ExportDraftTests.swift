@@ -5,7 +5,7 @@ import XCTest
 final class Cafe24ExportDraftTests: XCTestCase {
     func testResetRestoresOriginalEditableValues() {
         var product = ExportProduct.demo
-        product.photoData = [Data([1]), Data([2])]
+        product.photos = [Data([1]), Data([2])]
         var draft = Cafe24ExportDraft(product: product)
         let originalProductName = draft.productName
         let originalProductDescription = draft.productDescription

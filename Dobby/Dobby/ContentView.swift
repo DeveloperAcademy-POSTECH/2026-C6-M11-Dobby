@@ -157,10 +157,12 @@ struct ContentView: View {
             return
         }
         let saved = garments.first { $0.id.uuidString == session.productID }.map { ExportProduct(garment: $0) }
-        let restored = ExportProduct(id: session.productID, imageData: saved?.imageData,
-            fruits: session.payload, instagram: session.payload,
-            detailMeasurements: session.measurementItems?.map { ExportMeasurement(id: $0.id, title: $0.title, value: $0.value) },
-            photoData: saved?.photoData ?? [])
+        let restored = ExportProduct(id: session.productID, thumbnailData: saved?.thumbnailData,
+            marketplacePayload: session.payload, instagramPayload: session.payload,
+            measurements: session.measurementItems?.map {
+                ExportMeasurement(id: $0.id, title: $0.title, value: $0.value)
+            },
+            photos: saved?.photos ?? [])
         routeTask?.cancel()
         if showCreation {
             // A previous product's copy helper can return while a new draft is
