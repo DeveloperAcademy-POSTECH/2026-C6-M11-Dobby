@@ -507,9 +507,14 @@ final class ProductCreationFlowTests: XCTestCase {
         back.tap()
         let confirmation = app.descendants(matching: .any)["product-flow.exit-confirmation"].firstMatch
         XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["product-flow.exit-title"].label, "작성 중인 상품이 있어요")
         XCTAssertEqual(app.staticTexts["product-flow.exit-message"].label,
-            "메인화면으로 나갈까요?\n작성된 내용은 자동으로 임시저장되고\n사라지지 않아요.")
+            "나중에 이어서 작성할 수 있도록 임시 저장할까요?")
         XCTAssertTrue(app.buttons["product-flow.exit-save"].isEnabled)
+        XCTAssertEqual(app.buttons["product-flow.exit-save"].label, "임시저장하고 나가기")
+        XCTAssertTrue(app.buttons["product-flow.exit-discard"].isEnabled)
+        XCTAssertEqual(app.buttons["product-flow.exit-discard"].label, "삭제하고 나가기")
+        XCTAssertEqual(app.buttons["product-flow.exit-cancel"].label, "닫기")
         app.buttons["product-flow.exit-cancel"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)

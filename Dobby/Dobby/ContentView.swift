@@ -91,7 +91,8 @@ struct ContentView: View {
             ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
                 copyHomeProduct: $creationCopyHomeProduct,
                 resumeProductID: request.productID,
-                onDraftSaved: { creationRequest = nil; libraryPath.removeAll(); tab = .capture },
+                onDraftSaved: returnHomeFromCreation,
+                onDraftDiscarded: returnHomeFromCreation,
                 onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
                 onCancel: { creationRequest = nil })
                 .tint(Color("HomeAccent"))
@@ -115,6 +116,12 @@ struct ContentView: View {
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
         .tint(Color("HomeAccent"))
+    }
+
+    private func returnHomeFromCreation() {
+        creationRequest = nil
+        libraryPath.removeAll()
+        tab = .capture
     }
 
     private func startCreation(resuming productID: UUID? = nil) {

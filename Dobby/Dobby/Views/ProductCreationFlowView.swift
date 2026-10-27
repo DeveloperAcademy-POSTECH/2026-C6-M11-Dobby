@@ -5,10 +5,12 @@ import UIKit
 /// Holds the same product and photo session through the complete creation flow.
 struct ProductCreationFlowView: View {
     private enum Step: Hashable { case details, photoSelection, information, completed }
+    private enum ExitAction { case save, discard }
     let controller: CopyActivityController
     let onFinish: () -> Void
     let onCancel: () -> Void
     private let onDraftSaved: () -> Void
+    private let onDraftDiscarded: () -> Void
     private let resumeProductID: UUID?
     @Binding private var isPresented: Bool
     @Binding private var copyHomeProduct: ExportProduct?
@@ -25,6 +27,7 @@ struct ProductCreationFlowView: View {
     @State private var showFruits = false
     @State private var isFinishing = false
     @State private var cleanupError: String?
+    @State private var cleanupAction: ExitAction = .save
     @State private var restorationError: String?
     @State private var isRestoring: Bool
     @State private var restoredRecord: SavedMeasurement?
@@ -35,6 +38,7 @@ struct ProductCreationFlowView: View {
     init(container: ModelContainer, controller: CopyActivityController, isPresented: Binding<Bool>,
          copyHomeProduct: Binding<ExportProduct?>,
          resumeProductID: UUID? = nil, onDraftSaved: (() -> Void)? = nil,
+         onDraftDiscarded: (() -> Void)? = nil,
          onFinish: @escaping () -> Void, onCancel: @escaping () -> Void) {
         let flowContext = ModelContext(container)
         flowContext.autosaveEnabled = false
@@ -45,6 +49,7 @@ struct ProductCreationFlowView: View {
         self.onFinish = onFinish
         self.onCancel = onCancel
         self.onDraftSaved = onDraftSaved ?? onCancel
+        self.onDraftDiscarded = onDraftDiscarded ?? onDraftSaved ?? onCancel
         self.resumeProductID = resumeProductID
         _isRestoring = State(initialValue: resumeProductID != nil)
         isFixture = ProductAppStorage.fixtureDirectory != nil
@@ -105,13 +110,14 @@ struct ProductCreationFlowView: View {
         .disabled(isFinishing || pendingExitAction != nil)
         .overlay {
             if isFinishing {
-                ProgressView("작업을 저장하는 중…").padding().background(.regularMaterial, in: Capsule())
+                ProgressView(cleanupAction == .discard ? "작업을 삭제하는 중…" : "작업을 저장하는 중…")
+                    .padding().background(.regularMaterial, in: Capsule())
             }
         }
         .overlay {
             if pendingExitAction != nil {
                 ProductDraftExitConfirmation(onCancel: { pendingExitAction = nil },
-                    onSave: confirmDraftExit)
+                    onSave: confirmDraftExit, onDiscard: requestDiscardAndExit)
             }
         }
         .environment(\.modelContext, context)
@@ -128,9 +134,12 @@ struct ProductCreationFlowView: View {
             exportProduct = product
             copyHomeProduct = nil
         }
-        .alert("작성 중인 제품을 저장하지 못했어요", isPresented: Binding(
+        .alert(cleanupAction == .discard ? "작성 중인 제품을 삭제하지 못했어요" : "작성 중인 제품을 저장하지 못했어요", isPresented: Binding(
             get: { cleanupError != nil }, set: { if !$0 { cleanupError = nil } })) {
-                Button("다시 시도") { requestSaveAndExit() }
+                Button("다시 시도") {
+                    if cleanupAction == .discard { requestDiscardAndExit() }
+                    else { requestSaveAndExit() }
+                }
                 Button("확인", role: .cancel) { cleanupError = nil }
             } message: { Text(cleanupError ?? "") }
         .onDisappear {
@@ -252,6 +261,7 @@ struct ProductCreationFlowView: View {
 
     private func finishFlow() async {
         guard !isFinishing else { return }
+        cleanupAction = .save
         isFinishing = true
         defer { isFinishing = false }
         try? await photoModel?.discardUncommittedDetails()
@@ -261,6 +271,7 @@ struct ProductCreationFlowView: View {
 
     private func saveResultAndExit(_ record: SavedMeasurement) async throws {
         guard !isFinishing else { return }
+        cleanupAction = .save
         isFinishing = true
         defer { isFinishing = false }
         let garment = try prepareProduct(for: record, allowsUnavailableDraft: true)
@@ -290,6 +301,7 @@ struct ProductCreationFlowView: View {
 
     private func saveAndExit() async {
         guard !isFinishing else { return }
+        cleanupAction = .save
         isFinishing = true
         defer { isFinishing = false }
         do {
@@ -311,6 +323,37 @@ struct ProductCreationFlowView: View {
         }
         catch { cleanupError = error.localizedDescription; return }
         onDraftSaved()
+    }
+
+    private func requestDiscardAndExit() {
+        guard !isFinishing else { return }
+        pendingExitAction = nil
+        Task { await discardAndExit() }
+    }
+
+    private func discardAndExit() async {
+        guard !isFinishing else { return }
+        cleanupAction = .discard
+        isFinishing = true
+        defer { isFinishing = false }
+        do {
+            if let garment {
+                guard garment.informationCompletedAt == nil, garment.isCreationDraft else {
+                    cleanupError = "등록을 마친 상품은 보관함에서 삭제해 주세요."
+                    return
+                }
+                // Commit this draft's deletion before releasing any retained originals.
+                try GarmentStore.deleteSavedGarment(id: garment.id, in: context.container)
+            }
+        } catch {
+            cleanupError = error.localizedDescription
+            return
+        }
+        garment = nil
+        preservesDraftPhotos = false
+        // The durable deletion is complete. Failed temporary-file cleanup can retry on dismissal.
+        try? await photoModel?.discardUncommittedDetails()
+        onDraftDiscarded()
     }
 
     private func persistDraft(_ garment: Garment, step: ProductDraftStep) throws {
