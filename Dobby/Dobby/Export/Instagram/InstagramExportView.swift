@@ -42,8 +42,7 @@ struct InstagramExportView: View {
                     account: account,
                     draft: $draft,
                     isDisabled: busy || uploadState.isCompleted,
-                    isCompleted: uploadState.isCompleted,
-                    onReportProblem: { message = "Instagram 앱에서 게시물을 먼저 확인해 주세요. 게시물이 없다면 다시 업로드할 수 있습니다." }
+                    isCompleted: uploadState.isCompleted
                 )
             } else {
                 InstagramConnectionView(

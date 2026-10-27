@@ -5,13 +5,12 @@ struct InstagramComposeView: View {
     @Binding var draft: InstagramExportDraft
     let isDisabled: Bool
     var isCompleted = false
-    var onReportProblem: () -> Void = {}
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 if isCompleted {
-                    InstagramUploadCompletedHeader(onReportProblem: onReportProblem)
+                    InstagramUploadCompletedHeader()
                 }
                 InstagramAccountCard(account: account)
                 InstagramPhotoEditor(photos: draft.photos)
@@ -29,8 +28,6 @@ struct InstagramComposeView: View {
 }
 
 private struct InstagramUploadCompletedHeader: View {
-    let onReportProblem: () -> Void
-
     var body: some View {
         VStack(spacing: 8) {
             Text("인스타그램에 업로드 완료 🎉")
@@ -41,10 +38,6 @@ private struct InstagramUploadCompletedHeader: View {
                 Text("했어요")
             }
             .font(.body)
-            Button("정상적으로 업로드가 안됐어요", action: onReportProblem)
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .underline()
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
