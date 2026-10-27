@@ -69,8 +69,7 @@ struct ContentView: View {
 #endif
                     .navigationDestination(for: UUID.self) { productID in
                         if let garment = garments.first(where: { $0.id == productID }) {
-                            ProductSavedDetailView(garment: garment, controller: controller,
-                                onLibrary: { libraryPath.removeAll() })
+                            ProductSavedDetailView(garment: garment, controller: controller)
                         }
                     }
                 }
@@ -187,8 +186,6 @@ struct ProductSavedDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var garment: Garment
     let controller: CopyActivityController
-    let onLibrary: () -> Void
-    @State private var showCompletion = false
     @State private var showInformation = false
     @State private var measurementInput = GarmentMeasurementInputState()
     @State private var exportProduct: ExportProduct?
@@ -196,47 +193,40 @@ struct ProductSavedDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(spacing: 12) {
-                    if let photo = garment.thumbnail {
-                        StoredProductPhotoView(photo: photo, maximumPixelSize: 700, contentMode: .fit)
-                            .frame(height: 150)
-                    }
-                    Text(garment.name.isEmpty ? "이름 없는 \(garment.group.label)" : garment.name)
-                        .font(.subheadline.weight(.semibold))
-                }.frame(maxWidth: .infinity)
-                ScrollView(.horizontal) {
-                    HStack(spacing: 10) {
-                        ForEach(garment.productPhotos) { photo in
-                            StoredProductPhotoView(photo: photo, maximumPixelSize: 320)
-                                .frame(width: 92, height: 112).clipped()
-                        }
-                    }
-                }
-                if !garment.detail.isEmpty { Text(garment.detail) }
-                if !garment.brand.isEmpty { LabeledContent("브랜드", value: garment.brand) }
-                Text("실측 사이즈").font(.headline)
-                ForEach(garment.visibleMeasurements) { value in
-                    LabeledContent(value.displayLabel, value: MeasurementDisplayText.centimeters(value.valueCm) + " cm")
-                        .accessibilityIdentifier("library.measurement.\(value.key)")
-                }
-                Button("내보내기") { openExport() }
-                    .buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
-                    .accessibilityIdentifier("library.export")
-            }.padding(20)
+            ProductDetailCard(garment: garment, measurementAccessibilityPrefix: "library.measurement")
+                .padding(.horizontal, 21)
+                .padding(.vertical, 16)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
         }
-        .navigationTitle("제품 상세").navigationBarTitleDisplayMode(.inline)
+        .background(ProductInformationStyle.background)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ProductUploadButton(action: openExport)
+                .accessibilityIdentifier("library.export")
+                .padding(.horizontal, 33)
+                .padding(.top, 16)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
+                .background(ProductInformationStyle.background.ignoresSafeArea(edges: .bottom))
+        }
+        .navigationTitle(garment.name.isEmpty ? "이름 없는 \(garment.group.label)" : garment.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .tint(.primary)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("수정") { showInformation = true }
+                    .foregroundStyle(.primary)
                     .accessibilityIdentifier("library.edit")
             }
         }
         .navigationDestination(isPresented: $showInformation) {
-            InfoInputView(garment: garment, measurementInput: $measurementInput) { _ in showCompletion = true }
-        }
-        .navigationDestination(isPresented: $showCompletion) {
-            ProductInputCompletionView(garment: garment, onExport: openExport, onLibrary: onLibrary)
+            InfoInputView(garment: garment, measurementInput: $measurementInput) { _ in
+                showInformation = false
+            }
         }
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)

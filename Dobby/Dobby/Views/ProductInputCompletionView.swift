@@ -21,6 +21,7 @@ struct ProductInputCompletionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
         .tint(.primary)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("product-complete.screen")
@@ -56,11 +57,7 @@ private struct ProductCompletionActions: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Button(action: onExport) {
-                Text("플랫폼에 업로드하러 가기").frame(maxWidth: .infinity).frame(height: 62)
-                    .foregroundStyle(.white)
-                    .background(ProductInformationStyle.accent, in: Capsule())
-            }
+            ProductUploadButton(action: onExport)
             .accessibilityIdentifier("product-complete.export")
             Button(action: onLibrary) {
                 Text("보관함으로 이동하기").frame(maxWidth: .infinity).frame(height: 62)
@@ -74,6 +71,23 @@ private struct ProductCompletionActions: View {
         .padding(.horizontal, 33)
         .padding(.top, 16)
         .frame(maxWidth: .infinity)
-        .background(Color(red: 1, green: 249 / 255, blue: 246 / 255).ignoresSafeArea(edges: .bottom))
+        .background(ProductInformationStyle.background.ignoresSafeArea(edges: .bottom))
+    }
+}
+
+struct ProductUploadButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("플랫폼에 업로드하러 가기")
+                .font(.callout.weight(.semibold).italic())
+                .tracking(-0.31)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 62)
+                .background(ProductInformationStyle.upload, in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -46,6 +46,16 @@ struct InfoInputView: View {
                     focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
+                    .background {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture(perform: dismissKeyboard)
+                    }
+            }
+            .background {
+                ProductInformationStyle.background
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismissKeyboard)
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: focusedMeasurementID) { _, _ in
@@ -138,6 +148,12 @@ struct InfoInputView: View {
         withAnimation(.easeOut(duration: 0.22)) {
             proxy.scrollTo(Self.measurementTableID, anchor: .bottom)
         }
+    }
+
+    private func dismissKeyboard() {
+        focusedMeasurementID = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
     }
 
 }
