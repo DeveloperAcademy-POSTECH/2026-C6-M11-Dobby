@@ -22,14 +22,18 @@ nonisolated struct DetailCameraCapabilities: Equatable, Sendable {
     var zoomFactor: Double?
 }
 
-/// 표시 배율 기준 왕복 순환. 초광각이 없는 기기는 0.5x를 건너뛴다.
+/// 버튼만 0.5x·1x·2x를 왕복한다. 핀치가 사용하는 기기 최대 배율과 분리한다.
 nonisolated struct DetailZoomStops {
     private var descending = false
     mutating func next(from value: Double, range: DetailCameraControlRange) -> Double {
-        if value >= range.maximum - 0.001 { descending = true }
-        if value <= range.minimum + 0.001 { descending = false }
-        let target = descending ? (value > 1.001 ? 1 : range.minimum)
-            : (value < 0.999 ? 1 : range.maximum)
+        let minimum = range.clamped(0.5) ?? value
+        let maximum = range.clamped(2) ?? value
+        // 높은 핀치 배율에서는 첫 탭으로 버튼의 상한에 복귀한 뒤 내려간다.
+        if value > maximum + 0.001 { descending = true; return maximum }
+        if value >= maximum - 0.001 { descending = true }
+        if value <= minimum + 0.001 { descending = false }
+        let target = descending ? (value > 1.001 ? 1 : minimum)
+            : (value < 0.999 ? 1 : maximum)
         return range.clamped(target) ?? value
     }
 }
