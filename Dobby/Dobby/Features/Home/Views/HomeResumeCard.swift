@@ -41,6 +41,7 @@ struct HomeResumeCard<Thumbnail: View>: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel("작업 이어서 하기, 현재 \(step.title), \(relativeSaveTime)")
         .accessibilityHint("저장된 작업 단계에서 계속합니다")
         .accessibilityIdentifier("home.resume")

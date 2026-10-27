@@ -4,6 +4,37 @@ import XCTest
 /// Relaunches prove that a new flow restores saved state rather than live view state.
 @MainActor
 final class ProductDraftResumeTests: XCTestCase {
+    func testHomeCardResumesSavedDetailDraftAfterRelaunch() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertFalse(app.buttons["home.resume"].exists)
+        attachScreenshot(app, name: "home-without-draft")
+        openMeasurementResult(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        app.buttons["confirmGarmentMeasurement"].tap()
+        captureTwoDetails(in: app)
+        let productID = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
+        app.tabBars.buttons["홈"].tap()
+        let resume = app.buttons["home.resume"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 10))
+        XCTAssertTrue(resume.label.contains("상세 촬영 단계"))
+        XCTAssertTrue(resume.isHittable)
+        attachScreenshot(app, name: "home-latest-detail-draft")
+
+        // 홈 카드도 새 프로세스에서 저장된 상품 ID로 기존 복원 흐름을 열어야 한다.
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(resume.waitForExistence(timeout: 10))
+        resume.tap()
+        assertResumedStage("제품 상세 촬영", app: app)
+        XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists)
+        XCTAssertTrue(app.buttons["camera.captureDetail"].isHittable)
+        XCTAssertEqual(detailPhotoCaptureIndices(in: app).count, 3)
+        XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
+    }
+
     func testMeasurementAndDetailDraftsResumeCorrectedEvidenceAndOriginalPhotos() throws {
         continueAfterFailure = false
         let app = fixtureApp()

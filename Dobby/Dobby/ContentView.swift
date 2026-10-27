@@ -33,7 +33,9 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $tab) {
             Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: HomeTab.capture) {
-                HomeView { startCreation() }
+                HomeView(resumeCandidate: HomeResumeCandidate.latest(in: garments),
+                    onResumeDraft: { startCreation(resuming: $0) },
+                    onStartCapture: { startCreation() })
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
                         if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
