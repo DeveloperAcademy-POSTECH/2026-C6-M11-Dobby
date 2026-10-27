@@ -2,9 +2,10 @@
 import SwiftUI
 
 /// 비율별 표시 영역과 중앙 배치를 담당한다. 실제 영상·샘플 표시는 호출자가 제공한다.
-struct DetailAspectRatioPreview<Content: View>: View {
+struct DetailAspectRatioPreview<Content: View, Backdrop: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
     @ViewBuilder var content: () -> Content
+    @ViewBuilder var backdrop: () -> Backdrop
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -20,7 +21,22 @@ struct DetailAspectRatioPreview<Content: View>: View {
                 .animation(nil, value: geometry.size)
                 .animation(nil, value: reduceMotion)
         }
-        .background(Color(.systemBackground))
+        // 배경은 저장 구도에 포함되지 않는다. 비율 변경에도 화면 전체 크기를 유지한다.
+        .background {
+            backdrop()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .background(.black)
+        .clipped()
+    }
+}
+
+extension DetailAspectRatioPreview where Backdrop == EmptyView {
+    init(aspectRatio: DetailPhotoAspectRatio, @ViewBuilder content: @escaping () -> Content) {
+        self.init(aspectRatio: aspectRatio, content: content, backdrop: { EmptyView() })
     }
 }
 

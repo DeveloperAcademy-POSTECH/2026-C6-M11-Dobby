@@ -73,11 +73,28 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         XCTAssertEqual(fixture.samples.creations, 1)
     }
 
+    func testBackdropFillsContainerWithoutFollowingCaptureRatio() async throws {
+        let fixture = try host()
+        defer { fixture.close() }
+        for ratio in DetailPhotoAspectRatio.allCases {
+            fixture.options.photoAspectRatio = ratio
+            let frame = DetailAspectRatioPreviewLayout(containerSize: CGSize(width: 400, height: 800),
+                                                       aspectRatio: ratio).frame
+            try await waitForSize(fixture, height: frame.height)
+            XCTAssertEqual(fixture.backdrop.sizes.last, CGSize(width: 400, height: 800))
+        }
+        XCTAssertEqual(fixture.samples.creations, 1)
+        XCTAssertEqual(fixture.backdrop.creations, 1)
+        XCTAssertTrue(fixture.backdrop.sizes.filter { $0 != .zero }
+            .allSatisfy { $0 == CGSize(width: 400, height: 800) })
+    }
+
     private struct Fixture {
         let window: UIWindow
         let previousKeyWindow: UIWindow?
         let options: DetailCameraOptions
         let samples: PreviewSamples
+        let backdrop: PreviewSamples
         func close() {
             window.isHidden = true
             window.rootViewController = nil
@@ -92,9 +109,12 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         let options = DetailCameraOptions()
         options.photoAspectRatio = ratio
         let samples = PreviewSamples()
-        window.rootViewController = UIHostingController(rootView: PreviewHarness(options: options, samples: samples))
+        let backdrop = PreviewSamples()
+        window.rootViewController = UIHostingController(rootView:
+            PreviewHarness(options: options, samples: samples, backdrop: backdrop))
         window.makeKeyAndVisible()
-        return Fixture(window: window, previousKeyWindow: previousKeyWindow, options: options, samples: samples)
+        return Fixture(window: window, previousKeyWindow: previousKeyWindow, options: options,
+                       samples: samples, backdrop: backdrop)
     }
 
     private func waitForSize(_ fixture: Fixture, height: CGFloat,
@@ -125,9 +145,14 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
 private struct PreviewHarness: View {
     let options: DetailCameraOptions
     let samples: PreviewSamples
+    let backdrop: PreviewSamples
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio) { PreviewProbe(samples: samples) }
-            .frame(width: 400, height: 800)
+        DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio) {
+            PreviewProbe(samples: samples)
+        } backdrop: {
+            PreviewProbe(samples: backdrop)
+        }
+        .frame(width: 400, height: 800)
     }
 }
 

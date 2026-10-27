@@ -13,10 +13,16 @@ import SwiftUI
 struct CameraLivePreviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     let camera: CameraPreviewSession
+    var aspectRatio: DetailPhotoAspectRatio = .fourThree
     @State private var isVisible = false
 
     var body: some View {
-        CameraPreviewSurface(session: camera.session) { camera.rotationAngle = $0 }
+        DetailAspectRatioPreview(aspectRatio: aspectRatio) {
+            CameraPreviewSurface(session: camera.session) { camera.rotationAngle = $0 }
+        } backdrop: {
+            // 동일 세션에 배경용 표시 레이어만 추가한다. 세션 수명은 이 뷰 한 곳에서 관리한다.
+            CameraPreviewSurface(session: camera.session)
+        }
             .accessibilityLabel("후면 카메라 실시간 미리보기")
             .overlay {
                 switch camera.state {

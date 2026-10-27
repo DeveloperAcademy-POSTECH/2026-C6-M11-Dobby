@@ -146,9 +146,19 @@ struct CameraFlowView: View {
         }
     }
 
+    @ViewBuilder
     private var ratioPreview: some View {
-        DetailAspectRatioPreview(aspectRatio: camera?.options.photoAspectRatio ?? .fourThree) {
-            preview
+        let ratio = camera?.options.photoAspectRatio ?? .fourThree
+        if let previewSource {
+            DetailAspectRatioPreview(aspectRatio: ratio) {
+                CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
+            } backdrop: {
+                CameraPhotoView(source: previewSource)
+            }
+        } else if let camera {
+            CameraLivePreviewView(camera: camera, aspectRatio: ratio)
+        } else {
+            ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
         }
     }
 
@@ -173,17 +183,6 @@ struct CameraFlowView: View {
 
     private var selectionLabel: some View {
         Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
-    }
-
-    @ViewBuilder
-    private var preview: some View {
-        if let previewSource {
-            CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
-        } else if let camera {
-            CameraLivePreviewView(camera: camera)
-        } else {
-            ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
-        }
     }
 
     private var shutter: some View {
