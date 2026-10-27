@@ -1,11 +1,39 @@
 import SwiftUI
 
+enum ProductDetailPhotoPresentation {
+    case standard
+    case compact
+
+    var size: CGSize {
+        switch self {
+        case .standard: CGSize(width: 152, height: 212)
+        case .compact: CGSize(width: 77, height: 108)
+        }
+    }
+
+    var cornerRadius: CGFloat {
+        switch self {
+        case .standard: 16
+        case .compact: 8
+        }
+    }
+
+    var showsExpansionIcon: Bool {
+        switch self {
+        case .standard: true
+        case .compact: false
+        }
+    }
+}
+
 struct ProductDetailCard: View {
     let garment: Garment
     var measurementAccessibilityPrefix = "product-detail.measurement"
+    var photoPresentation: ProductDetailPhotoPresentation = .standard
 
     var body: some View {
-        ProductDetailSections(garment: garment, measurementAccessibilityPrefix: measurementAccessibilityPrefix)
+        ProductDetailSections(garment: garment, measurementAccessibilityPrefix: measurementAccessibilityPrefix,
+                              photoPresentation: photoPresentation)
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.white)
@@ -17,10 +45,11 @@ struct ProductDetailCard: View {
 private struct ProductDetailSections: View {
     let garment: Garment
     let measurementAccessibilityPrefix: String
+    let photoPresentation: ProductDetailPhotoPresentation
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            ProductDetailPhotoSection(garment: garment)
+            ProductDetailPhotoSection(garment: garment, presentation: photoPresentation)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("product-detail.photos")
             Divider()
@@ -68,13 +97,14 @@ private struct ProductDetailField: View {
 
 private struct ProductDetailPhotoSection: View {
     let garment: Garment
+    let presentation: ProductDetailPhotoPresentation
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ProductFieldTitle(title: "제품 사진")
                 .tracking(-0.43)
                 .frame(minHeight: 22, alignment: .leading)
-            ProductDetailPhotos(garment: garment)
+            ProductDetailPhotos(garment: garment, presentation: presentation)
                 .padding(.trailing, -16)
         }
     }
@@ -82,10 +112,11 @@ private struct ProductDetailPhotoSection: View {
 
 private struct ProductDetailPhotos: View {
     let garment: Garment
+    let presentation: ProductDetailPhotoPresentation
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            ProductDetailPhotoRow(garment: garment)
+            ProductDetailPhotoRow(garment: garment, presentation: presentation)
                 .padding(.trailing, 16)
         }
     }
@@ -93,26 +124,39 @@ private struct ProductDetailPhotos: View {
 
 private struct ProductDetailPhotoRow: View {
     let garment: Garment
+    let presentation: ProductDetailPhotoPresentation
+    @State private var expandedPhoto: GarmentPhoto?
 
     var body: some View {
         HStack(spacing: 8) {
             ForEach(garment.productPhotos) { photo in
-                ProductDetailPhoto(photo: photo, showsExpansionIcon: photo.id == garment.productPhotos.first?.id)
+                ProductDetailPhoto(photo: photo, presentation: presentation,
+                    showsExpansionIcon: presentation.showsExpansionIcon && photo.id == garment.productPhotos.first?.id,
+                    onExpand: {
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { expandedPhoto = photo }
+                    })
             }
+        }
+        .fullScreenCover(item: $expandedPhoto) { photo in
+            ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id)
+                .presentationBackground(.clear)
         }
     }
 }
 
 private struct ProductDetailPhoto: View {
     let photo: GarmentPhoto
+    let presentation: ProductDetailPhotoPresentation
     let showsExpansionIcon: Bool
-    @State private var isExpanded = false
+    let onExpand: () -> Void
 
     var body: some View {
-        Button { isExpanded = true } label: {
+        Button(action: onExpand) {
             StoredProductPhotoView(photo: photo, maximumPixelSize: 640)
-                .frame(width: 152, height: 212)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .frame(width: presentation.size.width, height: presentation.size.height)
+                .clipShape(RoundedRectangle(cornerRadius: presentation.cornerRadius))
                 .overlay(alignment: .bottomTrailing) {
                     if showsExpansionIcon {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -124,29 +168,7 @@ private struct ProductDetailPhoto: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("제품 사진 확대")
-        .sheet(isPresented: $isExpanded) {
-            ProductExpandedPhoto(photo: photo)
-        }
-    }
-}
-
-private struct ProductExpandedPhoto: View {
-    let photo: GarmentPhoto
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            StoredProductPhotoView(photo: photo, maximumPixelSize: 2400, contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.black)
-                .navigationTitle("제품 사진")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("닫기") { dismiss() }
-                    }
-                }
-        }
+        .accessibilityIdentifier("product-detail.photo.\(photo.id)")
     }
 }
 

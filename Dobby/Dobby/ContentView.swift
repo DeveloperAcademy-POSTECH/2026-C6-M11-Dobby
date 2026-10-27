@@ -193,7 +193,8 @@ struct ProductSavedDetailView: View {
 
     var body: some View {
         ScrollView {
-            ProductDetailCard(garment: garment, measurementAccessibilityPrefix: "library.measurement")
+            ProductDetailCard(garment: garment, measurementAccessibilityPrefix: "library.measurement",
+                              photoPresentation: .compact)
                 .padding(.horizontal, 21)
                 .padding(.vertical, 16)
                 .frame(maxWidth: 640)
@@ -224,7 +225,8 @@ struct ProductSavedDetailView: View {
             }
         }
         .navigationDestination(isPresented: $showInformation) {
-            InfoInputView(garment: garment, measurementInput: $measurementInput) { _ in
+            InfoInputView(garment: garment, measurementInput: $measurementInput,
+                          allowsPhotoEditing: true) { _ in
                 showInformation = false
             }
         }
