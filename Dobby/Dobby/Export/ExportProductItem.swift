@@ -36,12 +36,9 @@ struct ExportProductItem<Thumbnail: View>: View {
                 brand: brand,
                 priceText: priceText
             )
-
-            Spacer(minLength: 0)
         }
         .frame(
             width: ExportProductItemLayout.cardWidth,
-            height: ExportProductItemLayout.cardHeight,
             alignment: .top
         )
         .background(Color(.systemBackground))
@@ -91,21 +88,21 @@ private struct ExportProductItemMetadata: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if let brand {
+                Text(brand)
+                    .font(.system(size: 16, weight: .medium))
+                    .lineLimit(1)
+            }
+
             Text(name)
                 .font(.system(size: 14))
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let brand {
-                Text(brand)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
             if let priceText {
                 Text(priceText)
                     .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color(.brandNeutral900))
             }
         }
         .padding(10)
@@ -115,7 +112,6 @@ private struct ExportProductItemMetadata: View {
 
 private enum ExportProductItemLayout {
     static let cardWidth: CGFloat = 174
-    static let cardHeight: CGFloat = 375
     static let thumbnailWidth: CGFloat = 175
     static let thumbnailHeight: CGFloat = 232
     static let cornerRadius: CGFloat = 20
