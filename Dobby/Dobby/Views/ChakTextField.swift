@@ -102,6 +102,11 @@ private struct ChakTextFieldEditor: View {
     .padding()
 }
 
+#Preview("입력 중") {
+    ChakTextFieldFocusedPreview()
+        .padding()
+}
+
 #Preview("오류") {
     @Previewable @State var text = ""
 
@@ -113,4 +118,22 @@ private struct ChakTextFieldEditor: View {
         errorMessage: "Error Message"
     )
     .padding()
+}
+
+private struct ChakTextFieldFocusedPreview: View {
+    @State private var text = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ChakTextFieldLabel(label: "Label", isRequired: true)
+            ChakTextFieldEditor(
+                text: $text,
+                placeholder: "Placeholder",
+                isFocused: $isFocused,
+                showsError: false
+            )
+        }
+        .task { isFocused = true }
+    }
 }
