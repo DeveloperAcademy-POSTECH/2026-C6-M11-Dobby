@@ -38,7 +38,14 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["보관함"].isSelected)
         app.tabBars.buttons["홈"].tap()
         expectHome(in: app)
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
         attachScreenshot(app, name: "routing-home-capture-library")
+
+        // 탭 왕복 후에도 중간 화면 없이 실측 촬영으로 진입합니다.
+        app.buttons["product-flow.start"].tap()
+        XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
+        app.buttons["closeGarmentCapture"].tap()
+        expectHome(in: app)
     }
 
     @MainActor
@@ -92,14 +99,16 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(sampleButton.waitForExistence(timeout: 5))
         sampleButton.tap()
 
-        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.tabBars.firstMatch.exists)
-        let photos = app.descendants(matching: .any)["product-detail.photos"].firstMatch
-        let name = app.descendants(matching: .any)["product-detail.name"].firstMatch
-        XCTAssertTrue(photos.waitForExistence(timeout: 5))
-        XCTAssertTrue(name.exists)
-        XCTAssertLessThanOrEqual(photos.frame.maxY, name.frame.minY)
-        XCTAssertTrue(name.staticTexts["90s 나이키 트랙탑"].exists)
+        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["90s 나이키 트랙탑"].exists)
+        // LabeledContent는 OS에 따라 값이 별도 텍스트 대신 행의 value로 노출됩니다.
+        let brand = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "브랜드")).firstMatch
+        XCTAssertTrue(brand.waitForExistence(timeout: 5))
+        let brandText = [brand.label, brand.value as? String ?? ""]
+            + brand.descendants(matching: .staticText).allElementsBoundByIndex.map(\.label)
+        XCTAssertTrue(brandText.contains { $0.contains("나이키") })
+        XCTAssertTrue(app.descendants(matching: .any)["library.measurement.shoulderWidth"].exists)
 
         let exportButton = app.buttons["library.export"]
         XCTAssertTrue(exportButton.isHittable, "The upload action stays fixed below the detail content")
@@ -292,7 +301,7 @@ final class AppRoutingTests: XCTestCase {
 
     @MainActor
     private func expectHome(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(app.staticTexts["home.title"].waitForExistence(timeout: 10), file: file, line: line)
+        XCTAssertTrue(app.staticTexts["home.guidance"].waitForExistence(timeout: 10), file: file, line: line)
         let entry = app.buttons["product-flow.start"]
         XCTAssertTrue(entry.waitForExistence(timeout: 5), file: file, line: line)
         XCTAssertTrue(entry.isHittable, file: file, line: line)

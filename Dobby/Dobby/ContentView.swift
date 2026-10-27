@@ -33,7 +33,9 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $tab) {
             Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: HomeTab.capture) {
-                HomeView { startCreation() }
+                HomeView(resumeCandidate: HomeResumeCandidate.latest(in: garments),
+                    onResumeDraft: { startCreation(resuming: $0) },
+                    onStartCapture: { startCreation() })
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
                         if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
@@ -71,14 +73,18 @@ struct ContentView: View {
                         }
                     }
                 }
+                .tint(libraryPath.isEmpty
+                    ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color("HomeAccent"))
             }
         }
-        .tint(tab == .library && libraryPath.isEmpty
+        // 홈은 중립색, 보관함은 편집 상태에 따른 main의 강조색을 유지합니다.
+        .tint(tab == .capture ? Color.primary : libraryPath.isEmpty
             ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color("HomeAccent"))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
                     .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
+                    .allowsHitTesting(false)
             }
         }
         .fullScreenCover(item: $creationRequest) { request in
@@ -108,6 +114,7 @@ struct ContentView: View {
                 Button("확인", role: .cancel) { linkError = nil }
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
+        .tint(Color("HomeAccent"))
     }
 
     private func startCreation(resuming productID: UUID? = nil) {
