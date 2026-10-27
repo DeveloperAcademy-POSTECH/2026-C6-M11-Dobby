@@ -99,30 +99,54 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(sampleButton.waitForExistence(timeout: 5))
         sampleButton.tap()
 
-        XCTAssertTrue(app.navigationBars["제품 상세"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["90s 나이키 트랙탑"].exists)
-        // LabeledContent는 OS에 따라 값이 별도 텍스트 대신 행의 value로 노출됩니다.
-        let brand = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "브랜드")).firstMatch
-        XCTAssertTrue(brand.waitForExistence(timeout: 5))
-        let brandText = [brand.label, brand.value as? String ?? ""]
-            + brand.descendants(matching: .staticText).allElementsBoundByIndex.map(\.label)
-        XCTAssertTrue(brandText.contains { $0.contains("나이키") })
-        XCTAssertTrue(app.descendants(matching: .any)["library.measurement.shoulderWidth"].exists)
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
+        let photos = app.descendants(matching: .any)["product-detail.photos"].firstMatch
+        let name = app.descendants(matching: .any)["product-detail.name"].firstMatch
+        XCTAssertTrue(photos.waitForExistence(timeout: 5))
+        XCTAssertTrue(name.exists)
+        XCTAssertLessThanOrEqual(photos.frame.maxY, name.frame.minY)
+        XCTAssertTrue(name.staticTexts["90s 나이키 트랙탑"].exists)
 
         let exportButton = app.buttons["library.export"]
         XCTAssertTrue(exportButton.isHittable, "The upload action stays fixed below the detail content")
         attachScreenshot(app, name: "debug-library-detail-top")
 
-        let photo = app.buttons["제품 사진 확대"].firstMatch
-        XCTAssertTrue(photo.isHittable)
-        photo.tap()
-        XCTAssertTrue(app.navigationBars["제품 사진"].waitForExistence(timeout: 5))
-        app.buttons["닫기"].tap()
+        let photoButtons = app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대"))
+        let photoCount = photoButtons.count
+        XCTAssertGreaterThan(photoCount, 2)
+        let secondPhoto = photoButtons.element(boundBy: 1)
+        XCTAssertTrue(secondPhoto.isHittable)
+        secondPhoto.tap()
+        let pager = app.descendants(matching: .any)["product-gallery.pager"].firstMatch
+        assertGalleryPage(pager, in: app, page: 2, total: photoCount)
+        XCTAssertFalse(app.buttons["product-gallery.delete"].exists)
+        let pageControl = app.descendants(matching: .any)["product-gallery.page-control"].firstMatch
+        XCTAssertTrue(pageControl.exists)
+        attachScreenshot(app, name: "debug-library-gallery-second-photo")
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)))
+        assertGalleryPage(pager, in: app, page: 3, total: photoCount)
+        pager.swipeRight()
+        assertGalleryPage(pager, in: app, page: 2, total: photoCount)
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)))
+        assertGalleryPage(pager, in: app, page: 3, total: photoCount)
+        pager.swipeRight()
+        assertGalleryPage(pager, in: app, page: 2, total: photoCount)
+        attachScreenshot(app, name: "debug-library-gallery-snapped-photo")
+        app.buttons["product-gallery.close"].tap()
+        XCTAssertTrue(pager.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+
+        photoButtons.firstMatch.tap()
+        assertGalleryPage(pager, in: app, page: 1, total: photoCount)
+        app.buttons["product-gallery.close"].tap()
+        XCTAssertTrue(pager.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
 
         app.buttons["library.edit"].tap()
-        let information = app.navigationBars["제품 정보 입력"]
+        let information = app.navigationBars["제품 정보 수정"]
         XCTAssertTrue(information.waitForExistence(timeout: 5))
         information.buttons.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
@@ -214,6 +238,147 @@ final class AppRoutingTests: XCTestCase {
     }
 
     @MainActor
+    func testSavedProductPhotosCanBeDeletedFromThumbnailsAndGalleryAndPersist() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openSavedPhotoSample(in: app)
+        XCTAssertEqual(inputPhotoDeleteButtons(in: app).count, 0)
+        app.buttons["library.edit"].tap()
+        let information = app.navigationBars["제품 정보 수정"]
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+
+        let thumbnails = inputPhotoButtons(in: app)
+        let deletes = inputPhotoDeleteButtons(in: app)
+        let originalCount = thumbnails.count
+        XCTAssertGreaterThan(originalCount, 2)
+        XCTAssertEqual(deletes.count, originalCount)
+        attachScreenshot(app, name: "saved-product-edit-photo-delete-controls")
+        let secondPhotoID = thumbnails.element(boundBy: 1).identifier
+            .replacingOccurrences(of: "product-info.photo.", with: "")
+        let secondDelete = app.buttons["product-info.delete-photo.\(secondPhotoID)"]
+        thumbnails.element(boundBy: 1).tap()
+
+        let pager = app.descendants(matching: .any)["product-gallery.pager"].firstMatch
+        assertGalleryPage(pager, in: app, page: 2, total: originalCount)
+        let galleryDelete = app.buttons["product-gallery.delete"]
+        XCTAssertTrue(galleryDelete.isHittable)
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)))
+        assertGalleryPage(pager, in: app, page: 3, total: originalCount)
+        pager.swipeRight()
+        assertGalleryPage(pager, in: app, page: 2, total: originalCount)
+        XCTAssertTrue(galleryDelete.isEnabled)
+        attachScreenshot(app, name: "saved-product-edit-expanded-photo-delete")
+        galleryDelete.tap()
+        assertGalleryPage(pager, in: app, page: 2, total: originalCount - 1)
+        XCTAssertFalse(secondDelete.exists)
+        app.buttons["product-gallery.close"].tap()
+        XCTAssertTrue(pager.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        XCTAssertEqual(thumbnails.count, originalCount - 1)
+        XCTAssertEqual(deletes.count, originalCount - 1)
+
+        let firstDelete = app.buttons[deletes.firstMatch.identifier]
+        let firstPhotoID = firstDelete.identifier.replacingOccurrences(of: "product-info.delete-photo.", with: "")
+        XCTAssertTrue(firstDelete.isHittable)
+        firstDelete.tap()
+        XCTAssertTrue(firstDelete.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(thumbnails.count, originalCount - 2)
+        XCTAssertEqual(deletes.count, originalCount - 2)
+        app.buttons["product-info.done"].tap()
+
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        let detailPhotos = detailPhotoButtons(in: app)
+        XCTAssertEqual(detailPhotos.count, originalCount - 2)
+        XCTAssertFalse(app.buttons["product-detail.photo.\(secondPhotoID)"].exists)
+        XCTAssertFalse(app.buttons["product-detail.photo.\(firstPhotoID)"].exists)
+        XCTAssertEqual(deletes.count, 0)
+        XCTAssertFalse(app.buttons["product-complete.library"].exists)
+        attachScreenshot(app, name: "saved-product-detail-after-photo-deletion")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["보관함"].tap()
+        let savedCard = app.buttons["library.product.53E00000-0000-4000-8000-000000000053"]
+        XCTAssertTrue(savedCard.waitForExistence(timeout: 10))
+        savedCard.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+        XCTAssertEqual(detailPhotos.count, originalCount - 2)
+        XCTAssertFalse(app.buttons["product-detail.photo.\(secondPhotoID)"].exists)
+        XCTAssertFalse(app.buttons["product-detail.photo.\(firstPhotoID)"].exists)
+        app.buttons["library.edit"].tap()
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        XCTAssertEqual(thumbnails.count, originalCount - 2)
+        XCTAssertEqual(deletes.count, originalCount - 2)
+    }
+
+    @MainActor
+    func testDeletingLastSavedProductPhotosClosesGalleryAndPersistsEmptyState() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openSavedPhotoSample(in: app)
+        app.buttons["library.edit"].tap()
+        let information = app.navigationBars["제품 정보 수정"]
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        let thumbnails = inputPhotoButtons(in: app)
+        let deletes = inputPhotoDeleteButtons(in: app)
+        let originalCount = deletes.count
+        XCTAssertGreaterThan(originalCount, 2)
+        for remaining in stride(from: originalCount - 1, through: 2, by: -1) {
+            let delete = app.buttons[deletes.firstMatch.identifier]
+            XCTAssertTrue(delete.isHittable)
+            delete.tap()
+            XCTAssertTrue(delete.waitForNonExistence(timeout: 5))
+            XCTAssertEqual(deletes.count, remaining)
+        }
+        XCTAssertEqual(thumbnails.count, 2)
+        thumbnails.element(boundBy: 1).tap()
+        let pager = app.descendants(matching: .any)["product-gallery.pager"].firstMatch
+        assertGalleryPage(pager, in: app, page: 2, total: 2)
+        let galleryDelete = app.buttons["product-gallery.delete"]
+        XCTAssertTrue(galleryDelete.isHittable)
+        galleryDelete.tap()
+        assertGalleryPage(pager, in: app, page: 1, total: 1)
+        XCTAssertFalse(app.descendants(matching: .any)["product-gallery.page-control"].firstMatch.exists)
+        galleryDelete.tap()
+        XCTAssertTrue(pager.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        let empty = app.descendants(matching: .any)["product-info.photos.empty"].firstMatch
+        XCTAssertTrue(empty.waitForExistence(timeout: 5))
+        XCTAssertEqual(thumbnails.count, 0)
+        XCTAssertEqual(deletes.count, 0)
+        attachScreenshot(app, name: "saved-product-edit-without-photos")
+
+        let done = app.buttons["product-info.done"]
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        XCTAssertEqual(detailPhotoButtons(in: app).count, 0)
+        app.navigationBars["90s 나이키 트랙탑"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 5))
+        let savedCard = app.buttons["library.product.53E00000-0000-4000-8000-000000000053"]
+        XCTAssertTrue(savedCard.isHittable)
+        attachScreenshot(app, name: "saved-product-library-without-thumbnail")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["보관함"].tap()
+        XCTAssertTrue(savedCard.waitForExistence(timeout: 10))
+        savedCard.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
+        XCTAssertEqual(detailPhotoButtons(in: app).count, 0)
+        app.buttons["library.edit"].tap()
+        XCTAssertTrue(information.waitForExistence(timeout: 5))
+        XCTAssertTrue(empty.waitForExistence(timeout: 5))
+        XCTAssertEqual(thumbnails.count, 0)
+        XCTAssertEqual(deletes.count, 0)
+    }
+
+    @MainActor
     func testProductInformationBackgroundTapDismissesKeyboardsWithoutLosingInput() {
         continueAfterFailure = false
         let app = fixtureApp()
@@ -223,7 +388,7 @@ final class AppRoutingTests: XCTestCase {
         app.buttons["debug.export-sample"].tap()
         XCTAssertTrue(app.buttons["library.edit"].waitForExistence(timeout: 10))
         app.buttons["library.edit"].tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 5))
 
         let name = app.descendants(matching: .any)["product-info.name"].firstMatch
         let detail = app.descendants(matching: .any)["product-info.detail"].firstMatch
@@ -270,6 +435,30 @@ final class AppRoutingTests: XCTestCase {
     }
 
     @MainActor
+    private func openSavedPhotoSample(in app: XCUIApplication) {
+        app.tabBars.buttons["보관함"].tap()
+        let sample = app.buttons["debug.export-sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5))
+        sample.tap()
+        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    private func inputPhotoButtons(in app: XCUIApplication) -> XCUIElementQuery {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo."))
+    }
+
+    @MainActor
+    private func inputPhotoDeleteButtons(in app: XCUIApplication) -> XCUIElementQuery {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.delete-photo."))
+    }
+
+    @MainActor
+    private func detailPhotoButtons(in app: XCUIApplication) -> XCUIElementQuery {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-detail.photo."))
+    }
+
+    @MainActor
     private func tapVisibleInput(_ input: XCUIElement, in app: XCUIApplication) {
         let barBottom = app.navigationBars.firstMatch.frame.maxY
         let keyboardTop = app.keyboards.firstMatch.exists
@@ -290,6 +479,27 @@ final class AppRoutingTests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: 8, dy: min(max(input.frame.midY, top), bottom))).tap()
         XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func assertGalleryPage(_ pager: XCUIElement, in app: XCUIApplication, page: Int, total: Int,
+                                   file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(pager.waitForExistence(timeout: 5), file: file, line: line)
+        let expected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "\(page) / \(total)"),
+                                                 object: pager)
+        XCTAssertEqual(XCTWaiter.wait(for: [expected], timeout: 5), .completed, file: file, line: line)
+        let photo = app.descendants(matching: .any)["product-gallery.photo.\(page)"].firstMatch
+        XCTAssertTrue(photo.waitForExistence(timeout: 5), file: file, line: line)
+        let aligned = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let photoFrame = photo.frame
+            let pagerFrame = pager.frame
+            return !photoFrame.isEmpty && abs(photoFrame.minX - pagerFrame.minX) <= 1
+                && abs(photoFrame.maxX - pagerFrame.maxX) <= 1
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [aligned], timeout: 5), .completed,
+                       "The selected photo \(photo.frame) must settle on pager \(pager.frame)", file: file, line: line)
+        XCTAssertEqual(photo.frame.minX, pager.frame.minX, accuracy: 1, file: file, line: line)
+        XCTAssertEqual(photo.frame.maxX, pager.frame.maxX, accuracy: 1, file: file, line: line)
     }
 
     @MainActor
