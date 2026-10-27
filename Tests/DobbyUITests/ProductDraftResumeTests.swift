@@ -35,6 +35,70 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
     }
 
+    func testHomeUpdatesToOlderDraftAfterDeletionAndHidesWhenEmpty() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openMeasurementResult(in: app)
+        let firstID = saveDraftViaHome(stage: "실측 결과 단계", app: app)
+        app.tabBars.buttons["홈"].tap()
+        expectHomeResume(stage: "실측 결과 단계", app: app)
+
+        // 이어하기 카드가 있어도 줄자 버튼은 별도의 새 촬영을 시작한다.
+        openMeasurementResult(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        app.buttons["confirmGarmentMeasurement"].tap()
+        XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 10))
+        let guide = app.buttons["camera.startDetailCapture"]
+        XCTAssertTrue(guide.waitForExistence(timeout: 10))
+        guide.tap()
+        saveAndReturnHome(app: app)
+        expectHomeResume(stage: "상세 촬영 단계", app: app)
+        app.tabBars.buttons["보관함"].tap()
+        let drafts = draftButtons(in: app)
+        XCTAssertEqual(drafts.count, 2)
+        let second = drafts.allElementsBoundByIndex.first { !$0.identifier.hasSuffix(firstID) }
+        guard let second else { XCTFail("새 촬영은 별도 초안을 생성해야 한다"); return }
+        let secondID = String(second.identifier.dropFirst("library.draft.".count))
+        deleteDraft(productID: secondID, app: app)
+        app.tabBars.buttons["홈"].tap()
+        expectHomeResume(stage: "실측 결과 단계", app: app)
+        app.buttons["home.resume"].tap()
+        assertResumedStage("실측 결과", app: app)
+        XCTAssertEqual(saveDraftViaHome(stage: "실측 결과 단계", app: app), firstID)
+        deleteDraft(productID: firstID, app: app)
+        app.tabBars.buttons["홈"].tap()
+        XCTAssertFalse(app.buttons["home.resume"].exists)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["home.resume"].exists)
+    }
+
+    func testHomeResumeRemainsReachableWithAccessibilityText() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openMeasurementResult(in: app)
+        _ = saveDraftViaHome(stage: "실측 결과 단계", app: app)
+        app.terminate()
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        expectHomeResume(stage: "실측 결과 단계", app: app)
+        let card = app.buttons["home.resume"]
+        XCTAssertGreaterThan(card.frame.height, 125, "큰 글씨에서는 카드 높이가 확장되어야 한다")
+        XCTAssertGreaterThanOrEqual(card.frame.minX, 0)
+        XCTAssertLessThanOrEqual(card.frame.maxX, app.frame.width)
+        attachScreenshot(app, name: "home-draft-accessibility-text")
+        app.scrollViews.firstMatch.swipeUp()
+        XCTAssertTrue(card.isHittable)
+        attachScreenshot(app, name: "home-draft-accessibility-scrolled")
+        card.tap()
+        assertResumedStage("실측 결과", app: app)
+    }
+
     func testMeasurementAndDetailDraftsResumeCorrectedEvidenceAndOriginalPhotos() throws {
         continueAfterFailure = false
         let app = fixtureApp()
@@ -75,7 +139,7 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
         attachScreenshot(app, name: "draft-library-details")
 
-        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
+        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app, viaHome: false)
         assertResumedStage("제품 상세 촬영", app: app)
         XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists,
                        "A saved photo draft must retain the acknowledged capture guide")
@@ -184,8 +248,12 @@ final class ProductDraftResumeTests: XCTestCase {
 
         assertCompletedProduct(productID: productID, name: name, brand: brand, app: app)
         attachScreenshot(app, name: "draft-completed-same-product")
+        app.tabBars.buttons["홈"].tap()
+        XCTAssertFalse(app.buttons["home.resume"].exists, "완료된 상품은 홈의 이어하기 대상에서 제외한다")
         app.terminate()
         app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["home.resume"].exists)
         app.tabBars.buttons["보관함"].tap()
         assertCompletedProduct(productID: productID, name: name, brand: brand, app: app)
         app.buttons["library.product.\(productID)"].tap()
@@ -260,13 +328,8 @@ final class ProductDraftResumeTests: XCTestCase {
 
     @discardableResult
     private func saveDraftViaHome(stage: String, app: XCUIApplication) -> String {
-        presentExitConfirmation(in: app)
-        app.buttons["product-flow.exit-save"].tap()
-        let start = app.buttons["product-flow.start"]
-        XCTAssertTrue(start.waitForExistence(timeout: 20))
-        wait(for: NSPredicate(format: "hittable == true"), on: start)
-        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected, "Saving a registration draft must return to Home")
-        XCTAssertFalse(exitConfirmation(in: app).exists)
+        saveAndReturnHome(app: app)
+        expectHomeResume(stage: stage, app: app)
         app.tabBars.buttons["보관함"].tap()
         XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10))
         let drafts = draftButtons(in: app)
@@ -276,6 +339,16 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertNotNil(UUID(uuidString: productID))
         assertDraft(productID: productID, stage: stage, app: app)
         return productID
+    }
+
+    private func saveAndReturnHome(app: XCUIApplication) {
+        presentExitConfirmation(in: app)
+        app.buttons["product-flow.exit-save"].tap()
+        let start = app.buttons["product-flow.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 20))
+        wait(for: NSPredicate(format: "hittable == true"), on: start)
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected, "Saving a registration draft must return to Home")
+        XCTAssertFalse(exitConfirmation(in: app).exists)
     }
 
     private func cancelExitAndStay(title: String, screenshot: String? = nil, app: XCUIApplication) {
@@ -307,12 +380,38 @@ final class ProductDraftResumeTests: XCTestCase {
         app.descendants(matching: .any)["product-flow.exit-confirmation"].firstMatch
     }
 
-    private func relaunchAndResume(productID: String, stage: String, app: XCUIApplication) {
+    private func relaunchAndResume(productID: String, stage: String, app: XCUIApplication, viaHome: Bool = true) {
         app.terminate()
         app.launch()
         app.tabBars.buttons["보관함"].tap()
         assertDraft(productID: productID, stage: stage, app: app)
-        app.buttons["library.draft.\(productID)"].tap()
+        if viaHome {
+            app.tabBars.buttons["홈"].tap()
+            expectHomeResume(stage: stage, app: app)
+            app.buttons["home.resume"].tap()
+        } else {
+            app.buttons["library.draft.\(productID)"].tap()
+        }
+    }
+
+    private func expectHomeResume(stage: String, app: XCUIApplication) {
+        let card = app.buttons["home.resume"]
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        XCTAssertTrue(card.label.contains(stage))
+        for _ in 0..<5 where !card.isHittable { app.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(card.isHittable)
+    }
+
+    private func deleteDraft(productID: String, app: XCUIApplication) {
+        let edit = app.buttons["library.edit-mode"]
+        if edit.label == "수정" { edit.tap() }
+        let remove = app.buttons["library.delete.\(productID)"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+        let confirm = app.alerts["이 작업을 삭제하겠습니까?"].buttons["삭제하기"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(remove.waitForNonExistence(timeout: 10))
     }
 
     private func assertResumedStage(_ title: String, app: XCUIApplication) {
