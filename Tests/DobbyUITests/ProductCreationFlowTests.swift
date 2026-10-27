@@ -234,7 +234,7 @@ final class ProductCreationFlowTests: XCTestCase {
         attachScreenshot(app, name: "flow-top-library-relaunch-corrected-value")
 
         app.buttons["library.edit"].tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         focusExistingShoulder(in: app, expectedText: "67")
         app.buttons["product-info.done"].tap()
         XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
@@ -246,13 +246,13 @@ final class ProductCreationFlowTests: XCTestCase {
         // A saved product keeps pending edits when returning to its detail
         // page, and commits them only after completing Info again.
         app.buttons["library.edit"].tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         replaceText(in: shoulder, with: "72.19", app: app)
         tapBack(in: app)
         XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
         assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
         app.buttons["library.edit"].tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "72.19")
         attachScreenshot(app, name: "flow-top-library-pending-draft-restored-72.19")
@@ -381,6 +381,8 @@ final class ProductCreationFlowTests: XCTestCase {
         let done = app.buttons["product-info.done"]
         XCTAssertTrue(done.waitForExistence(timeout: 10))
         XCTAssertFalse(done.isEnabled)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-info.delete-photo.")).count, 0)
         attachScreenshot(app, name: "product-info-empty")
         replaceText(in: field("name", app: app), with: "Design validation", app: app)
         XCTAssertTrue(done.isEnabled)
@@ -425,12 +427,18 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", detail)).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["브랜드"].exists, "An omitted brand must not leave an empty section")
         attachScreenshot(app, name: "product-complete-summary")
-        let photo = app.buttons["제품 사진 확대"].firstMatch
+        let photoButtons = app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대"))
+        let photo = photoButtons.firstMatch
         reveal(photo, in: app)
+        let photoCount = photoButtons.count
         photo.tap()
-        XCTAssertTrue(app.navigationBars["제품 사진"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["닫기"].exists)
-        app.buttons["닫기"].tap()
+        let pager = app.descendants(matching: .any)["product-gallery.pager"].firstMatch
+        XCTAssertTrue(pager.waitForExistence(timeout: 5))
+        wait(for: NSPredicate(format: "value == %@", "1 / \(photoCount)"), on: pager)
+        XCTAssertFalse(app.buttons["product-gallery.delete"].exists)
+        XCTAssertTrue(app.buttons["product-gallery.close"].exists)
+        app.buttons["product-gallery.close"].tap()
+        XCTAssertTrue(pager.waitForNonExistence(timeout: 5))
         let measurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
         let actions = app.buttons["product-complete.export"]
         for _ in 0..<5 {

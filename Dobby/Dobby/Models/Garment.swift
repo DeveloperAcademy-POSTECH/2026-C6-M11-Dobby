@@ -125,7 +125,7 @@ extension Garment {
     }
 
     var thumbnail: GarmentPhoto? {
-        orderedPhotos.first { $0.role == .thumbnail } ?? orderedPhotos.first
+        productPhotos.first { $0.role == .thumbnail } ?? productPhotos.first
     }
 
     /// 상품별 선택 이력과 기존 내보내기 성공 기록을 중복 없이 표시한다.

@@ -53,7 +53,7 @@ struct HomeView: View {
                                 if let photo = candidate.garment.thumbnail {
                                     StoredProductPhotoView(photo: photo, maximumPixelSize: 500)
                                 } else {
-                                    Rectangle().fill(.quaternary).overlay { Image(systemName: "photo") }
+                                    Color(white: 217.0 / 255)
                                 }
                             }
                         }
