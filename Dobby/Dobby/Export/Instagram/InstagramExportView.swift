@@ -98,7 +98,7 @@ struct InstagramExportView: View {
         }
         .overlay {
             if uploadState.isUploading {
-                InstagramUploadingOverlay()
+                PlatformUploadingOverlay(platformName: "인스타그램")
                     .zIndex(10)
             }
         }

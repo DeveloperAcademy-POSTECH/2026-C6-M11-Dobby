@@ -96,7 +96,7 @@ struct Cafe24ExportView: View {
             } else if isDisconnecting {
                 ExportLoadingOverlay(message: "카페24 연결을 해제하고 있어요…")
             } else if uploadState.isUploading {
-                ExportLoadingOverlay(message: "카페24에 상품을 업로드하고 있어요…")
+                PlatformUploadingOverlay(platformName: "카페24")
             }
         }
         .interactiveDismissDisabled(uploadState.isUploading)
