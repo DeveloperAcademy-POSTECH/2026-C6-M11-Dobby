@@ -4,6 +4,28 @@ import XCTest
 
 @MainActor
 final class DetailCameraOptionsRegressionTests: XCTestCase {
+    func testRapidHighZoomRequestsKeepLatestClampedValue() async throws {
+        let first = expectation(description: "first zoom"), latest = expectation(description: "latest zoom")
+        let driver = SuspendedExposureControls(started: [first, latest], maximumZoom: 20)
+        let model = DetailCameraOptions(controller: driver)
+        await model.refreshCapabilities()
+        model.requestZoom(8)
+        await fulfillment(of: [first], timeout: 2)
+        model.requestZoom(12)
+        model.requestZoom(50)
+        await driver.finish(8, returning: 7.9)
+        await fulfillment(of: [latest], timeout: 2)
+        let received = await driver.received
+        XCTAssertEqual(received, [8, 20])
+        XCTAssertEqual(model.appliedZoom, 7.9)
+        XCTAssertTrue(model.isApplying)
+        await driver.finish(20, returning: 20)
+        for _ in 0..<100 where model.isApplying { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertFalse(model.isApplying)
+        XCTAssertEqual(model.appliedZoom, 20)
+        XCTAssertNil(model.failure)
+    }
+
     func testQueuedControlImmediatelyBlocksCaptureUntilInvalidated() async {
         for zoom in [false, true] {
             let model = DetailCameraOptions(controller: SuspendedExposureControls(started: []))
@@ -103,9 +125,14 @@ private actor SuspendedExposureControls: DetailCameraControlling {
     private(set) var received: [Double] = []
     private var started: [XCTestExpectation]
     private var pending: [Double: CheckedContinuation<Double, Error>] = [:]
-    init(started: [XCTestExpectation]) { self.started = started }
+    private let maximumZoom: Double
+    init(started: [XCTestExpectation], maximumZoom: Double = 2) {
+        self.started = started
+        self.maximumZoom = maximumZoom
+    }
     func capabilities() async throws -> DetailCameraCapabilities {
-        .init(exposure: .init(minimum: -1, maximum: 1), zoom: .init(minimum: 0.5, maximum: 2), exposureBias: 0)
+        .init(exposure: .init(minimum: -1, maximum: 1),
+              zoom: .init(minimum: 0.5, maximum: maximumZoom), exposureBias: 0)
     }
     func apply(_ request: DetailCameraControlRequest) async throws -> Double {
         let value: Double

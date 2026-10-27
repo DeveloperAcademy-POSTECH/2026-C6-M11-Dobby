@@ -89,6 +89,23 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
             .allSatisfy { $0 == CGSize(width: 400, height: 800) })
     }
 
+    func testContainerResizeKeepsBackdropAndCaptureViewportIndependent() async throws {
+        let fixture = try host()
+        defer { fixture.close() }
+        try await waitForSize(fixture, height: 400 * 4 / 3)
+        let host = try XCTUnwrap(fixture.window.rootViewController as? UIHostingController<PreviewHarness>)
+        host.rootView = PreviewHarness(options: fixture.options, samples: fixture.samples,
+                                      backdrop: fixture.backdrop, size: CGSize(width: 800, height: 400))
+        try await eventually("가로 컨테이너에도 배경과 4:3 촬영 영역이 맞아야 합니다.") {
+            guard let viewport = fixture.samples.sizes.last else { return false }
+            return abs(viewport.width - 400 * 4 / 3) < 0.5 && abs(viewport.height - 400) < 0.5
+                && fixture.backdrop.sizes.last == CGSize(width: 800, height: 400)
+        }
+        XCTAssertEqual(fixture.samples.creations, 1)
+        XCTAssertEqual(fixture.backdrop.creations, 1)
+        XCTAssertEqual(fixture.options.photoAspectRatio, .fourThree)
+    }
+
     private struct Fixture {
         let window: UIWindow
         let previousKeyWindow: UIWindow?
@@ -146,13 +163,14 @@ private struct PreviewHarness: View {
     let options: DetailCameraOptions
     let samples: PreviewSamples
     let backdrop: PreviewSamples
+    var size = CGSize(width: 400, height: 800)
     var body: some View {
         DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio) {
             PreviewProbe(samples: samples)
         } backdrop: {
             PreviewProbe(samples: backdrop)
         }
-        .frame(width: 400, height: 800)
+        .frame(width: size.width, height: size.height)
     }
 }
 
