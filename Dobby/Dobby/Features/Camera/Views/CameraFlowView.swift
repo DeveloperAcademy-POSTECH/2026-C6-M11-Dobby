@@ -16,6 +16,9 @@ struct CameraFlowView: View {
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
     let onComplete: (ProductPhotoOutput) async throws -> Void
+    let onSelectPhotos: (() -> Void)?
+    let onExit: (() -> Void)?
+    private let onSelectionVisibilityChange: (Bool) -> Void
     var previewSource: CapturedAsset.Source?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     @State private var captureRequested = false
@@ -27,11 +30,17 @@ struct CameraFlowView: View {
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
          previewSource: CapturedAsset.Source? = nil,
+         onSelectPhotos: (() -> Void)? = nil,
+         onExit: (() -> Void)? = nil,
+         onSelectionVisibilityChange: @escaping (Bool) -> Void = { _ in },
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
         self.camera = camera
         _permission = State(initialValue: permission)
         self.onComplete = onComplete
+        self.onSelectPhotos = onSelectPhotos
+        self.onExit = onExit
+        self.onSelectionVisibilityChange = onSelectionVisibilityChange
         self.previewSource = previewSource
     }
 
@@ -72,21 +81,23 @@ struct CameraFlowView: View {
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(onExit != nil)
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
+            if let onExit {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { requestExit(onExit) } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                        .disabled(isExitDisabled)
+                        .accessibilityLabel("뒤로가기")
+                        .accessibilityIdentifier("product-flow.back")
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 // 기존 사진 선택에는 카메라 권한이 필요하지 않다.
-                NavigationLink {
-                    ProductPhotoSelectionView(model: model, onComplete: onComplete)
-                } label: {
-                    Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .tint(Color(red: 0.94, green: 0.24, blue: 0.07))
-                .disabled(isPhotoOperationInProgress)
-                .accessibilityIdentifier("camera.selectPhotos")
+                photoSelectionControl
             }
         }
         .fullScreenCover(isPresented: $isCaptureGuidePresented) {
@@ -139,6 +150,29 @@ struct CameraFlowView: View {
         DetailAspectRatioPreview(aspectRatio: camera?.options.photoAspectRatio ?? .fourThree) {
             preview
         }
+    }
+
+    private var photoSelectionControl: some View {
+        Group {
+            if let onSelectPhotos {
+                Button(action: onSelectPhotos) { selectionLabel }
+            } else {
+                NavigationLink {
+                    ProductPhotoSelectionView(model: model, onExit: onExit, onComplete: onComplete)
+                        .onAppear { onSelectionVisibilityChange(true) }
+                        .onDisappear { onSelectionVisibilityChange(false) }
+                } label: { selectionLabel }
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
+        .tint(Color(red: 0.94, green: 0.24, blue: 0.07))
+        .disabled(isPhotoOperationInProgress)
+        .accessibilityIdentifier("camera.selectPhotos")
+    }
+
+    private var selectionLabel: some View {
+        Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
     }
 
     @ViewBuilder
@@ -218,6 +252,17 @@ struct CameraFlowView: View {
 
     private var isPhotoOperationInProgress: Bool {
         captureRequested || model.isCapturing || model.isDeleting
+    }
+
+    private var isExitDisabled: Bool {
+        isPhotoOperationInProgress || camera?.options.isApplying == true
+            || isCaptureGuidePresented || isGalleryPresented
+    }
+
+    private func requestExit(_ onExit: () -> Void) {
+        guard !isExitDisabled else { return }
+        isMoreOptionsPresented = false
+        onExit()
     }
 }
 

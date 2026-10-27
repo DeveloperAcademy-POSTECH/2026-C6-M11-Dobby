@@ -22,14 +22,14 @@ private struct HomePreview: View {
     var body: some View {
         // 독립 Preview에서는 실제 촬영 화면 대신 확인 알림을 표시합니다.
         TabView {
-            Tab("홈", systemImage: "house") {
+            Tab("홈", systemImage: "house.fill") {
                 HomeView { showCaptureConfirmation = true }
             }
             Tab("보관함", systemImage: "hanger") {
                 ContentUnavailableView("보관함 미리보기", systemImage: "hanger")
             }
         }
-        .tint(Color("HomeAccent"))
+        .tint(.primary)
         .preferredColorScheme(.light)
         .alert("촬영 시작 버튼 확인", isPresented: $showCaptureConfirmation) {
             Button("확인", role: .cancel) { }

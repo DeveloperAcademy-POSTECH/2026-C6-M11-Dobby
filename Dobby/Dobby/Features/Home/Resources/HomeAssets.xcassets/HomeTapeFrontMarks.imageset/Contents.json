@@ -1,0 +1,16 @@
+{
+  "images": [
+    {
+      "filename": "HomeTapeFrontMarks.png",
+      "idiom": "universal",
+      "scale": "3x"
+    }
+  ],
+  "info": {
+    "author": "mason",
+    "version": 1
+  },
+  "properties": {
+    "template-rendering-intent": "original"
+  }
+}

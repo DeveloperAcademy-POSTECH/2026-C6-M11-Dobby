@@ -8,6 +8,7 @@ struct ExportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var completedChannels: Set<ExportChannel>
+    @State private var selectionSaveError: String?
     @State private var showCafe24 = false
     @State private var showInstagram = false
     @State private var showFruitsGuideOverlay = false
@@ -75,12 +76,38 @@ struct ExportView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showFruitsGuideOverlay)
+        .alert("플랫폼 기록을 저장하지 못했어요", isPresented: Binding(
+            get: { selectionSaveError != nil },
+            set: { if !$0 { selectionSaveError = nil } }
+        )) {
+            Button("확인", role: .cancel) { selectionSaveError = nil }
+        } message: {
+            Text(selectionSaveError ?? "다시 시도해 주세요.")
+        }
     }
 
     private func didSelectChannel(_ channel: ExportChannel) {
-        if channel == .instagram { showInstagram = true; return }
-        if channel == .fruitsFamily { showFruitsGuideOverlay = true; return }
-        if channel == .cafe24 { showCafe24 = true; return }
+        guard !controller.busy, recordSelection(channel) else { return }
+        switch channel {
+        case .instagram:
+            showInstagram = true
+        case .cafe24:
+            showCafe24 = true
+        case .fruitsFamily:
+            showFruitsGuideOverlay = true
+        case .naverStore:
+            break
+        }
+    }
+
+    private func recordSelection(_ channel: ExportChannel) -> Bool {
+        do {
+            try GarmentStore.recordSelectedExportChannel(channel, productID: product.id, in: modelContext)
+            return true
+        } catch {
+            selectionSaveError = "플랫폼 선택 기록을 저장하지 못했어요. 잠시 후 다시 시도해 주세요."
+            return false
+        }
     }
 }
 

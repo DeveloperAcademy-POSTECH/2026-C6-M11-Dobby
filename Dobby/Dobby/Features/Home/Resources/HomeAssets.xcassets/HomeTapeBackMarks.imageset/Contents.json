@@ -1,15 +1,7 @@
 {
   "images": [
     {
-      "idiom": "universal",
-      "scale": "1x"
-    },
-    {
-      "idiom": "universal",
-      "scale": "2x"
-    },
-    {
-      "filename": "home-measuring-tape@3x.png",
+      "filename": "HomeTapeBackMarks.png",
       "idiom": "universal",
       "scale": "3x"
     }
