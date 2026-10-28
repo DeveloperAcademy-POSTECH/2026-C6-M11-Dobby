@@ -4,15 +4,13 @@ import SwiftUI
 /// 하나의 전체 화면 영상 위에서 저장 영역 밖만 글라스로 구분한다.
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
-    var topInset: CGFloat = 0
-    var bottomInset: CGFloat = 0
     @ViewBuilder var content: (CGRect) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
             let layout = DetailAspectRatioPreviewLayout(containerSize: geometry.size,
-                aspectRatio: aspectRatio, topInset: topInset, bottomInset: bottomInset)
+                aspectRatio: aspectRatio)
             content(layout.frame)
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .clipped()
@@ -46,18 +44,16 @@ struct DetailPreviewGlassMask: Shape {
     }
 }
 
-/// 컨트롤을 가리지 않는 최대 크기의 저장 영역. 가로 화면에서는 좌우에도 글라스가 남을 수 있다.
+/// 촬영 영역은 전체 화면에서 계산한다. 조작부의 높이로 가로 폭을 줄이지 않는다.
 nonisolated struct DetailAspectRatioPreviewLayout {
     let frame: CGRect
 
-    init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio,
-         topInset: CGFloat = 0, bottomInset: CGFloat = 0) {
-        let top = min(max(0, topInset), containerSize.height)
-        let availableHeight = max(0, containerSize.height - top - max(0, bottomInset))
+    init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio) {
+        let availableHeight = max(0, containerSize.height)
         let ratio = aspectRatio.previewRatio(isLandscape: containerSize.width > containerSize.height)
         let width = min(containerSize.width, availableHeight * ratio)
         let height = width / ratio
         frame = CGRect(x: (containerSize.width - width) / 2,
-                       y: top + (availableHeight - height) / 2, width: width, height: height)
+                       y: (availableHeight - height) / 2, width: width, height: height)
     }
 }

@@ -14,12 +14,10 @@ struct CameraLivePreviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     let camera: CameraPreviewSession
     var aspectRatio: DetailPhotoAspectRatio = .fourThree
-    var topInset: CGFloat = 0
-    var bottomInset: CGFloat = 0
     @State private var isVisible = false
 
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: aspectRatio, topInset: topInset, bottomInset: bottomInset) { viewport in
+        DetailAspectRatioPreview(aspectRatio: aspectRatio) { viewport in
             CameraPreviewSurface(session: camera.session, viewport: viewport,
                 onRotationChange: { camera.rotationAngle = $0 },
                 onFramingReady: { camera.previewCrop = $0 })

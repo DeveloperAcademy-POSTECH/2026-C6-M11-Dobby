@@ -21,6 +21,7 @@ struct CameraFlowView: View {
     private let onSelectionVisibilityChange: (Bool) -> Void
     var previewSource: CapturedAsset.Source?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
+    @State private var controlsHeight: CGFloat = 148
     @State private var captureRequested = false
     @State private var failureMessage: String?
     @State private var isCaptureGuidePresented = false
@@ -47,10 +48,11 @@ struct CameraFlowView: View {
     var body: some View {
         CameraPermissionGate(permission: permission) {
             GeometryReader { geometry in
-                ratioPreview(topInset: geometry.safeAreaInsets.top)
+                ratioPreview
                     .modifier(DetailZoomModifier(options: camera?.options,
                         enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
-                            && (previewSource != nil || camera?.state == .running)))
+                            && (previewSource != nil || camera?.state == .running),
+                        bottomInset: controlsHeight + 17))
                     .overlay {
                         if isMoreOptionsPresented {
                             Button { isMoreOptionsPresented = false } label: {
@@ -72,6 +74,8 @@ struct CameraFlowView: View {
                                 DetailCaptureOptionsView(options: camera?.options) { isMoreOptionsPresented = false }
                             } else {
                                 captureControls
+                                    .padding(.bottom, geometry.safeAreaInsets.bottom)
+                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
                             }
                         }
                     }
@@ -151,15 +155,15 @@ struct CameraFlowView: View {
     }
 
     @ViewBuilder
-    private func ratioPreview(topInset: CGFloat) -> some View {
+    private var ratioPreview: some View {
         let ratio = camera?.options.photoAspectRatio ?? .fourThree
         Group {
             if let previewSource {
-                DetailAspectRatioPreview(aspectRatio: ratio, topInset: topInset, bottomInset: 148) { _ in
+                DetailAspectRatioPreview(aspectRatio: ratio) { _ in
                     CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
                 }
             } else if let camera {
-                CameraLivePreviewView(camera: camera, aspectRatio: ratio, topInset: topInset, bottomInset: 148)
+                CameraLivePreviewView(camera: camera, aspectRatio: ratio)
             } else {
                 ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
             }
@@ -230,7 +234,7 @@ struct CameraFlowView: View {
             Spacer(minLength: 16)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 148)
+        .frame(height: 114)
     }
 
     private var canCapture: Bool {

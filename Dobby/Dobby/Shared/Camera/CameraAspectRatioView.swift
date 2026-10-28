@@ -2,8 +2,9 @@
 import SwiftUI
 
 /// 선택값은 촬영 옵션 Model에 즉시 반영하고, 뒤로가기는 더보기 메뉴로 돌아간다.
-struct DetailAspectRatioView: View {
-    let options: DetailCameraOptions
+struct CameraAspectRatioView: View {
+    let state: CameraOptionsState
+    let onSelectRatio: (String) -> Void
     let onBack: () -> Void
 
     var body: some View {
@@ -18,24 +19,24 @@ struct DetailAspectRatioView: View {
                     Spacer()
                 }
             }
-            Text(options.photoAspectRatio.rawValue)
+            Text(state.selectedAspectRatio)
                 .font(.largeTitle).monospacedDigit()
                 .accessibilityIdentifier("camera.aspectRatioValue")
             HStack(spacing: 32) {
-                ForEach(DetailPhotoAspectRatio.allCases, id: \.self) { ratio in
-                    Button { options.photoAspectRatio = ratio } label: {
-                        Text(ratio.rawValue)
+                ForEach(state.aspectRatios, id: \.self) { ratio in
+                    Button { onSelectRatio(ratio) } label: {
+                        Text(ratio)
                             .font(.caption2).monospacedDigit()
                             .minimumScaleFactor(0.7).lineLimit(1)
                             .frame(width: 28, height: 28)
                             .background { RatioCorners().stroke(lineWidth: 1.5) }
-                            .foregroundStyle(options.photoAspectRatio == ratio ? .yellow : .white)
+                            .foregroundStyle(state.selectedAspectRatio == ratio ? .yellow : .white)
                             .frame(width: 44, height: 44).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("사진 비율 \(ratio.rawValue)")
-                    .accessibilityAddTraits(options.photoAspectRatio == ratio ? .isSelected : [])
-                    .accessibilityIdentifier("camera.aspectRatio.\(ratio.rawValue)")
+                    .accessibilityLabel("사진 비율 \(ratio)")
+                    .accessibilityAddTraits(state.selectedAspectRatio == ratio ? .isSelected : [])
+                    .accessibilityIdentifier("camera.aspectRatio.\(ratio)")
                 }
             }
             .padding(.top, 4)
@@ -65,8 +66,3 @@ private struct RatioCorners: Shape {
     }
 }
 
-#Preview("비율 선택") {
-    @Previewable @State var options = DetailCameraOptions()
-    DetailAspectRatioView(options: options, onBack: {})
-        .preferredColorScheme(.dark).background(Color.gray)
-}

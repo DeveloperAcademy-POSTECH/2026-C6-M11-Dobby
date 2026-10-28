@@ -4,6 +4,7 @@ import SwiftUI
 struct DetailZoomModifier: ViewModifier {
     let options: DetailCameraOptions?
     let enabled: Bool
+    var bottomInset: CGFloat = 0
     @State private var stops = DetailZoomStops()
     @State private var pinchStart: Double?
     @GestureState private var pinching = false
@@ -39,8 +40,8 @@ struct DetailZoomModifier: ViewModifier {
                         .accessibilityHint("탭하여 배율을 변경하거나 미리보기를 두 손가락으로 확대하세요.")
                         .accessibilityIdentifier("camera.zoom")
                     }
-                    // 실측 촬영의 하단 조작 영역(192pt) + 간격(17pt)과 같은 위치를 유지한다.
-                    .padding(.bottom, 209)
+                    // 호출 화면에서 측정한 조작부 높이에 맞춰 간격을 유지한다.
+                    .padding(.bottom, bottomInset)
                 }
             }
     }

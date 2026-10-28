@@ -55,18 +55,22 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         XCTAssertEqual(fixture.samples.creations, 1)
     }
 
-    func testGlassLeavesOnlyRatioViewportClearAndProtectsControls() {
-        let size = CGSize(width: 390, height: 844)
-        for ratio in DetailPhotoAspectRatio.allCases {
-            let frame = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: ratio,
-                                                       topInset: 110, bottomInset: 148).frame
-            XCTAssertGreaterThanOrEqual(frame.minY, 110)
-            XCTAssertLessThanOrEqual(frame.maxY, 696)
-            XCTAssertEqual(frame.width / frame.height, ratio.previewRatio(isLandscape: false), accuracy: 0.0001)
-            let mask = DetailPreviewGlassMask(viewport: frame).path(in: CGRect(origin: .zero, size: size))
-            XCTAssertFalse(mask.contains(CGPoint(x: frame.midX, y: frame.midY), eoFill: true))
-            XCTAssertTrue(mask.contains(CGPoint(x: 195, y: 55), eoFill: true))
-            XCTAssertTrue(mask.contains(CGPoint(x: 195, y: 770), eoFill: true))
+    func testPortraitRatiosKeepWidthAndSixteenNineExpandsVertically() {
+        for size in [CGSize(width: 375, height: 667), CGSize(width: 390, height: 844),
+                     CGSize(width: 440, height: 956)] {
+            let standard = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .fourThree).frame
+            let tall = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .sixteenNine).frame
+            let square = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .square).frame
+            for frame in [standard, tall, square] {
+                XCTAssertEqual(frame.width, size.width, accuracy: 0.001)
+                XCTAssertEqual(frame.minX, 0, accuracy: 0.001)
+                XCTAssertEqual(frame.midY, size.height / 2, accuracy: 0.001)
+                let mask = DetailPreviewGlassMask(viewport: frame).path(in: CGRect(origin: .zero, size: size))
+                XCTAssertFalse(mask.contains(CGPoint(x: frame.midX, y: frame.midY), eoFill: true))
+            }
+            XCTAssertLessThan(tall.minY, standard.minY)
+            XCTAssertGreaterThan(tall.maxY, standard.maxY)
+            XCTAssertGreaterThan(standard.height, square.height)
         }
     }
 
