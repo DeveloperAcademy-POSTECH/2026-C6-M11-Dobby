@@ -2,6 +2,8 @@
 
 ## 표시와 측정
 
+최신 main `5fedf04`(#114)의 공용 카메라 UI 추출을 반영했다. 실측·상세 촬영은 `Shared/Camera`의 `CameraCaptureOptionsView`, `CameraExposureView`, `CameraAspectRatioView` 구현을 함께 사용한다. `DetailCaptureOptionsView`는 기존 모델을 공용 상태·콜백으로 연결하는 어댑터만 담당하며, 삭제된 Detail 노출·비율 뷰를 복제해 두지 않는다. 상세 촬영의 기본 UI를 유지하고 실측의 좁은 창·큰 글자·햅틱·표시선 모션은 같은 공용 컴포넌트의 표시 옵션으로 연결한다.
+
 중앙 사진 창의 1x는 일반 카메라 전체 4:3 원본이다. 2x는 기존 `RegisteredCameraCrop`을 RGB·깊이·K에 한 번만 적용한다. 16:9·1:1 선택은 표시 크롭이다. 주변을 보이게 하기 위해 중앙 영상을 화면 전체로 확대하지 않는다.
 
 한 `AVCaptureMultiCamSession`이 `builtInLiDARDepthCamera`의 일반 RGB·절대 깊이와 `builtInUltraWideCamera`의 RGB를 소유한다. ARSession을 병행 실행하지 않는다. 호환 인터페이스 이름 `ARKitCaptureProvider` 내부에서 소스를 선택한다. 미지원 시 MultiCam을 중지한 뒤 ARKit으로 순차 폴백하며, 새 sessionID로 이전 소스의 사진·Vision 콜백을 무효화한다.

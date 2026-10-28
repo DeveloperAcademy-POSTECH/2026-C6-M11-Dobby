@@ -21,6 +21,7 @@ struct CameraFlowView: View {
     private let onSelectionVisibilityChange: (Bool) -> Void
     var previewSource: CapturedAsset.Source?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
+    @State private var controlsHeight: CGFloat = 148
     @State private var captureRequested = false
     @State private var failureMessage: String?
     @State private var isCaptureGuidePresented = false
@@ -46,49 +47,56 @@ struct CameraFlowView: View {
 
     var body: some View {
         CameraPermissionGate(permission: permission) {
-            ratioPreview
-                .modifier(DetailZoomModifier(options: camera?.options,
-                    enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
-                        && (previewSource != nil || camera?.state == .running)))
-                .overlay {
-                    if isMoreOptionsPresented {
-                        Button { isMoreOptionsPresented = false } label: {
-                            Color.clear.contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
-                        .accessibilityIdentifier("camera.dismissOptions")
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    VStack(spacing: 0) {
-                        if let failureMessage {
-                            Text(failureMessage).padding().background(.ultraThinMaterial)
-                        } else if model.isCapturing {
-                            ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
-                        }
+            GeometryReader { geometry in
+                ratioPreview
+                    .modifier(DetailZoomModifier(options: camera?.options,
+                        enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
+                            && (previewSource != nil || camera?.state == .running),
+                        bottomInset: controlsHeight + 17))
+                    .overlay {
                         if isMoreOptionsPresented {
-                            DetailCaptureOptionsView(options: camera?.options) { isMoreOptionsPresented = false }
-                        } else {
-                            captureControls
+                            Button { isMoreOptionsPresented = false } label: {
+                                Color.clear.contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
+                            .accessibilityIdentifier("camera.dismissOptions")
                         }
                     }
-                }
-                .ignoresSafeArea()
+                    .overlay(alignment: .bottom) {
+                        VStack(spacing: 0) {
+                            if let failureMessage {
+                                Text(failureMessage).padding().background(.ultraThinMaterial)
+                            } else if model.isCapturing {
+                                ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
+                            }
+                            if isMoreOptionsPresented {
+                                DetailCaptureOptionsView(options: camera?.options) { isMoreOptionsPresented = false }
+                            } else {
+                                captureControls
+                                    .padding(.bottom, geometry.safeAreaInsets.bottom)
+                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
+                            }
+                        }
+                    }
+                    .ignoresSafeArea()
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(background.ignoresSafeArea())
+        .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil)
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { requestExit(onExit) } label: {
                         Image(systemName: "chevron.left")
+                            .foregroundStyle(.white)
                     }
                         .disabled(isExitDisabled)
                         .accessibilityLabel("뒤로가기")
@@ -146,9 +154,19 @@ struct CameraFlowView: View {
         }
     }
 
+    @ViewBuilder
     private var ratioPreview: some View {
-        DetailAspectRatioPreview(aspectRatio: camera?.options.photoAspectRatio ?? .fourThree) {
-            preview
+        let ratio = camera?.options.photoAspectRatio ?? .fourThree
+        Group {
+            if let previewSource {
+                DetailAspectRatioPreview(aspectRatio: ratio) { _ in
+                    CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
+                }
+            } else if let camera {
+                CameraLivePreviewView(camera: camera, aspectRatio: ratio)
+            } else {
+                ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
+            }
         }
     }
 
@@ -173,17 +191,6 @@ struct CameraFlowView: View {
 
     private var selectionLabel: some View {
         Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
-    }
-
-    @ViewBuilder
-    private var preview: some View {
-        if let previewSource {
-            CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
-        } else if let camera {
-            CameraLivePreviewView(camera: camera)
-        } else {
-            ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
-        }
     }
 
     private var shutter: some View {
@@ -227,8 +234,7 @@ struct CameraFlowView: View {
             Spacer(minLength: 16)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 148)
-        .background(.ultraThinMaterial)
+        .frame(height: 114)
     }
 
     private var canCapture: Bool {

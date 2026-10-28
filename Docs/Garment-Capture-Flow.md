@@ -343,7 +343,7 @@ DOBBY_UI_DESIGN_REFERENCE=1 Tools/run-ui-tests.sh \
 ### 실측 촬영 더보기 · 노출과 사진 비율 (#105)
 
 - 우측 하단 더보기는 화면을 덮는 별도 시트 대신 기존 촬영 화면 위의 하단 옵션 패널로 전환한다. 촬영 버튼·배율·안내는 자리를 유지한 채 숨겨지며, 사진 창과 ARSession은 그대로 유지한다. 바깥 사진 탭은 전체 옵션을 닫고, 각 설정의 뒤로가기는 메뉴로 돌아간다. 다시 열면 메뉴에서 시작한다.
-- Mason의 `DetailCaptureOptionsView`·`DetailExposureView`·`DetailAspectRatioView`를 재사용한다. 기본 상세 촬영은 `.standard`, 실측은 `.measurement` 표시를 사용한다. 실측 메뉴↔하위 패널은 response0.30·damping0.90의 짧은 전환을 사용하며, 동작 줄이기는 이동 없이0.12초 opacity로 전환한다. 큰 글자와 좁은 가로 화면은 세로 선택·스크롤로 대응한다.
+- 최신 main의 Mason 공용 `CameraCaptureOptionsView`·`CameraExposureView`·`CameraAspectRatioView`를 사용한다. `DetailCaptureOptionsView`에는 모델을 `CameraOptionsState`와 콜백으로 변환하는 어댑터만 남긴다. 기본 상세 촬영은 `.standard`, 실측은 `.measurement` 표시를 사용한다. 실측 메뉴↔하위 패널은 response0.30·damping0.90의 짧은 전환을 사용하며, 동작 줄이기는 이동 없이0.12초 opacity로 전환한다. 큰 글자와 좁은 가로 화면은 세로 선택·스크롤로 대응한다.
 - 메뉴 열기/닫기와 사진 비율 변경은 서로 다른 애니메이션이다. 사진 비율은 실제 UIKit 카메라 창의 크기와 위치를0.30초 동안 보간하며, 그동안 촬영을 막아 중간 크기와 촬영 메타데이터가 섞이지 않도록 한다. 전체 휴대폰 화면을 채워 추가 확대하는 #101 이전 방식으로 돌아가지 않는다.
 - 기존 촬영 가이드 다시 보기는 옵션 메뉴에서 유지한다. 메뉴가 열린 동안 사진 초점·노출 팬과 셔터는 옵션 선택과 경쟁하지 않는다. 옵션을 닫으면 현재 인식 상태에 따라 주황색 셔터가 복귀한다.
 - 사진 프레임 바깥 전체는 같은 카메라 RGB를 흐리게 비추는 반투명 배경으로 처리한다. 이 배경은 주변 색을 보여주는 장식용 재표시이며 실제 추가 촬영 시야가 아니다. 기존 중앙 ARSCNView의 크기·초점·윤곽·촬영 크롭은 그대로 유지하고, 주변 배경은 터치나 측정에 참여하지 않는다.
