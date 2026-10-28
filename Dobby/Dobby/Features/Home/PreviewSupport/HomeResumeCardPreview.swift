@@ -38,7 +38,6 @@ private struct HomeResumeCardPreview: View {
                 Image(uiImage: photo).resizable().scaledToFill()
             } else {
                 Color(white: 217 / 255)
-                    .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
             }
         }
         .frame(width: width)

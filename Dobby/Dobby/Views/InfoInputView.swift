@@ -12,6 +12,7 @@ import UIKit
 struct InfoInputView: View {
     @Bindable var garment: Garment
     let onExit: (() -> Void)?
+    let allowsPhotoEditing: Bool
     var onComplete: ((Garment) -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
@@ -27,10 +28,12 @@ struct InfoInputView: View {
     static let measurementTableID = "product-info.measurement-table"
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
+         allowsPhotoEditing: Bool = false,
          onExit: (() -> Void)? = nil,
          onComplete: ((Garment) -> Void)? = nil) {
         self.garment = garment
         self.retainedMeasurementInput = measurementInput
+        self.allowsPhotoEditing = allowsPhotoEditing
         self.onExit = onExit
         self.onComplete = onComplete
     }
@@ -43,9 +46,11 @@ struct InfoInputView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 ProductInformationFields(garment: garment, measurementInput: measurementInput,
-                    focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion)
+                    focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
+                    allowsPhotoEditing: allowsPhotoEditing)
                     .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
+                    .padding(.top, allowsPhotoEditing ? 12 : 16)
+                    .padding(.bottom, 16)
                     .background {
                         Color.clear
                             .contentShape(Rectangle())
@@ -68,7 +73,7 @@ struct InfoInputView: View {
             }
         }
         .background(ProductInformationStyle.background)
-        .navigationTitle("제품 정보 입력")
+        .navigationTitle(allowsPhotoEditing ? "제품 정보 수정" : "제품 정보 입력")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil)
         .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)

@@ -31,10 +31,11 @@ struct ProductInformationFields: View {
     @Binding var measurementInput: GarmentMeasurementInputState
     let focus: FocusState<UUID?>.Binding
     let showsValidationErrors: Bool
+    var allowsPhotoEditing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            ProductInputPhotoSection(garment: garment)
+            ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing)
             ProductInputField(title: "제품명", text: $garment.name,
                 placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name", isRequired: true,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isNameValid(garment)
@@ -128,41 +129,6 @@ private struct ProductFieldEditor: View {
                 }
         } else {
             TextField(placeholder, text: $text, axis: .vertical).lineLimit(1...2)
-        }
-    }
-}
-
-struct ProductInputPhotoSection: View {
-    let garment: Garment
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ProductFieldTitle(title: "제품 사진")
-            ProductInputPhotos(garment: garment).padding(.horizontal, -20)
-        }
-    }
-}
-
-private struct ProductInputPhotos: View {
-    let garment: Garment
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            ProductInputPhotoRow(garment: garment).padding(.horizontal, 20)
-        }
-    }
-}
-
-private struct ProductInputPhotoRow: View {
-    let garment: Garment
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(garment.productPhotos) { photo in
-                StoredProductPhotoView(photo: photo, maximumPixelSize: 320, contentMode: .fill)
-                    .frame(width: 77, height: 108)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
         }
     }
 }
