@@ -62,7 +62,7 @@ struct ProductInputPhotoSection: View {
     }
 
     private func removePhoto(_ id: UUID) throws -> Bool {
-        try GarmentStore.removeProductPhoto(id: id, from: garment, in: context)
+        try GarmentStore.removeProductPhoto(id: id, from: garment, in: context, persist: { _ in })
     }
 
     private var deletionAction: ((UUID) throws -> Bool)? {
