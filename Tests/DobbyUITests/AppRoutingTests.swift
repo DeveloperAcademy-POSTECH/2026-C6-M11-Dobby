@@ -512,6 +512,9 @@ final class AppRoutingTests: XCTestCase {
     @MainActor
     private func expectHome(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.staticTexts["home.guidance"].waitForExistence(timeout: 10), file: file, line: line)
+        let guidance = app.staticTexts["home.guidance"].label
+        XCTAssertTrue(guidance.contains("줄자 버튼을 눌러서"), file: file, line: line)
+        XCTAssertTrue(guidance.contains("실측 시작하기"), file: file, line: line)
         let entry = app.buttons["product-flow.start"]
         XCTAssertTrue(entry.waitForExistence(timeout: 5), file: file, line: line)
         XCTAssertTrue(entry.isHittable, file: file, line: line)

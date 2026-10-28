@@ -113,6 +113,11 @@ final class ProductDraftResumeTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         XCTAssertFalse(app.buttons["home.resume"].exists)
+        let start = app.buttons["product-flow.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        let initialShutterSize = start.frame.size
+        let guidance = app.staticTexts["home.guidance"]
+        let initialGuidance = guidance.label
         attachScreenshot(app, name: "home-without-draft")
         openMeasurementResult(in: app)
         waitEnabled(app.buttons["confirmGarmentMeasurement"])
@@ -124,6 +129,10 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertTrue(resume.waitForExistence(timeout: 10))
         XCTAssertTrue(resume.label.contains("상세 촬영 단계"))
         XCTAssertTrue(resume.isHittable)
+        XCTAssertEqual(start.frame.width, initialShutterSize.width, accuracy: 1)
+        XCTAssertEqual(start.frame.height, initialShutterSize.height, accuracy: 1)
+        XCTAssertEqual(guidance.label, initialGuidance)
+        XCTAssertLessThanOrEqual(guidance.frame.maxY, resume.frame.minY)
         attachScreenshot(app, name: "home-latest-detail-draft")
 
         // 홈 카드도 새 프로세스에서 저장된 상품 ID로 기존 복원 흐름을 열어야 한다.
