@@ -29,7 +29,8 @@ final class DetailCaptureGuideUITests: XCTestCase {
         XCTAssertFalse(app.buttons["camera.openGallery"].exists)
         XCTAssertFalse(app.buttons["camera.exposureOption"].isEnabled)
         XCTAssertFalse(app.buttons["camera.aspectRatioOption"].isEnabled)
-        XCTAssertEqual(app.buttons["camera.aspectRatioOption"].value as? String, "4:3, 조절 준비 중")
+        XCTAssertEqual(app.buttons["camera.aspectRatioOption"].value as? String, "4:3",
+                       "The shared panel reports its selected ratio even when the separate availability gate disables editing")
         attachScreenshot(app, name: "detail-capture-options-menu")
         closeOptions.tap()
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 5))

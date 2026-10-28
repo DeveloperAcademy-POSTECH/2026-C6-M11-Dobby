@@ -5,6 +5,47 @@ import UIKit
 /// No test below establishes optical zoom, LiDAR alignment or physical accuracy.
 final class CameraPhotoViewportUITests: XCTestCase {
     @MainActor
+    func testTranslucentSurroundingsFollowTheCameraWithoutMovingThePhotoOrAcceptingFocus() throws {
+        continueAfterFailure = false
+        let app = openPreview(arguments: ["--garment-preview-top", "--garment-preview-no-outline"])
+        let viewport = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
+        let frame = viewport.frame
+        let screen = app.frame
+        let initial = XCUIScreen.main.screenshot()
+        let upper = position(CGPoint(x: 0.80, y: 0.14), in: screen)
+        let lower = position(CGPoint(x: 0.10, y: 0.95), in: screen)
+        let topColor = try rgbSample(in: initial.image, at: upper, screen: screen)
+        for site in [upper, lower] {
+            XCTAssertFalse(frame.contains(site))
+            let color = try rgbSample(in: initial.image, at: site, screen: screen)
+            XCTAssertGreaterThan(color.max() ?? 0, 15, "Surroundings must show camera color rather than solid black")
+            XCTAssertGreaterThan(color.reduce(0, +), 45,
+                                 "Native adaptive regular glass must retain the camera underneath")
+        }
+        attach(initial, name: "camera-translucent-surroundings-one-x")
+
+        let focus = app.descendants(matching: .any)["cameraFocusIndicator"].firstMatch
+        let outside = app.coordinate(withNormalizedOffset: CGVector(dx: 0.80, dy: 0.14))
+        outside.tap()
+        XCTAssertFalse(focus.exists, "The decorative backdrop cannot create focus requests outside the photograph")
+        let zoom = app.buttons["cameraZoomSelector"]
+        zoom.tap()
+        waitUntil { zoom.value as? String == "2x" }
+        assertFrame(viewport.frame, equals: frame)
+        let zoomed = XCUIScreen.main.screenshot()
+        let changed = try rgbSample(in: zoomed.image, at: upper, screen: screen)
+        XCTAssertGreaterThan(zip(topColor, changed).map { abs($0.0 - $0.1) }.max() ?? 0, 8,
+                             "Surroundings must follow camera content, not a constant gray fill")
+        attach(zoomed, name: "camera-translucent-surroundings-two-x")
+        zoom.tap()
+        waitUntil { zoom.value as? String == "1x" }
+        viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.55)).tap()
+        XCTAssertTrue(focus.waitForExistence(timeout: 2))
+        XCTAssertEqual(focus.frame.midX, frame.minX + frame.width * 0.65, accuracy: 2)
+        XCTAssertEqual(focus.frame.midY, frame.minY + frame.height * 0.55, accuracy: 2)
+    }
+
+    @MainActor
     func testFullSourcePixelsStayInPlaceFromPreviewThroughProcessingAndResult() throws {
         continueAfterFailure = false
         let app = openPreview(arguments: ["--garment-preview-top", "--garment-preview-processing",
@@ -15,7 +56,7 @@ final class CameraPhotoViewportUITests: XCTestCase {
         assertFrame(viewport.frame, equals: expected)
         XCTAssertEqual(viewport.frame.width / viewport.frame.height, 0.8, accuracy: 0.001)
         if app.frame.width == 402 && app.frame.height == 874 {
-            assertFrame(viewport.frame, equals: CGRect(x: app.frame.minX, y: app.frame.minY + 162.75,
+            assertFrame(viewport.frame, equals: CGRect(x: app.frame.minX, y: app.frame.minY + 139.5625,
                 width: 402, height: 502.5))
         }
 
@@ -141,14 +182,19 @@ final class CameraPhotoViewportUITests: XCTestCase {
     }
 
     /// Expected visible source area comes from the UI specification, not the
-    /// production geometry helper: reserve chrome, then fit the 4:5 test photo.
+    /// production helper: fit the 4:5 test photo in the full camera canvas.
     private func expectedPhotoRect(in screen: CGRect) -> CGRect {
-        let available = screen.width > screen.height
-            ? CGRect(x: screen.minX, y: screen.minY, width: screen.width - 180, height: screen.height)
-            : CGRect(x: screen.minX, y: screen.minY + 146, width: screen.width, height: screen.height - 338)
-        let scale = min(available.width / 800, available.height / 1000)
-        return CGRect(x: available.midX - 800 * scale / 2, y: available.midY - 1000 * scale / 2,
-            width: 800 * scale, height: 1000 * scale)
+        if screen.width > screen.height {
+            let area = CGRect(x: screen.minX, y: screen.minY, width: screen.width - 180, height: screen.height)
+            let scale = min(area.width / 800, area.height / 1000)
+            return CGRect(x: area.midX - 400 * scale, y: area.midY - 500 * scale,
+                width: 800 * scale, height: 1000 * scale)
+        }
+        let maximumHeight = min(screen.width * 16 / 9, screen.height - 120)
+        let height = min(maximumHeight, screen.width / 0.8)
+        let width = height * 0.8
+        return CGRect(x: screen.midX - width / 2,
+            y: screen.minY + 60 + (maximumHeight - height) * 0.375, width: width, height: height)
     }
 
     private func position(_ normalized: CGPoint, in rect: CGRect) -> CGPoint {

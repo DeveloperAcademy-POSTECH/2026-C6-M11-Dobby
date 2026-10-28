@@ -7,39 +7,115 @@
 
 import SwiftUI
 
+nonisolated enum DetailCaptureOptionsDestination: String, Sendable, CaseIterable {
+    case menu, exposure, aspectRatio
+
+    /// A backdrop or Escape first returns from a child panel to its menu.
+    /// At the menu, its owner can dismiss the complete options presentation.
+    var parent: Self? { self == .menu ? nil : .menu }
+}
+
+/// Detail capture keeps its existing presentation unless a caller opts into
+/// the measurement camera's compact animated bottom panel.
+nonisolated enum DetailCaptureOptionsPresentation: Sendable {
+    case standard, measurement
+
+    func animation(reduceMotion: Bool) -> Animation? {
+        guard self == .measurement else { return nil }
+        return reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.30, dampingFraction: 0.90)
+    }
+
+    func transition(reduceMotion: Bool) -> AnyTransition {
+        guard self == .measurement else { return .identity }
+        return reduceMotion ? .opacity
+            : .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity)
+    }
+}
+
 /// 실측·상세 화면에서 재사용하는 촬영 옵션 UI. 값과 적용 동작은 호출자가 전달한다.
 struct CameraCaptureOptionsView: View {
-    var state = CameraOptionsState()
-    var onExposureChange: (Double) -> Void = { _ in }
-    var onAspectRatioChange: (String) -> Void = { _ in }
+    let state: CameraOptionsState
+    let onExposureChange: (Double) -> Void
+    let onAspectRatioChange: (String) -> Void
+    let presentation: DetailCaptureOptionsPresentation
+    private let selection: Binding<DetailCaptureOptionsDestination>?
+    private let forceReduceMotion: Bool
     let onClose: () -> Void
-    @State private var showsExposure = false
-    @State private var showsAspectRatio = false
+    @State private var localSelection: DetailCaptureOptionsDestination = .menu
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(state: CameraOptionsState = CameraOptionsState(),
+         onExposureChange: @escaping (Double) -> Void = { _ in },
+         onAspectRatioChange: @escaping (String) -> Void = { _ in },
+         presentation: DetailCaptureOptionsPresentation = .standard,
+         selection: Binding<DetailCaptureOptionsDestination>? = nil,
+         forceReduceMotion: Bool = false,
+         onClose: @escaping () -> Void) {
+        self.state = state
+        self.onExposureChange = onExposureChange
+        self.onAspectRatioChange = onAspectRatioChange
+        self.presentation = presentation
+        self.selection = selection
+        self.forceReduceMotion = forceReduceMotion
+        self.onClose = onClose
+    }
+
+    private var destination: DetailCaptureOptionsDestination { selection?.wrappedValue ?? localSelection }
+    private var effectiveReduceMotion: Bool { reduceMotion || forceReduceMotion }
 
     var body: some View {
-        if showsExposure {
-            CameraExposureView(state: state, onChangeExposure: onExposureChange) { showsExposure = false }
-        } else if showsAspectRatio {
-            CameraAspectRatioView(state: state, onSelectRatio: onAspectRatioChange) { showsAspectRatio = false }
-        } else {
-            menu
+        Group {
+            if presentation == .measurement {
+                ViewThatFits(in: .vertical) {
+                    panel.fixedSize(horizontal: false, vertical: true)
+                    ScrollView(.vertical) { panel }
+                        .scrollIndicators(.hidden)
+                }
+            } else {
+                panel
+            }
         }
+        // The owning camera animates opening/closing this complete container;
+        // this view animates only navigation between its own child panels.
+        .animation(presentation.animation(reduceMotion: effectiveReduceMotion), value: destination)
+    }
+
+    private var panel: some View {
+        Group {
+            if destination == .exposure, state.exposureRange != nil {
+                CameraExposureView(state: state, presentation: presentation,
+                    forceReduceMotion: effectiveReduceMotion, onChangeExposure: onExposureChange) { navigate(to: .menu) }
+            } else if destination == .aspectRatio, !state.aspectRatios.isEmpty {
+                CameraAspectRatioView(state: state, presentation: presentation,
+                    onSelectRatio: onAspectRatioChange) { navigate(to: .menu) }
+            } else {
+                menu
+            }
+        }
+        .id(destination)
+        .transition(presentation.transition(reduceMotion: effectiveReduceMotion))
+    }
+
+    private func navigate(to destination: DetailCaptureOptionsDestination) {
+        if let selection { selection.wrappedValue = destination }
+        else { localSelection = destination }
     }
 
     private var menu: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: presentation == .measurement ? 16 : 24) {
             option("노출", identifier: "camera.exposureOption", enabled: state.exposureRange != nil,
-                   action: { showsExposure = true }) {
+                   action: { navigate(to: .exposure) }) {
                 Image(systemName: "plusminus").font(.title2)
             }
             option("비율", identifier: "camera.aspectRatioOption", enabled: !state.aspectRatios.isEmpty,
-                   action: { showsAspectRatio = true }) {
+                   action: { navigate(to: .aspectRatio) }) {
                 Text(state.selectedAspectRatio).font(.headline).monospacedDigit()
             }
         }
-        .padding(.horizontal, 52)
-        .padding(.top, 24)
-        .padding(.bottom, 16)
+        .padding(.horizontal, presentation == .measurement ? 12 : 52)
+        // Reserve the close button's complete row in narrow landscape panels.
+        .padding(.top, presentation == .measurement ? 52 : 24)
+        .padding(.bottom, presentation == .measurement ? 12 : 16)
         .frame(maxWidth: .infinity)
         .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 32))
         .overlay(alignment: .topTrailing) {
@@ -54,8 +130,8 @@ struct CameraCaptureOptionsView: View {
             .accessibilityLabel("촬영 옵션 닫기")
             .accessibilityIdentifier("camera.closeOptions")
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 24)
+        .padding(.horizontal, presentation == .measurement ? 8 : 16)
+        .padding(.bottom, presentation == .measurement ? 16 : 24)
         .frame(minHeight: 148, alignment: .bottom)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("camera.optionsMenu")
@@ -84,8 +160,6 @@ struct CameraCaptureOptionsView: View {
     }
 }
 
-// 실측 화면도 같은 방식으로 실제 적용값/지원 범위를 전달하고 콜백을 기존 제어기에 연결한다.
-// 여기서 카메라 세션이나 측정 Model을 생성하지 않는다.
 #Preview("공용 촬영 옵션 · 독립 상태") {
     @Previewable @State var state = CameraOptionsState(exposureRange: -2...2,
         appliedExposure: 0, aspectRatios: ["4:3", "16:9", "1:1"])

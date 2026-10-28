@@ -1,10 +1,25 @@
 // Created by mason on 10/20/26.
 import SwiftUI
 
-/// 상세 카메라 Model을 공용 옵션 UI의 값/콜백으로 연결한다.
+/// 상세·실측 카메라 Model을 공용 옵션 UI의 값/콜백으로 연결한다.
 struct DetailCaptureOptionsView: View {
-    var options: DetailCameraOptions? = nil
+    let options: DetailCameraOptions?
+    let presentation: DetailCaptureOptionsPresentation
+    private let selection: Binding<DetailCaptureOptionsDestination>?
+    private let forceReduceMotion: Bool
     let onClose: () -> Void
+
+    init(options: DetailCameraOptions? = nil,
+         presentation: DetailCaptureOptionsPresentation = .standard,
+         selection: Binding<DetailCaptureOptionsDestination>? = nil,
+         forceReduceMotion: Bool = false,
+         onClose: @escaping () -> Void) {
+        self.options = options
+        self.presentation = presentation
+        self.selection = selection
+        self.forceReduceMotion = forceReduceMotion
+        self.onClose = onClose
+    }
 
     var body: some View {
         CameraCaptureOptionsView(state: state,
@@ -12,7 +27,8 @@ struct DetailCaptureOptionsView: View {
             onAspectRatioChange: { value in
                 guard let ratio = DetailPhotoAspectRatio(rawValue: value) else { return }
                 options?.photoAspectRatio = ratio
-            }, onClose: onClose)
+            }, presentation: presentation, selection: selection,
+            forceReduceMotion: forceReduceMotion, onClose: onClose)
     }
 
     private var state: CameraOptionsState {
