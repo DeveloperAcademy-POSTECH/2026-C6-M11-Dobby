@@ -8,6 +8,7 @@ struct ProductLibraryView: View {
     let onStartMeasurement: () -> Void
     let onResumeDraft: (UUID) -> Void
     @State private var searchText = ""
+    @State private var showsOnlyDrafts: Bool
     @FocusState private var isSearchFocused: Bool
     @State private var pendingDeletion: UUID?
     @State private var deletionFailed = false
@@ -23,11 +24,13 @@ struct ProductLibraryView: View {
 
     init(garments: [Garment], isEditing: Binding<Bool>,
          onStartMeasurement: @escaping () -> Void,
-         onResumeDraft: @escaping (UUID) -> Void = { _ in }) {
+         onResumeDraft: @escaping (UUID) -> Void = { _ in },
+         initiallyShowsOnlyDrafts: Bool = false) {
         self.garments = garments
         _isEditing = isEditing
         self.onStartMeasurement = onStartMeasurement
         self.onResumeDraft = onResumeDraft
+        _showsOnlyDrafts = State(initialValue: initiallyShowsOnlyDrafts)
     }
 
     private var filteredGarments: [Garment] {
@@ -40,6 +43,10 @@ struct ProductLibraryView: View {
 
     private var filteredDraftGarments: [Garment] {
         filteredGarments.filter(\.isCreationDraft)
+    }
+
+    private var draftGarments: [Garment] {
+        garments.filter(\.isCreationDraft)
     }
 
     private var filteredSavedGarments: [Garment] {
@@ -55,20 +62,33 @@ struct ProductLibraryView: View {
             Group {
                 if garments.isEmpty {
                     emptyLibrary
-                } else if filteredGarments.isEmpty {
+                } else if filteredGarments.isEmpty && !showsOnlyDrafts {
                     ContentUnavailableView.search(text: searchText.trimmingCharacters(in: .whitespacesAndNewlines))
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            if !filteredDraftGarments.isEmpty {
-                                ProductDraftCountBadge(count: filteredDraftGarments.count)
-                            }
-
                             ForEach(filteredDraftGarments) { garment in
                                 draftCell(garment)
                             }
 
-                            if !filteredSavedGarments.isEmpty {
+                            if !draftGarments.isEmpty {
+                                ProductDraftCountBadge(
+                                    count: draftGarments.count,
+                                    isSelected: showsOnlyDrafts
+                                ) {
+                                    isSearchFocused = false
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        showsOnlyDrafts.toggle()
+                                    }
+                                }
+                            }
+
+                            if showsOnlyDrafts && filteredDraftGarments.isEmpty {
+                                ContentUnavailableView.search(
+                                    text: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                )
+                                .frame(maxWidth: .infinity)
+                            } else if !showsOnlyDrafts && !filteredSavedGarments.isEmpty {
                                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                                     ForEach(filteredSavedGarments) { garment in
                                         productCell(garment)
@@ -138,6 +158,9 @@ struct ProductLibraryView: View {
         }
         .onChange(of: garments.isEmpty, initial: true) { _, isEmpty in
             if isEmpty { isEditing = false }
+        }
+        .onChange(of: draftGarments.isEmpty) { _, draftsAreEmpty in
+            if draftsAreEmpty { showsOnlyDrafts = false }
         }
         .onDisappear {
             isSearchFocused = false
