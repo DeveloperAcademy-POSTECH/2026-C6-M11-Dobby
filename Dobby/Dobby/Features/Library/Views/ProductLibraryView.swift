@@ -67,7 +67,11 @@ struct ProductLibraryView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            if showsOnlyDrafts {
+                            ForEach(filteredDraftGarments) { garment in
+                                draftCell(garment)
+                            }
+
+                            if !draftGarments.isEmpty {
                                 ProductDraftCountBadge(
                                     count: draftGarments.count,
                                     isSelected: showsOnlyDrafts
@@ -77,7 +81,9 @@ struct ProductLibraryView: View {
                                         showsOnlyDrafts.toggle()
                                     }
                                 }
+                            }
 
+                            if showsOnlyDrafts {
                                 if filteredDraftGarments.isEmpty {
                                     ContentUnavailableView.search(
                                         text: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -90,28 +96,10 @@ struct ProductLibraryView: View {
                                         }
                                     }
                                 }
-                            } else {
-                                ForEach(filteredDraftGarments) { garment in
-                                    draftCell(garment)
-                                }
-
-                                if !draftGarments.isEmpty {
-                                    ProductDraftCountBadge(
-                                        count: draftGarments.count,
-                                        isSelected: showsOnlyDrafts
-                                    ) {
-                                        isSearchFocused = false
-                                        withAnimation(.easeInOut(duration: 0.18)) {
-                                            showsOnlyDrafts.toggle()
-                                        }
-                                    }
-                                }
-
-                                if !filteredSavedGarments.isEmpty {
-                                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                                        ForEach(filteredSavedGarments) { garment in
-                                            productCell(garment)
-                                        }
+                            } else if !filteredSavedGarments.isEmpty {
+                                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                                    ForEach(filteredSavedGarments) { garment in
+                                        productCell(garment)
                                     }
                                 }
                             }
