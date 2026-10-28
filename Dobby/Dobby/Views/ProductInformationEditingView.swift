@@ -23,18 +23,16 @@ struct ProductInformationEditingView: View {
     }
 
     var body: some View {
-        ZStack {
-            InfoInputView(garment: garment, measurementInput: $measurementInput,
-                          allowsPhotoEditing: true, onExit: requestExit, onComplete: onComplete)
-                .disabled(showsDiscardConfirmation)
-
-            if showsDiscardConfirmation {
+        InfoInputView(garment: garment, measurementInput: $measurementInput,
+                      allowsPhotoEditing: true, onExit: requestExit, onComplete: onComplete)
+            .fullScreenCover(isPresented: $showsDiscardConfirmation) {
                 ProductInformationDiscardConfirmation(
                     onCancel: { showsDiscardConfirmation = false },
                     onDiscard: discardChangesAndExit
                 )
+                .presentationBackground(.clear)
+                .interactiveDismissDisabled()
             }
-        }
     }
 
     private func requestExit() {
@@ -46,6 +44,7 @@ struct ProductInformationEditingView: View {
     }
 
     private func discardChangesAndExit() {
+        showsDiscardConfirmation = false
         initialSnapshot.restore(garment, measurementInput: &measurementInput)
         onExit()
     }
@@ -58,15 +57,15 @@ private struct ProductInformationEditingPreview: View {
     @State private var measurementInput = GarmentMeasurementInputState()
 
     var body: some View {
-        NavigationStack {
-            ZStack {
+        ZStack {
+            NavigationStack {
                 InfoInputView(garment: garment, measurementInput: $measurementInput,
                               allowsPhotoEditing: true, onExit: { })
                     .disabled(showsConfirmation)
+            }
 
-                if showsConfirmation {
-                    ProductInformationDiscardConfirmation(onCancel: { }, onDiscard: { })
-                }
+            if showsConfirmation {
+                ProductInformationDiscardConfirmation(onCancel: { }, onDiscard: { })
             }
         }
     }
