@@ -17,7 +17,7 @@ nonisolated struct DetailPhotoCropGeometry: Equatable, Sendable {
     }
 
     init?(pixelWidth: Int, pixelHeight: Int, orientation: CapturedAsset.Orientation,
-          aspectRatio: DetailPhotoAspectRatio?) {
+          aspectRatio: DetailPhotoAspectRatio?, normalizedPreviewCrop: CGRect? = nil) {
         // CGFloat 좌표 변환에서도 픽셀 정수가 정확하게 보존돼야 한다.
         guard pixelWidth > 0, pixelHeight > 0,
               pixelWidth <= 9_007_199_254_740_991, pixelHeight <= 9_007_199_254_740_991 else { return nil }
@@ -42,11 +42,22 @@ nonisolated struct DetailPhotoCropGeometry: Equatable, Sendable {
         // 정사각형 원본은 세로 기준. 화면 방향이 아닌 정방향 사진의 종횡을 따른다.
         let horizontal = width > height ? longSide : shortSide
         let vertical = width > height ? shortSide : longSide
-        let unit = min(width / horizontal, height / vertical)
+        var region = CGRect(origin: .zero, size: uprightPixelSize)
+        if let crop = normalizedPreviewCrop {
+            guard [crop.minX, crop.minY, crop.width, crop.height].allSatisfy(\.isFinite),
+                  crop.width > 0, crop.height > 0,
+                  CGRect(x: 0, y: 0, width: 1, height: 1).contains(crop) else { return nil }
+            // 픽셀 경계는 안쪽으로 반올림해 글라스 뒤의 내용이 저장되지 않도록 한다.
+            let left = ceil(crop.minX * CGFloat(width)), top = ceil(crop.minY * CGFloat(height))
+            region = CGRect(x: left, y: top, width: floor(crop.maxX * CGFloat(width)) - left,
+                            height: floor(crop.maxY * CGFloat(height)) - top)
+        }
+        let unit = min(Int(region.width) / horizontal, Int(region.height) / vertical)
         guard unit > 0 else { return nil }
         let cropWidth = unit * horizontal, cropHeight = unit * vertical
         // 정수 픽셀로 정확한 비율을 유지. 홀수 잔여 픽셀은 오른쪽/아래쪽에서 더 제거한다.
-        cropRect = CGRect(x: (width - cropWidth) / 2, y: (height - cropHeight) / 2,
-                          width: cropWidth, height: cropHeight)
+        let cropX = region.minX + floor((region.width - CGFloat(cropWidth)) / 2)
+        let cropY = region.minY + floor((region.height - CGFloat(cropHeight)) / 2)
+        cropRect = CGRect(x: cropX, y: cropY, width: CGFloat(cropWidth), height: CGFloat(cropHeight))
     }
 }

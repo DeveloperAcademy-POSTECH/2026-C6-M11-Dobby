@@ -23,6 +23,8 @@ final class CameraPreviewSession: CaptureProviding {
     @ObservationIgnored private let driver = CameraPreviewDriver()
     @ObservationIgnored private let store = CameraPhotoStore()
     @ObservationIgnored private let processor = DetailPhotoProcessor()
+    var isPreviewTransitioning = false
+    @ObservationIgnored var previewCrop: (() -> CGRect?)?
     @ObservationIgnored var rotationAngle: CGFloat = 90
     @ObservationIgnored private var wantsRunning = false
     @ObservationIgnored private var revision = 0
@@ -34,11 +36,11 @@ final class CameraPreviewSession: CaptureProviding {
     // View에는 프리뷰 레이어 연결만 허용한다. 구성·시작·중지는 driver가 직렬 처리한다.
     var session: AVCaptureSession { driver.session }
     // 최초 진입에도 관찰 가능한 state를 읽어 셔터가 세션 준비 완료를 감지하게 한다.
-    var canCapture: Bool { state == .running && wantsRunning && !isCapturing && !options.isApplying }
+    var canCapture: Bool { state == .running && wantsRunning && !isCapturing && !options.isApplying && !isPreviewTransitioning }
 
     func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset {
         try Task.checkCancellation()
-        guard canCapture else { throw CameraFailure.cameraUnavailable }
+        guard canCapture, let crop = previewCrop?() else { throw CameraFailure.cameraUnavailable }
         isCapturing = true
         defer { isCapturing = false }
         let request = revision
@@ -47,7 +49,7 @@ final class CameraPreviewSession: CaptureProviding {
         let data = try await driver.capture(rotationAngle: rotationAngle)
         try Task.checkCancellation()
         guard wantsRunning, revision == request else { throw CancellationError() }
-        let processed = try await processor.process(data, aspectRatio: aspectRatio)
+        let processed = try await processor.process(data, aspectRatio: aspectRatio, normalizedPreviewCrop: crop)
         try Task.checkCancellation()
         guard wantsRunning, revision == request else { throw CancellationError() }
         let asset = try await store.save(processed, sessionID: sessionID, garmentID: garmentID, capturedAt: capturedAt)

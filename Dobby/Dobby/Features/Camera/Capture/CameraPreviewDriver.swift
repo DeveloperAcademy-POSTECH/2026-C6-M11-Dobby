@@ -189,6 +189,6 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
         let multiplier = Double(device.displayVideoZoomFactorMultiplier)
         guard multiplier.isFinite, multiplier > 0 else { return nil }
         return .init(minimum: max(0.5, Double(device.minAvailableVideoZoomFactor) * multiplier),
-                     maximum: min(2, Double(device.maxAvailableVideoZoomFactor) * multiplier))
+                     maximum: Double(device.maxAvailableVideoZoomFactor) * multiplier)
     }
 }

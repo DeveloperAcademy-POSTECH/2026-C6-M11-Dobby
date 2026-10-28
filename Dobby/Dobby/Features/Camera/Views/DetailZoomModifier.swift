@@ -4,6 +4,7 @@ import SwiftUI
 struct DetailZoomModifier: ViewModifier {
     let options: DetailCameraOptions?
     let enabled: Bool
+    var bottomInset: CGFloat = 0
     @State private var stops = DetailZoomStops()
     @State private var pinchStart: Double?
     @GestureState private var pinching = false
@@ -31,7 +32,7 @@ struct DetailZoomModifier: ViewModifier {
                         } label: {
                             Text(label).font(.footnote.weight(.semibold)).monospacedDigit()
                                 .foregroundStyle(label == "1x" ? .white : .yellow)
-                                .frame(width: 44, height: 44)
+                                .frame(width: 48, height: 48)
                                 .background(.black.opacity(0.55), in: Circle())
                         }
                         .buttonStyle(.plain).disabled(options.isApplying || pinching)
@@ -39,7 +40,8 @@ struct DetailZoomModifier: ViewModifier {
                         .accessibilityHint("탭하여 배율을 변경하거나 미리보기를 두 손가락으로 확대하세요.")
                         .accessibilityIdentifier("camera.zoom")
                     }
-                    .padding(.bottom, 156)
+                    // 호출 화면에서 측정한 조작부 높이에 맞춰 간격을 유지한다.
+                    .padding(.bottom, bottomInset)
                 }
             }
     }
