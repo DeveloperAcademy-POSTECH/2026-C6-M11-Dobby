@@ -1,5 +1,11 @@
 import Foundation
 
+/// AVFoundation has synchronized, calibrated LiDAR but no AR world tracking.
+/// Keep that evidence explicit rather than claiming an AR tracking state.
+nonisolated enum CaptureFrameEvidence: String, Codable, Sendable {
+    case synchronizedCalibratedLiDAR
+}
+
 /// Full-field depth quality used to compare nearby shutter candidates. This is
 /// neither a garment mask score nor a centimetre-accuracy estimate.
 nonisolated struct CaptureFrameQuality: Codable, Sendable, Equatable {
@@ -10,6 +16,8 @@ nonisolated struct CaptureFrameQuality: Codable, Sendable, Equatable {
     var trackingNormal: Bool
     var translationSpeedMetersPerSecond: Double?
     var angularSpeedRadiansPerSecond: Double?
+    /// Nil preserves decoding/selection of previously saved ARKit captures.
+    var captureEvidence: CaptureFrameEvidence? = nil
 
     static let maximumTranslationSpeed = 0.10
     static let maximumAngularSpeed = 12 * Double.pi / 180
@@ -21,7 +29,8 @@ nonisolated struct CaptureFrameQuality: Codable, Sendable, Equatable {
     }
 
     var isEligible: Bool {
-        guard timestamp.isFinite, timestamp >= 0, trackingNormal,
+        guard timestamp.isFinite, timestamp >= 0,
+              trackingNormal || captureEvidence == .synchronizedCalibratedLiDAR,
               validDepthCoverage.isFinite, (0...1).contains(validDepthCoverage),
               validDepthSampleCount >= 30, validDepthCoverage > 0 else { return false }
         if let highConfidenceCoverage {

@@ -5,7 +5,8 @@ import OSLog
 /// constructing discarded AR sessions, image contexts or model adapters.
 @MainActor
 final class GarmentCaptureSession: ObservableObject {
-    let camera = ARKitCaptureProvider()
+    let camera: ARKitCaptureProvider
+    let cameraOptions: DetailCameraOptions
     @Published private(set) var service: RecordedMeasurementService?
     @Published private(set) var loadingError: String?
 
@@ -16,11 +17,49 @@ final class GarmentCaptureSession: ObservableObject {
     }
     private static let signposter = OSSignposter(subsystem: "com.dobby.performance", category: "CaptureSetup")
     private var cameraChanges: AnyCancellable?
+    private var cameraOptionsSync: Task<Void, Never>?
+    private var previousCameraOptionsSnapshot: LiDARDetailCameraSnapshot?
     private var preparationID: UUID?
 
     init() {
+        let camera = ARKitCaptureProvider()
+        self.camera = camera
+        cameraOptions = DetailCameraOptions(controller: LiDARDetailCameraControls(camera: camera))
+        camera.onExternalControlIntent = { [weak options = cameraOptions] in
+            // Do not wait for Combine's deferred snapshot synchronization: an
+            // older menu continuation could otherwise drain its next EV first.
+            options?.invalidatePendingRequestsForExternalIntent()
+        }
         cameraChanges = camera.objectWillChange.sink { [weak self] in
             self?.objectWillChange.send()
+            self?.scheduleCameraOptionsSync()
+        }
+        synchronizeCameraOptions()
+    }
+
+    /// Call before opening the shared panels as well as after camera updates.
+    /// The snapshot also reads buffered EV, so a just-finished gesture need not
+    /// wait for its deferred SwiftUI publication before the menu opens.
+    func synchronizeCameraOptions() {
+        let snapshot = camera.detailCameraSnapshot
+        let previous = previousCameraOptionsSnapshot
+        let invalidates = previous?.sessionID != snapshot.sessionID
+            || previous?.externalRevision != snapshot.externalRevision
+            || previous?.capabilities.exposure != snapshot.capabilities.exposure
+        cameraOptions.synchronizeExternalState(capabilities: snapshot.capabilities,
+            invalidatePendingRequests: invalidates)
+        previousCameraOptionsSnapshot = snapshot
+    }
+
+    private func scheduleCameraOptionsSync() {
+        guard cameraOptionsSync == nil else { return }
+        // Combine emits before @Published assigns. Coalesce related fields,
+        // then read their coherent values on the next MainActor turn.
+        cameraOptionsSync = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            cameraOptionsSync = nil
+            synchronizeCameraOptions()
         }
     }
 

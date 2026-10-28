@@ -13,32 +13,28 @@ struct HomeView: View {
     var onResumeDraft: ((UUID) -> Void)? = nil
     let onStartCapture: () -> Void
     @ScaledMetric(relativeTo: .title3) private var guidanceLineHeight = 29
-    @ScaledMetric(relativeTo: .body) private var draftGuidanceLineHeight = 24
 
     private var showsResumeCard: Bool { resumeCandidate != nil && onResumeDraft != nil }
 
     var body: some View {
         GeometryReader { geometry in
             let reference = HomeTapeMeasure.referenceSize
-            // 기본 안내문 y=610, draft 안내문 y=589·카드 y=645. 작은 화면은 스크롤을 허용합니다.
-            let lineHeight = showsResumeCard ? draftGuidanceLineHeight : guidanceLineHeight
-            let guidanceTop: CGFloat = showsResumeCard ? 589 : 610
-            let cardSpace: CGFloat = showsResumeCard ? 133 : 0
-            let availableHeight = max(0, geometry.size.height - lineHeight * 2 - 24 - cardSpace)
-            let scale = max(0.35, min(1, geometry.size.width / reference.width, availableHeight / guidanceTop))
+            // 402pt 기준 기본 안내문 y=610, 이어하기 안내문 y=574·카드 y=652.
+            // 두 상태의 줄자 크기를 같게 유지하고, 높이가 부족하면 스크롤합니다.
+            let guidanceTop: CGFloat = showsResumeCard ? 574 : 610
+            let scale = max(0, min(1, geometry.size.width / reference.width))
             ScrollView(.vertical) {
                 VStack(spacing: 0) {
-                    HomeTapeMeasure(showsMarkings: !showsResumeCard, onStartCapture: onStartCapture)
+                    HomeTapeMeasure(onStartCapture: onStartCapture)
                         .frame(width: reference.width * scale, height: reference.height * scale)
                     VStack(spacing: 0) {
-                        Text(showsResumeCard ? "줄자 버튼을 누르고" : "줄자 버튼을 눌러서")
-                            .frame(minHeight: lineHeight)
-                        Text("실측 시작하기").frame(minHeight: lineHeight)
+                        Text("줄자 버튼을 눌러서")
+                            .frame(minHeight: guidanceLineHeight)
+                        Text("실측 시작하기").frame(minHeight: guidanceLineHeight)
                     }
-                    .font(showsResumeCard ? HomeTypography.draftGuidance : HomeTypography.guidance)
-                    .tracking(showsResumeCard ? -0.43 : -0.2)
-                    .foregroundStyle(showsResumeCard ? Color(white: 144 / 255)
-                        : Color(red: 122 / 255, green: 117 / 255, blue: 110 / 255))
+                    .font(HomeTypography.guidance)
+                    .tracking(-0.2)
+                    .foregroundStyle(Color(red: 122 / 255, green: 117 / 255, blue: 110 / 255))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityElement(children: .combine)
@@ -57,8 +53,9 @@ struct HomeView: View {
                                 }
                             }
                         }
+                        .frame(maxWidth: 361)
                         .padding(.horizontal, 20)
-                        .padding(.top, 8)
+                        .padding(.top, 20)
                     }
                 }
                 .frame(maxWidth: .infinity)
