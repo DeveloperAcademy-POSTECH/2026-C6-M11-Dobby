@@ -28,7 +28,7 @@ struct HomeView: View {
             let scale = max(0.35, min(1, geometry.size.width / reference.width, availableHeight / guidanceTop))
             ScrollView(.vertical) {
                 VStack(spacing: 0) {
-                    HomeTapeMeasure(showsMarkings: !showsResumeCard, onStartCapture: onStartCapture)
+                    HomeTapeMeasure(onStartCapture: onStartCapture)
                         .frame(width: reference.width * scale, height: reference.height * scale)
                     VStack(spacing: 0) {
                         Text(showsResumeCard ? "줄자 버튼을 누르고" : "줄자 버튼을 눌러서")

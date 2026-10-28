@@ -10,7 +10,6 @@ import SwiftUI
 /// Figma의 줄자 영역(402×553.82). 화면 배치와 촬영 전환은 부모가 결정합니다.
 struct HomeTapeMeasure: View {
     static let referenceSize = CGSize(width: 402, height: 553.82)
-    var showsMarkings = true
     let onStartCapture: () -> Void
 
     var body: some View {
@@ -20,15 +19,8 @@ struct HomeTapeMeasure: View {
             let horizontalInset = (geometry.size.width - Self.referenceSize.width * scale) / 2
 
             ZStack(alignment: .topLeading) {
-                // 원본 레이어의 render bounds와 겹침 순서를 유지합니다.
-                decoration("HomeTapeBack", x: 168.914, width: 88.974, height: 408.048, scale: scale)
-                if showsMarkings {
-                    decoration("HomeTapeBackMarks", x: 158.994, width: 98.889, height: 409.027, scale: scale)
-                }
-                decoration("HomeTapeFront", x: 161.392, width: 101.050, height: 367.045, scale: scale)
-                if showsMarkings {
-                    decoration("HomeTapeFrontMarks", x: 128.000, width: 134.442, height: 367.045, scale: scale)
-                }
+                // Figma 3594:9473의 화면 안 render bounds. 띠의 아래쪽은 본체 뒤에 겹칩니다.
+                decoration("HomeTapeVertical", x: 170.134, width: 60.733, height: 258, scale: scale)
                 decoration("HomeTapeMeasureBody", x: 45, y: 241, width: 312.82, height: 312.82, scale: scale)
 
                 Button(action: onStartCapture) {

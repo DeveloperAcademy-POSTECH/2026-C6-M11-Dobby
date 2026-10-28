@@ -1,0 +1,15 @@
+{
+  "images": [
+    {
+      "filename": "HomeTapeVertical.png",
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "mason",
+    "version": 1
+  },
+  "properties": {
+    "template-rendering-intent": "original"
+  }
+}
