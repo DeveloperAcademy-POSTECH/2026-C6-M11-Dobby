@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 struct ProductInformationEditingView: View {
@@ -49,3 +50,43 @@ struct ProductInformationEditingView: View {
         onExit()
     }
 }
+
+#if DEBUG
+private struct ProductInformationEditingPreview: View {
+    let garment: Garment
+    let showsConfirmation: Bool
+    @State private var measurementInput = GarmentMeasurementInputState()
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                InfoInputView(garment: garment, measurementInput: $measurementInput,
+                              allowsPhotoEditing: true, onExit: { })
+                    .disabled(showsConfirmation)
+
+                if showsConfirmation {
+                    ProductInformationDiscardConfirmation(onCancel: { }, onDiscard: { })
+                }
+            }
+        }
+    }
+}
+
+#Preview("제품 정보 수정") {
+    ProductInformationEditingPreview(
+        garment: SampleData.first(in: SampleData.previewContainer.mainContext),
+        showsConfirmation: false
+    )
+    .modelContainer(SampleData.previewContainer)
+    .preferredColorScheme(.light)
+}
+
+#Preview("제품 정보 수정 · 변경 취소 경고") {
+    ProductInformationEditingPreview(
+        garment: SampleData.first(in: SampleData.previewContainer.mainContext),
+        showsConfirmation: true
+    )
+    .modelContainer(SampleData.previewContainer)
+    .preferredColorScheme(.light)
+}
+#endif

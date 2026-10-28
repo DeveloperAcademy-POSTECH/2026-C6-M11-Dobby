@@ -9,7 +9,7 @@ enum LibraryPreviewData {
     static let container = makeContainer()
 
     /// Interactive previews receive their own data so deletion stays local.
-    static func makeContainer() -> ModelContainer {
+    static func makeContainer(includesDraft: Bool = false) -> ModelContainer {
         do {
             let container = try ModelContainer(
                 for: Garment.self, GarmentPhoto.self, LandmarkPoint.self,
@@ -18,6 +18,10 @@ enum LibraryPreviewData {
             )
             let context = container.mainContext
             let timestamp = Date(timeIntervalSince1970: 1_790_000_000)
+
+            if includesDraft {
+                try insertDraft(in: context, savedAt: timestamp.addingTimeInterval(60))
+            }
 
             for (index, item) in items.enumerated() {
                 guard let url = Bundle.main.url(forResource: item.imageName, withExtension: "png"),
@@ -59,6 +63,28 @@ enum LibraryPreviewData {
         let brand: String
         let price: Int
         let imageName: String
+    }
+
+    private static func insertDraft(in context: ModelContext, savedAt: Date) throws {
+        let item = items[0]
+        guard let url = Bundle.main.url(forResource: item.imageName, withExtension: "png"),
+              let image = UIImage(contentsOfFile: url.path) else {
+            preconditionFailure("보관함 임시저장 미리보기 이미지가 없습니다: \(item.imageName).png")
+        }
+        let measurementRecordID = UUID()
+        let garment = Garment(category: item.category, group: .top)
+        garment.sourceMeasurementID = measurementRecordID
+        context.insert(garment)
+        try GarmentStore.addPhoto(image, to: garment, role: .thumbnail)
+        garment.creationDraftData = try JSONEncoder().encode(ProductCreationDraft(
+            step: .information,
+            measurementRecordID: measurementRecordID,
+            photoState: nil,
+            measurementInputData: nil,
+            savedAt: savedAt
+        ))
+        garment.createdAt = savedAt
+        garment.updatedAt = savedAt
     }
 
     private static let items = [

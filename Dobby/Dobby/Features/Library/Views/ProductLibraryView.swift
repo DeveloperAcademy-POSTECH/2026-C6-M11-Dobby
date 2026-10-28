@@ -328,6 +328,13 @@ private struct ProductLibraryPreview: View {
         .preferredColorScheme(.light)
 }
 
+#Preview("보관함 · 임시저장") {
+    ProductLibraryPreview()
+        .modelContainer(LibraryPreviewData.makeContainer(includesDraft: true))
+        .tint(LibraryStyle.primary)
+        .preferredColorScheme(.light)
+}
+
 #Preview("보관함 · 비어 있음") {
     ProductLibraryPreview()
         .modelContainer(for: [Garment.self, GarmentPhoto.self, LandmarkPoint.self,
