@@ -8,7 +8,7 @@ import ImageIO
 actor DetailPhotoProcessor {
     private lazy var context = CIContext(options: [.cacheIntermediates: false])
 
-    func process(_ data: Data, aspectRatio: DetailPhotoAspectRatio?) throws -> Data {
+    func process(_ data: Data, aspectRatio: DetailPhotoAspectRatio?, normalizedPreviewCrop: CGRect? = nil) throws -> Data {
         try Task.checkCancellation()
         guard let aspectRatio else { return data }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -17,7 +17,7 @@ actor DetailPhotoProcessor {
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let orientation = CapturedAsset.Orientation(rawValue: properties[kCGImagePropertyOrientation] as? Int ?? 1),
               let geometry = DetailPhotoCropGeometry(pixelWidth: image.width, pixelHeight: image.height,
-                  orientation: orientation, aspectRatio: aspectRatio) else { throw CameraFailure.saveFailed }
+                  orientation: orientation, aspectRatio: aspectRatio, normalizedPreviewCrop: normalizedPreviewCrop) else { throw CameraFailure.saveFailed }
         let oriented = CIImage(cgImage: image).oriented(forExifOrientation: Int32(orientation.rawValue))
         let upright = oriented.transformed(by: CGAffineTransform(translationX: -oriented.extent.minX,
                                                                  y: -oriented.extent.minY))

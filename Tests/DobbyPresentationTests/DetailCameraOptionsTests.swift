@@ -29,6 +29,46 @@ final class DetailCameraOptionsTests: XCTestCase {
         await model.refreshCapabilities()
         XCTAssertEqual(model.appliedZoom, 1)
     }
+    func testButtonStopsStayAtTwoWithLargerDeviceMaximum() {
+        for minimum in [0.5, 1.0] {
+            let range = DetailCameraControlRange(minimum: minimum, maximum: 40)!
+            let expected = minimum < 1 ? [2.0, 1, 0.5, 1, 2] : [2.0, 1, 2, 1, 2]
+            var stops = DetailZoomStops()
+            var value = 1.0
+            for target in expected {
+                value = stops.next(from: value, range: range)
+                XCTAssertEqual(value, target)
+            }
+            // 핀치가 끝나면 UI에서 버튼 순환 방향도 초기화한다.
+            stops = DetailZoomStops()
+            value = 12
+            for target in expected {
+                value = stops.next(from: value, range: range)
+                XCTAssertEqual(value, target)
+            }
+        }
+    }
+    func testButtonStopsRespectDeviceLimitBelowTwo() {
+        var stops = DetailZoomStops()
+        let range = DetailCameraControlRange(minimum: 1, maximum: 1.5)!
+        XCTAssertEqual(stops.next(from: 1, range: range), 1.5)
+        XCTAssertEqual(stops.next(from: 1.5, range: range), 1)
+    }
+    func testExtendedZoomUsesDeviceLimitAndReportsAppliedValue() async {
+        let driver = DeferredDetailControls(maximumZoom: 20)
+        let model = DetailCameraOptions(controller: driver)
+        await model.refreshCapabilities()
+        for (requested, limited, applied) in [(8.0, 8.0, 7.9), (100.0, 20.0, 20.0)] {
+            let task = Task { await model.apply(.zoom(requested)) }
+            await driver.waitForRequest()
+            let received = await driver.received
+            XCTAssertEqual(received, .zoom(limited))
+            await driver.complete(applied)
+            await task.value
+            XCTAssertEqual(model.appliedZoom, applied)
+            XCTAssertNil(model.failure)
+        }
+    }
     func testDefaultRatioIsFourThreeWithoutInventingDeviceValues() async {
         let model = DetailCameraOptions()
         await model.refreshCapabilities()
@@ -94,11 +134,13 @@ final class DetailCameraOptionsTests: XCTestCase {
     }
 }
 private actor DeferredDetailControls: DetailCameraControlling {
+    let maximumZoom: Double
+    init(maximumZoom: Double = 2) { self.maximumZoom = maximumZoom }
     private(set) var received: DetailCameraControlRequest?
     private var completion: CheckedContinuation<Double, Never>?
     func capabilities() async throws -> DetailCameraCapabilities {
         .init(exposure: .init(minimum: -1, maximum: 1),
-              zoom: .init(minimum: 0.5, maximum: 2), zoomFactor: 1)
+              zoom: .init(minimum: 0.5, maximum: maximumZoom), zoomFactor: 1)
     }
     func apply(_ request: DetailCameraControlRequest) async throws -> Double {
         received = request

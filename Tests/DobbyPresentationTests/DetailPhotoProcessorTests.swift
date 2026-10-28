@@ -123,6 +123,27 @@ final class DetailPhotoProcessorTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: urls[0].path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: urls[1].path))
     }
+    func testPreviewCropReachesJPEGAfterExifRotation() async throws {
+        let output = try await DetailPhotoProcessor().process(photo(orientation: 6), aspectRatio: .square,
+            normalizedPreviewCrop: CGRect(x: 0, y: 0, width: 0.5, height: 0.5))
+        let source = try XCTUnwrap(CGImageSourceCreateWithData(output as CFData, nil))
+        let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        XCTAssertEqual(image.width, 24)
+        XCTAssertEqual(image.height, 24)
+        let center = try XCTUnwrap(image.cropping(to: CGRect(x: 12, y: 12, width: 1, height: 1)))
+        var rgba = [UInt8](repeating: 0, count: 4)
+        try rgba.withUnsafeMutableBytes { bytes in
+            let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: 1, height: 1,
+                bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(center, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        // 원본 좌하단의 파란 영역이 EXIF 6 회전 후 좌상단에 온다.
+        XCTAssertLessThan(rgba[0], 30)
+        XCTAssertLessThan(rgba[1], 30)
+        XCTAssertGreaterThan(rgba[2], 225)
+    }
+
     func testInvalidInputAndCancelledProcessingNeverProduceOutput() async throws {
         do {
             _ = try await DetailPhotoProcessor().process(Data([0, 1]), aspectRatio: .square)

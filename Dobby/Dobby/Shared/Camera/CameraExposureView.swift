@@ -2,8 +2,9 @@
 import SwiftUI
 
 /// 사진 확인·셔터 영역을 대신하는 노출 패널. UI 상태는 View, 실제 적용값은 Model이 소유한다.
-struct DetailExposureView: View {
-    let options: DetailCameraOptions
+struct CameraExposureView: View {
+    let state: CameraOptionsState
+    let onChangeExposure: (Double) -> Void
     let onBack: () -> Void
     @State private var value = 0.0
     @State private var dragStart: Double?
@@ -19,22 +20,22 @@ struct DetailExposureView: View {
                     Spacer()
                     if abs(value) > 0.01 {
                         Button("노출 초기화", systemImage: "arrow.counterclockwise") { change(0) }
-                            .disabled(options.capabilities.exposure == nil)
+                            .disabled(state.exposureRange == nil)
                             .accessibilityIdentifier("camera.exposureReset")
                     }
                 }
                 .labelStyle(.iconOnly).buttonStyle(.bordered).tint(.primary)
                 .buttonBorderShape(.circle).controlSize(.large)
             }
-            Text(options.appliedExposure == nil ? "—" : valueText)
+            Text(state.appliedExposure == nil ? "—" : valueText)
                 .font(.largeTitle).monospacedDigit()
                 .accessibilityIdentifier("camera.exposureValue")
-            if let range = options.capabilities.exposure, range.minimum < range.maximum {
+            if let range = state.exposureRange, range.lowerBound < range.upperBound {
                 ruler(range: range)
             } else {
                 Text("카메라가 준비되면 조절할 수 있어요.").font(.footnote)
             }
-            if options.failure != nil {
+            if state.hasExposureFailure {
                 Text("노출을 적용하지 못했어요. 다시 조절해 주세요.").font(.footnote)
                     .accessibilityIdentifier("camera.exposureError")
             }
@@ -45,21 +46,21 @@ struct DetailExposureView: View {
         .padding(.horizontal, 8).padding(.bottom, 24)
         .accessibilityIdentifier("camera.exposurePanel")
         .accessibilityAction(.escape, onBack)
-        .onAppear { value = options.appliedExposure ?? 0 }
-        .onChange(of: options.appliedExposure) { _, applied in
-            if !options.isApplying { value = applied ?? 0 }
+        .onAppear { value = state.appliedExposure ?? 0 }
+        .onChange(of: state.appliedExposure) { _, applied in
+            if !state.isApplying { value = applied ?? 0 }
         }
-        .onChange(of: options.isApplying) { _, busy in
-            if !busy { value = options.appliedExposure ?? 0 }
+        .onChange(of: state.isApplying) { _, busy in
+            if !busy { value = state.appliedExposure ?? 0 }
         }
     }
 
-    private func ruler(range: DetailCameraControlRange) -> some View {
+    private func ruler(range: ClosedRange<Double>) -> some View {
         Canvas { context, size in
             // 지원 범위 안의 눈금만 이동시키고 중앙의 노란 지시선은 고정한다.
             for tick in -20...20 {
                 let index = Int((value * 10).rounded()) + tick
-                guard (range.minimum...range.maximum).contains(Double(index) / 10) else { continue }
+                guard (range.lowerBound...range.upperBound).contains(Double(index) / 10) else { continue }
                 let x = size.width / 2 + (Double(index) / 10 - value) * 120
                 let height: CGFloat = index % 5 == 0 ? 16 : 10
                 context.fill(Path(CGRect(x: x, y: (size.height - height) / 2, width: 1, height: height)),
@@ -83,27 +84,12 @@ struct DetailExposureView: View {
     }
 
     private func change(_ proposed: Double) {
-        guard let limited = options.capabilities.exposure?.clamped((proposed * 10).rounded() / 10),
-              limited != value || options.failure != nil else { return }
+        guard proposed.isFinite, let range = state.exposureRange,
+              range.lowerBound.isFinite, range.upperBound.isFinite else { return }
+        let limited = min(max((proposed * 10).rounded() / 10, range.lowerBound), range.upperBound)
+        guard limited != value || state.hasExposureFailure else { return }
         value = limited
-        options.requestExposure(limited)
+        onChangeExposure(limited)
     }
 }
 
-#if DEBUG
-#Preview("노출 조절 · 목 제어기") {
-    @Previewable @State var options = DetailCameraOptions(controller: ExposurePreviewControls())
-    DetailExposureView(options: options, onBack: {})
-        .preferredColorScheme(.dark).background(Color.gray)
-        .task { await options.refreshCapabilities() }
-}
-private actor ExposurePreviewControls: DetailCameraControlling {
-    func capabilities() async throws -> DetailCameraCapabilities {
-        .init(exposure: .init(minimum: -2, maximum: 2), exposureBias: 0)
-    }
-    func apply(_ request: DetailCameraControlRequest) async throws -> Double {
-        guard case .exposure(let bias) = request else { throw DetailCameraControlFailure.unsupported }
-        return bias
-    }
-}
-#endif
