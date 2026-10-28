@@ -7,7 +7,7 @@ import XCTest
 final class ExportChannelCompatibilityTests: XCTestCase {
     func testSharedChannelsRoundTripAndTrackSuccessfulGarmentExports() throws {
         let channels = ExportChannel.allCases
-        XCTAssertEqual(Set(channels.map(\.rawValue)), ["instagram", "naverStore", "cafe24", "fruitsFamily"],
+        XCTAssertEqual(Set(channels.map(\.rawValue)), ["instagram", "cafe24", "fruitsFamily"],
             "Existing channel identifiers must remain compatible with saved records")
         for (index, channel) in channels.enumerated() {
             let data = try JSONEncoder().encode(channel)

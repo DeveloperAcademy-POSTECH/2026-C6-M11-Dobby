@@ -29,11 +29,6 @@ struct ExportChannelButton: View {
         .padding()
 }
 
-#Preview("네이버스토어", traits: .sizeThatFitsLayout) {
-    ExportChannelButton(channel: .naverStore, hasOpenedLink: false, action: {})
-        .padding()
-}
-
 #Preview("카페24", traits: .sizeThatFitsLayout) {
     ExportChannelButton(channel: .cafe24, hasOpenedLink: false, action: {})
         .padding()

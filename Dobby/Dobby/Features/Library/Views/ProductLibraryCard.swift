@@ -99,7 +99,6 @@ private extension ExportChannel {
     var libraryBadgeAssetName: String {
         switch self {
         case .instagram: return "LibraryInstagramBadge"
-        case .naverStore: return imageName
         case .cafe24: return "LibraryCafe24Badge"
         case .fruitsFamily: return "LibraryFruitsFamilyBadge"
         }
