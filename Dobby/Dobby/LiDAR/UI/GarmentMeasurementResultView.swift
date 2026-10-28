@@ -196,6 +196,9 @@ struct GarmentMeasurementResultView: View {
             .overlay(alignment: .topTrailing) {
                 VStack(alignment: .trailing, spacing: 6) {
                     if isSynthetic { syntheticBadge.allowsHitTesting(false) }
+                    if model.snapshot.hasExpandedPhotoPresentation {
+                        expandedPhotoNotice.allowsHitTesting(false)
+                    }
                     reviewNotice
                 }.padding(12)
             }
@@ -215,6 +218,9 @@ struct GarmentMeasurementResultView: View {
             VStack(alignment: .leading, spacing: 20) {
                 reviewNotice.padding(.horizontal, 20)
                 if isSynthetic { syntheticBadge.padding(.horizontal, 20) }
+                if model.snapshot.hasExpandedPhotoPresentation {
+                    expandedPhotoNotice.padding(.horizontal, 20)
+                }
                 photoEditor(showsEnlargeControl: true)
                 auxiliaryContent.padding(.horizontal, 20)
             }.padding(.top, 16).padding(.bottom, 24)
@@ -282,6 +288,17 @@ struct GarmentMeasurementResultView: View {
                     : "실패한 항목과 원인, 다시 촬영하거나 측정점을 수정하는 방법을 확인합니다")
                 .accessibilityIdentifier("garmentUnavailableNotice")
         }
+    }
+
+    private var expandedPhotoNotice: some View {
+        Text("측정점을 모두 볼 수 있도록 사진 영역을 넓혔어요")
+            .font(.caption2).foregroundStyle(.white)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .frame(maxWidth: 270, alignment: .leading)
+            .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 10))
+            .accessibilityIdentifier("garmentExpandedPhotoNotice")
     }
 
     private var syntheticBadge: some View {

@@ -118,7 +118,7 @@ struct LiDARCameraView: View {
                 return "LiDAR 깊이를 준비하고 있습니다. 렌즈를 가리지 말고 잠시 기다려 주세요."
             }
             switch status.tracking {
-            case .normal:
+            case .normal, .synchronizedDepth:
                 return "옷을 펴고 소매와 밑단까지 화면에 들어오게 해 주세요."
             case .excessiveMotion:
                 return "카메라 움직임이 큽니다. 잠시 멈춘 뒤 촬영하면 더 안정적입니다."

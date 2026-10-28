@@ -29,7 +29,8 @@ final class DetailCaptureGuideUITests: XCTestCase {
         XCTAssertFalse(app.buttons["camera.openGallery"].exists)
         XCTAssertFalse(app.buttons["camera.exposureOption"].isEnabled)
         XCTAssertFalse(app.buttons["camera.aspectRatioOption"].isEnabled)
-        XCTAssertEqual(app.buttons["camera.aspectRatioOption"].value as? String, "4:3, 조절 준비 중")
+        XCTAssertEqual(app.buttons["camera.aspectRatioOption"].value as? String, "사용 불가",
+                       "The camera-free detail fixture must not claim an available ratio controller")
         attachScreenshot(app, name: "detail-capture-options-menu")
         closeOptions.tap()
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 5))
