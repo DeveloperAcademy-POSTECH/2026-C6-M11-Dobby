@@ -45,7 +45,7 @@ private struct ChakTextFieldLabel: View {
                 Text("*")
                     .font(.system(size: 17, weight: .semibold))
                     .tracking(-0.43)
-                    .foregroundStyle(Color(.brandMain))
+                    .foregroundStyle(Color(.brandMain500))
                     .accessibilityHidden(true)
             }
         }
