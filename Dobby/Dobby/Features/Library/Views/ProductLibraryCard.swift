@@ -4,6 +4,7 @@ import UIKit
 /// Figma's library card. Product content comes from the saved garment.
 struct ProductLibraryCard: View {
     let garment: Garment
+    let showsDraftPlaceholders: Bool
     @ScaledMetric(relativeTo: .subheadline) private var titleLineHeight: CGFloat = 16
     @ScaledMetric(relativeTo: .callout) private var brandLineHeight: CGFloat = 20
     @ScaledMetric(relativeTo: .subheadline) private var priceLineHeight: CGFloat = 16
@@ -12,22 +13,27 @@ struct ProductLibraryCard: View {
         brandLineHeight + titleLineHeight * 2 + priceLineHeight + 30 + 3 * 8 + 2 * 10
     }
 
+    init(garment: Garment, showsDraftPlaceholders: Bool = false) {
+        self.garment = garment
+        self.showsDraftPlaceholders = showsDraftPlaceholders
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             thumbnail
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(garment.brand)
+                Text(displayBrand)
                     .modifier(LibraryCardTextStyle(size: 16, lineHeight: 20, relativeTo: .callout))
                     .foregroundStyle(LibraryCardStyle.brand)
                     .lineLimit(1)
                     .frame(height: brandLineHeight, alignment: .topLeading)
 
-                LibraryCardTitle(text: garment.name)
+                LibraryCardTitle(text: displayName)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .frame(minHeight: titleLineHeight, alignment: .topLeading)
 
-                Text(garment.price.map { $0.formatted(.number.locale(Locale(identifier: "ko_KR"))) } ?? "")
+                Text(displayPrice)
                     .modifier(LibraryCardTextStyle(size: 14, lineHeight: 16, relativeTo: .subheadline))
                     .foregroundStyle(LibraryCardStyle.price)
                     .lineLimit(1)
@@ -84,14 +90,33 @@ struct ProductLibraryCard: View {
     }
 
     private var cardAccessibilityLabel: String {
-        var values = [garment.brand, garment.name.isEmpty ? "저장된 상품" : garment.name]
-        if let price = garment.price {
-            values.append(price.formatted(.number.locale(Locale(identifier: "ko_KR"))))
-        }
+        var values = [displayBrand, displayName]
+        values.append(displayPrice)
         if !garment.selectedExportChannels.isEmpty {
             values.append("선택한 내보내기 플랫폼: " + garment.selectedExportChannels.map(\.title).joined(separator: ", "))
         }
         return values.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+
+    private var displayBrand: String {
+        garment.brand.isBlank && showsDraftPlaceholders ? "Brand Name" : garment.brand
+    }
+
+    private var displayName: String {
+        garment.name.isBlank && showsDraftPlaceholders ? "제목 없음" : garment.name
+    }
+
+    private var displayPrice: String {
+        if let price = garment.price {
+            return price.formatted(.number.locale(Locale(identifier: "ko_KR")))
+        }
+        return showsDraftPlaceholders ? "Price" : ""
+    }
+}
+
+private extension String {
+    var isBlank: Bool {
+        trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 
@@ -206,6 +231,16 @@ private struct LibraryCardTextStyle: ViewModifier {
         ProductLibraryCard(garment: empty)
             .frame(width: 175)
     }
+    .padding(20)
+    .background(LibraryStyle.background)
+}
+
+#Preview("임시저장 빈 값 안내") {
+    ProductLibraryCard(
+        garment: Garment(category: "Jacket", group: .top),
+        showsDraftPlaceholders: true
+    )
+    .frame(width: 175)
     .padding(20)
     .background(LibraryStyle.background)
 }

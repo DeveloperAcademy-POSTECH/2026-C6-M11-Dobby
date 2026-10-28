@@ -67,11 +67,7 @@ struct ProductLibraryView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(filteredDraftGarments) { garment in
-                                draftCell(garment)
-                            }
-
-                            if !draftGarments.isEmpty {
+                            if showsOnlyDrafts {
                                 ProductDraftCountBadge(
                                     count: draftGarments.count,
                                     isSelected: showsOnlyDrafts
@@ -81,17 +77,41 @@ struct ProductLibraryView: View {
                                         showsOnlyDrafts.toggle()
                                     }
                                 }
-                            }
 
-                            if showsOnlyDrafts && filteredDraftGarments.isEmpty {
-                                ContentUnavailableView.search(
-                                    text: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                                )
-                                .frame(maxWidth: .infinity)
-                            } else if !showsOnlyDrafts && !filteredSavedGarments.isEmpty {
-                                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                                    ForEach(filteredSavedGarments) { garment in
-                                        productCell(garment)
+                                if filteredDraftGarments.isEmpty {
+                                    ContentUnavailableView.search(
+                                        text: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                } else {
+                                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                                        ForEach(filteredDraftGarments) { garment in
+                                            draftProductCell(garment)
+                                        }
+                                    }
+                                }
+                            } else {
+                                ForEach(filteredDraftGarments) { garment in
+                                    draftCell(garment)
+                                }
+
+                                if !draftGarments.isEmpty {
+                                    ProductDraftCountBadge(
+                                        count: draftGarments.count,
+                                        isSelected: showsOnlyDrafts
+                                    ) {
+                                        isSearchFocused = false
+                                        withAnimation(.easeInOut(duration: 0.18)) {
+                                            showsOnlyDrafts.toggle()
+                                        }
+                                    }
+                                }
+
+                                if !filteredSavedGarments.isEmpty {
+                                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                                        ForEach(filteredSavedGarments) { garment in
+                                            productCell(garment)
+                                        }
                                     }
                                 }
                             }
@@ -256,6 +276,27 @@ struct ProductLibraryView: View {
         }
     }
 
+    @ViewBuilder
+    private func draftProductCell(_ garment: Garment) -> some View {
+        if isEditing {
+            ProductLibraryCard(garment: garment, showsDraftPlaceholders: true)
+                .overlay(alignment: .topLeading) {
+                    deleteButton(for: garment)
+                }
+                .accessibilityElement(children: .contain)
+        } else {
+            Button {
+                isSearchFocused = false
+                onResumeDraft(garment.id)
+            } label: {
+                ProductLibraryCard(garment: garment, showsDraftPlaceholders: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
+            .accessibilityHint("임시저장한 상품 작업을 이어갑니다.")
+        }
+    }
+
     private func deleteButton(for garment: Garment) -> some View {
         Button(role: .destructive) {
             pendingDeletion = garment.id
@@ -329,10 +370,16 @@ struct ProductLibraryView: View {
 private struct ProductLibraryPreview: View {
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
     @State var isEditing = false
+    var initiallyShowsOnlyDrafts = false
 
     var body: some View {
         NavigationStack {
-            ProductLibraryView(garments: garments, isEditing: $isEditing, onStartMeasurement: {})
+            ProductLibraryView(
+                garments: garments,
+                isEditing: $isEditing,
+                onStartMeasurement: {},
+                initiallyShowsOnlyDrafts: initiallyShowsOnlyDrafts
+            )
         }
     }
 }
@@ -353,6 +400,13 @@ private struct ProductLibraryPreview: View {
 
 #Preview("보관함 · 임시저장") {
     ProductLibraryPreview()
+        .modelContainer(LibraryPreviewData.makeContainer(includesDraft: true))
+        .tint(LibraryStyle.primary)
+        .preferredColorScheme(.light)
+}
+
+#Preview("보관함 · 임시저장 필터") {
+    ProductLibraryPreview(initiallyShowsOnlyDrafts: true)
         .modelContainer(LibraryPreviewData.makeContainer(includesDraft: true))
         .tint(LibraryStyle.primary)
         .preferredColorScheme(.light)
