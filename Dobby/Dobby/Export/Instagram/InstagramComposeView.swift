@@ -34,7 +34,7 @@ private struct InstagramUploadCompletedHeader: View {
                 .font(.title3.bold())
             HStack(spacing: 4) {
                 Text("연결된 계정에 자동 업로드를")
-                Text("완료").foregroundStyle(Color(.brandMain))
+                Text("완료").foregroundStyle(Color(.brandMain500))
                 Text("했어요")
             }
             .font(.body)

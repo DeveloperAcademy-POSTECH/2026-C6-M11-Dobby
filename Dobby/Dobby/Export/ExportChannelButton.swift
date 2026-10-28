@@ -25,7 +25,7 @@ struct ExportChannelButton: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .background(Color(.brandMain))
+                        .background(Color(.brandMain500))
                 }
             }
             .padding(16)

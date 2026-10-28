@@ -65,7 +65,7 @@ private struct InstagramUploadFailureActions: View {
             InstagramUploadFailureButton(
                 title: "다시 업로드하기",
                 foregroundColor: Color(.brandNeutralWhite),
-                backgroundColor: Color(.brandMain),
+                backgroundColor: Color(.brandMain500),
                 action: onRetry
             )
         }
