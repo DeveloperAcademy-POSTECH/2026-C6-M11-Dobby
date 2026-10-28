@@ -135,12 +135,6 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertLessThanOrEqual(guidance.frame.maxY, resume.frame.minY)
         attachScreenshot(app, name: "home-latest-detail-draft")
 
-        app.tabBars.buttons["설정"].tap()
-        XCTAssertTrue(app.navigationBars["설정"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["홈"].tap()
-        XCTAssertTrue(resume.waitForExistence(timeout: 5))
-        XCTAssertTrue(resume.label.contains("상세 촬영 단계"))
-
         // 홈 카드도 새 프로세스에서 저장된 상품 ID로 기존 복원 흐름을 열어야 한다.
         app.terminate()
         app.launch()

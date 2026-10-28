@@ -48,9 +48,6 @@ private struct HomePreview: View {
             Tab("보관함", systemImage: "hanger") {
                 ContentUnavailableView("보관함 미리보기", systemImage: "hanger")
             }
-            Tab("설정", systemImage: "gearshape.fill") {
-                NavigationStack { SettingsView() }
-            }
         }
         .tint(.primary)
         .preferredColorScheme(.light)
