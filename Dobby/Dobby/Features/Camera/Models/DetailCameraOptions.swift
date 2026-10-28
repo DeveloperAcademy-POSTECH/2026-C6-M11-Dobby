@@ -22,17 +22,47 @@ final class DetailCameraOptions {
     init(controller: any DetailCameraControlling = UnavailableDetailCameraControls()) {
         self.controller = controller
     }
-    func invalidate() {
+
+    /// Opt-in synchronization for a camera with other exposure controls, such
+    /// as the measurement preview's tap and vertical drag. Detail capture does
+    /// not call this API and retains its existing controller-owned behavior.
+    func synchronizeExternalState(capabilities: DetailCameraCapabilities,
+                                  invalidatePendingRequests: Bool = false) {
+        if invalidatePendingRequests { invalidate() }
+        if self.capabilities != capabilities { self.capabilities = capabilities }
+        let exposure = capabilities.exposureBias.flatMap { bias -> Double? in
+            capabilities.exposure?.clamped(bias) == bias ? bias : nil
+        }
+        let zoom = capabilities.zoomFactor.flatMap { factor -> Double? in
+            factor > 0 && capabilities.zoom?.clamped(factor) == factor ? factor : nil
+        }
+        if appliedExposure != exposure { appliedExposure = exposure }
+        if appliedZoom != zoom { appliedZoom = zoom }
+    }
+
+    /// Only the measurement camera opts in. Cancel before a newer preview tap
+    /// or pan is submitted, keeping accepted state and ratio until the camera
+    /// publishes its receipt. An idle pan frame causes no observable writes.
+    func invalidatePendingRequestsForExternalIntent() {
+        guard isApplying else { return }
+        invalidateControlRequests()
+    }
+
+    private func invalidateControlRequests() {
         controlTask?.cancel()
         controlTask = nil
         queuedControls.removeAll()
         revision += 1
-        capabilities = .init()
         requested = nil
-        appliedExposure = nil
-        appliedZoom = nil
         failure = nil
         isExecuting = false
+    }
+
+    func invalidate() {
+        invalidateControlRequests()
+        capabilities = .init()
+        appliedExposure = nil
+        appliedZoom = nil
     }
     func refreshCapabilities() async {
         invalidate()

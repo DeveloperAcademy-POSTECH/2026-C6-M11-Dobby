@@ -338,3 +338,52 @@ DOBBY_UI_DESIGN_REFERENCE=1 Tools/run-ui-tests.sh \
 - 실제 iPhone의 중력 방향 안내·광학 초점·노출 반응과 물리 측정 정확도는 이번 시뮬레이터 검증으로 입증하지 않는다.
 
 검증 로그: `/private/tmp/dobby96-ui-first.log`, `/private/tmp/dobby96-ui-second.log`, `/private/tmp/dobby96-final-ui.log`, `/private/tmp/dobby96-tutorial-final.log`, `/private/tmp/dobby96-render-final.log`, `/private/tmp/dobby96-device-final.log`.
+
+
+### 실측 촬영 더보기 · 노출과 사진 비율 (#105)
+
+- 우측 하단 더보기는 화면을 덮는 별도 시트 대신 기존 촬영 화면 위의 하단 옵션 패널로 전환한다. 촬영 버튼·배율·안내는 자리를 유지한 채 숨겨지며, 사진 창과 ARSession은 그대로 유지한다. 바깥 사진 탭은 전체 옵션을 닫고, 각 설정의 뒤로가기는 메뉴로 돌아간다. 다시 열면 메뉴에서 시작한다.
+- 최신 main의 Mason 공용 `CameraCaptureOptionsView`·`CameraExposureView`·`CameraAspectRatioView`를 사용한다. `DetailCaptureOptionsView`에는 모델을 `CameraOptionsState`와 콜백으로 변환하는 어댑터만 남긴다. 기본 상세 촬영은 `.standard`, 실측은 `.measurement` 표시를 사용한다. 실측 메뉴↔하위 패널은 response0.30·damping0.90의 짧은 전환을 사용하며, 동작 줄이기는 이동 없이0.12초 opacity로 전환한다. 큰 글자와 좁은 가로 화면은 세로 선택·스크롤로 대응한다.
+- 메뉴 열기/닫기와 사진 비율 변경은 서로 다른 애니메이션이다. 사진 비율은 실제 UIKit 카메라 창의 크기와 위치를0.30초 동안 보간하며, 그동안 촬영을 막아 중간 크기와 촬영 메타데이터가 섞이지 않도록 한다. 전체 휴대폰 화면을 채워 추가 확대하는 #101 이전 방식으로 돌아가지 않는다.
+- 기존 촬영 가이드 다시 보기는 옵션 메뉴에서 유지한다. 메뉴가 열린 동안 사진 초점·노출 팬과 셔터는 옵션 선택과 경쟁하지 않는다. 옵션을 닫으면 현재 인식 상태에 따라 주황색 셔터가 복귀한다.
+- 사진 프레임 바깥 전체는 같은 카메라 RGB를 흐리게 비추는 반투명 배경으로 처리한다. 이 배경은 주변 색을 보여주는 장식용 재표시이며 실제 추가 촬영 시야가 아니다. 기존 중앙 ARSCNView의 크기·초점·윤곽·촬영 크롭은 그대로 유지하고, 주변 배경은 터치나 측정에 참여하지 않는다.
+- 실기기의 장식 배경은 같은 ARSession의 최신 RGB를 별도 큐에서 최대320px·10fps로 작게 렌더한다. 처리 중에는 프레임을 건너뛰고 버퍼 한 개만 유지하며, 추가 ARSession·ARSCNView를 만들지 않는다. 회전·배율·세션·화면 상태가 바뀌면 오래된 렌더 결과를 버린다. 촬영 중에는 갱신을 멈추고 준비된 정지 사진으로 전환한다.
+
+노출 연결:
+
+- `GarmentCaptureSession`이 공용 옵션 모델을 안정적으로 소유한다. `LiDARDetailCameraControls`는 별도 AVCaptureSession을 만들지 않고 기존 ARKit 제어 worker의 실제 수락 receipt를 반환한다. 이 값은 센서 밝기가 완전히 정착했다는 보증과 구분한다.
+- 더보기 눈금, 초점 탭의 EV0 초기화, 사진 위 세로 드래그가 같은 카메라 노출 상태를 공유한다. 메뉴를 닫아도 최신 대기 요청은 유지하며, 아직 제출 중인 메뉴 요청이 있으면 완료 전 촬영하지 않는다. 기존 직접 팬의 즉각적 UI 표시와 촬영 barrier는 유지한다.
+- 새 초점·세로 팬 입력은 이전 메뉴의 대기 노출 요청을 동기 취소한다. deferred Combine 동기화보다 먼저 큐를 비워, 오래된 메뉴 값이 새 EV0 뒤에 재제출되지 않게 한다. 대기 메뉴 요청이 없으면 이 경로는 상태를 발행하지 않는다.
+- 세션 교체·중단·취소·supersede와 적용 실패를 분리하고 늦은 receipt를 버린다. 공용 노출 UI도 드래그 도중 이전 receipt로 눈금을 되돌리지 않는다.
+- 실측의 노출 눈금은 사용자가 표시상0.1EV 단계를 바꿀 때 [선택 햅틱](https://developer.apple.com/documentation/swiftui/sensoryfeedback)을 요청한다. 초기 표시·외부 노출 동기화·초기화 버튼·한계의 동일 값·적용 재시도는 추가 진동을 만들지 않는다. 카메라의 Float EV 수락값과 UI Double 사이의 작은 오차도 같은 표시 눈금으로 취급한다.
+- 중앙 노란 표시선은 고정된44pt 터치 영역 안에서16→36→16pt로 변한다. 손을 대면 늘어나고 손을 떼거나 제스처가 취소되면 복귀하는 짧은 스프링(response0.22·damping0.86)을 사용한다. 동작 줄이기에서는 길이를 즉시 전환한다. 이 애니메이션은 장식 표시선에만 적용하며 노출값·카메라 요청을 보간하거나 기다리게 하지 않는다. 기존 상세 촬영의28pt 표시선과 햅틱 동작은 유지한다.
+
+사진 비율:
+
+- 선택은4:3·16:9·1:1이다. 기본4:3은 실제 원본 전체를 유지해 기존1x·2x 구도를 보존한다. 비표준 합성/가져오기 사진도 기본 모드에서는 원본을 유지한다. 나머지는 회전된 사진에서 정확한 중앙 표시 영역을 계산한다.
+- 원본 JPEG·깊이·intrinsics·ML 입력·측정점 좌표는 변경하지 않는다. 2x의 등록된 RGB·깊이 크롭 이후 선택 비율의 표시 크롭은 한 번만 적용한다. 촬영 직후 분석 화면은 셔터 순간의 창을 고정한다.
+- `CaptureSnapshot.capturePresentationCrop`은 선택한 촬영 창, `presentationCrop`은 결과 사진의 실제 표시 창이다. 기존 기록은 새 필드가 nil이어도 열린다.
+- 선택 비율 밖에 정상 측정점이 있으면 검증에서 버리지 않고 결과의 사진 영역을 넓힌다. 이 경우에만 “측정점을 모두 볼 수 있도록 사진 영역을 넓혔어요”라는 중립 안내를 표시한다. 측정 실패 경고나 느낌표로 취급하지 않는다. 사진·점·선·확대기·점 이동은 넓힌 동일 표시 변환을 사용한다.
+- 메뉴 선택은 해당 촬영 세션에서 유지하며, 앱 재실행 후 설정 영구 보존을 추가한 것은 아니다.
+
+구조 참고: [Apple 카메라 도구 사용 안내](https://support.apple.com/guide/iphone/use-camera-tools-iph3dc593597/27/ios/27). 광학 밝기 응답과 실제 기기의 애니메이션 프레임은 시뮬레이터 화면·목 receipt 테스트와 별도로 확인해야 한다.
+
+검증:
+
+- 서로 다른 집중 테스트198개가 통과했다. 비율·회전·등록 크롭 핵심55개, 제어·사진 기하·옵션 표시 단위126개, 실제 UIKit 창의 중간 크기·재선택 애니메이션2개, 화면 동작15개다. 프로젝트의 전체 테스트를 실행했다는 의미는 아니다.
+- 새 화면 테스트5개는 메뉴 열기·바깥 탭 닫기·촬영 복귀, 노출 눈금·초점 EV0 동기화, 세 가지 비율과 재열기, 가로 화면·동작 줄이기, 촬영 전후 동일 픽셀 및 결과 확장·점 이동을 확인한다. 메뉴가 열리면 뒤의 조작 subtree를 제거하고 고정 촬영 영역은 유지한다. 패널 접근성 컨테이너는 자식 버튼의 고유 식별자를 보존한다.
+- 메뉴·노출·비율·가로 화면·분석 중 사진·결과 캡처를 직접 검토했다. 실제 iPhone 센서의 밝기 변화나 기본 카메라와의 애니메이션 체감 일치, 물리 측정 정확도를 확인한 것은 아니다.
+- iPhone 대상 Dobby 앱·QuickCopyWidget 빌드가 서명·설치 없이 통과했다. `git diff --check`도 통과했다.
+- 로그: `/private/tmp/dobby105-core-tests.log`(핵심55개), `/private/tmp/dobby105-options-tests-final.log`(단위126개 및 기존 통과 화면8개), `/private/tmp/dobby105-options-ui-verified.log`(창 애니메이션2개 및 기존 화면2개), `/private/tmp/dobby105-options-ui-corrected.log`(최종 새 화면5개·표시 단위2개 재검증), `/private/tmp/dobby105-device-build-complete.log`. 앞선 통합 로그의 메뉴 화면 실패는 최종 수정 실행에서 모두 재검증했다.
+- main `f1c6520` 통합 후 화면19개와 서로 다른 단위326개(XCTest280개·Swift Testing46개)가 통과했다. 노출 Float 변환 오차로 같은 표시 눈금에 햅틱이 중복되는 경로를 검증했고, 중앙선의 녹화 프레임에서16→36→16pt와 중간 길이를 확인했다. 실제 햅틱 감각이나 기본 카메라의 비공개 애니메이션 곡선과 완전히 같다는 뜻은 아니다. 로그: `/private/tmp/dobby105-main-haptics-verified.log`(화면19개), `/private/tmp/dobby105-haptics-final-tests.log`(마지막 보강 및 전체 단위 재검증), `/private/tmp/dobby105-marker-motion-analysis.log`, `/private/tmp/dobby105-main-haptics-device-final.log`.
+- 반투명 주변부 추가 후 서로 다른 화면8개와 렌더러 단위5개가 통과했다. 주변 색이1x·2x에 맞게 달라지고 주변 탭은 초점을 만들지 않으며, 중앙 픽셀·초점·회전·비율별 분석/결과 좌표가 유지됨을 확인했다. 실제 BGRA 생성 버퍼로4방향 색·2x 중앙 크롭·320px 제한·비메인 렌더, 일시 정지/정지 사진 교체·수명 정리를 검증했다. 렌더 컨텍스트는 worker에서 지연 생성하고 명시적인 동기화 저장소로 재사용한다.
+- 주변부 검증 로그: `/private/tmp/dobby105-surroundings-first.log`, `/private/tmp/dobby105-surroundings-regression.log`, `/private/tmp/dobby105-backdrop-renderer-final.log`. 최종 앱·위젯 iPhone 대상 빌드는 `/private/tmp/dobby105-surroundings-build-verified.log`에서 통과했다. 서명·설치·실기기 프레임 성능 측정은 수행하지 않았다.
+
+
+### 일반 카메라 + 실제 초광각 주변부 (MultiCam)
+
+- 위의 10fps·320px 장식 배경 구현은 교체했다. 실제 촬영 화면은 `LiDARMultiCameraCapture` 한 세션이 일반 RGB·LiDAR 절대 깊이·초광각 RGB를 동기화하고, 하나의 `MultiCameraPreview` Metal 화면에서 합성한다. 자세한 계약과 실기기 검증 범위는 [MultiCam 미리보기](MultiCam-Measurement-Preview.md)를 참고한다.
+- 중앙 사진 창은 전체 일반 카메라 1x와 기존 등록된 2x 크롭을 유지한다. 비율/2x 선택 때문에 중앙 창 밖에도 일반 카메라 원본 픽셀이 있으면 그대로 이어 보여주고, 일반 카메라 범위 밖만 실제 초광각으로 채운다. 주변부는 GPU의 검정 틴트가 아니라 실제 `.glassEffect(.regular)` 한 장으로 처리하며 사진 창은 투명하게 비운다.
+- 기존 ARKit을 동시 실행하지 않는다. 실제 기기의 조합·보정 정보·비용을 확인한 후 MultiCam을 실행한다. 지원하지 않으면 ARKit 단일 카메라로 순차 폴백하고, 주변을 가짜 확대 영상으로 채우지 않는다.
+- AVFoundation 깊이는 `.avFoundationLiDAR`로 구분한다. 사진과 깊이 모두 같은 렌즈 보정 좌표계로 변환한다. AR 추적이나 픽셀별 confidence가 있다고 가정하지 않는다.
+- 세로 비율별 사진 창은 전체 너비를 우선하며 16:9는 셔터 뒤까지 이어진다. 배율 버튼은 사진 하단에 맞춰 이동하고 셔터 영역 앞에서 제한한다. 셔터·더보기는 고정하고, 사진·글라스 마스크·배율 위치가 같은 비율 애니메이션을 따르도록 한다. 원본 RGB·깊이·K와 측정점 좌표는 변경하지 않는다.

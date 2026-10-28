@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class DetailExposureControlTests: XCTestCase {
+    func testSelectionFeedbackIgnoresDeviceFloatRoundingAndRepeatedRangeLimits() {
+        for tenth in -20...20 {
+            let displayed = Double(tenth) / 10
+            let deviceReceipt = Double(Float(displayed))
+            XCTAssertFalse(DetailExposureSelectionFeedback.hasChangedDisplayedStep(from: deviceReceipt, to: displayed),
+                           "Float camera receipts must not add another haptic at the same displayed EV")
+        }
+        for limit in [-2.0, 2.0] {
+            XCTAssertFalse(DetailExposureSelectionFeedback.hasChangedDisplayedStep(from: limit, to: limit))
+        }
+    }
+
+    func testSelectionFeedbackRecognizesUserStepsAcrossZeroAndRejectsInvalidInput() {
+        for (previous, next) in [(0.0, 0.1), (0.1, 0.0), (0.0, -0.1), (-0.1, 0.0), (1.9, 2.0)] {
+            XCTAssertTrue(DetailExposureSelectionFeedback.hasChangedDisplayedStep(from: previous, to: next))
+        }
+        XCTAssertFalse(DetailExposureSelectionFeedback.hasChangedDisplayedStep(from: -0.0, to: 0.0))
+        XCTAssertFalse(DetailExposureSelectionFeedback.hasChangedDisplayedStep(from: .nan, to: 0))
+        XCTAssertFalse(DetailExposureSelectionFeedback.hasChangedDisplayedStep(from: 0, to: .infinity))
+    }
+
     func testNewRequestCancelsPreviousAndIgnoresOldOrDuplicateCallbacks() throws {
         let completion = DetailExposureCompletion()
         var oldResults: [Result<Double, Error>] = [], newResults: [Result<Double, Error>] = []
