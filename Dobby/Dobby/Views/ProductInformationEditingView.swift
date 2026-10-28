@@ -22,14 +22,18 @@ struct ProductInformationEditingView: View {
     }
 
     var body: some View {
-        InfoInputView(garment: garment, measurementInput: $measurementInput,
-                      allowsPhotoEditing: true, onExit: requestExit, onComplete: onComplete)
-            .alert("저장하지 않은 변경사항이 있어요", isPresented: $showsDiscardConfirmation) {
-                Button("닫기", role: .cancel) { }
-                Button("삭제하고 나가기", role: .destructive, action: discardChangesAndExit)
-            } message: {
-                Text("변경사항을 삭제하고 보관함으로 나갈까요?")
+        ZStack {
+            InfoInputView(garment: garment, measurementInput: $measurementInput,
+                          allowsPhotoEditing: true, onExit: requestExit, onComplete: onComplete)
+                .disabled(showsDiscardConfirmation)
+
+            if showsDiscardConfirmation {
+                ProductInformationDiscardConfirmation(
+                    onCancel: { showsDiscardConfirmation = false },
+                    onDiscard: discardChangesAndExit
+                )
             }
+        }
     }
 
     private func requestExit() {
