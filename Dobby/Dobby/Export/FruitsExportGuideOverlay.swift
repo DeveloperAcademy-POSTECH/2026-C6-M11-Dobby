@@ -173,17 +173,12 @@ private struct FruitsExportGuideContent: View {
                             .font(.subheadline)
                     }
 
-                    Button(action: onOpen) {
-                        HStack(spacing: 8) {
-                            if opening { ProgressView().tint(.white) }
-                            Text("후루츠패밀리 열기")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 62)
+                    ChakPrimaryButton(
+                        title: "후루츠패밀리 열기",
+                        isLoading: opening
+                    ) {
+                        onOpen()
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .background(Color("BrandMain"), in: Capsule())
                     .disabled(opening || busy)
                     .accessibilityIdentifier("export.fruits.overlay.open")
                 }
@@ -215,7 +210,7 @@ private struct FruitsExportGuideContent: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(width: 28, height: 28)
-                .background(Color("BrandMain"), in: Circle())
+                .background(Color("BrandMain500"), in: Circle())
 
             content()
                 .font(.callout.weight(.semibold))

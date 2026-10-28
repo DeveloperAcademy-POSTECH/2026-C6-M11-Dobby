@@ -216,7 +216,9 @@ struct ProductSavedDetailView: View {
         }
         .background(ProductInformationStyle.background)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ProductUploadButton(action: openExport)
+            ChakPrimaryButton(title: "플랫폼에 업로드하러 가기") {
+                openExport()
+            }
                 .accessibilityIdentifier("library.export")
                 .padding(.horizontal, 33)
                 .padding(.top, 16)

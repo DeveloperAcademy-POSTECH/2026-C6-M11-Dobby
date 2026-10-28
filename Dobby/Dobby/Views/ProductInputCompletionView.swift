@@ -57,7 +57,7 @@ private struct ProductCompletionActions: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ProductUploadButton(action: onExport)
+            ChakPrimaryButton(title: "플랫폼에 업로드하러 가기", action: onExport)
             .accessibilityIdentifier("product-complete.export")
             Button(action: onLibrary) {
                 Text("보관함으로 이동하기").frame(maxWidth: .infinity).frame(height: 62)
@@ -72,22 +72,5 @@ private struct ProductCompletionActions: View {
         .padding(.top, 16)
         .frame(maxWidth: .infinity)
         .background(ProductInformationStyle.background.ignoresSafeArea(edges: .bottom))
-    }
-}
-
-struct ProductUploadButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text("플랫폼에 업로드하러 가기")
-                .font(.callout.weight(.semibold).italic())
-                .tracking(-0.31)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 62)
-                .background(ProductInformationStyle.upload, in: Capsule())
-        }
-        .buttonStyle(.plain)
     }
 }

@@ -28,7 +28,7 @@ final class ExportChannelSelectionTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<ExportRecord>()), 0)
     }
 
-    func testAllFourChannelsHaveOneBadgeInStableOrderAfterRepeatedSelections() throws {
+    func testAllChannelsHaveOneBadgeInStableOrderAfterRepeatedSelections() throws {
         let container = try makeMemoryContainer()
         let context = ModelContext(container)
         context.autosaveEnabled = false
@@ -36,15 +36,15 @@ final class ExportChannelSelectionTests: XCTestCase {
         context.insert(garment)
         try context.save()
 
-        for channel in ExportChannel.allCases.reversed() {
+        for channel in ExportChannel.availableCases.reversed() {
             try GarmentStore.recordSelectedExportChannel(channel, productID: garment.id.uuidString, in: context)
             try GarmentStore.recordSelectedExportChannel(channel, productID: garment.id.uuidString, in: context)
         }
 
-        XCTAssertEqual(garment.selectedExportChannels, ExportChannel.allCases)
+        XCTAssertEqual(garment.selectedExportChannels, ExportChannel.availableCases)
         let values = try XCTUnwrap(garment.selectedExportChannelRawValues)
-        XCTAssertEqual(values.count, 4)
-        XCTAssertEqual(Set(values), Set(ExportChannel.allCases.map(\.rawValue)))
+        XCTAssertEqual(values.count, 3)
+        XCTAssertEqual(Set(values), Set(ExportChannel.availableCases.map(\.rawValue)))
     }
 
     func testUnknownStoredValuesAndDuplicateEntriesDoNotCreateExtraBadges() {
@@ -54,7 +54,7 @@ final class ExportChannelSelectionTests: XCTestCase {
         unknownLegacyRecord.channelRaw = "removed-platform"
         garment.exports = [unknownLegacyRecord]
 
-        XCTAssertEqual(garment.selectedExportChannels, [.naverStore])
+        XCTAssertTrue(garment.selectedExportChannels.isEmpty)
     }
 
     func testSelectionsSurviveFullDiskStoreReopenWithAutosaveDisabled() throws {
@@ -78,7 +78,7 @@ final class ExportChannelSelectionTests: XCTestCase {
             context.insert(untouched)
             try context.save()
 
-            for channel in ExportChannel.allCases.reversed() {
+            for channel in ExportChannel.availableCases.reversed() {
                 try GarmentStore.recordSelectedExportChannel(channel, productID: selectedID.uuidString, in: context)
             }
             try GarmentStore.recordSelectedExportChannel(.instagram, productID: selectedID.uuidString, in: context)
@@ -95,8 +95,8 @@ final class ExportChannelSelectionTests: XCTestCase {
             let untouched = try XCTUnwrap(garments.first { $0.id == untouchedID })
 
             XCTAssertEqual(garments.count, 2)
-            XCTAssertEqual(selected.selectedExportChannels, ExportChannel.allCases)
-            XCTAssertEqual(selected.selectedExportChannelRawValues?.count, 4)
+            XCTAssertEqual(selected.selectedExportChannels, ExportChannel.availableCases)
+            XCTAssertEqual(selected.selectedExportChannelRawValues?.count, 3)
             XCTAssertTrue(selected.exports.isEmpty)
             XCTAssertNil(untouched.selectedExportChannelRawValues)
             XCTAssertTrue(untouched.selectedExportChannels.isEmpty)
@@ -144,7 +144,6 @@ final class ExportChannelSelectionTests: XCTestCase {
             ExportRecord(channel: .cafe24, succeeded: true),
             ExportRecord(channel: .instagram, succeeded: true),
             ExportRecord(channel: .instagram, succeeded: true),
-            ExportRecord(channel: .naverStore, succeeded: false),
             ExportRecord(channel: .fruitsFamily, succeeded: false)
         ]
 
@@ -152,8 +151,7 @@ final class ExportChannelSelectionTests: XCTestCase {
         XCTAssertEqual(garment.selectedExportChannels, [.instagram, .cafe24])
 
         garment.selectedExportChannelRawValues = ["naverStore", "instagram"]
-        XCTAssertEqual(garment.selectedExportChannels, [.instagram, .naverStore, .cafe24])
-        XCTAssertFalse(garment.hasExported(to: .naverStore), "A separate click badge does not turn a failed upload into success")
+        XCTAssertEqual(garment.selectedExportChannels, [.instagram, .cafe24])
     }
 
     private func makeMemoryContainer() throws -> ModelContainer {

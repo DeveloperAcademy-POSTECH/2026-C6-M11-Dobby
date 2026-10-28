@@ -109,16 +109,12 @@ struct GarmentMeasurementResultView: View {
                 .sharedBackgroundVisibility(.hidden)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button { Task { await confirm() } } label: {
-                HStack(spacing: 10) {
-                    if isSaving || model.needsRecalculation { ProgressView().tint(.white) }
-                    Text(isSaving ? "저장 중…" : model.needsRecalculation ? "다시 측정 중…" : "다음")
-                        .font(.system(.callout, design: .default, weight: .semibold)).italic()
-                }.frame(maxWidth: .infinity).frame(minHeight: 62)
-                    .background(GarmentCaptureStyle.accent, in: Capsule())
-                    .contentShape(.interaction, Capsule())
+            ChakPrimaryButton(
+                title: isSaving ? "저장 중…" : model.needsRecalculation ? "다시 측정 중…" : "다음",
+                isLoading: isSaving || model.needsRecalculation
+            ) {
+                Task { await confirm() }
             }
-            .buttonStyle(.plain).foregroundStyle(.white)
             .disabled(isSaving || isEditingPoint || model.needsRecalculation)
             .accessibilityHint(onConfirmedRecord == nil
                 ? "사진과 확인한 측정 결과를 저장하고 촬영을 마칩니다"

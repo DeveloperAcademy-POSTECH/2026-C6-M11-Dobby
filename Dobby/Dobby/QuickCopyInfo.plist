@@ -21,11 +21,8 @@
 	<string>$(DOBBY_INSTAGRAM_APP_API_KEY)</string>
 	<key>InstagramBackendBaseURL</key>
 	<string>$(INSTAGRAM_BACKEND_BASE_URL)</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Pretendard-Regular.otf</string>

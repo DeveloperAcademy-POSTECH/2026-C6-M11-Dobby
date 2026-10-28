@@ -6,7 +6,8 @@ extension GarmentStore {
     @MainActor
     static func recordSelectedExportChannel(_ channel: ExportChannel, productID: String,
                                            in context: ModelContext) throws {
-        guard let id = UUID(uuidString: productID) else { return }
+        guard ExportChannel.availableCases.contains(channel),
+              let id = UUID(uuidString: productID) else { return }
         var descriptor = FetchDescriptor<Garment>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
         guard let garment = try context.fetch(descriptor).first,

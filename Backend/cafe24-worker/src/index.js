@@ -43,11 +43,20 @@ async function startOAuth(request, url, env) {
   const state = crypto.randomUUID();
   const codeVerifier = randomBase64URL(32);
   const codeChallenge = await sha256Base64URL(codeVerifier);
-  await env.CAFE24_TOKENS.put(
-    `pending:${state}`,
-    JSON.stringify({ deviceToken, mallID, codeVerifier }),
-    { expirationTtl: 600 },
-  );
+  const deviceKey = await tokenKey(deviceToken);
+  const pendingDeviceKey = `pending-device:${deviceKey}`;
+  const previousState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
+
+  if (previousState) await env.CAFE24_TOKENS.delete(`pending:${previousState}`);
+
+  await Promise.all([
+    env.CAFE24_TOKENS.put(
+      `pending:${state}`,
+      JSON.stringify({ deviceToken, deviceKey, mallID, codeVerifier }),
+      { expirationTtl: 600 },
+    ),
+    env.CAFE24_TOKENS.put(pendingDeviceKey, state, { expirationTtl: 600 }),
+  ]);
   const authorize = new URL(`https://${mallID}.cafe24api.com/api/v2/oauth/authorize`);
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("client_id", env.CAFE24_CLIENT_ID);
@@ -64,14 +73,31 @@ async function finishOAuth(url, env) {
   const pendingText = state && await env.CAFE24_TOKENS.get(`pending:${state}`);
   if (!pendingText || !code) return appRedirect(env, "error");
   const pending = JSON.parse(pendingText);
+  const pendingDeviceKey = `pending-device:${pending.deviceKey}`;
+  const activeState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
+
+  if (!pending.deviceKey || activeState !== state) {
+    await env.CAFE24_TOKENS.delete(`pending:${state}`);
+    return appRedirect(env, "error");
+  }
   const token = await cafe24Token(pending.mallID, env, new URLSearchParams({
     grant_type: "authorization_code",
     code,
     redirect_uri: env.CAFE24_REDIRECT_URI,
     code_verifier: pending.codeVerifier,
   }));
-  await env.CAFE24_TOKENS.put(`connection:${await tokenKey(pending.deviceToken)}`, JSON.stringify(token));
-  await env.CAFE24_TOKENS.delete(`pending:${state}`);
+  const latestState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
+
+  if (latestState !== state) {
+    await env.CAFE24_TOKENS.delete(`pending:${state}`);
+    return appRedirect(env, "error");
+  }
+
+  await Promise.all([
+    env.CAFE24_TOKENS.put(`connection:${pending.deviceKey}`, JSON.stringify(token)),
+    env.CAFE24_TOKENS.delete(`pending:${state}`),
+    env.CAFE24_TOKENS.delete(pendingDeviceKey),
+  ]);
   return appRedirect(env, "success");
 }
 
@@ -83,7 +109,18 @@ async function connection(request, env) {
 async function disconnect(request, env) {
   const deviceToken = bearer(request);
   if (!deviceToken) return json({ error: "invalid_request" }, 400);
-  await env.CAFE24_TOKENS.delete(`connection:${await tokenKey(deviceToken)}`);
+
+  const deviceKey = await tokenKey(deviceToken);
+  const pendingDeviceKey = `pending-device:${deviceKey}`;
+  const pendingState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
+  const deletions = [
+    env.CAFE24_TOKENS.delete(`connection:${deviceKey}`),
+    env.CAFE24_TOKENS.delete(pendingDeviceKey),
+  ];
+
+  if (pendingState) deletions.push(env.CAFE24_TOKENS.delete(`pending:${pendingState}`));
+
+  await Promise.all(deletions);
   return json({ disconnected: true });
 }
 
