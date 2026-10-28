@@ -4,7 +4,7 @@ import UIKit
 import ImageIO
 
 struct ContentView: View {
-    private enum HomeTab: Hashable { case capture, library }
+    private enum HomeTab: Hashable { case capture, library, settings }
     private struct CreationRequest: Identifiable {
         let id = UUID()
         let productID: UUID?
@@ -76,10 +76,15 @@ struct ContentView: View {
                 .tint(libraryPath.isEmpty
                     ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color("HomeAccent"))
             }
+            Tab("설정", systemImage: "gearshape.fill", value: HomeTab.settings) {
+                NavigationStack {
+                    SettingsView()
+                }
+            }
         }
         // 홈은 중립색, 보관함은 편집 상태에 따른 main의 강조색을 유지합니다.
-        .tint(tab == .capture ? Color.primary : libraryPath.isEmpty
-            ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color("HomeAccent"))
+        .tint(tab == .library && libraryPath.isEmpty
+            ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color.primary)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
