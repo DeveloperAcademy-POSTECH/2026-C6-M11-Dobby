@@ -60,6 +60,10 @@ struct ProductLibraryView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
+                            if !filteredDraftGarments.isEmpty {
+                                ProductDraftCountBadge(count: filteredDraftGarments.count)
+                            }
+
                             ForEach(filteredDraftGarments) { garment in
                                 draftCell(garment)
                             }
