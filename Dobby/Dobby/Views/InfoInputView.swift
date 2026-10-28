@@ -166,7 +166,7 @@ struct InfoInputView: View {
 /// The visible text outlives its dirty draft. Clearing a consumed draft must not
 /// switch a focused TextField back to a rounded model display and emit that
 /// rounded value as a new edit during navigation/keyboard dismissal.
-nonisolated struct GarmentMeasurementInputState: Codable {
+nonisolated struct GarmentMeasurementInputState: Codable, Equatable {
     private var inputTexts: [UUID: String] = [:]
     var drafts: [UUID: String] = [:]
 

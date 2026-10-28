@@ -136,7 +136,7 @@ struct ExportProductSummary: View {
     var body: some View {
         HStack(spacing: 14) {
             Group {
-                if let data = product.imageData, let image = UIImage(data: data) {
+                if let data = product.thumbnailData, let image = UIImage(data: data) {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
@@ -154,7 +154,7 @@ struct ExportProductSummary: View {
                 Text(product.name.isEmpty ? "이름 없는 상품" : product.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
-                Label("사진 \(photoCount ?? product.displayPhotos.count)장", systemImage: "photo")
+                Label("사진 \(photoCount ?? product.exportPhotos.count)장", systemImage: "photo")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -190,6 +190,94 @@ struct ExportTextFieldBackground: ViewModifier {
 extension View {
     func exportTextFieldStyle() -> some View {
         modifier(ExportTextFieldBackground())
+    }
+}
+
+struct ExportNavigationButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    var isDisabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .foregroundStyle(Color(.exportCloseIcon))
+        }
+        .disabled(isDisabled)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+struct ExportAccountMenu: View {
+    let accessibilityLabel: String
+    let onReconnect: () -> Void
+    let onDisconnect: () -> Void
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented = true
+        } label: {
+            Image(systemName: "ellipsis")
+                .foregroundStyle(Color(.exportCloseIcon))
+        }
+        .accessibilityLabel(accessibilityLabel)
+        .popover(isPresented: $isPresented) {
+            VStack(spacing: 0) {
+                ExportAccountMenuButton(
+                    title: "다시 연결하기",
+                    systemImage: "arrow.clockwise",
+                    action: performReconnect
+                )
+                ExportAccountMenuButton(
+                    title: "연결 해제하기",
+                    systemImage: "personalhotspot.slash",
+                    tint: .red,
+                    action: performDisconnect
+                )
+            }
+            .padding(12)
+            .frame(width: 240)
+            .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private func performReconnect() {
+        isPresented = false
+        onReconnect()
+    }
+
+    private func performDisconnect() {
+        isPresented = false
+        onDisconnect()
+    }
+}
+
+private struct ExportAccountMenuButton: View {
+    let title: String
+    let systemImage: String
+    var tint: Color = .primary
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 24, height: 24, alignment: .center)
+
+                Text(title)
+                    .font(.system(size: 17, weight: .regular))
+
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(tint)
     }
 }
 

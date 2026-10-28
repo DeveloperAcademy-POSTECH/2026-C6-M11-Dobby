@@ -1,139 +1,185 @@
 import SwiftUI
 
-struct Cafe24ExportView: View {
-    let product: ExportProduct
-    @State private var client = Cafe24IntegrationClient()
-    @State private var mallID = ""
-    @State private var priceText: String
-    @State private var connectedMallID: String?
-    @State private var isWorking = false
-    @State private var resultMessage: String?
-    @State private var isError = false
+private enum Cafe24UploadState {
+    case idle
+    case uploading
+    case completed(Cafe24PublishResult)
 
-    init(product: ExportProduct) {
-        self.product = product
-        _priceText = State(initialValue: product.fruits.price)
+    var isUploading: Bool {
+        if case .uploading = self { true } else { false }
+    }
+
+    var isCompleted: Bool {
+        if case .completed = self { true } else { false }
+    }
+}
+
+struct Cafe24ExportView: View {
+    let onPublished: (Cafe24PublishResult) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var client = Cafe24IntegrationClient()
+    @State private var draft: Cafe24ExportDraft
+    @State private var connectedMallID: String?
+    @State private var isLoadingConnection = true
+    @State private var connectionError: String?
+    @State private var uploadState: Cafe24UploadState = .idle
+    @State private var isConnecting = false
+    @State private var isDisconnecting = false
+    @State private var message: String?
+    @State private var isConfirmingRepublish = false
+
+    init(product: ExportProduct, onPublished: @escaping (Cafe24PublishResult) -> Void = { _ in }) {
+        self.onPublished = onPublished
+        _draft = State(initialValue: Cafe24ExportDraft(product: product))
     }
 
     var body: some View {
-        ExportScreenContent {
-            ExportServiceHeader(
-                channel: .cafe24,
-                title: "카페24",
-                description: "연결한 쇼핑몰에 상품 정보를 바로 등록해요.",
-                status: connectedMallID == nil ? nil : "연결됨"
-            )
-
-            ExportSectionCard(
-                title: "쇼핑몰 연결",
-                subtitle: connectedMallID == nil ? "상품을 등록할 카페24 쇼핑몰 ID를 입력해 주세요." : nil
-            ) {
-                if let connectedMallID {
-                    HStack(spacing: 12) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(ExportScreenStyle.accent)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("연결된 쇼핑몰")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(connectedMallID)
-                                .font(.headline)
-                        }
-                        Spacer()
-                        ExportStatusBadge(title: "사용 가능")
-                    }
-                    .padding(16)
-                    .background(ExportScreenStyle.field, in: RoundedRectangle(cornerRadius: ExportScreenStyle.fieldCornerRadius))
-
-                    Button("다른 쇼핑몰 연결") { self.connectedMallID = nil }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ExportScreenStyle.accent)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(ExportScreenStyle.accent.opacity(0.08), in: Capsule())
-                } else {
-                    ExportField(label: "쇼핑몰 ID") {
-                        TextField("예: myshop", text: $mallID)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .exportTextFieldStyle()
-                    }
-                    Button("카페24 계정 연결") { Task { await connect() } }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(ExportScreenStyle.accent, in: Capsule())
-                        .disabled(isWorking || mallID.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .opacity(mallID.trimmingCharacters(in: .whitespaces).isEmpty ? 0.45 : 1)
-                }
-            }
-
-            ExportSectionCard(title: "등록할 상품") {
-                ExportProductSummary(product: product)
-                Divider()
-                ExportField(label: "판매가") {
-                    HStack(spacing: 8) {
-                        TextField("판매가 입력", text: $priceText)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                        Text("원")
-                            .foregroundStyle(.secondary)
-                    }
-                    .exportTextFieldStyle()
-                }
-                ExportInfoBanner(
-                    text: "첫 등록은 고객에게 노출되지 않도록 진열 안 함·판매 안 함 상태로 등록됩니다.",
-                    systemImage: "eye.slash.fill"
+        Group {
+            if connectedMallID != nil {
+                Cafe24ProductView(
+                    draft: $draft,
+                    isCompleted: uploadState.isCompleted,
+                    isDisabled: uploadState.isUploading
+                )
+            } else {
+                Cafe24ConnectionView(
+                    isLoading: isConnecting || isLoadingConnection,
+                    errorMessage: connectionError,
+                    onConnect: { mallID in Task { await connect(mallID: mallID) } }
                 )
             }
         }
-        .navigationTitle("카페24 내보내기")
+        .navigationTitle("카페24로 내보내기")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ExportBottomActionBar {
-                ExportBottomAction(
-                    title: "카페24에 상품 등록",
-                    isWorking: isWorking,
-                    isEnabled: connectedMallID != nil && !priceText.filter(\.isNumber).isEmpty
-                ) {
-                    Task { await publish() }
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            if !uploadState.isUploading {
+                ToolbarItem(placement: .topBarLeading) {
+                    ExportNavigationButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "플랫폼 업로드로 돌아가기"
+                    ) {
+                        dismiss()
+                    }
+                }
+            }
+            if connectedMallID != nil && !uploadState.isUploading && !isDisconnecting {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ExportAccountMenu(
+                        accessibilityLabel: "카페24 계정 메뉴",
+                        onReconnect: { Task { await loadStatus() } },
+                        onDisconnect: { Task { await disconnect() } }
+                    )
                 }
             }
         }
-        .overlay { if isWorking { ExportLoadingOverlay(message: "카페24와 연결 중…") } }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if connectedMallID != nil {
+                ExportBottomActionBar {
+                    ExportBottomAction(
+                        title: "업로드하기",
+                        isWorking: uploadState.isUploading,
+                        isEnabled: !isDisconnecting && (uploadState.isCompleted || canPublish)
+                    ) {
+                        if uploadState.isCompleted {
+                            isConfirmingRepublish = true
+                        } else {
+                            Task { await publish() }
+                        }
+                    }
+                }
+            }
+        }
+        .overlay {
+            if isConnecting {
+                ExportLoadingOverlay(message: "카페24와 연결 중…")
+            } else if isDisconnecting {
+                ExportLoadingOverlay(message: "카페24 연결을 해제하고 있어요…")
+            } else if uploadState.isUploading {
+                PlatformUploadingOverlay(platformName: "카페24")
+            }
+        }
+        .interactiveDismissDisabled(uploadState.isUploading)
         .task { await loadStatus() }
-        .alert(isError ? "등록할 수 없습니다" : "등록 완료",
-               isPresented: Binding(get: { resultMessage != nil }, set: { if !$0 { resultMessage = nil } })) {
-            Button("확인", role: .cancel) {}
-        } message: { Text(resultMessage ?? "") }
+        .confirmationDialog("상품을 한 번 더 올릴까요?", isPresented: $isConfirmingRepublish,
+                            titleVisibility: .visible) {
+            Button("다시 업로드하기") { Task { await publish() } }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("다시 업로드하면 같은 쇼핑몰에 새 상품이 추가됩니다.")
+        }
+        .alert("카페24 안내", isPresented: Binding(
+            get: { message != nil }, set: { if !$0 { message = nil } })) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(message ?? "")
+            }
+    }
+
+    private var canPublish: Bool {
+        !uploadState.isUploading && draft.canPublish
     }
 
     private func loadStatus() async {
-        guard client.isConfigured else { return }
-        if let status = try? await client.connectionStatus() { connectedMallID = status.connected ? status.mallID : nil }
+        isLoadingConnection = true
+        connectionError = nil
+        defer { isLoadingConnection = false }
+        do {
+            let status = try await client.connectionStatus()
+            connectedMallID = status.connected ? status.mallID : nil
+        } catch {
+            connectedMallID = nil
+            connectionError = error.localizedDescription
+        }
     }
 
-    private func connect() async {
-        isWorking = true; defer { isWorking = false }
+    private func connect(mallID: String) async {
+        isConnecting = true
+        defer { isConnecting = false }
         do {
             try await client.connect(mallID: mallID)
-            connectedMallID = try await client.connectionStatus().mallID
-        } catch { show(error) }
+            let status = try await client.connectionStatus()
+            connectedMallID = status.connected ? status.mallID : nil
+            connectionError = nil
+        } catch {
+            connectionError = error.localizedDescription
+        }
     }
 
     private func publish() async {
-        guard let price = Int(priceText.filter(\.isNumber)) else { show(Cafe24IntegrationError.invalidPrice); return }
-        isWorking = true; defer { isWorking = false }
+        if let validationMessage = draft.validationMessage {
+            message = validationMessage
+            return
+        }
+        guard let price = draft.price else { return }
+        uploadState = .uploading
         do {
-            let result = try await client.publish(product: product, price: price)
-            isError = false
-            resultMessage = "\(result.mallID) 쇼핑몰에 상품 #\(result.productNo)을 비공개로 등록했습니다."
-        } catch { show(error) }
+            let result = try await client.publish(
+                productName: draft.productName,
+                description: draft.productDescription,
+                price: price,
+                images: draft.photos
+            )
+            uploadState = .completed(result)
+            onPublished(result)
+        } catch {
+            uploadState = .idle
+            message = error.localizedDescription
+        }
     }
 
-    private func show(_ error: Error) {
-        isError = true
-        resultMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    private func disconnect() async {
+        guard !isConnecting, !isDisconnecting else { return }
+        isDisconnecting = true
+        defer { isDisconnecting = false }
+        do {
+            try await client.disconnect()
+            connectedMallID = nil
+            connectionError = nil
+            uploadState = .idle
+        } catch {
+            message = error.localizedDescription
+        }
     }
 }
 

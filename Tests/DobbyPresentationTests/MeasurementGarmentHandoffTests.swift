@@ -216,7 +216,7 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         XCTAssertNil(stored.measurement("thighWidthRight"))
         XCTAssertEqual(stored.visibleMeasurements.map(\.key), ["totalLengthLeft", "waistWidth", "frontRise", "hemWidthLeft"])
         XCTAssertEqual(decoded.definitions.map(\.id), record.definitions.map(\.id))
-        XCTAssertTrue(ExportProduct(garment: stored, loadPhoto: { _ in nil }).fruits.thigh.isEmpty)
+        XCTAssertTrue(ExportProduct(garment: stored, loadPhoto: { _ in nil }).marketplacePayload.thigh.isEmpty)
     }
 
     private func putResolvedThigh(_ coordinate: ImagePoint, in result: inout GarmentMeasurementResult,
@@ -285,8 +285,8 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
             XCTAssertEqual(value.valueCm, 34.1, accuracy: 1e-10)
             XCTAssertEqual(try XCTUnwrap(value.autoValueCm), 32.125, accuracy: 1e-10)
             let product = ExportProduct(garment: stored, loadPhoto: { _ in nil })
-            XCTAssertEqual(product.fruits.thigh, "34.1")
-            XCTAssertEqual(product.copyMeasurements.map(\.title), ["총장", "허리", "밑위", "허벅지", "밑단"])
+            XCTAssertEqual(product.marketplacePayload.thigh, "34.1")
+            XCTAssertEqual(product.exportMeasurements.map(\.title), ["총장", "허리", "밑위", "허벅지", "밑단"])
             point.resetToAuto()
             XCTAssertEqual(point.x, automatic.x)
             XCTAssertEqual(point.y, automatic.y)
@@ -343,9 +343,9 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         XCTAssertEqual(point.hasAutomaticObservation, false)
         XCTAssertFalse(point.isMoved)
         let product = ExportProduct(garment: stored, loadPhoto: { _ in nil })
-        XCTAssertTrue(product.fruits.thigh.isEmpty)
-        XCTAssertFalse(product.copyMeasurements.contains { $0.id == "thighWidthRight" })
-        XCTAssertEqual(product.copyMeasurements.map(\.title), ["총장", "허리", "밑위", "밑단"])
+        XCTAssertTrue(product.marketplacePayload.thigh.isEmpty)
+        XCTAssertFalse(product.exportMeasurements.contains { $0.id == "thighWidthRight" })
+        XCTAssertEqual(product.exportMeasurements.map(\.title), ["총장", "허리", "밑위", "밑단"])
     }
 
     func testExplicitThighEndpointRestorationDoesNotInventAnAutomaticBaseline() throws {
@@ -877,8 +877,8 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
             let product = ExportProduct(garment: garment, loadPhoto: {
                 try? Data(contentsOf: photos.appendingPathComponent($0.fileName))
             })
-            XCTAssertEqual(product.copyMeasurements.first { $0.id == "chestWidth" }?.value, "64.125")
-            XCTAssertEqual(product.photoData.count, 1)
+            XCTAssertEqual(product.exportMeasurements.first { $0.id == "chestWidth" }?.value, "64.125")
+            XCTAssertEqual(product.photos.count, 1)
             let same = try GarmentStore.importMeasurement(record, in: context,
                 photosDirectory: photos, allowsSynthetic: true)
             XCTAssertTrue(same === garment)

@@ -28,11 +28,11 @@ final class CopyActivityController {
         busy = true
         defer { busy = false }
         refresh()
-        let measurementItems = product.copyMeasurements
+        let measurementItems = product.exportMeasurements
             .filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map { ProductCopyMeasurement(id: $0.id, title: $0.title, value: $0.value) }
         if let session,
-           session.canReuse(productID: product.id, payload: product.fruits,
+           session.canReuse(productID: product.id, payload: product.marketplacePayload,
                             measurementItems: measurementItems) {
             errorMessage = nil
             return true
@@ -51,7 +51,7 @@ final class CopyActivityController {
             id: UUID(),
             channel: .fruits,
             productID: product.id,
-            payload: product.fruits,
+            payload: product.marketplacePayload,
             measurementItems: measurementItems,
             createdAt: Date()
         )
@@ -61,10 +61,10 @@ final class CopyActivityController {
                                          sessionID: next.id,
                                          channelName: next.channel.title,
                                          values: .init(
-                                             productName: product.fruits.productName,
-                                             description: product.fruits.description,
-                                             brand: product.fruits.brand,
-                                             measurements: product.fruits.measurements,
+                                             productName: product.marketplacePayload.productName,
+                                             description: product.marketplacePayload.description,
+                                             brand: product.marketplacePayload.brand,
+                                             measurements: product.marketplacePayload.measurements,
                                              measurementItems: measurementItems
                                          )
                                      ),

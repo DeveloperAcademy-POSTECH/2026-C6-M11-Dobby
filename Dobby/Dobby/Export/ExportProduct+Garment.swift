@@ -62,12 +62,15 @@ extension ExportProduct {
         )
         self.init(
             id: garment.id.uuidString,
-            imageData: photos.first { $0.id == garment.thumbnail?.id }?.data ?? photos.first?.data,
-            fruits: payload,
-            instagram: instagramPayload,
-            detailMeasurements: measurements,
-            photoData: photos.map(\.data),
-            garmentCategory: garment.category.isEmpty ? nil : garment.category
+            thumbnailData: photos.first { $0.id == garment.thumbnail?.id }?.data ?? photos.first?.data,
+            marketplacePayload: payload,
+            instagramPayload: instagramPayload,
+            measurements: measurements,
+            photos: photos.map(\.data),
+            category: garment.category.isEmpty ? nil : garment.category,
+            completedChannels: Set(garment.exports.filter(\.succeeded).compactMap {
+                ExportChannel(rawValue: $0.channelRaw)
+            })
         )
     }
 }

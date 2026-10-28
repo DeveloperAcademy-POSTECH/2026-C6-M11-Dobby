@@ -8,6 +8,7 @@ struct ProductLibraryView: View {
     let onStartMeasurement: () -> Void
     let onResumeDraft: (UUID) -> Void
     @State private var searchText = ""
+    @State private var showsOnlyDrafts: Bool
     @FocusState private var isSearchFocused: Bool
     @State private var pendingDeletion: UUID?
     @State private var deletionFailed = false
@@ -23,11 +24,13 @@ struct ProductLibraryView: View {
 
     init(garments: [Garment], isEditing: Binding<Bool>,
          onStartMeasurement: @escaping () -> Void,
-         onResumeDraft: @escaping (UUID) -> Void = { _ in }) {
+         onResumeDraft: @escaping (UUID) -> Void = { _ in },
+         initiallyShowsOnlyDrafts: Bool = false) {
         self.garments = garments
         _isEditing = isEditing
         self.onStartMeasurement = onStartMeasurement
         self.onResumeDraft = onResumeDraft
+        _showsOnlyDrafts = State(initialValue: initiallyShowsOnlyDrafts)
     }
 
     private var filteredGarments: [Garment] {
@@ -40,6 +43,10 @@ struct ProductLibraryView: View {
 
     private var filteredDraftGarments: [Garment] {
         filteredGarments.filter(\.isCreationDraft)
+    }
+
+    private var draftGarments: [Garment] {
+        garments.filter(\.isCreationDraft)
     }
 
     private var filteredSavedGarments: [Garment] {
@@ -55,7 +62,7 @@ struct ProductLibraryView: View {
             Group {
                 if garments.isEmpty {
                     emptyLibrary
-                } else if filteredGarments.isEmpty {
+                } else if filteredGarments.isEmpty && !showsOnlyDrafts {
                     ContentUnavailableView.search(text: searchText.trimmingCharacters(in: .whitespacesAndNewlines))
                 } else {
                     ScrollView {
@@ -64,7 +71,32 @@ struct ProductLibraryView: View {
                                 draftCell(garment)
                             }
 
-                            if !filteredSavedGarments.isEmpty {
+                            if !draftGarments.isEmpty {
+                                ProductDraftCountBadge(
+                                    count: draftGarments.count,
+                                    isSelected: showsOnlyDrafts
+                                ) {
+                                    isSearchFocused = false
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        showsOnlyDrafts.toggle()
+                                    }
+                                }
+                            }
+
+                            if showsOnlyDrafts {
+                                if filteredDraftGarments.isEmpty {
+                                    ContentUnavailableView.search(
+                                        text: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                } else {
+                                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                                        ForEach(filteredDraftGarments) { garment in
+                                            draftProductCell(garment)
+                                        }
+                                    }
+                                }
+                            } else if !filteredSavedGarments.isEmpty {
                                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                                     ForEach(filteredSavedGarments) { garment in
                                         productCell(garment)
@@ -134,6 +166,9 @@ struct ProductLibraryView: View {
         }
         .onChange(of: garments.isEmpty, initial: true) { _, isEmpty in
             if isEmpty { isEditing = false }
+        }
+        .onChange(of: draftGarments.isEmpty) { _, draftsAreEmpty in
+            if draftsAreEmpty { showsOnlyDrafts = false }
         }
         .onDisappear {
             isSearchFocused = false
@@ -229,6 +264,27 @@ struct ProductLibraryView: View {
         }
     }
 
+    @ViewBuilder
+    private func draftProductCell(_ garment: Garment) -> some View {
+        if isEditing {
+            ProductLibraryCard(garment: garment, showsDraftPlaceholders: true)
+                .overlay(alignment: .topLeading) {
+                    deleteButton(for: garment)
+                }
+                .accessibilityElement(children: .contain)
+        } else {
+            Button {
+                isSearchFocused = false
+                onResumeDraft(garment.id)
+            } label: {
+                ProductLibraryCard(garment: garment, showsDraftPlaceholders: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
+            .accessibilityHint("임시저장한 상품 작업을 이어갑니다.")
+        }
+    }
+
     private func deleteButton(for garment: Garment) -> some View {
         Button(role: .destructive) {
             pendingDeletion = garment.id
@@ -302,10 +358,16 @@ struct ProductLibraryView: View {
 private struct ProductLibraryPreview: View {
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
     @State var isEditing = false
+    var initiallyShowsOnlyDrafts = false
 
     var body: some View {
         NavigationStack {
-            ProductLibraryView(garments: garments, isEditing: $isEditing, onStartMeasurement: {})
+            ProductLibraryView(
+                garments: garments,
+                isEditing: $isEditing,
+                onStartMeasurement: {},
+                initiallyShowsOnlyDrafts: initiallyShowsOnlyDrafts
+            )
         }
     }
 }
@@ -321,6 +383,20 @@ private struct ProductLibraryPreview: View {
     ProductLibraryPreview(isEditing: true)
         .modelContainer(LibraryPreviewData.makeContainer())
         .tint(LibraryStyle.editAccent)
+        .preferredColorScheme(.light)
+}
+
+#Preview("보관함 · 임시저장") {
+    ProductLibraryPreview()
+        .modelContainer(LibraryPreviewData.makeContainer(includesDraft: true))
+        .tint(LibraryStyle.primary)
+        .preferredColorScheme(.light)
+}
+
+#Preview("보관함 · 임시저장 필터") {
+    ProductLibraryPreview(initiallyShowsOnlyDrafts: true)
+        .modelContainer(LibraryPreviewData.makeContainer(includesDraft: true))
+        .tint(LibraryStyle.primary)
         .preferredColorScheme(.light)
 }
 

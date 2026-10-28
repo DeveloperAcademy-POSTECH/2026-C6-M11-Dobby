@@ -1,22 +1,35 @@
 import Foundation
-import SwiftUI
 
 struct ExportProduct: Identifiable {
     let id: String
-    let imageData: Data?
-    let fruits: ProductCopyPayload
-    let instagram: ProductCopyPayload
-    var detailMeasurements: [ExportMeasurement]? = nil
-    var photoData: [Data] = []
-    var garmentCategory: String? = nil
-    var displayPhotos: [Data] { photoData.isEmpty ? imageData.map { [$0] } ?? [] : photoData }
-    var name: String { fruits.productName }
+    let thumbnailData: Data?
+    let marketplacePayload: ProductCopyPayload
+    let instagramPayload: ProductCopyPayload
+    var measurements: [ExportMeasurement]? = nil
+    var photos: [Data] = []
+    var category: String? = nil
+    var completedChannels: Set<ExportChannel> = []
+}
 
-    var copyMeasurements: [ExportMeasurement] {
-        detailMeasurements ?? [
-            ExportMeasurement(id: "length", title: "총장", value: fruits.length),
-            ExportMeasurement(id: "waist", title: "허리 단면", value: fruits.waist),
-            ExportMeasurement(id: "thigh", title: "허벅지 단면", value: fruits.thigh)
+extension ExportProduct {
+    var exportPhotos: [Data] {
+        photos.isEmpty ? thumbnailData.map { [$0] } ?? [] : photos
+    }
+
+    var name: String { marketplacePayload.productName }
+
+    var brand: String { marketplacePayload.brand }
+
+    var displayPrice: String {
+        guard let price = Int(marketplacePayload.price) else { return marketplacePayload.price }
+        return "\(price.formatted(.number.grouping(.automatic)))원"
+    }
+
+    var exportMeasurements: [ExportMeasurement] {
+        measurements ?? [
+            ExportMeasurement(id: "length", title: "총장", value: marketplacePayload.length),
+            ExportMeasurement(id: "waist", title: "허리 단면", value: marketplacePayload.waist),
+            ExportMeasurement(id: "thigh", title: "허벅지 단면", value: marketplacePayload.thigh)
         ]
     }
 }
@@ -39,28 +52,5 @@ struct ExportMeasurement: Identifiable {
         title = measuredValue.label
         value = measuredValue.valueCm.formatted(.number.locale(Locale(identifier: "en_US_POSIX"))
             .grouping(.never).precision(.fractionLength(0...2)))
-    }
-}
-
-extension ExportProduct {
-    static let demo = ExportProduct(id: "levis-550-example", imageData: nil,
-                                    fruits: .sample(for: .fruits), instagram: .sample(for: .instagram))
-}
-
-struct ExportProductHeader: View {
-    let product: ExportProduct
-    var body: some View {
-        VStack(spacing: 12) {
-            if let data = product.imageData, let image = UIImage(data: data) {
-                Image(uiImage: image).resizable().scaledToFit().frame(height: 150)
-            } else {
-                Image(systemName: "tshirt").resizable().scaledToFit()
-                    .foregroundStyle(.secondary).frame(width: 100, height: 130)
-                    .accessibilityLabel("상품 사진 없음")
-            }
-            Text(product.name).font(.subheadline.weight(.semibold))
-                .multilineTextAlignment(.center).padding(.horizontal, 16).padding(.vertical, 10)
-                .background(Color(.secondarySystemBackground), in: Capsule())
-        }.frame(maxWidth: .infinity).padding(.vertical, 20)
     }
 }

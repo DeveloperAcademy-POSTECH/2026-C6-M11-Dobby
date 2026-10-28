@@ -1,68 +1,65 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct ExportView: View {
     let product: ExportProduct
     let controller: CopyActivityController
     @Binding var showFruits: Bool
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
     @Environment(\.modelContext) private var modelContext
-    @State private var history = ExportHistoryStore()
-    @State private var isShowingOpenError = false
-    @State private var isOpeningLink = false
-    @State private var showFruitsGuideA = false
+    @State private var completedChannels: Set<ExportChannel>
+    @State private var selectionSaveError: String?
     @State private var showCafe24 = false
-    @State private var showNaverStore = false
     @State private var showInstagram = false
     @State private var showFruitsGuideOverlay = false
-    @State private var openedFruitsMethods: Set<FruitsExportMethod> = []
-    @State private var selectionSaveError: String?
+
+    init(product: ExportProduct, controller: CopyActivityController, showFruits: Binding<Bool>) {
+        self.product = product
+        self.controller = controller
+        _showFruits = showFruits
+        _completedChannels = State(initialValue: product.completedChannels)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    ExportProductHeader(product: product)
-                    ExportChannelListView(openedChannels: history.openedChannels,
-                                          onSelectChannel: didSelectChannel,
-                                          openedFruitsMethods: openedFruitsMethods,
-                                          onSelectFruits: selectFruits)
-                }.padding(.horizontal, 24).padding(.bottom, 24)
+                VStack(spacing: 20) {
+                    ExportProductItem(product: product)
+                    ExportChannelListView(completedChannels: completedChannels,
+                                          onSelectChannel: didSelectChannel)
+                }.padding(.horizontal, 33).padding(.bottom, 32)
             }
-            .navigationTitle("내보내기")
+            .background(Color(.brandNeutral50))
+            .navigationTitle("플랫폼 업로드하기")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.primary) }
-                        .accessibilityLabel("닫기").accessibilityIdentifier("export.close")
+                    ExportNavigationButton(systemImage: "xmark", accessibilityLabel: "닫기") {
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("export.close")
                 }
             }
             .navigationDestination(isPresented: $showFruits) {
                 FruitsExportView(product: product, controller: controller) {
-                    openedFruitsMethods.insert(.dynamicIslandB)
-                    history.recordOpenResult(for: .fruitsFamily, accepted: true)
-                }
-            }
-            .navigationDestination(isPresented: $showFruitsGuideA) {
-                FruitsExportView(product: product, controller: controller) {
-                    openedFruitsMethods.insert(.dynamicIslandA)
-                    history.recordOpenResult(for: .fruitsFamily, accepted: true)
+                    completedChannels.insert(.fruitsFamily)
                 }
             }
             .navigationDestination(isPresented: $showCafe24) {
-                Cafe24ExportView(product: product)
-            }
-            .navigationDestination(isPresented: $showNaverStore) {
-                NaverStoreExportView(product: product)
+                Cafe24ExportView(product: product) { _ in
+                    completedChannels.insert(.cafe24)
+                    try? ExportCompletionRecorder.record(productID: product.id, channel: .cafe24,
+                                                         in: modelContext)
+                }
             }
             .navigationDestination(isPresented: $showInstagram) {
-                InstagramExportView(product: product)
+                InstagramExportView(product: product) { _ in
+                    completedChannels.insert(.instagram)
+                    try? ExportCompletionRecorder.record(productID: product.id, channel: .instagram,
+                                                         in: modelContext)
+                }
             }
-            .disabled(isOpeningLink || controller.busy)
-            .alert("페이지를 열 수 없습니다", isPresented: $isShowingOpenError) {
-                Button("확인", role: .cancel) {}
-            } message: { Text("잠시 후 다시 시도해 주세요.") }
+            .disabled(controller.busy)
         }
         .overlay {
             if showFruitsGuideOverlay {
@@ -71,8 +68,7 @@ struct ExportView: View {
                     controller: controller,
                     onDismiss: { showFruitsGuideOverlay = false },
                     onOpened: {
-                        openedFruitsMethods.insert(.dynamicIslandB)
-                        history.recordOpenResult(for: .fruitsFamily, accepted: true)
+                        completedChannels.insert(.fruitsFamily)
                     }
                 )
                 .transition(.opacity)
@@ -90,27 +86,17 @@ struct ExportView: View {
         }
     }
 
-    private func selectFruits(_ method: FruitsExportMethod) {
-        guard !controller.busy, !isOpeningLink, recordSelection(.fruitsFamily) else { return }
-        if method == .dynamicIslandB {
-            showFruitsGuideOverlay = true
-        } else {
-            showFruitsGuideA = true
-        }
-    }
-
     private func didSelectChannel(_ channel: ExportChannel) {
-        guard !controller.busy, !isOpeningLink, recordSelection(channel) else { return }
-        if channel == .instagram { showInstagram = true; return }
-        if channel == .fruitsFamily { showFruits = true; return }
-        if channel == .cafe24 { showCafe24 = true; return }
-        if channel == .naverStore { showNaverStore = true; return }
-        guard !isOpeningLink else { return }
-        isOpeningLink = true
-        openURL(channel.destinationURL) { accepted in
-            history.recordOpenResult(for: channel, accepted: accepted)
-            isOpeningLink = false
-            isShowingOpenError = !accepted
+        guard !controller.busy, recordSelection(channel) else { return }
+        switch channel {
+        case .instagram:
+            showInstagram = true
+        case .cafe24:
+            showCafe24 = true
+        case .fruitsFamily:
+            showFruitsGuideOverlay = true
+        case .naverStore:
+            break
         }
     }
 

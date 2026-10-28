@@ -7,6 +7,9 @@ enum ExportChannel: String, CaseIterable, Identifiable, Codable {
     case cafe24
     case fruitsFamily
 
+    /// 현재 앱에서 새 내보내기에 사용할 수 있는 채널입니다.
+    static let availableCases: [ExportChannel] = [.instagram, .cafe24, .fruitsFamily]
+
     var id: String { rawValue }
 
     var title: String {
@@ -19,6 +22,19 @@ enum ExportChannel: String, CaseIterable, Identifiable, Codable {
             return "카페24로 내보내기"
         case .fruitsFamily:
             return "후루츠패밀리로 내보내기"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .instagram:
+            return "인스타그램에 업로드하기"
+        case .naverStore:
+            return "네이버스토어"
+        case .cafe24:
+            return "카페24에 업로드하기"
+        case .fruitsFamily:
+            return "후르츠패밀리에 업로드하기"
         }
     }
 

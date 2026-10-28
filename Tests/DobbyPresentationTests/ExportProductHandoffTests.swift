@@ -20,15 +20,15 @@ struct ExportProductHandoffTests {
         ]
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
         #expect(product.id == garment.id.uuidString)
-        #expect(product.fruits.productName == garment.name)
-        #expect(product.fruits.description == garment.detail)
-        #expect(product.fruits.brand == garment.brand)
-        #expect(product.fruits.price == "23000")
-        #expect(product.copyMeasurements.map(\.id) == ["totalLength", "chestWidth"])
-        #expect(product.fruits.measurements == "총장 65 cm\n가슴 단면 53.25 cm")
-        #expect(product.fruits.length == "65")
-        #expect(product.fruits.waist.isEmpty && product.fruits.thigh.isEmpty)
-        #expect(product.instagram.measurements == "총장 65cm\n가슴 단면 53.2cm")
+        #expect(product.marketplacePayload.productName == garment.name)
+        #expect(product.marketplacePayload.description == garment.detail)
+        #expect(product.marketplacePayload.brand == garment.brand)
+        #expect(product.marketplacePayload.price == "23000")
+        #expect(product.exportMeasurements.map(\.id) == ["totalLength", "chestWidth"])
+        #expect(product.marketplacePayload.measurements == "총장 65 cm\n가슴 단면 53.25 cm")
+        #expect(product.marketplacePayload.length == "65")
+        #expect(product.marketplacePayload.waist.isEmpty && product.marketplacePayload.thigh.isEmpty)
+        #expect(product.instagramPayload.measurements == "총장 65cm\n가슴 단면 53.2cm")
         garment.name = "이후 수정"
         #expect(product.name == "수정한 제품명")
     }
@@ -36,10 +36,10 @@ struct ExportProductHandoffTests {
     @Test func emptyProductDoesNotAcquireSampleValues() {
         let garment = Garment(category: "T-shirt", group: .top)
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(product.name.isEmpty && product.fruits.price.isEmpty)
-        #expect(product.fruits.measurements.isEmpty && product.copyMeasurements.isEmpty)
-        #expect(product.fruits.length.isEmpty && product.fruits.waist.isEmpty && product.fruits.thigh.isEmpty)
-        #expect(product.imageData == nil && product.displayPhotos.isEmpty)
+        #expect(product.name.isEmpty && product.marketplacePayload.price.isEmpty)
+        #expect(product.marketplacePayload.measurements.isEmpty && product.exportMeasurements.isEmpty)
+        #expect(product.marketplacePayload.length.isEmpty && product.marketplacePayload.waist.isEmpty && product.marketplacePayload.thigh.isEmpty)
+        #expect(product.thumbnailData == nil && product.exportPhotos.isEmpty)
     }
 
     @Test func currentLiDARBottomExportsAndCopiesFiveAcceptedMeasurementsInPresentationOrder() {
@@ -56,24 +56,24 @@ struct ExportProductHandoffTests {
             return value
         }
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(product.copyMeasurements.map(\.id) == [
+        #expect(product.exportMeasurements.map(\.id) == [
             "totalLengthLeft", "waistWidth", "frontRise", "thighWidthRight", "hemWidthLeft"
         ])
-        #expect(product.copyMeasurements.map(\.title) == ["총장", "허리", "밑위", "허벅지", "밑단"])
-        #expect(product.fruits.thigh == "32.1256")
-        #expect(product.fruits.measurements == "총장 102.25 cm\n허리 43.25 cm\n밑위 28.5 cm\n허벅지 32.1256 cm\n밑단 21.125 cm")
-        #expect(product.instagram.measurements == "총장 102.2cm\n허리 43.2cm\n밑위 28.5cm\n허벅지 32.1cm\n밑단 21.1cm")
-        #expect(product.instagram.length == "102.2")
-        #expect(product.instagram.waist == "43.2")
-        #expect(product.instagram.thigh == "32.1")
+        #expect(product.exportMeasurements.map(\.title) == ["총장", "허리", "밑위", "허벅지", "밑단"])
+        #expect(product.marketplacePayload.thigh == "32.1256")
+        #expect(product.marketplacePayload.measurements == "총장 102.25 cm\n허리 43.25 cm\n밑위 28.5 cm\n허벅지 32.1256 cm\n밑단 21.125 cm")
+        #expect(product.instagramPayload.measurements == "총장 102.2cm\n허리 43.2cm\n밑위 28.5cm\n허벅지 32.1cm\n밑단 21.1cm")
+        #expect(product.instagramPayload.length == "102.2")
+        #expect(product.instagramPayload.waist == "43.2")
+        #expect(product.instagramPayload.thigh == "32.1")
         #expect(garment.measurements.count == 6)
         #expect(garment.measurement("thighWidthRight")?.label == "원본 표기")
         #expect(abs((garment.measurement("thighWidthRight")?.autoValueCm ?? .nan) - 31.1256) < 1e-10)
         garment.measurement("thighWidthRight")?.update(to: 33.75)
         let edited = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(edited.fruits.thigh == "33.75")
-        #expect(edited.copyMeasurements.first { $0.id == "thighWidthRight" }?.value == "33.75")
-        #expect(product.fruits.thigh == "32.1256", "An existing copy snapshot keeps its accepted value")
+        #expect(edited.marketplacePayload.thigh == "33.75")
+        #expect(edited.exportMeasurements.first { $0.id == "thighWidthRight" }?.value == "33.75")
+        #expect(product.marketplacePayload.thigh == "32.1256", "An existing copy snapshot keeps its accepted value")
     }
 
     @Test func failedOrLegacyLiDARThighNeverAddsAnExportPlaceholderOrOtherSide() {
@@ -91,14 +91,14 @@ struct ExportProductHandoffTests {
         }
         let failed = ExportProduct(garment: garment, loadPhoto: { _ in nil })
         #expect(garment.visibleMeasurements.count == 5)
-        #expect(failed.copyMeasurements.map(\.title) == ["총장", "허리", "밑위", "밑단"])
-        #expect(failed.fruits.thigh.isEmpty)
-        #expect(!failed.fruits.measurements.contains("허벅지"))
+        #expect(failed.exportMeasurements.map(\.title) == ["총장", "허리", "밑위", "밑단"])
+        #expect(failed.marketplacePayload.thigh.isEmpty)
+        #expect(!failed.marketplacePayload.measurements.contains("허벅지"))
         garment.measurements.removeAll { $0.key == "thighWidthRight" || $0.key == "thighWidthLeft" }
         let legacy = ExportProduct(garment: garment, loadPhoto: { _ in nil })
         #expect(garment.visibleMeasurements.count == 4)
-        #expect(legacy.copyMeasurements.map(\.id) == failed.copyMeasurements.map(\.id))
-        #expect(legacy.fruits.thigh.isEmpty)
+        #expect(legacy.exportMeasurements.map(\.id) == failed.exportMeasurements.map(\.id))
+        #expect(legacy.marketplacePayload.thigh.isEmpty)
     }
 
     @Test func photoOrderAndRepresentativeArePreservedWithMissingFiles() {
@@ -109,10 +109,10 @@ struct ExportProductHandoffTests {
         garment.photos = [cover, missing, first]
         let bytes = [first.id: Data([1]), cover.id: Data([2])]
         let product = ExportProduct(garment: garment, loadPhoto: { bytes[$0.id] })
-        #expect(product.photoData == [Data([1]), Data([2])])
-        #expect(product.imageData == Data([2]))
+        #expect(product.photos == [Data([1]), Data([2])])
+        #expect(product.thumbnailData == Data([2]))
         let fallback = ExportProduct(garment: garment, loadPhoto: { $0.id == first.id ? Data([1]) : nil })
-        #expect(fallback.imageData == Data([1]))
+        #expect(fallback.thumbnailData == Data([1]))
     }
 
     @Test func pantsUseOneAcceptedSideAndPreserveOriginalRows() {
@@ -124,18 +124,18 @@ struct ExportProductHandoffTests {
             MeasuredValue(key: "thighWidthLeft", label: "허벅지 좌", displayOrder: 2, valueCm: 32.32145, autoValueCm: 30)
         ]
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(product.fruits.length == "102.25123")
-        #expect(product.fruits.waist == "43.1256" && product.fruits.thigh == "32.32145")
-        #expect(product.copyMeasurements.map(\.id) == ["totalLengthLeft", "waistWidth", "thighWidthLeft"])
-        #expect(product.copyMeasurements.map(\.title) == ["총장", "허리", "허벅지 단면"])
+        #expect(product.marketplacePayload.length == "102.25123")
+        #expect(product.marketplacePayload.waist == "43.1256" && product.marketplacePayload.thigh == "32.32145")
+        #expect(product.exportMeasurements.map(\.id) == ["totalLengthLeft", "waistWidth", "thighWidthLeft"])
+        #expect(product.exportMeasurements.map(\.title) == ["총장", "허리", "허벅지 단면"])
         #expect(garment.orderedMeasurements.count == 4)
         #expect(garment.measurement("thighWidthRight")?.valueCm == 31.2)
         #expect(garment.measurement("thighWidthLeft")?.label == "허벅지 좌")
         garment.measurements.removeAll { $0.key == "thighWidthLeft" }
         let fallback = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(fallback.fruits.thigh == "31.2")
-        #expect(fallback.copyMeasurements.map(\.id) == ["totalLengthLeft", "waistWidth", "thighWidthRight"])
-        #expect(fallback.copyMeasurements.last?.title == "허벅지 단면")
+        #expect(fallback.marketplacePayload.thigh == "31.2")
+        #expect(fallback.exportMeasurements.map(\.id) == ["totalLengthLeft", "waistWidth", "thighWidthRight"])
+        #expect(fallback.exportMeasurements.last?.title == "허벅지 단면")
     }
 
     @Test func topExportShowsOneSleeveWithoutChangingEitherStoredObservation() {
@@ -153,12 +153,12 @@ struct ExportProductHandoffTests {
                           valueCm: definition.2, autoValueCm: definition.2)
         }
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(product.copyMeasurements.map(\.id) == ["shoulderWidth", "chestWidth", "hemWidth",
+        #expect(product.exportMeasurements.map(\.id) == ["shoulderWidth", "chestWidth", "hemWidth",
                                                     "sleeveLengthLeft", "totalLength"])
-        #expect(product.copyMeasurements.first { $0.id == "sleeveLengthLeft" }?.title == "소매길이")
-        #expect(product.copyMeasurements.first { $0.id == "sleeveLengthLeft" }?.value == "62.25123456789")
-        #expect(!product.fruits.measurements.contains("오른쪽") && !product.fruits.measurements.contains("왼쪽"))
-        #expect(product.instagram.measurements == [
+        #expect(product.exportMeasurements.first { $0.id == "sleeveLengthLeft" }?.title == "소매길이")
+        #expect(product.exportMeasurements.first { $0.id == "sleeveLengthLeft" }?.value == "62.25123456789")
+        #expect(!product.marketplacePayload.measurements.contains("오른쪽") && !product.marketplacePayload.measurements.contains("왼쪽"))
+        #expect(product.instagramPayload.measurements == [
             "어깨 45.1cm", "가슴 55.2cm", "밑단 51.2cm", "소매길이 62.2cm", "총장 68.2cm"
         ].joined(separator: "\n"))
         #expect(garment.orderedMeasurements.count == 6 && garment.visibleMeasurements.count == 5)
@@ -182,11 +182,11 @@ struct ExportProductHandoffTests {
                           valueCm: definition.2, autoValueCm: definition.2)
         }
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(product.copyMeasurements.map(\.id) == ["waistWidth", "frontRise", "totalLengthLeft",
+        #expect(product.exportMeasurements.map(\.id) == ["waistWidth", "frontRise", "totalLengthLeft",
                                                     "hemWidthLeft", "inseamLeft"])
-        #expect(product.copyMeasurements.map(\.title) == ["허리", "밑위", "총장", "밑단 단면", "인심(직선)"])
-        #expect(product.fruits.length == "102.25123" && product.fruits.waist == "43.1256")
-        #expect(product.fruits.thigh.isEmpty)
+        #expect(product.exportMeasurements.map(\.title) == ["허리", "밑위", "총장", "밑단 단면", "인심(직선)"])
+        #expect(product.marketplacePayload.length == "102.25123" && product.marketplacePayload.waist == "43.1256")
+        #expect(product.marketplacePayload.thigh.isEmpty)
         #expect(garment.orderedMeasurements.count == 8 && garment.visibleMeasurements.count == 5)
         #expect(garment.orderedMeasurements.map(\.valueCm) == definitions.map { $0.2 })
         #expect(garment.orderedMeasurements.map(\.label) == definitions.map { $0.1 })
@@ -205,9 +205,9 @@ struct ExportProductHandoffTests {
         garment.measurements = [right, leftThigh, rightThigh, left]
         garment.syncFilterFields()
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(product.copyMeasurements.map(\.id) == ["thighWidthRight", "totalLengthRight"])
-        #expect(product.copyMeasurements.map(\.title) == ["허벅지 단면", "총장"])
-        #expect(product.fruits.length == "101.25123456789" && product.fruits.thigh == "32.1256")
+        #expect(product.exportMeasurements.map(\.id) == ["thighWidthRight", "totalLengthRight"])
+        #expect(product.exportMeasurements.map(\.title) == ["허벅지 단면", "총장"])
+        #expect(product.marketplacePayload.length == "101.25123456789" && product.marketplacePayload.thigh == "32.1256")
         #expect(garment.lengthCm == right.valueCm)
         #expect(left.valueCm.isNaN && left.autoValueCm == 103 && !left.isEdited)
         #expect(leftThigh.valueCm == 0 && leftThigh.autoValueCm == 31 && !leftThigh.isEdited)
@@ -223,14 +223,14 @@ struct ExportProductHandoffTests {
             MeasuredValue(key: "sleeveLengthLeft", label: "소매", displayOrder: 3, valueCm: .infinity, autoValueCm: 60)
         ]
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(product.copyMeasurements.isEmpty && product.fruits.measurements.isEmpty)
-        #expect(product.fruits.length.isEmpty && product.fruits.waist.isEmpty && product.fruits.thigh.isEmpty)
+        #expect(product.exportMeasurements.isEmpty && product.marketplacePayload.measurements.isEmpty)
+        #expect(product.marketplacePayload.length.isEmpty && product.marketplacePayload.waist.isEmpty && product.marketplacePayload.thigh.isEmpty)
         garment.measurements = [
             MeasuredValue(key: "waistWidth", label: "허리", displayOrder: 0, valueCm: 44, autoValueCm: 44),
             MeasuredValue(key: "thighWidthLeft", label: "허벅지", displayOrder: 1, valueCm: 32, autoValueCm: 32)
         ]
         let top = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(top.fruits.waist.isEmpty && top.fruits.thigh.isEmpty)
+        #expect(top.marketplacePayload.waist.isEmpty && top.marketplacePayload.thigh.isEmpty)
     }
 
     @Test func unselectedMeasurementEvidenceDoesNotLeakIntoProductPhotos() {
@@ -244,8 +244,8 @@ struct ExportProductHandoffTests {
         garment.photos = [legacy, chosen, evidence]
         let bytes = [evidence.id: Data([0]), chosen.id: Data([1]), legacy.id: Data([2])]
         let product = ExportProduct(garment: garment, loadPhoto: { bytes[$0.id] })
-        #expect(product.photoData == [Data([1]), Data([2])])
-        #expect(product.imageData == Data([1]))
+        #expect(product.photos == [Data([1]), Data([2])])
+        #expect(product.thumbnailData == Data([1]))
         #expect(garment.measurementPhoto?.id == evidence.id)
     }
 
@@ -261,10 +261,10 @@ struct ExportProductHandoffTests {
             valueCm: 1e19, autoValueCm: nil)
         garment.measurements = [converted, typed, tiny, large]
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(product.copyMeasurements[0].value == "61.25")
-        #expect(product.fruits.length == "67.25123456789")
-        #expect(Double(product.copyMeasurements[2].value) == tiny.valueCm)
-        #expect(Double(product.copyMeasurements[3].value) == large.valueCm)
+        #expect(product.exportMeasurements[0].value == "61.25")
+        #expect(product.marketplacePayload.length == "67.25123456789")
+        #expect(Double(product.exportMeasurements[2].value) == tiny.valueCm)
+        #expect(Double(product.exportMeasurements[3].value) == large.valueCm)
         #expect(converted.valueCm == 0.6125 * 100 && converted.autoValueCm == 0.6125 * 100)
         #expect(typed.valueCm == 67.25123456789 && !typed.isEdited)
     }
@@ -280,7 +280,7 @@ struct ExportProductHandoffTests {
 
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
 
-        #expect(product.instagram.measurements == "A 45.9cm\nB 45.9cm\nC 45cm\nD 45cm")
+        #expect(product.instagramPayload.measurements == "A 45.9cm\nB 45.9cm\nC 45cm\nD 45cm")
         #expect(garment.measurements.map(\.valueCm) == [45.95, 45.99, 45.01, 45])
     }
 }

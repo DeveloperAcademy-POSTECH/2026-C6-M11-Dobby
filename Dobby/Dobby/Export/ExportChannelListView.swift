@@ -1,28 +1,34 @@
 import SwiftUI
 
 struct ExportChannelListView: View {
-    let openedChannels: Set<ExportChannel>
+    let completedChannels: Set<ExportChannel>
     let onSelectChannel: (ExportChannel) -> Void
-    var openedFruitsMethods: Set<FruitsExportMethod> = []
-    var onSelectFruits: ((FruitsExportMethod) -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: 16) {
-            ForEach(ExportChannel.allCases) { channel in
-                if channel == .fruitsFamily, let onSelectFruits {
-                    ForEach(FruitsExportMethod.allCases) { method in
-                        ExportChannelButton(channel: channel,
-                                            hasOpenedLink: openedFruitsMethods.contains(method),
-                                            action: { onSelectFruits(method) },
-                                            titleOverride: method.title)
+        VStack(alignment: .leading, spacing: 32) {
+            ExportChannelSection(title: "자동 업로드", channels: [.instagram, .cafe24],
+                                 completedChannels: completedChannels, onSelectChannel: onSelectChannel)
+            ExportChannelSection(title: "복사해서 옮기기", channels: [.fruitsFamily],
+                                 completedChannels: completedChannels, onSelectChannel: onSelectChannel)
+        }
+    }
+}
+
+private struct ExportChannelSection: View {
+    let title: String
+    let channels: [ExportChannel]
+    let completedChannels: Set<ExportChannel>
+    let onSelectChannel: (ExportChannel) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+            VStack(spacing: 12) {
+                ForEach(channels) { channel in
+                    ExportChannelButton(channel: channel, isComplete: completedChannels.contains(channel)) {
+                        onSelectChannel(channel)
                     }
-                } else {
-                ExportChannelButton(
-                    channel: channel,
-                    hasOpenedLink: openedChannels.contains(channel)
-                ) {
-                    onSelectChannel(channel)
-                }
                 }
             }
         }
@@ -30,16 +36,16 @@ struct ExportChannelListView: View {
 }
 
 #Preview("처음 방문", traits: .sizeThatFitsLayout) {
-    ExportChannelListView(openedChannels: [], onSelectChannel: { _ in })
+    ExportChannelListView(completedChannels: [], onSelectChannel: { _ in })
         .padding(30)
 }
 
 #Preview("일부 방문", traits: .sizeThatFitsLayout) {
-    ExportChannelListView(openedChannels: [.instagram], onSelectChannel: { _ in })
+    ExportChannelListView(completedChannels: [.instagram], onSelectChannel: { _ in })
         .padding(30)
 }
 
 #Preview("모두 방문", traits: .sizeThatFitsLayout) {
-    ExportChannelListView(openedChannels: Set(ExportChannel.allCases), onSelectChannel: { _ in })
+    ExportChannelListView(completedChannels: Set(ExportChannel.availableCases), onSelectChannel: { _ in })
         .padding(30)
 }
