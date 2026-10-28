@@ -93,9 +93,16 @@ struct ProductCreationFlowView: View {
                                 ProductPhotoSelectionView(model: photoModel, onExit: requestDraftExit,
                                     onComplete: receivePhotos)
                             case .information:
-                                InfoInputView(garment: garment, measurementInput: $measurementInput,
-                                    onExit: requestDraftExit) {
-                                    _ in path.append(.completed)
+                                if resumeProductID == nil {
+                                    InfoInputView(garment: garment, measurementInput: $measurementInput,
+                                        onExit: requestDraftExit) {
+                                        _ in path.append(.completed)
+                                    }
+                                } else {
+                                    ProductInformationEditingView(garment: garment,
+                                        measurementInput: $measurementInput, onExit: onCancel) {
+                                        _ in path.append(.completed)
+                                    }
                                 }
                             case .completed:
                                 ProductInputCompletionView(garment: garment,
