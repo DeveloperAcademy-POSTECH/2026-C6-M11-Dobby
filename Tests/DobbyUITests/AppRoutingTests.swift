@@ -12,6 +12,18 @@ final class AppRoutingTests: XCTestCase {
         defer { app.terminate() }
         expectHome(in: app)
 
+        let tabs = app.tabBars.buttons
+        XCTAssertEqual(tabs.count, 3)
+        XCTAssertEqual(tabs.allElementsBoundByIndex.map(\.label), ["홈", "보관함", "설정"])
+        tabs["설정"].tap()
+        XCTAssertTrue(app.navigationBars["설정"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["설정 준비 중"].exists)
+        XCTAssertTrue(tabs["설정"].isSelected)
+        attachScreenshot(app, name: "routing-settings-entry")
+        tabs["홈"].tap()
+        expectHome(in: app)
+        XCTAssertTrue(tabs["홈"].isSelected)
+
         // This launches the explicitly labelled synthetic creation flow. Exit
         // before shutter/confirmation, so no product or measurement is stored.
         app.buttons["product-flow.start"].tap()
@@ -512,6 +524,9 @@ final class AppRoutingTests: XCTestCase {
     @MainActor
     private func expectHome(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(app.staticTexts["home.guidance"].waitForExistence(timeout: 10), file: file, line: line)
+        let guidance = app.staticTexts["home.guidance"].label
+        XCTAssertTrue(guidance.contains("줄자 버튼을 눌러서"), file: file, line: line)
+        XCTAssertTrue(guidance.contains("실측 시작하기"), file: file, line: line)
         let entry = app.buttons["product-flow.start"]
         XCTAssertTrue(entry.waitForExistence(timeout: 5), file: file, line: line)
         XCTAssertTrue(entry.isHittable, file: file, line: line)

@@ -47,7 +47,7 @@ private struct HomeResumeCardPreview: View {
         .alert("이어하기 버튼 확인", isPresented: $showConfirmation) {
             Button("확인", role: .cancel) { }
         } message: {
-            Text("미리보기입니다. 실제 저장된 작업 복원은 후속 연결 단계에서 적용합니다.")
+            Text("표시용 미리보기입니다. 실제 앱에서는 저장한 작업을 이어서 진행합니다.")
         }
     }
 }
