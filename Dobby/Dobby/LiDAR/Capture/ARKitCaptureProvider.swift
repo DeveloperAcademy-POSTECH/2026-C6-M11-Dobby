@@ -4,6 +4,8 @@ import Combine
 import CoreImage
 import Foundation
 import ImageIO
+import OSLog
+import Synchronization
 
 extension CameraControlState {
     /// Requested EV belongs to the finger, accepted EV to the device queue.
@@ -124,10 +126,14 @@ nonisolated enum CaptureUnavailableReason: Equatable, Sendable {
 nonisolated struct CaptureFrameStatus: Equatable, Sendable {
     var hasDepth: Bool
     var tracking: CaptureTrackingStatus
+    /// The preview uses the delivered sensor aspect ratio, never the phone's
+    /// full-screen aspect ratio. Equatable status avoids publishing every frame.
+    var imageSize: PixelSize? = nil
 }
 
 nonisolated enum CaptureTrackingStatus: Equatable, Sendable {
     case normal
+    case synchronizedDepth
     case excessiveMotion
     case insufficientFeatures
     case limited
@@ -162,7 +168,7 @@ nonisolated enum ARKitCaptureError: LocalizedError, Sendable, AutomaticMeasureme
         case .cameraPermissionDenied: "카메라 접근 권한이 필요합니다. 설정에서 Dobby의 카메라 접근을 허용해 주세요."
         case .sessionNotRunning: "카메라가 준비되지 않았습니다. 카메라를 시작해 주세요."
         case .captureInProgress: "이미 촬영하고 있습니다. 잠시 기다려 주세요."
-        case .timedOut: "4초 안에 안정된 추적과 유효한 깊이를 갖춘 프레임을 확보하지 못했습니다. 렌즈를 가리지 말고 카메라를 잠시 멈춘 뒤 다시 촬영해 주세요."
+        case .timedOut: "4초 안에 촬영 시점의 사진과 유효한 LiDAR 깊이를 함께 확보하지 못했어요. 렌즈를 가리지 말고 옷 전체를 비춘 상태에서 잠시 멈춘 뒤 다시 촬영해 주세요."
         case .interrupted: "카메라 사용이 중단되었습니다. 앱으로 돌아온 뒤 다시 촬영해 주세요."
         case .stopped: "카메라가 종료되어 촬영을 취소했습니다."
         case .invalidDepth: "LiDAR 깊이 데이터 형식을 읽을 수 없습니다. 다시 촬영해 주세요."
@@ -176,8 +182,18 @@ nonisolated enum ARKitCaptureError: LocalizedError, Sendable, AutomaticMeasureme
 /// Camera ownership is deliberately confined to this adapter. Mason's camera
 /// implementation can replace it while preserving CaptureSnapshotProviding.
 @MainActor
-final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotProviding {
+final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotProviding, LiDARDetailCameraSource {
     let session = ARSession()
+    /// One owner at a time: MultiCam owns wide RGB + LiDAR + Ultra Wide;
+    /// ARKit is a sequential fallback, never a competing second session.
+    nonisolated let multiCamera = LiDARMultiCameraCapture()
+    @Published private(set) var usesMultiCamera = false
+    @Published private(set) var surroundingsUnavailableReason: String?
+    private var multiCameraControlDevice: AVCaptureDevice?
+
+    private var currentSourceTimestamp: TimeInterval? {
+        usesMultiCamera ? multiCamera.frames.latest()?.timestamp : session.currentFrame?.timestamp
+    }
     @Published private(set) var state: CaptureState = .idle
     @Published private(set) var frameStatus: CaptureFrameStatus?
     @Published private(set) var isRunning = false
@@ -185,6 +201,10 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     @Published private(set) var cameraCapabilities = CameraControlCapabilities.unavailable
     @Published private(set) var cameraControls = CameraControlState()
     @Published private(set) var controlError: String?
+
+    /// An opt-in owner can synchronously retire queued menu requests before a
+    /// newer UIKit intent enters the worker. Raw gesture EV stays buffered.
+    var onExternalControlIntent: (@MainActor () -> Void)?
 
     var isSupported: Bool {
         ARWorldTrackingConfiguration.isSupported &&
@@ -198,6 +218,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     private var exposureToken: CameraControlRequest?
     private var controlPresentation = CameraControlPresentationBuffer()
     private var controlSequence: UInt64 = 0
+    private var detailCameraExternalRevision: UInt64 = 0
     private var controlDeviceAttached = false
     private var controlAttachmentSessionID: UUID?
     private var resumeTrackingOnNextStart = false
@@ -205,6 +226,8 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     private var lastCameraTimestamp: TimeInterval?
     private var lastCameraReceivedAt: TimeInterval?
     private var generation: UUID?
+    private static let startupSignposter = OSSignposter(subsystem: "com.dobby.performance", category: "CameraStartup")
+    private var startupInterval: OSSignpostIntervalState?
     private var permissionRequestInProgress = false
     private var imageOrientation: ImageOrientation = .right
     override init() {
@@ -225,6 +248,13 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     }
 
     func start() async {
+        // A replacement view task may arrive while its cancelled predecessor
+        // is unwinding startRunning. Wait without blocking the main actor;
+        // otherwise returning early here could leave a stopped black preview.
+        while permissionRequestInProgress {
+            do { try await Task.sleep(for: .milliseconds(20)) }
+            catch { return }
+        }
         if isRunning {
             if state != .capturing, let generation {
                 liveAnalyzer.resume(sessionID: generation)
@@ -239,7 +269,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
 
         // A new UUID prevents delayed ML/capture results from a previous session
         // being treated as observations from this session.
-        let identifier = UUID()
+        var identifier = UUID()
         generation = identifier
         resetCameraControlConnection()
         permissionRequestInProgress = true
@@ -262,28 +292,98 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             return
         }
 
-        let configuration = ARWorldTrackingConfiguration()
-        configuration.frameSemantics = [.sceneDepth]
-        if ARWorldTrackingConfiguration.supportsFrameSemantics([.sceneDepth, .smoothedSceneDepth]) {
-            configuration.frameSemantics.insert(.smoothedSceneDepth)
-        }
-        configuration.environmentTexturing = .none
-        // This screen displays camera pixels and 2D outlines, not lit AR objects.
-        configuration.isLightEstimationEnabled = false
-        configuration.isAutoFocusEnabled = true
-        worker.activate(sessionID: identifier)
+        finishStartupInterval()
+        startupInterval = Self.startupSignposter.beginInterval("CameraPreviewStartup",
+            id: Self.startupSignposter.makeSignpostID())
+        worker.activate(sessionID: identifier, allowsARKitFrames: false)
         liveAnalyzer.reset(sessionID: identifier)
         resetReadiness()
-        startFreshnessMonitor(sessionID: identifier)
         state = .starting
         frameStatus = nil
-        isRunning = true
-        let runOptions: ARSession.RunOptions = resumeTrackingOnNextStart ? [] : [.resetTracking, .removeExistingAnchors]
-        resumeTrackingOnNextStart = false
-        session.run(configuration, options: runOptions)
         cameraControls.sessionID = identifier
+        isRunning = true
         clearFocusIndicator()
+        surroundingsUnavailableReason = nil
+        // Await any earlier ARKit stop before asking AVFoundation to own wide.
+        session.pause()
+        usesMultiCamera = true
+        do {
+            let device = try await multiCamera.start(sessionID: identifier,
+                onFrame: { [weak self] frame in self?.consumeMultiCameraFrame(frame) },
+                onFailure: { [weak self] sessionID, reason in
+                    Task { @MainActor [weak self] in
+                        self?.multiCameraFailed(sessionID: sessionID, reason: reason)
+                    }
+                })
+            guard generation == identifier, !Task.isCancelled else {
+                await multiCamera.stop(sessionID: identifier)
+                if generation == identifier { stop() }
+                return
+            }
+            multiCameraControlDevice = device
+            resumeTrackingOnNextStart = false
+        } catch {
+            await multiCamera.stop(sessionID: identifier)
+            guard generation == identifier else { return }
+            guard !Task.isCancelled else { stop(); return }
+            // A device/format without the real camera pair gets an honest
+            // single-camera fallback, never a stretched/repeated surround.
+            surroundingsUnavailableReason = error.localizedDescription
+            usesMultiCamera = false
+            // A backend boundary is a genuinely new source identity. Even a
+            // queued MultiCam callback cannot enter the fallback's analyzer or
+            // snapshot worker under an accidentally reused session UUID.
+            identifier = UUID()
+            generation = identifier
+            resetCameraControlConnection()
+            cameraControls.sessionID = identifier
+            multiCameraControlDevice = nil
+            worker.activate(sessionID: identifier, minimumARKitTimestamp: session.currentFrame?.timestamp)
+            liveAnalyzer.reset(sessionID: identifier)
+            resetReadiness()
+            let configuration = ARWorldTrackingConfiguration()
+            configuration.frameSemantics = [.sceneDepth]
+            if ARWorldTrackingConfiguration.supportsFrameSemantics([.sceneDepth, .smoothedSceneDepth]) {
+                configuration.frameSemantics.insert(.smoothedSceneDepth)
+            }
+            configuration.environmentTexturing = .none
+            configuration.isLightEstimationEnabled = false
+            configuration.isAutoFocusEnabled = true
+            let options: ARSession.RunOptions = resumeTrackingOnNextStart ? [] : [.resetTracking, .removeExistingAnchors]
+            resumeTrackingOnNextStart = false
+            session.run(configuration, options: options)
+        }
+        guard generation == identifier, isRunning else { return }
+        startFreshnessMonitor(sessionID: identifier)
         await attachCameraControls(sessionID: identifier)
+    }
+
+    private nonisolated func consumeMultiCameraFrame(_ frame: MultiCameraFrame) {
+        // One admitted frame at a time. Snapshot copying and its finalize timer
+        // share a serial queue, while newer camera frames replace/drop rather
+        // than building an unbounded capture backlog.
+        worker.enqueue(frame) { [weak self] update in
+            guard let self, let identifier = worker.sessionID, identifier == frame.sessionID else { return }
+            liveAnalyzer.submit(frame: frame, sessionID: identifier) { [weak self] sessionID, readiness in
+                Task { @MainActor [weak self] in
+                    self?.receiveLiveReadiness(sessionID: sessionID, readiness: readiness)
+                }
+            }
+            if let update { Task { @MainActor [weak self] in self?.receive(update) } }
+        }
+    }
+
+    private func multiCameraFailed(sessionID: UUID, reason: String) {
+        guard generation == sessionID, usesMultiCamera, isRunning else { return }
+        finishStartupInterval()
+        worker.stop(error: .sessionFailed(reason))
+        liveAnalyzer.reset(sessionID: nil)
+        isRunning = false
+        state = .failed(reason)
+        resetReadiness()
+        resetCameraControlConnection()
+        freshnessTask?.cancel()
+        Task { await multiCamera.stop(sessionID: sessionID) }
     }
 
     func stop() {
@@ -299,6 +399,8 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     }
 
     private func pauseCamera() {
+        finishStartupInterval()
+        let stoppedSessionID = generation
         generation = nil
         permissionRequestInProgress = false
         worker.stop(error: .stopped)
@@ -307,6 +409,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         freshnessTask = nil
         resetReadiness()
         session.pause()
+        if let stoppedSessionID {
+            Task { await multiCamera.stop(sessionID: stoppedSessionID) }
+        }
         isRunning = false
         state = .idle
         frameStatus = nil
@@ -316,6 +421,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     /// Invalidate both pending UI callbacks and queued hardware commands when
     /// ARKit loses its camera. Only the zoom preference survives a retake.
     private func resetCameraControlConnection() {
+        detailCameraExternalRevision &+= 1
         cameraControlWorker.deactivate()
         exposureToken = nil
         controlPresentation.reset()
@@ -329,6 +435,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         cameraControls.hardwareObservation = nil
         controlDeviceAttached = false
         controlAttachmentSessionID = nil
+        multiCameraControlDevice = nil
         clearFocusIndicator()
         controlError = nil
     }
@@ -344,7 +451,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         guard generation == sessionID, isRunning, controlAttachmentSessionID != sessionID,
               state != .capturing else { return }
         controlAttachmentSessionID = sessionID
-        let device = ARWorldTrackingConfiguration.configurableCaptureDeviceForPrimaryCamera
+        let device = usesMultiCamera ? multiCameraControlDevice
+            : ARWorldTrackingConfiguration.configurableCaptureDeviceForPrimaryCamera
+        guard device != nil else { controlAttachmentSessionID = nil; return }
         let capabilities = await cameraControlWorker.activate(sessionID: sessionID, device: device,
             exposureBias: 0) { [weak self] observedSession, receipt, error in
                 Task { @MainActor [weak self] in
@@ -374,11 +483,18 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     }
 
     private func updateZoomCapabilities() {
-        guard let frame = session.currentFrame, let depth = frame.sceneDepth?.depthMap else { return }
+        let imageSize: PixelSize
+        let depthSize: PixelSize
+        if usesMultiCamera, let frame = multiCamera.frames.latest() {
+            imageSize = .init(width: CVPixelBufferGetWidth(frame.wideImage), height: CVPixelBufferGetHeight(frame.wideImage))
+            depthSize = .init(width: CVPixelBufferGetWidth(frame.depthData.depthDataMap), height: CVPixelBufferGetHeight(frame.depthData.depthDataMap))
+        } else if let frame = session.currentFrame, let depth = frame.sceneDepth?.depthMap {
+            imageSize = .init(width: CVPixelBufferGetWidth(frame.capturedImage), height: CVPixelBufferGetHeight(frame.capturedImage))
+            depthSize = .init(width: CVPixelBufferGetWidth(depth), height: CVPixelBufferGetHeight(depth))
+        } else { return }
         var zooms: [CameraZoom] = [.standard]
         if RegisteredCameraCrop.make(
-            imageSize: .init(width: CVPixelBufferGetWidth(frame.capturedImage), height: CVPixelBufferGetHeight(frame.capturedImage)),
-            depthSize: .init(width: CVPixelBufferGetWidth(depth), height: CVPixelBufferGetHeight(depth)), zoomFactor: 2) != nil {
+            imageSize: imageSize, depthSize: depthSize, zoomFactor: 2) != nil {
             zooms.append(.double)
         }
         if cameraCapabilities.availableZooms != zooms {
@@ -393,6 +509,8 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     func requestFocus(at point: ImagePoint, requestID: UUID = UUID()) {
         guard isRunning, state != .capturing, let identifier = generation, point.isValid,
               cameraCapabilities.focusSupported else { return }
+        onExternalControlIntent?()
+        detailCameraExternalRevision &+= 1
         controlSequence &+= 1
         let token = CameraControlRequest(sessionID: identifier, requestID: requestID, revision: controlSequence)
         // Queue the gesture boundary before focus. Old EV completions cannot
@@ -410,7 +528,16 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         controls.focusStatus = .requested
         controls.aeafStatus = .unlocked
         controls.hardwareObservation = nil
-        cameraControlWorker.submitFocus(at: point, sessionID: identifier, requestID: token.requestID) { [weak self] result in
+        let hardwarePoint: ImagePoint
+        if usesMultiCamera, let frame = multiCamera.frames.latest(),
+           let distorted = frame.wideCalibration.sourcePoint(forRectifiedPixel:
+                SIMD2(Float(point.x) * Float(CVPixelBufferGetWidth(frame.wideImage)),
+                      Float(point.y) * Float(CVPixelBufferGetHeight(frame.wideImage))),
+                in: frame.wideCalibration.intrinsics.referenceSize) {
+            hardwarePoint = ImagePoint(x: Double(distorted.x) / Double(CVPixelBufferGetWidth(frame.wideImage)),
+                                       y: Double(distorted.y) / Double(CVPixelBufferGetHeight(frame.wideImage)))
+        } else { hardwarePoint = point }
+        cameraControlWorker.submitFocus(at: hardwarePoint, sessionID: identifier, requestID: token.requestID) { [weak self] result in
             Task { @MainActor [weak self] in
                 guard let self, token.matches(sessionID: generation, requestID: focusToken?.requestID,
                                                revision: focusToken?.revision ?? 0), isRunning else { return }
@@ -433,6 +560,18 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
 
     private var currentCameraControls: CameraControlState {
         controlPresentation.current(published: cameraControls)
+    }
+
+    var detailCameraSnapshot: LiDARDetailCameraSnapshot {
+        let active = isRunning && state != .capturing && generation != nil
+        let exposure = active ? cameraCapabilities.exposureRange.flatMap {
+            DetailCameraControlRange(minimum: $0.minimum, maximum: $0.maximum)
+        } : nil
+        let controls = currentCameraControls
+        let accepted = exposure.flatMap { $0.clamped(controls.exposureBias) }
+        return .init(sessionID: active ? generation : nil,
+            externalRevision: detailCameraExternalRevision,
+            capabilities: .init(exposure: exposure, exposureBias: accepted))
     }
 
     private func applyCameraControls(_ controls: CameraControlState) {
@@ -466,8 +605,39 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     /// Called synchronously by UIKit; never wait for SwiftUI, an AF/AE getter,
     /// Vision, or an earlier sensor completion before admitting the next input.
     func requestExposureBias(_ bias: Double) {
-        guard isRunning, state != .capturing, let identifier = generation,
-              let target = cameraCapabilities.exposureRange?.clamp(bias) else { return }
+        submitExposureBias(bias, isExternal: true)
+    }
+
+    /// The shared option model waits for the same worker admission receipt as
+    /// the preview. It does not read back an optimistic requested value or wait
+    /// for sensor settling. Cancellation never creates a successful menu value.
+    func applyDetailExposureBias(_ bias: Double) async throws -> Double {
+        try Task.checkCancellation()
+        let accepted: Double = try await withCheckedThrowingContinuation { continuation in
+            submitExposureBias(bias, isExternal: false) { continuation.resume(with: $0) }
+        }
+        try Task.checkCancellation()
+        return accepted
+    }
+
+    private func submitExposureBias(_ bias: Double, isExternal: Bool,
+                                   completion: (@MainActor @Sendable (Result<Double, Error>) -> Void)? = nil) {
+        guard isRunning, let identifier = generation else {
+            completion?(.failure(CameraHardwareControlError.staleSession)); return
+        }
+        guard state != .capturing else {
+            completion?(.failure(CameraHardwareControlError.busy)); return
+        }
+        guard bias.isFinite else {
+            completion?(.failure(CameraHardwareControlError.invalidInput)); return
+        }
+        guard let target = cameraCapabilities.exposureRange?.clamp(bias) else {
+            completion?(.failure(CameraHardwareControlError.unavailable)); return
+        }
+        if isExternal {
+            onExternalControlIntent?()
+            detailCameraExternalRevision &+= 1
+        }
         controlSequence &+= 1
         let token = CameraControlRequest(sessionID: identifier, requestID: UUID(), revision: controlSequence)
         exposureToken = token
@@ -481,22 +651,33 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         #endif
         cameraControlWorker.submitExposure(target, sessionID: identifier) { [weak self] result in
             // Coalesced raw touch events need no MainActor task or UI update.
-            if case .failure(CameraHardwareControlError.superseded) = result { return }
+            if completion == nil, case .failure(CameraHardwareControlError.superseded) = result { return }
             Task { @MainActor [weak self] in
-                guard let self, token.matches(sessionID: generation, requestID: exposureToken?.requestID,
-                                               revision: exposureToken?.revision ?? 0), isRunning else { return }
+                guard let self else {
+                    completion?(.failure(CameraHardwareControlError.unavailable)); return
+                }
+                guard token.matches(sessionID: generation, requestID: exposureToken?.requestID,
+                                    revision: exposureToken?.revision ?? 0), isRunning else {
+                    let error: CameraHardwareControlError = generation == token.sessionID && isRunning
+                        ? .superseded : .staleSession
+                    completion?(.failure(error))
+                    return
+                }
                 switch result {
                 case .success(let receipt):
                     applyCameraControls(currentCameraControls.acceptingExposureReceipt(receipt))
                     #if DEBUG
                     CameraExposureTrace.receipt(revision: receipt.revision, bias: receipt.exposureBias)
                     #endif
+                    completion?(.success(receipt.exposureBias))
                 case .failure(let error):
                     // Capture owns its barrier receipt. A later busy response
                     // must not roll back its requested/accepted metadata.
-                    guard state != .capturing else { return }
-                    applyCameraControls(currentCameraControls.reconcilingFailedExposure(error))
-                    controlError = "노출을 적용하지 못했어요. \(error.localizedDescription)"
+                    if state != .capturing {
+                        applyCameraControls(currentCameraControls.reconcilingFailedExposure(error))
+                        controlError = "노출을 적용하지 못했어요. \(error.localizedDescription)"
+                    }
+                    completion?(.failure(error))
                 }
             }
         }
@@ -549,11 +730,11 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
             controls.hardwareObservation = receipt.observation
             cameraControls = controls
             let settings = CameraCaptureSettings(settingsRevision: receipt.revision,
-                focusSensorPoint: receipt.focusPoint, requestedExposureBias: cameraControls.requestedExposureBias,
+                focusSensorPoint: usesMultiCamera ? cameraControls.focusPoint : receipt.focusPoint, requestedExposureBias: cameraControls.requestedExposureBias,
                 acceptedExposureBias: receipt.exposureBias, requestedZoomFactor: cameraControls.selectedZoom.rawValue,
                 requestedAEAFStatus: receipt.aeafStatus, hardwareObservation: receipt.observation)
             let request = SnapshotRequest(sessionID: identifier, orientation: orientation,
-                minimumFrameTimestamp: session.currentFrame?.timestamp, cameraSettings: settings)
+                minimumFrameTimestamp: currentSourceTimestamp, cameraSettings: settings)
             let snapshot = try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
                     request.attach(continuation)
@@ -570,6 +751,9 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
                 throw ARKitCaptureError.stopped
             }
             state = .ready
+            if usesMultiCamera, let winner = worker.selectedPreviewFrame {
+                multiCamera.frames.pin(winner)
+            }
             snapshotCompleted = true
             return snapshot
         } catch {
@@ -584,9 +768,14 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         lastCameraTimestamp = update.timestamp
         lastCameraReceivedAt = ProcessInfo.processInfo.systemUptime
         if frameStatus != update.status { frameStatus = update.status }
-        // An RGB preview frame enables the shutter. Snapshot selection still
-        // validates synchronized depth and camera quality after the tap.
-        if state == .starting { state = .ready }
+        // An RGB preview makes the camera available. The product UI separately
+        // gates its shutter on a live outline; snapshot selection still checks
+        // synchronized depth and camera quality after the tap.
+        if state == .starting {
+            Self.startupSignposter.emitEvent("CameraFirstPreviewFrame")
+            finishStartupInterval()
+            state = .ready
+        }
         updateZoomCapabilities()
         if !controlDeviceAttached, controlAttachmentSessionID != update.sessionID, state != .capturing {
             Task { [weak self] in await self?.attachCameraControls(sessionID: update.sessionID) }
@@ -596,15 +785,16 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
     private func receiveLiveReadiness(sessionID: UUID, readiness: LiveCaptureReadiness) {
         guard generation == sessionID, isRunning, state != .capturing,
               readiness.imageOrientation == imageOrientation, liveAnalyzer.isCurrent(readiness),
-              let current = session.currentFrame,
+              let currentTimestamp = currentSourceTimestamp,
               let receivedAt = lastCameraReceivedAt,
               ProcessInfo.processInfo.systemUptime - receivedAt <= 1,
               readiness.timestamp.isFinite,
               readiness.timestamp >= liveReadiness.timestamp,
-              current.timestamp - readiness.timestamp >= 0,
-              current.timestamp - readiness.timestamp <= 2 else { return }
-        // Preview masks are advisory visual feedback only. They contain no
-        // garment kind, measurement points, depth checks or capture permission.
+              currentTimestamp - readiness.timestamp >= 0,
+              currentTimestamp - readiness.timestamp <= 2 else { return }
+        // These are foreground outlines, not garment kind/points/depth proof.
+        // Product UI may require the outline before accepting a shutter tap;
+        // classification and measurement still use the newly captured photo.
         liveReadiness = readiness
     }
 
@@ -612,6 +802,12 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
         liveReadiness = .waiting
         lastCameraTimestamp = nil
         lastCameraReceivedAt = nil
+    }
+
+    private func finishStartupInterval() {
+        guard let interval = startupInterval else { return }
+        startupInterval = nil
+        Self.startupSignposter.endInterval("CameraPreviewStartup", interval)
     }
 
     private func startFreshnessMonitor(sessionID: UUID) {
@@ -625,8 +821,8 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
                 let cameraStale = lastCameraReceivedAt.map {
                     ProcessInfo.processInfo.systemUptime - $0 > 1
                 } ?? true
-                let previewStale = session.currentFrame.map {
-                    $0.timestamp - self.liveReadiness.timestamp > 2
+                let previewStale = currentSourceTimestamp.map {
+                    $0 - self.liveReadiness.timestamp > 2
                 } ?? true
                 if cameraStale || previewStale {
                     liveAnalyzer.invalidateReadiness()
@@ -640,6 +836,7 @@ final class ARKitCaptureProvider: NSObject, ObservableObject, CaptureSnapshotPro
 
 extension ARKitCaptureProvider: ARSessionDelegate {
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        guard let identifier = worker.acceptedARKitSessionID(timestamp: frame.timestamp) else { return }
         #if DEBUG
         // Read the already-delivered frame, never synchronously query the
         // capture device merely to profile exposure during a drag.
@@ -647,7 +844,7 @@ extension ARKitCaptureProvider: ARSessionDelegate {
             exposureDuration: frame.camera.exposureDuration, exposureOffset: Double(frame.camera.exposureOffset))
         #endif
         let update = worker.consume(frame)
-        if let identifier = worker.sessionID {
+        if worker.acceptedARKitSessionID(timestamp: frame.timestamp) == identifier {
             liveAnalyzer.submit(frame: frame, sessionID: identifier) { [weak self] sessionID, readiness in
                 Task { @MainActor [weak self] in
                     self?.receiveLiveReadiness(sessionID: sessionID, readiness: readiness)
@@ -660,10 +857,10 @@ extension ARKitCaptureProvider: ARSessionDelegate {
     }
 
     nonisolated func sessionWasInterrupted(_ session: ARSession) {
-        guard let identifier = worker.suspend(error: .interrupted) else { return }
+        guard let identifier = worker.suspend(error: .interrupted, arKitOnly: true) else { return }
         liveAnalyzer.reset(sessionID: nil)
         Task { @MainActor [weak self] in
-            guard let self, generation == identifier else { return }
+            guard let self, generation == identifier, !usesMultiCamera else { return }
             isRunning = false
             resetCameraControlConnection()
             state = .interrupted
@@ -673,9 +870,9 @@ extension ARKitCaptureProvider: ARSessionDelegate {
     }
 
     nonisolated func sessionInterruptionEnded(_ session: ARSession) {
-        guard let identifier = worker.sessionID else { return }
+        guard let identifier = worker.arKitSessionID else { return }
         Task { @MainActor [weak self] in
-            guard let self, generation == identifier else { return }
+            guard let self, generation == identifier, !usesMultiCamera else { return }
             // Main-actor tasks created by delegate callbacks need not execute in
             // callback order. Force a fresh run even if the interruption's UI
             // update has not been delivered yet; its old UUID will then be ignored.
@@ -686,10 +883,10 @@ extension ARKitCaptureProvider: ARSessionDelegate {
 
     nonisolated func session(_ session: ARSession, didFailWithError error: Error) {
         let failure = ARKitCaptureError.sessionFailed(error.localizedDescription)
-        guard let identifier = worker.suspend(error: failure) else { return }
+        guard let identifier = worker.suspend(error: failure, arKitOnly: true) else { return }
         liveAnalyzer.reset(sessionID: nil)
         Task { @MainActor [weak self] in
-            guard let self, generation == identifier else { return }
+            guard let self, generation == identifier, !usesMultiCamera else { return }
             isRunning = false
             resetCameraControlConnection()
             state = .failed(error.localizedDescription)
@@ -710,13 +907,33 @@ private nonisolated struct CaptureObservation: Sendable {
 private nonisolated final class CaptureWorker: @unchecked Sendable {
     let queue = DispatchQueue(label: "com.dobby.lidar.capture", qos: .userInitiated)
     private let lock = NSLock()
-    private let context = CIContext(options: [.cacheIntermediates: false])
+    // Accessed only by the serial capture queue; constructing a camera view
+    // must not initialize a GPU image context on the UI actor.
+    private let cachedContext = Mutex<CIContext?>(nil)
+    private var context: CIContext {
+        cachedContext.withLock { cached in
+            if let cached { return cached }
+            let created = CIContext(options: [.cacheIntermediates: false])
+            cached = created
+            return created
+        }
+    }
     private var identifier: UUID?
     private var acceptsFrames = false
+    private var allowsARKitFrames = true
+    private var minimumARKitTimestamp: TimeInterval?
+    private var queuedMultiFrameID: UUID?
     private var pending: SnapshotRequest?
     private var copying = false
     private var selector: CaptureFrameSelector?
     private var selectedCandidate: CopiedCaptureCandidate?
+    private var previewWinner: MultiCameraFrame?
+    private let multiCameraRectifier = MultiCameraRectifier()
+
+    var selectedPreviewFrame: MultiCameraFrame? {
+        lock.lock(); defer { lock.unlock() }
+        return previewWinner
+    }
     private var lastObservationTime: TimeInterval = -.infinity
     private var previousFramePose: simd_float4x4?
     private var previousFrameTime: TimeInterval?
@@ -726,15 +943,31 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         return identifier
     }
 
-    func activate(sessionID: UUID) {
+    var arKitSessionID: UUID? {
+        lock.lock(); defer { lock.unlock() }
+        return allowsARKitFrames ? identifier : nil
+    }
+
+    func acceptedARKitSessionID(timestamp: TimeInterval) -> UUID? {
+        lock.lock(); defer { lock.unlock() }
+        guard acceptsFrames, allowsARKitFrames, timestamp.isFinite,
+              minimumARKitTimestamp.map({ timestamp > $0 }) ?? true else { return nil }
+        return identifier
+    }
+
+    func activate(sessionID: UUID, allowsARKitFrames: Bool = true, minimumARKitTimestamp: TimeInterval? = nil) {
         lock.lock()
         let previous = pending
         pending = nil
         copying = false
         selector = nil
         selectedCandidate = nil
+        previewWinner = nil
         identifier = sessionID
         acceptsFrames = true
+        self.allowsARKitFrames = allowsARKitFrames
+        self.minimumARKitTimestamp = minimumARKitTimestamp
+        queuedMultiFrameID = nil
         lastObservationTime = -.infinity
         previousFramePose = nil
         previousFrameTime = nil
@@ -755,8 +988,9 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         previous?.finish(.failure(error))
     }
 
-    func suspend(error: ARKitCaptureError) -> UUID? {
+    func suspend(error: ARKitCaptureError, arKitOnly: Bool = false) -> UUID? {
         lock.lock()
+        guard !arKitOnly || allowsARKitFrames else { lock.unlock(); return nil }
         let currentID = identifier
         let previous = pending
         pending = nil
@@ -781,6 +1015,7 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
             selector = CaptureFrameSelector(requestID: request.id, startedAt: ProcessInfo.processInfo.systemUptime,
                                             minimumFrameTimestamp: request.minimumFrameTimestamp)
             selectedCandidate = nil
+            previewWinner = nil
         }
         lock.unlock()
         if let error { request.finish(.failure(error)); return }
@@ -804,7 +1039,8 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
 
     func consume(_ frame: ARFrame) -> CaptureObservation? {
         lock.lock()
-        guard let identifier, acceptsFrames else { lock.unlock(); return nil }
+        guard let identifier, acceptsFrames, allowsARKitFrames,
+              minimumARKitTimestamp.map({ frame.timestamp > $0 }) ?? true else { lock.unlock(); return nil }
         let elapsed = frame.timestamp - lastObservationTime
         let shouldPublish = elapsed >= 0.33
         let trackingNormal: Bool
@@ -838,7 +1074,9 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         let update: CaptureObservation? = shouldPublish
             ? CaptureObservation(sessionID: identifier,
                                  status: CaptureFrameStatus(hasDepth: frame.sceneDepth != nil,
-                                                            tracking: Self.trackingStatus(for: frame.camera.trackingState)),
+                                                            tracking: Self.trackingStatus(for: frame.camera.trackingState),
+                                                            imageSize: .init(width: CVPixelBufferGetWidth(frame.capturedImage),
+                                                                             height: CVPixelBufferGetHeight(frame.capturedImage))),
                                  timestamp: frame.timestamp)
             : nil
 
@@ -849,6 +1087,103 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
             }
         }
         return update
+    }
+
+    func enqueue(_ frame: MultiCameraFrame,
+                 completion: @escaping @Sendable (CaptureObservation?) -> Void) {
+        lock.lock()
+        guard acceptsFrames, !allowsARKitFrames, identifier == frame.sessionID,
+              queuedMultiFrameID == nil else { lock.unlock(); return }
+        let jobID = UUID()
+        queuedMultiFrameID = jobID
+        lock.unlock()
+        queue.async { [self, frame] in
+            defer {
+                lock.lock()
+                if queuedMultiFrameID == jobID { queuedMultiFrameID = nil }
+                lock.unlock()
+            }
+            guard sessionID == frame.sessionID else { return }
+            completion(consume(frame))
+        }
+    }
+
+    /// The AVFoundation owner has already rejected dropped, skewed, relative
+    /// and uncalibrated triples. No AR pose/tracking claim is manufactured.
+    func consume(_ frame: MultiCameraFrame) -> CaptureObservation? {
+        lock.lock()
+        guard let identifier, identifier == frame.sessionID, acceptsFrames, !allowsARKitFrames else { lock.unlock(); return nil }
+        let shouldPublish = frame.timestamp - lastObservationTime >= 0.33
+        if shouldPublish { lastObservationTime = frame.timestamp }
+        let request: SnapshotRequest?
+        if let pending, !copying, !pending.isFinished { request = pending; copying = true }
+        else { request = nil }
+        lock.unlock()
+        let update: CaptureObservation? = shouldPublish ? .init(sessionID: identifier,
+            status: .init(hasDepth: true, tracking: .synchronizedDepth,
+                imageSize: .init(width: CVPixelBufferGetWidth(frame.wideImage), height: CVPixelBufferGetHeight(frame.wideImage))),
+            timestamp: frame.timestamp) : nil
+        if let request { autoreleasepool { consider(frame, request: request) } }
+        return update
+    }
+
+    private func consider(_ frame: MultiCameraFrame, request: SnapshotRequest) {
+        do {
+            let depth = try multiCameraRectifier.depth(frame: frame)
+            let imageSize = PixelSize(width: CVPixelBufferGetWidth(frame.wideImage), height: CVPixelBufferGetHeight(frame.wideImage))
+            let qualityDepth: DepthMap?
+            if let factor = request.cameraSettings?.requestedZoomFactor, factor > 1 {
+                qualityDepth = RegisteredCameraCrop.make(imageSize: imageSize, depthSize: depth.size, zoomFactor: factor)?.applying(to: depth)
+            } else { qualityDepth = depth }
+            var quality = CaptureFrameQuality.evaluate(depth: qualityDepth, timestamp: frame.timestamp,
+                trackingNormal: false, translationSpeedMetersPerSecond: nil, angularSpeedRadiansPerSecond: nil)
+            quality.captureEvidence = .synchronizedCalibratedLiDAR
+            lock.lock()
+            guard pending === request, identifier == request.sessionID, acceptsFrames,
+                  !request.isFinished, var selector else { lock.unlock(); return }
+            let previousDeadline = selector.windowEndsAt
+            let replace = selector.consider(quality, requestID: request.id, now: ProcessInfo.processInfo.systemUptime)
+            let newDeadline = previousDeadline == nil ? selector.windowEndsAt : nil
+            self.selector = selector
+            if !replace { copying = false }
+            lock.unlock()
+            if replace {
+                let candidate = try copyCandidate(frame, depth: depth, request: request)
+                lock.lock()
+                if pending === request, identifier == request.sessionID, acceptsFrames, !request.isFinished {
+                    selectedCandidate = candidate
+                    previewWinner = frame
+                    copying = false
+                }
+                lock.unlock()
+            }
+            if let newDeadline {
+                queue.asyncAfter(deadline: .now() + max(0, newDeadline - ProcessInfo.processInfo.systemUptime)) { [weak self, weak request] in
+                    guard let self, let request else { return }
+                    finalize(request)
+                }
+            }
+        } catch {
+            complete(request, result: .failure(error))
+        }
+    }
+
+    private func copyCandidate(_ source: MultiCameraFrame, depth: DepthMap, request: SnapshotRequest) throws -> CopiedCaptureCandidate {
+        var image = try multiCameraRectifier.image(frame: source)
+        let imageSize = PixelSize(width: image.width, height: image.height)
+        var frame = MeasurementFrame(sessionID: request.sessionID, frameID: UUID(), timestamp: source.timestamp,
+            capturedAt: Date(), imageSize: imageSize, intrinsics: source.wideCalibration.intrinsics,
+            depth: depth, source: .avFoundationLiDAR, orientation: request.orientation)
+        var settings = request.cameraSettings
+        if let factor = settings?.requestedZoomFactor, factor > 1 {
+            guard let crop = RegisteredCameraCrop.make(imageSize: imageSize, depthSize: depth.size, zoomFactor: factor),
+                  let depth = crop.applying(to: depth), let intrinsics = crop.applying(to: frame.intrinsics),
+                  let cropped = image.cropping(to: CGRect(x: crop.imageOriginX, y: crop.imageOriginY,
+                    width: crop.imageSize.width, height: crop.imageSize.height)) else { throw ARKitCaptureError.invalidCalibration }
+            frame.imageSize = crop.imageSize; frame.depth = depth; frame.intrinsics = intrinsics
+            image = cropped; settings?.crop = crop
+        }
+        return CopiedCaptureCandidate(frame: frame, smoothedFrame: nil, image: image, cameraSettings: settings)
     }
 
     private func consider(_ frame: ARFrame, request: SnapshotRequest, trackingNormal: Bool,
@@ -918,7 +1253,11 @@ private nonisolated final class CaptureWorker: @unchecked Sendable {
         self.selector = selector
         copying = true
         lock.unlock()
-        let result = Result { try autoreleasepool { try snapshot(candidate, selectionSummary: summary) } }
+        var recordedSummary = summary
+        if candidate.frame.source == .avFoundationLiDAR {
+            recordedSummary.policyVersion = "synchronized-calibrated-lidar-depth-v1"
+        }
+        let result = Result { try autoreleasepool { try snapshot(candidate, selectionSummary: recordedSummary) } }
         complete(request, result: result)
     }
 

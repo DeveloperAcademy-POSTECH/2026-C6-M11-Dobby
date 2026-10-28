@@ -11,6 +11,8 @@ import UIKit
 
 struct InfoInputView: View {
     @Bindable var garment: Garment
+    let onExit: (() -> Void)?
+    let allowsPhotoEditing: Bool
     var onComplete: ((Garment) -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
@@ -26,9 +28,13 @@ struct InfoInputView: View {
     static let measurementTableID = "product-info.measurement-table"
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
+         allowsPhotoEditing: Bool = false,
+         onExit: (() -> Void)? = nil,
          onComplete: ((Garment) -> Void)? = nil) {
         self.garment = garment
         self.retainedMeasurementInput = measurementInput
+        self.allowsPhotoEditing = allowsPhotoEditing
+        self.onExit = onExit
         self.onComplete = onComplete
     }
 
@@ -40,9 +46,21 @@ struct InfoInputView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 ProductInformationFields(garment: garment, measurementInput: measurementInput,
-                    focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion)
+                    focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
+                    allowsPhotoEditing: allowsPhotoEditing)
                     .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
+                    .padding(.top, allowsPhotoEditing ? 12 : 16)
+                    .padding(.bottom, 16)
+                    .background {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture(perform: dismissKeyboard)
+                    }
+            }
+            .background {
+                ProductInformationStyle.background
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismissKeyboard)
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: focusedMeasurementID) { _, _ in
@@ -55,13 +73,26 @@ struct InfoInputView: View {
             }
         }
         .background(ProductInformationStyle.background)
-        .navigationTitle("제품 정보 입력")
+        .navigationTitle(allowsPhotoEditing ? "제품 정보 수정" : "제품 정보 입력")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(onExit != nil)
         .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .tint(.primary)
         .onDisappear { focusedMeasurementID = nil }
         .toolbar {
+            if let onExit {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        focusedMeasurementID = nil
+                        onExit()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("뒤로가기")
+                    .accessibilityIdentifier("product-flow.back")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: complete) {
                     Text("완료")
@@ -124,20 +155,27 @@ struct InfoInputView: View {
         }
     }
 
+    private func dismissKeyboard() {
+        focusedMeasurementID = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
+    }
+
 }
 
 /// The visible text outlives its dirty draft. Clearing a consumed draft must not
 /// switch a focused TextField back to a rounded model display and emit that
 /// rounded value as a new edit during navigation/keyboard dismissal.
-@MainActor
-struct GarmentMeasurementInputState {
+nonisolated struct GarmentMeasurementInputState: Codable {
     private var inputTexts: [UUID: String] = [:]
     var drafts: [UUID: String] = [:]
 
+    @MainActor
     func text(for value: MeasuredValue) -> String {
         inputTexts[value.id] ?? GarmentMeasurementInputText.format(value.valueCm)
     }
 
+    @MainActor
     mutating func setText(_ text: String, for value: MeasuredValue) {
         guard text != self.text(for: value) else { return }
         inputTexts[value.id] = text
@@ -220,7 +258,9 @@ enum GarmentInputCompletion {
         }
         garment.syncFilterFields()
         let previousCompletion = garment.informationCompletedAt
+        let previousDraft = garment.creationDraftData
         garment.informationCompletedAt = .now
+        garment.creationDraftData = nil
         do {
             try persist()
         } catch {
@@ -231,6 +271,7 @@ enum GarmentInputCompletion {
             }
             garment.syncFilterFields()
             garment.informationCompletedAt = previousCompletion
+            garment.creationDraftData = previousDraft
             throw error
         }
     }

@@ -15,6 +15,16 @@ struct CameraPhotoView: View {
     var contentMode: ContentMode = .fill
     var onLoad: ((Bool) -> Void)?
     @State private var image: CGImage?
+    @State private var imageRequestID: UUID?
+
+    private struct LoadIdentity: Equatable {
+        let source: CapturedAsset.Source
+        let maximumPixelSize: Int
+    }
+
+    private var loadIdentity: LoadIdentity {
+        .init(source: source, maximumPixelSize: maximumPixelSize)
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -31,16 +41,19 @@ struct CameraPhotoView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
         }
-        .task(id: source) {
+        .task(id: loadIdentity) {
+            let identity = loadIdentity
+            let requestID = UUID()
+            imageRequestID = requestID
             image = nil
-            defer { onLoad?(image != nil) }
-            guard case let .localFile(url, _) = source,
-                  let file = CGImageSourceCreateWithURL(url as CFURL, nil) else { return }
-            image = CGImageSourceCreateThumbnailAtIndex(file, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize
-            ] as CFDictionary)
+            defer {
+                if !Task.isCancelled, imageRequestID == requestID, loadIdentity == identity { onLoad?(image != nil) }
+            }
+            guard case let .localFile(url, _) = identity.source else { return }
+            let request = ProductThumbnailRequest(url: url, maximumPixelSize: identity.maximumPixelSize)
+            let decoded = await ProductThumbnailLoader.shared.image(for: request)
+            guard !Task.isCancelled, imageRequestID == requestID, loadIdentity == identity else { return }
+            image = decoded?.image
         }
     }
 }

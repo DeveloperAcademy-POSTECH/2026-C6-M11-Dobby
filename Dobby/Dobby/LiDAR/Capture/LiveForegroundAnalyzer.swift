@@ -2,13 +2,25 @@ import ARKit
 import CoreImage
 import Foundation
 import Vision
+import Synchronization
 
 /// Preview-only foreground outlines, without clothing models, depth or capture quality.
 nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.dobby.lidar.live-foreground", qos: .userInitiated)
     private let cancellationQueue = DispatchQueue(label: "com.dobby.lidar.live-foreground-cancel", qos: .utility)
     private let lock = NSLock()
-    private let context = CIContext(options: [.cacheIntermediates: false])
+    // Created and accessed only by render() on the serial analysis queue.
+    // Constructing a camera owner on the UI actor must not initialize Metal.
+    private let cachedContext = Mutex<CIContext?>(nil)
+    private var context: CIContext {
+        cachedContext.withLock { cached in
+            if let cached { return cached }
+            let created = CIContext(options: [.cacheIntermediates: false])
+            cached = created
+            return created
+        }
+    }
+    private let multiCameraRectifier = MultiCameraRectifier()
     private var orientation: ImageOrientation = .right
     private var identifier: UUID?
     private var readinessEpoch = UUID()
@@ -29,9 +41,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         orientation = value
         readinessEpoch = UUID()
         lastSubmissionTime = -.infinity
-        let request = activeRequest
-        lock.unlock()
-        request?.cancel()
+        cancelActiveRequestWhileLocked()
     }
 
     func isCurrent(_ readiness: LiveCaptureReadiness) -> Bool {
@@ -47,19 +57,15 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         interactionGate.reset(sessionID: sessionID)
         readinessEpoch = UUID()
         lastSubmissionTime = -.infinity
-        let request = activeRequest
         // Cancelling Vision does not end its physical request immediately.
         // Keep busy until the worker exits to prevent a second request.
-        lock.unlock()
-        request?.cancel()
+        cancelActiveRequestWhileLocked()
     }
 
     func invalidateReadiness() {
         lock.lock()
         readinessEpoch = UUID()
-        let request = activeRequest
-        lock.unlock()
-        request?.cancel()
+        cancelActiveRequestWhileLocked()
     }
 
     func suspend(sessionID: UUID) {
@@ -67,9 +73,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         guard identifier == sessionID else { lock.unlock(); return }
         isSuspended = true
         readinessEpoch = UUID()
-        let request = activeRequest
-        lock.unlock()
-        request?.cancel()
+        cancelActiveRequestWhileLocked()
     }
 
     func resume(sessionID: UUID) {
@@ -109,6 +113,12 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     /// touch path or enqueue cancellation behind the running perform request.
     private func cancelInteractionAnalysisWhileLocked() {
         readinessEpoch = UUID()
+        cancelActiveRequestWhileLocked()
+    }
+
+    /// Consumes the caller's lock. Rotation, pause, reset and zoom must be as
+    /// responsive as a gesture, even while Vision drains an earlier request.
+    private func cancelActiveRequestWhileLocked() {
         let cancellation = activeRequest.map(RequestCancellation.init)
         activeRequest = nil
         // Cancellation does not finish the job. Keep busy and activeJobID until
@@ -121,30 +131,41 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
 
     func submit(frame: ARFrame, sessionID: UUID,
                 completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
+        submit(source: SourceBuffer(buffer: frame.capturedImage), timestamp: frame.timestamp,
+               sessionID: sessionID, completion: completion)
+    }
+
+    func submit(frame: MultiCameraFrame, sessionID: UUID,
+                completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
+        submit(source: SourceBuffer(buffer: frame.wideImage, multiCamera: frame), timestamp: frame.timestamp,
+               sessionID: sessionID, completion: completion)
+    }
+
+    private func submit(source: SourceBuffer, timestamp: TimeInterval, sessionID: UUID,
+                        completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
         lock.lock()
         guard identifier == sessionID, !busy,
               interactionGate.allowsAnalysis(sessionID: sessionID, captureSuspended: isSuspended,
                                               now: ProcessInfo.processInfo.systemUptime),
-              frame.timestamp.isFinite, frame.timestamp >= 0,
-              frame.timestamp - lastSubmissionTime >= minimumInterval else {
+              timestamp.isFinite, timestamp >= 0,
+              timestamp - lastSubmissionTime >= minimumInterval else {
             lock.unlock()
             return
         }
         busy = true
         let job = AnalysisJob(id: UUID(), sessionID: sessionID, readinessEpoch: readinessEpoch,
-            timestamp: frame.timestamp, orientation: orientation,
-            imageSize: .init(width: CVPixelBufferGetWidth(frame.capturedImage),
-                             height: CVPixelBufferGetHeight(frame.capturedImage)))
+            timestamp: timestamp, orientation: orientation,
+            imageSize: .init(width: CVPixelBufferGetWidth(source.buffer),
+                             height: CVPixelBufferGetHeight(source.buffer)))
         activeJobID = job.id
-        lastSubmissionTime = frame.timestamp
+        lastSubmissionTime = timestamp
         lock.unlock()
 
         // Retain one buffer until the small raster is rendered. No ARFrame,
         // original-size RGB copy or depth map enters the foreground request.
-        let source = SourceBuffer(buffer: frame.capturedImage)
         queue.async { [self, source] in
             guard isCurrent(job) else { finish(nil, job: job, completion: completion); return }
-            let image = autoreleasepool { render(source.buffer, job: job) }
+            let image = autoreleasepool { render(source, job: job) }
             guard let image else {
                 finish(.status(.analysisFailed, timestamp: job.timestamp), job: job, completion: completion)
                 return
@@ -170,7 +191,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
             && readinessEpoch == job.readinessEpoch && orientation == job.orientation
     }
 
-    private func render(_ buffer: CVPixelBuffer, job: AnalysisJob) -> CGImage? {
+    private func render(_ source: SourceBuffer, job: AnalysisJob) -> CGImage? {
         guard let rawSize = LivePreviewRasterGeometry.analysisSize(for: job.imageSize,
             maximumDimension: LiveForegroundPreviewSelectionPolicy.maximumRasterDimension) else { return nil }
         let exif: Int32
@@ -183,8 +204,18 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         let quarterTurn = job.orientation == .right || job.orientation == .left
         let uprightSize = quarterTurn ? PixelSize(width: rawSize.height, height: rawSize.width) : rawSize
         let scale = Double(rawSize.width) / Double(job.imageSize.width)
-        let input = CIImage(cvPixelBuffer: buffer).oriented(forExifOrientation: exif)
-            .transformed(by: .init(scaleX: scale, y: scale))
+        let sensorImage: CIImage
+        if let frame = source.multiCamera {
+            // Live contours and captured landmarks share the rectified pinhole
+            // grid. Raw distorted RGB would place the outline on other pixels.
+            guard let corrected = try? multiCameraRectifier.image(frame: frame,
+                maximumDimension: LiveForegroundPreviewSelectionPolicy.maximumRasterDimension) else { return nil }
+            sensorImage = CIImage(cgImage: corrected)
+        } else {
+            sensorImage = CIImage(cvPixelBuffer: source.buffer)
+                .transformed(by: .init(scaleX: scale, y: scale))
+        }
+        let input = sensorImage.oriented(forExifOrientation: exif)
         return context.createCGImage(input,
             from: CGRect(x: input.extent.minX, y: input.extent.minY,
                          width: CGFloat(uprightSize.width), height: CGFloat(uprightSize.height)),
@@ -295,7 +326,10 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     }
 
     /// Read only on the render queue. Vision receives an independent small CGImage.
-    private struct SourceBuffer: @unchecked Sendable { let buffer: CVPixelBuffer }
+    private struct SourceBuffer: @unchecked Sendable {
+        let buffer: CVPixelBuffer
+        var multiCamera: MultiCameraFrame? = nil
+    }
     /// Fully rendered, immutable pixels; the buffer pool is no longer involved.
     private struct PreviewRaster: @unchecked Sendable { let image: CGImage }
     /// VNRequest supports cancellation while another queue performs it. Retain

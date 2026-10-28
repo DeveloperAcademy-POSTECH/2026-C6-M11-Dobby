@@ -19,6 +19,8 @@ final class Garment {
     var sourceMeasurementID: UUID? = nil
     /// 사진·치수와 제품 정보 입력을 저장한 시점. nil이면 새 연결 흐름의 초안이다.
     var informationCompletedAt: Date? = nil
+    /// 나가기를 눌러 보관한 등록 과정. 과거 상품의 nil은 초안으로 취급하지 않는다.
+    var creationDraftData: Data? = nil
 
     // MARK: 분류 — 모델이 채운다
 
@@ -36,6 +38,9 @@ final class Garment {
     var brand: String
     var detail: String
     var price: Int?
+
+    /// 내보내기 화면에서 선택한 플랫폼. 기존 상품은 nil이며 업로드 성공 기록과 구분한다.
+    var selectedExportChannelRawValues: [String]? = nil
 
     // MARK: 필터용 사본
     //
@@ -83,6 +88,16 @@ final class Garment {
 // MARK: - 읽기 편의
 
 extension Garment {
+    var creationDraft: ProductCreationDraft? {
+        guard let creationDraftData,
+              let draft = try? JSONDecoder().decode(ProductCreationDraft.self, from: creationDraftData),
+              draft.schemaVersion == 1,
+              draft.photoState.map({ $0.garmentID == id }) ?? true else { return nil }
+        return draft
+    }
+
+    var isCreationDraft: Bool { informationCompletedAt == nil && creationDraft != nil }
+
     /// 관계 배열은 저장 순서를 보장하지 않으므로 읽을 때마다 정렬한다. 화면에서는 `photos`가
     /// 아니라 반드시 이쪽을 쓴다.
     var orderedPhotos: [GarmentPhoto] {
@@ -110,7 +125,13 @@ extension Garment {
     }
 
     var thumbnail: GarmentPhoto? {
-        orderedPhotos.first { $0.role == .thumbnail } ?? orderedPhotos.first
+        productPhotos.first { $0.role == .thumbnail } ?? productPhotos.first
+    }
+
+    /// 상품별 선택 이력과 기존 내보내기 성공 기록을 중복 없이 표시한다.
+    var selectedExportChannels: [ExportChannel] {
+        let selected = Set(selectedExportChannelRawValues ?? [])
+        return ExportChannel.allCases.filter { selected.contains($0.rawValue) || hasExported(to: $0) }
     }
 
     /// 실측에 쓴 사진. 「지점 다시 잡기」 화면이 이 사진과 그 점들을 연다.

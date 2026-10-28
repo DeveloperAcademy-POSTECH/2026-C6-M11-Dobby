@@ -13,10 +13,15 @@ import SwiftUI
 struct CameraLivePreviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     let camera: CameraPreviewSession
+    var aspectRatio: DetailPhotoAspectRatio = .fourThree
     @State private var isVisible = false
 
     var body: some View {
-        CameraPreviewSurface(session: camera.session) { camera.rotationAngle = $0 }
+        DetailAspectRatioPreview(aspectRatio: aspectRatio) { viewport in
+            CameraPreviewSurface(session: camera.session, viewport: viewport,
+                onRotationChange: { camera.rotationAngle = $0 },
+                onFramingReady: { camera.previewCrop = $0 })
+        }
             .accessibilityLabel("후면 카메라 실시간 미리보기")
             .overlay {
                 switch camera.state {
@@ -33,6 +38,11 @@ struct CameraLivePreviewView: View {
                 }
             }
             .clipped()
+            .task(id: aspectRatio) {
+                camera.isPreviewTransitioning = true
+                do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+                camera.isPreviewTransitioning = false
+            }
             .onAppear {
                 isVisible = true
                 camera.setActive(scenePhase == .active)
@@ -40,6 +50,7 @@ struct CameraLivePreviewView: View {
             .onChange(of: scenePhase) { _, phase in camera.setActive(isVisible && phase == .active) }
             .onDisappear {
                 isVisible = false
+                camera.previewCrop = nil
                 camera.setActive(false)
             }
             .onReceive(NotificationCenter.default.publisher(for: AVCaptureSession.runtimeErrorNotification, object: camera.session).receive(on: DispatchQueue.main)) { _ in

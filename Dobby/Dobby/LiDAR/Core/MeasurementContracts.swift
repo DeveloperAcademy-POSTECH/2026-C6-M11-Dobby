@@ -32,7 +32,7 @@ nonisolated enum ImageOrientation: String, Codable, Sendable, CaseIterable {
 }
 
 nonisolated enum DepthSource: String, Codable, Sendable {
-    case sceneDepth, smoothedSceneDepth, synthetic
+    case sceneDepth, smoothedSceneDepth, avFoundationLiDAR, synthetic
 }
 
 /// Rectified axial depth in metres, registered to the complete RGB image.
@@ -67,6 +67,13 @@ nonisolated struct CaptureSnapshot: Codable, Sendable {
     /// Optional keeps older archives compatible. These settings never replace
     /// the actual frame's RGB/depth calibration used by the measurement engine.
     var cameraSettings: CameraCaptureSettings? = nil
+    /// Actual result presentation region. It may be expanded to keep normal
+    /// measurement points visible. RGB/depth, calibration and raw coordinates
+    /// remain unchanged. Older captures omit this and show the complete photo.
+    var presentationCrop: PhotoDisplayCrop? = nil
+    /// The strict oriented presentation region selected at the shutter, before
+    /// any result-only expansion. Optional preserves older archive decoding.
+    var capturePresentationCrop: PhotoDisplayCrop? = nil
 }
 
 nonisolated enum LandmarkOrigin: String, Codable, Sendable {

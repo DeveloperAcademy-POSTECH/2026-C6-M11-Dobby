@@ -21,6 +21,7 @@ struct ProductInputCompletionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
         .tint(.primary)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("product-complete.screen")
@@ -33,7 +34,7 @@ private struct ProductCompletionContent: View {
     var body: some View {
         VStack(spacing: 24) {
             ProductCompletionHeader()
-            ProductDetailCard(garment: garment)
+            ProductDetailCard(garment: garment, photoPresentation: .compact)
         }
     }
 }
@@ -70,6 +71,6 @@ private struct ProductCompletionActions: View {
         .padding(.horizontal, 33)
         .padding(.top, 16)
         .frame(maxWidth: .infinity)
-        .background(Color(red: 1, green: 249 / 255, blue: 246 / 255).ignoresSafeArea(edges: .bottom))
+        .background(ProductInformationStyle.background.ignoresSafeArea(edges: .bottom))
     }
 }

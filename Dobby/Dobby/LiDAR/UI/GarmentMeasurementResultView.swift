@@ -10,9 +10,12 @@ struct GarmentMeasurementResultView: View {
     let onRetake: () -> Void
     let onConfirm: () -> Void
     let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
+    let onExitRecord: ((SavedMeasurement) async throws -> Void)?
+    let onExitRequested: ((@escaping () -> Void) -> Void)?
+    let allowsRetake: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .title2) private var headingTitleSize: CGFloat = 22
-    @ScaledMetric(relativeTo: .subheadline) private var headingSubtitleSize: CGFloat = 14
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("dobby.measurementResult.pointTutorial.v1.seen") private var hasSeenPointTutorial = false
     @State private var image: UIImage?
     @State private var selectedDefinition: MeasurementDefinition?
     @State private var showPhoto = false
@@ -30,19 +33,31 @@ struct GarmentMeasurementResultView: View {
     @State private var pendingRecord: SavedMeasurement?
     @State private var pendingRecordRevision: UUID?
     @State private var pendingRecordArchived = false
+    @State private var showsPointTutorial = false
+    @State private var hasPresentedPointTutorial = false
     private let pipeline = MeasurementPipeline()
 
     init(model: AutomaticMeasurement, archive: MeasurementArchive,
          recordingError: String? = nil, initialImage: UIImage? = nil, onRetake: @escaping () -> Void,
          onConfirm: @escaping () -> Void,
-         onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil) {
+         onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
+         onExitRecord: ((SavedMeasurement) async throws -> Void)? = nil,
+         initialRecord: SavedMeasurement? = nil,
+         allowsRetake: Bool = true,
+         onExitRequested: ((@escaping () -> Void) -> Void)? = nil) {
         _model = State(initialValue: model)
         self.archive = archive
         self.recordingError = recordingError
         self.onRetake = onRetake
         self.onConfirm = onConfirm
         self.onConfirmedRecord = onConfirmedRecord
+        self.onExitRecord = onExitRecord
+        self.onExitRequested = onExitRequested
+        self.allowsRetake = allowsRetake
         _image = State(initialValue: initialImage)
+        _pendingRecord = State(initialValue: initialRecord)
+        _pendingRecordRevision = State(initialValue: initialRecord == nil ? nil : model.persistenceRevision)
+        _pendingRecordArchived = State(initialValue: initialRecord != nil)
     }
 
     private var isSynthetic: Bool { model.snapshot.frame.source == .synthetic }
@@ -65,26 +80,37 @@ struct GarmentMeasurementResultView: View {
                 accessibleResult
             }
         }
-        .background(GarmentCaptureStyle.background)
+        .background { Color.white.ignoresSafeArea() }
         .navigationTitle("실측 결과")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
-        .toolbarBackground(GarmentCaptureStyle.background, for: .navigationBar)
+        .toolbarBackground(Color.white, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button(action: onRetake) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("다시 촬영")
-                    .accessibilityIdentifier("retakeGarmentMeasurement")
-                    .disabled(isSaving || isEditingPoint)
+                if onExitRecord != nil {
+                    Button(action: requestExit) {
+                        GarmentCaptureToolbarIcon(systemName: "chevron.left")
+                    }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("뒤로가기")
+                        .accessibilityIdentifier("product-flow.back")
+                        .disabled(isSaving || isEditingPoint || model.needsRecalculation)
+                } else {
+                    Button(action: retakeIfAllowed) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("다시 촬영")
+                        .accessibilityIdentifier("retakeGarmentMeasurement")
+                        .disabled(!allowsRetake || isSaving || isEditingPoint)
+                }
             }.sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .topBarTrailing) { resultActions }
                 .sharedBackgroundVisibility(.hidden)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ChakPrimaryButton(
-                title: isSaving ? "저장 중…" : model.needsRecalculation ? "다시 측정 중…" : "확인",
+                title: isSaving ? "저장 중…" : model.needsRecalculation ? "다시 측정 중…" : "다음",
                 isLoading: isSaving || model.needsRecalculation
             ) {
                 Task { await confirm() }
@@ -95,15 +121,23 @@ struct GarmentMeasurementResultView: View {
                 : "사진과 확인한 측정 결과를 저장하고 제품 상세 촬영으로 이동합니다")
             .accessibilityIdentifier("confirmGarmentMeasurement")
             .padding(.leading, 32).padding(.trailing, 35).padding(.top, 28)
-            .background(GarmentCaptureStyle.background)
+            .background(Color.white)
         }
         .task {
             if let decoded = await SnapshotPresentation.thumbnail(for: model.snapshot), !Task.isCancelled {
                 image = decoded
             }
+            guard !Task.isCancelled else { return }
             if dynamicTypeSize.isAccessibilitySize { showDetails = true }
+            presentPointTutorialIfNeeded()
         }
         .onChange(of: dynamicTypeSize) { _, size in if size.isAccessibilitySize { showDetails = true } }
+        .onChange(of: model.needsRecalculation) { _, pending in
+            if !pending { presentPointTutorialIfNeeded() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { presentPointTutorialIfNeeded() }
+        }
         .task(id: model.calculationRevision) { await recalculate() }
         .sheet(item: $selectedDefinition) { definition in
             GarmentMeasurementItemSheet(model: model, definition: definition, archive: archive)
@@ -118,31 +152,49 @@ struct GarmentMeasurementResultView: View {
             totalLengthCorrectionSheet(measurement)
         }
         .sheet(isPresented: $showAuxiliaryDetails) { auxiliaryDetailsSheet }
+        .fullScreenCover(isPresented: $showsPointTutorial) {
+            GarmentResultPointTutorial {
+                if !isSynthetic { hasSeenPointTutorial = true }
+                showsPointTutorial = false
+            }
+            .presentationBackground(.clear)
+            .interactiveDismissDisabled()
+        }
         .alert("저장하지 못했어요", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button("확인", role: .cancel) { saveError = nil }
         } message: { Text(saveError ?? "") }
-        .tint(.white).preferredColorScheme(.dark)
+        .tint(.primary).preferredColorScheme(.light)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("garmentMeasurementResult")
     }
 
     private func portraitResult(in size: CGSize) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            heading
-                .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 6)
-            GeometryReader { geometry in
-                let aspect = SnapshotPresentation.aspectRatio(for: model.snapshot)
-                let photoWidth = min(geometry.size.width, geometry.size.height * aspect)
-                let photoHeight = photoWidth / aspect
+        // Fit the actual capture inside the Hi-Fi photograph window. Points
+        // and depth coordinates must not follow the reference image's crop.
+        let topGap: CGFloat = 30
+        let viewportHeight = min(size.width * 536 / 402, max(1, size.height - topGap))
+        let aspect = SnapshotPresentation.resultAspectRatio(for: model.snapshot)
+        let photoWidth = min(size.width, viewportHeight * aspect)
+        return VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                // A distinct backing element exposes the window's bounds
+                // without replacing the aspect-fit editor's accessibility ID.
+                Rectangle().fill(Color.white)
+                    .frame(width: size.width, height: viewportHeight)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("실측 사진 표시 영역")
+                    .accessibilityIdentifier("garmentResultPhotoViewport")
+                    .accessibilitySortPriority(-1)
+                    .allowsHitTesting(false)
                 photoEditor(showsEnlargeControl: false)
-                    .frame(width: photoWidth, height: photoHeight)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(maxHeight: size.width * 560 / 402)
-            .background(GarmentCaptureStyle.background)
+                    .frame(width: photoWidth, height: photoWidth / aspect)
+            }.frame(width: size.width, height: viewportHeight)
             .overlay(alignment: .topTrailing) {
                 VStack(alignment: .trailing, spacing: 6) {
                     if isSynthetic { syntheticBadge.allowsHitTesting(false) }
+                    if model.snapshot.hasExpandedPhotoPresentation {
+                        expandedPhotoNotice.allowsHitTesting(false)
+                    }
                     reviewNotice
                 }.padding(12)
             }
@@ -151,15 +203,20 @@ struct GarmentMeasurementResultView: View {
                     pointRecalculation.padding(12).allowsHitTesting(false)
                 }
             }
-        }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, topGap)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var accessibleResult: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                heading.padding(.horizontal, 20)
                 reviewNotice.padding(.horizontal, 20)
                 if isSynthetic { syntheticBadge.padding(.horizontal, 20) }
+                if model.snapshot.hasExpandedPhotoPresentation {
+                    expandedPhotoNotice.padding(.horizontal, 20)
+                }
                 photoEditor(showsEnlargeControl: true)
                 auxiliaryContent.padding(.horizontal, 20)
             }.padding(.top, 16).padding(.bottom, 24)
@@ -180,20 +237,25 @@ struct GarmentMeasurementResultView: View {
             }, onEditingChanged: { isEditingPoint = $0 })
     }
 
-    private var heading: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(model.needsRecalculation ? "수정한 위치로 다시 측정하고 있어요"
-                 : incompleteCount > 0 ? "\(incompleteCount)개 항목을 측정하지 못했어요"
-                 : model.hasPointAdjustments ? "측정 위치를 조정했어요" : "자동으로 실측을 완료했어요")
-                .font(.system(size: headingTitleSize, weight: .bold))
-                .frame(minHeight: 28, alignment: .leading)
-            Text("필요하면 측정 위치와 길이를 수정할 수 있어요")
-                .font(.system(size: headingSubtitleSize, weight: .semibold)).foregroundStyle(.white)
-                .frame(minHeight: 20, alignment: .leading)
+    private func presentPointTutorialIfNeeded() {
+        guard scenePhase == .active, !hasPresentedPointTutorial, image != nil,
+              !model.needsRecalculation, !isSaving, !isEditingPoint,
+              selectedDefinition == nil, manualReview == nil, totalLengthCorrection == nil,
+              !showPhoto, !showAuxiliaryDetails,
+              !model.visibleValues.isEmpty, incompleteCount == 0 else { return }
+        // Synthetic flows stay deterministic and never consume the real first-
+        // result preference. The opt-in exists only in Debug UI fixtures.
+        if isSynthetic {
+            #if DEBUG
+            guard ProcessInfo.processInfo.arguments.contains("--garment-preview-result-tutorial") else { return }
+            #else
+            return
+            #endif
+        } else if hasSeenPointTutorial {
+            return
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("garmentResultHeading")
+        hasPresentedPointTutorial = true
+        showsPointTutorial = true
     }
 
     @ViewBuilder
@@ -224,6 +286,17 @@ struct GarmentMeasurementResultView: View {
         }
     }
 
+    private var expandedPhotoNotice: some View {
+        Text("측정점을 모두 볼 수 있도록 사진 영역을 넓혔어요")
+            .font(.caption2).foregroundStyle(.white)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .frame(maxWidth: 270, alignment: .leading)
+            .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 10))
+            .accessibilityIdentifier("garmentExpandedPhotoNotice")
+    }
+
     private var syntheticBadge: some View {
         Label("화면 미리보기 · 합성 치수", systemImage: "cube.transparent")
             .font(.caption2.weight(.semibold)).foregroundStyle(GarmentCaptureStyle.accent)
@@ -234,7 +307,7 @@ struct GarmentMeasurementResultView: View {
 
     private var pointRecalculation: some View {
         ProgressView("수정한 위치로 다시 측정 중…")
-            .font(.caption).tint(GarmentCaptureStyle.accent)
+            .font(.caption).tint(GarmentCaptureStyle.accent).foregroundStyle(.white)
             .padding(8)
             .background(GarmentCaptureStyle.background.opacity(0.9), in: Capsule())
             .accessibilityIdentifier("garmentPointRecalculation")
@@ -439,9 +512,11 @@ struct GarmentMeasurementResultView: View {
                 .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
                 .accessibilityIdentifier("retryGarmentMeasurement_\(definition.id)")
         case .retake, .none:
-            Button("다시 촬영") { onRetake() }
-                .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
-                .accessibilityIdentifier("retakeForMeasurementFailure_\(definition.id)")
+            if allowsRetake {
+                Button("다시 촬영", action: retakeIfAllowed)
+                    .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
+                    .accessibilityIdentifier("retakeForMeasurementFailure_\(definition.id)")
+            }
         }
     }
 
@@ -457,8 +532,8 @@ struct GarmentMeasurementResultView: View {
                         Button("다시 계산") { model.requestRecalculation() }
                             .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
                             .accessibilityIdentifier("retryGarmentMeasurement_\(group.id)")
-                    } else {
-                        Button("다시 촬영") { onRetake() }
+                    } else if allowsRetake {
+                        Button("다시 촬영", action: retakeIfAllowed)
                             .buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)
                             .accessibilityIdentifier("retakeForMeasurementFailure_\(group.id)")
                     }
@@ -490,6 +565,11 @@ struct GarmentMeasurementResultView: View {
             .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("garmentMeasurementReviewActions")
+    }
+
+    private func retakeIfAllowed() {
+        guard allowsRetake else { return }
+        onRetake()
     }
 
     private func measurementRow(_ value: MeasurementValue) -> some View {
@@ -524,21 +604,46 @@ struct GarmentMeasurementResultView: View {
         isSaving = true
         defer { isSaving = false }
         do {
-            if pendingRecord == nil || pendingRecordRevision != model.persistenceRevision {
-                pendingRecord = try model.makeRecord()
-                pendingRecordRevision = model.persistenceRevision
-                pendingRecordArchived = false
-            }
-            guard let record = pendingRecord else { return }
-            if !pendingRecordArchived {
-                _ = try await archive.save(record)
-                pendingRecordArchived = true
-            }
+            let record = try await savedRecord()
             // A downstream storage failure retries the same confirmed record;
             // the already published immutable archive is not saved twice.
             try await onConfirmedRecord?(record)
             onConfirm()
         } catch { saveError = error.localizedDescription }
+    }
+
+    private func requestExit() {
+        guard onExitRecord != nil, !isSaving, !isEditingPoint, !model.needsRecalculation else { return }
+        let save: () -> Void = { Task { await saveAndExit() } }
+        if let onExitRequested { onExitRequested(save) }
+        else { save() }
+    }
+
+    private func saveAndExit() async {
+        guard let onExitRecord, !isSaving, !isEditingPoint, !model.needsRecalculation else { return }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let record = try await savedRecord()
+            try await onExitRecord(record)
+        } catch { saveError = error.localizedDescription }
+    }
+
+    private func savedRecord() async throws -> SavedMeasurement {
+        if let pendingRecord, pendingRecordRevision == model.persistenceRevision {
+            if !pendingRecordArchived {
+                _ = try await archive.save(pendingRecord)
+                pendingRecordArchived = true
+            }
+            return pendingRecord
+        }
+        let record = try model.makeRecord()
+        pendingRecord = record
+        pendingRecordRevision = model.persistenceRevision
+        pendingRecordArchived = false
+        _ = try await archive.save(record)
+        pendingRecordArchived = true
+        return record
     }
 
     private func recalculate() async {
@@ -559,6 +664,56 @@ private struct MeasurementCaptureFailureGroup: Identifiable {
     let id: String
     var titles: [String]
     let feedback: MeasurementFailureFeedback
+}
+
+/// A first-result guide, rather than an extra step in the capture pipeline.
+/// The illustration is the original 76 × 111 Figma asset, not a symbol substitute.
+private struct GarmentResultPointTutorial: View {
+    let dismiss: () -> Void
+    @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 18
+
+    var body: some View {
+        GeometryReader { geometry in
+            Button(action: dismiss) {
+                ZStack {
+                    Color.black.opacity(0.57)
+                    ViewThatFits(in: .vertical) {
+                        content
+                        ScrollView { content.padding(.vertical, 24) }
+                    }
+                    .padding(.horizontal, 24).padding(.vertical, 44)
+                    .offset(y: -26)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("자동 실측 완료. 직접 측정점을 움직일 수 있어요. 안내 닫기")
+            .accessibilityHint("화면을 탭하면 측정점과 길이를 확인하고 수정할 수 있어요")
+            .accessibilityIdentifier("dismissGarmentResultTutorial")
+        }
+        .ignoresSafeArea()
+        .preferredColorScheme(.light)
+    }
+
+    private var content: some View {
+        VStack(spacing: 22) {
+            Text("자동 실측 완료!")
+                .font(.system(size: titleSize, weight: .bold))
+                .frame(minHeight: 26)
+            Image("MeasurementPointTutorial")
+                .resizable().scaledToFit().frame(width: 76, height: 111)
+            VStack(spacing: 0) {
+                Text("직접 측정점을 움직일 수 있어요")
+                    .font(.callout.bold()).frame(minHeight: 26)
+                Text("화면을 터치해서 확인해주세요!")
+                    .font(.subheadline).frame(minHeight: 26)
+            }
+        }
+        .foregroundStyle(.white).multilineTextAlignment(.center)
+        .shadow(color: .black.opacity(0.25), radius: 2, y: 4)
+        .accessibilityHidden(true)
+    }
 }
 
 enum GarmentMeasurementText {

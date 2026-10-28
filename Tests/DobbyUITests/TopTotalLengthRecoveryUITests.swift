@@ -15,6 +15,7 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         start.tap()
         let shutter = app.buttons["captureGarment"]
         XCTAssertTrue(shutter.waitForExistence(timeout: 10))
+        armSyntheticGarmentCapture(in: app)
         shutter.tap()
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
