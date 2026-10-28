@@ -38,6 +38,7 @@ struct ProductInformationDiscardConfirmation: View {
             confirmationActions
         }
         .padding(16)
+        .frame(maxWidth: .infinity)
         .frame(maxWidth: 358)
         .background(.white, in: RoundedRectangle(cornerRadius: 16))
         .environment(\.colorScheme, .light)
@@ -52,7 +53,7 @@ struct ProductInformationDiscardConfirmation: View {
             styledText("변경사항을 삭제하고 보관함으로 나갈까요?", fontName: "Pretendard-Regular",
                        size: messageFontSize, lineHeight: messageLineHeight)
         }
-        .foregroundStyle(Color("BrandNeutral900"))
+        .foregroundStyle(.black)
         .frame(maxWidth: .infinity)
     }
 
@@ -71,15 +72,16 @@ struct ProductInformationDiscardConfirmation: View {
             .accessibilityIdentifier("product-info.discard-exit")
         }
         .buttonStyle(.plain)
+        .frame(height: 54, alignment: .topLeading)
     }
 
     private func actionLabel(_ title: String) -> some View {
         styledText(title, fontName: "Pretendard-Medium",
                    size: buttonFontSize, lineHeight: buttonLineHeight)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 54)
-            .background(Color("DraftExitSecondaryBackground"), in: Capsule())
-            .contentShape(Capsule())
+            .padding(.horizontal, 28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color("BrandNeutral100"), in: RoundedRectangle(cornerRadius: 60))
+            .contentShape(RoundedRectangle(cornerRadius: 60))
     }
 
     private func styledText(_ value: String, fontName: String, size: CGFloat,
