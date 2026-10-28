@@ -30,11 +30,16 @@ extension ProductCopyPayload {
         검수 중 미쳐 확인치 못한 오염이나 하자가 있을 수 있습니다.
         상세 사진들 원하시면 보내드리니 원하는 부위 dm으로 보내주세요
         교환이나 환불이 어려우니 신중한 구매 부탁드립니다.
-
-        오프라인 매장 소식 @okaoka_vtg
-
-        #okaoka#오카오카#빈티지샵#포항빈티지샵
         """, brand: "LEVI'S", measurements: "총장 59 cm\n허리 단면 43 cm\n허벅지 단면 32 cm",
                     price: channel == .fruits ? "56000" : "65000", length: "59", waist: "43", thigh: "32")
     }
+}
+
+extension ExportProduct {
+    static let demo = ExportProduct(
+        id: "levis-550-example",
+        thumbnailData: nil,
+        marketplacePayload: .sample(for: .fruits),
+        instagramPayload: .sample(for: .instagram)
+    )
 }

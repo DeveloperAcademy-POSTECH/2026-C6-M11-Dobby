@@ -37,7 +37,7 @@ async function deviceKey(deviceToken) {
 
 function appRequest(path, deviceToken) {
   return new Request(`https://worker.example${path}`, {
-    method: "POST",
+    method: path === "/connection" ? "DELETE" : "POST",
     headers: {
       Authorization: `Bearer ${deviceToken}`,
       "X-Dobby-App-Key": "app-key",
@@ -54,7 +54,7 @@ test("연결 해제 시 연결 토큰과 대기 중인 OAuth 요청을 삭제한
   environment.values.set(`pending-device:${key}`, state);
   environment.values.set(`pending:${state}`, JSON.stringify({ deviceKey: key }));
 
-  const response = await worker.fetch(appRequest("/disconnect", deviceToken), environment);
+  const response = await worker.fetch(appRequest("/connection", deviceToken), environment);
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { disconnected: true });
@@ -74,7 +74,7 @@ test("연결 해제 뒤 도착한 OAuth 콜백은 연결 토큰을 저장하지 
   const state = authorizationURL.searchParams.get("state");
   const key = await deviceKey(deviceToken);
 
-  await worker.fetch(appRequest("/disconnect", deviceToken), environment);
+  await worker.fetch(appRequest("/connection", deviceToken), environment);
   const response = await worker.fetch(
     new Request(`https://worker.example/oauth/callback?state=${state}&code=authorization-code`),
     environment,

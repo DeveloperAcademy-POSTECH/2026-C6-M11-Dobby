@@ -4,7 +4,7 @@ import UIKit
 import ImageIO
 
 struct ContentView: View {
-    private enum HomeTab: Hashable { case capture, library }
+    private enum HomeTab: Hashable { case capture, library, settings }
     private struct CreationRequest: Identifiable {
         let id = UUID()
         let productID: UUID?
@@ -76,10 +76,15 @@ struct ContentView: View {
                 .tint(libraryPath.isEmpty
                     ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color("HomeAccent"))
             }
+            Tab("설정", systemImage: "gearshape.fill", value: HomeTab.settings) {
+                NavigationStack {
+                    SettingsView()
+                }
+            }
         }
         // 홈은 중립색, 보관함은 편집 상태에 따른 main의 강조색을 유지합니다.
-        .tint(tab == .capture ? Color.primary : libraryPath.isEmpty
-            ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color("HomeAccent"))
+        .tint(tab == .library && libraryPath.isEmpty
+            ? (libraryIsEditing ? LibraryStyle.editAccent : LibraryStyle.primary) : Color.primary)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
@@ -167,10 +172,12 @@ struct ContentView: View {
             return
         }
         let saved = garments.first { $0.id.uuidString == session.productID }.map { ExportProduct(garment: $0) }
-        let restored = ExportProduct(id: session.productID, imageData: saved?.imageData,
-            fruits: session.payload, instagram: session.payload,
-            detailMeasurements: session.measurementItems?.map { ExportMeasurement(id: $0.id, title: $0.title, value: $0.value) },
-            photoData: saved?.photoData ?? [])
+        let restored = ExportProduct(id: session.productID, thumbnailData: saved?.thumbnailData,
+            marketplacePayload: session.payload, instagramPayload: session.payload,
+            measurements: session.measurementItems?.map {
+                ExportMeasurement(id: $0.id, title: $0.title, value: $0.value)
+            },
+            photos: saved?.photos ?? [])
         routeTask?.cancel()
         if creationRequest != nil {
             // A previous product's copy helper can return while a new draft is

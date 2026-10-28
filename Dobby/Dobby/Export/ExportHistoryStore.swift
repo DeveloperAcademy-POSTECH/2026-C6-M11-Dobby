@@ -10,7 +10,7 @@ final class ExportHistoryStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        openedChannels = Set(ExportChannel.allCases.filter {
+        openedChannels = Set(ExportChannel.availableCases.filter {
             defaults.bool(forKey: $0.openedLinkStorageKey)
         })
     }

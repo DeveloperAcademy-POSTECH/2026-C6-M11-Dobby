@@ -3,8 +3,12 @@ import Foundation
 /// 내보내기 화면에 표시할 채널입니다. rawValue는 방문 기록 식별자로 유지합니다.
 enum ExportChannel: String, CaseIterable, Identifiable, Codable {
     case instagram
+    case naverStore
     case cafe24
     case fruitsFamily
+
+    /// 현재 앱에서 새 내보내기에 사용할 수 있는 채널입니다.
+    static let availableCases: [ExportChannel] = [.instagram, .cafe24, .fruitsFamily]
 
     var id: String { rawValue }
 
@@ -12,6 +16,8 @@ enum ExportChannel: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .instagram:
             return "Instagram으로 내보내기"
+        case .naverStore:
+            return "네이버스토어로 내보내기"
         case .cafe24:
             return "카페24로 내보내기"
         case .fruitsFamily:
@@ -19,10 +25,25 @@ enum ExportChannel: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    var shortTitle: String {
+        switch self {
+        case .instagram:
+            return "인스타그램에 업로드하기"
+        case .naverStore:
+            return "네이버스토어"
+        case .cafe24:
+            return "카페24에 업로드하기"
+        case .fruitsFamily:
+            return "후르츠패밀리에 업로드하기"
+        }
+    }
+
     var imageName: String {
         switch self {
         case .instagram:
             return "InstagramLogo"
+        case .naverStore:
+            return "NaverStoreLogo"
         case .cafe24:
             return "Cafe24Logo"
         case .fruitsFamily:
@@ -41,6 +62,9 @@ enum ExportChannel: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .instagram:
             components.host = "www.instagram.com"
+            components.path = "/"
+        case .naverStore:
+            components.host = "sell.smartstore.naver.com"
             components.path = "/"
         case .cafe24:
             components.host = "eclogin.cafe24.com"

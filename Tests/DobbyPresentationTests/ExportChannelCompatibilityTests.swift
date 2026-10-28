@@ -7,8 +7,11 @@ import XCTest
 final class ExportChannelCompatibilityTests: XCTestCase {
     func testSharedChannelsRoundTripAndTrackSuccessfulGarmentExports() throws {
         let channels = ExportChannel.allCases
-        XCTAssertEqual(Set(channels.map(\.rawValue)), ["instagram", "cafe24", "fruitsFamily"],
+        XCTAssertEqual(Set(channels.map(\.rawValue)), ["instagram", "naverStore", "cafe24", "fruitsFamily"],
             "Existing channel identifiers must remain compatible with saved records")
+        XCTAssertEqual(ExportChannel.availableCases, [.instagram, .cafe24, .fruitsFamily])
+        XCTAssertFalse(ExportChannel.availableCases.contains(.naverStore),
+            "The legacy Naver identifier must not make the removed export feature visible")
         for (index, channel) in channels.enumerated() {
             let data = try JSONEncoder().encode(channel)
             let decoded = try JSONDecoder().decode(ExportChannel.self, from: data)

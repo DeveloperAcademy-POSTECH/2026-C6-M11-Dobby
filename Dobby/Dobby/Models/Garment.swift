@@ -131,7 +131,7 @@ extension Garment {
     /// 상품별 선택 이력과 기존 내보내기 성공 기록을 중복 없이 표시한다.
     var selectedExportChannels: [ExportChannel] {
         let selected = Set(selectedExportChannelRawValues ?? [])
-        return ExportChannel.allCases.filter { selected.contains($0.rawValue) || hasExported(to: $0) }
+        return ExportChannel.availableCases.filter { selected.contains($0.rawValue) || hasExported(to: $0) }
     }
 
     /// 실측에 쓴 사진. 「지점 다시 잡기」 화면이 이 사진과 그 점들을 연다.

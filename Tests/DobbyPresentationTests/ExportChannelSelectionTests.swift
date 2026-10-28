@@ -36,15 +36,15 @@ final class ExportChannelSelectionTests: XCTestCase {
         context.insert(garment)
         try context.save()
 
-        for channel in ExportChannel.allCases.reversed() {
+        for channel in ExportChannel.availableCases.reversed() {
             try GarmentStore.recordSelectedExportChannel(channel, productID: garment.id.uuidString, in: context)
             try GarmentStore.recordSelectedExportChannel(channel, productID: garment.id.uuidString, in: context)
         }
 
-        XCTAssertEqual(garment.selectedExportChannels, ExportChannel.allCases)
+        XCTAssertEqual(garment.selectedExportChannels, ExportChannel.availableCases)
         let values = try XCTUnwrap(garment.selectedExportChannelRawValues)
         XCTAssertEqual(values.count, 3)
-        XCTAssertEqual(Set(values), Set(ExportChannel.allCases.map(\.rawValue)))
+        XCTAssertEqual(Set(values), Set(ExportChannel.availableCases.map(\.rawValue)))
     }
 
     func testUnknownStoredValuesAndDuplicateEntriesDoNotCreateExtraBadges() {
@@ -78,7 +78,7 @@ final class ExportChannelSelectionTests: XCTestCase {
             context.insert(untouched)
             try context.save()
 
-            for channel in ExportChannel.allCases.reversed() {
+            for channel in ExportChannel.availableCases.reversed() {
                 try GarmentStore.recordSelectedExportChannel(channel, productID: selectedID.uuidString, in: context)
             }
             try GarmentStore.recordSelectedExportChannel(.instagram, productID: selectedID.uuidString, in: context)
@@ -95,7 +95,7 @@ final class ExportChannelSelectionTests: XCTestCase {
             let untouched = try XCTUnwrap(garments.first { $0.id == untouchedID })
 
             XCTAssertEqual(garments.count, 2)
-            XCTAssertEqual(selected.selectedExportChannels, ExportChannel.allCases)
+            XCTAssertEqual(selected.selectedExportChannels, ExportChannel.availableCases)
             XCTAssertEqual(selected.selectedExportChannelRawValues?.count, 3)
             XCTAssertTrue(selected.exports.isEmpty)
             XCTAssertNil(untouched.selectedExportChannelRawValues)

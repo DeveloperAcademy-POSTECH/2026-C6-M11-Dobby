@@ -83,7 +83,7 @@ struct GarmentInputCompletionTests {
         #expect(GarmentInformationValidation.isValid(garment))
         try GarmentInputCompletion.save(garment: garment, drafts: &drafts) {}
         #expect(garment.price == 40000)
-        #expect(ExportProduct(garment: garment, loadPhoto: { _ in nil }).fruits.price == "40000")
+        #expect(ExportProduct(garment: garment, loadPhoto: { _ in nil }).marketplacePayload.price == "40000")
     }
 
     @Test func doneConsumesFocusedDraftOnceAndPreservesAutomaticOriginal() throws {
@@ -97,9 +97,9 @@ struct GarmentInputCompletionTests {
         #expect(chest.valueCm == 55.2 && !chest.isEdited)
         #expect(garment.lengthCm == 67.2 && garment.chestCm == 55.2)
         let export = ExportProduct(garment: garment, loadPhoto: { _ in nil })
-        #expect(export.copyMeasurements.map(\.id) == ["chestWidth", "totalLength"])
-        #expect(export.fruits.length == "67.2")
-        #expect(export.fruits.measurements == "가슴 55.2 cm\n총장 67.2 cm")
+        #expect(export.exportMeasurements.map(\.id) == ["chestWidth", "totalLength"])
+        #expect(export.marketplacePayload.length == "67.2")
+        #expect(export.marketplacePayload.measurements == "가슴 55.2 cm\n총장 67.2 cm")
     }
 
     @Test func successfulSaveTruncatesFromSecondDecimalWithoutRounding() throws {
@@ -133,7 +133,7 @@ struct GarmentInputCompletionTests {
             }
             #expect(length.valueCm == 67.2 && length.autoValueCm == 68.12345)
             #expect(chest.valueCm == 55.2 && !chest.isEdited)
-            #expect(ExportProduct(garment: garment, loadPhoto: { _ in nil }).fruits.length == "67.2")
+            #expect(ExportProduct(garment: garment, loadPhoto: { _ in nil }).marketplacePayload.length == "67.2")
         }
     }
 
@@ -287,8 +287,8 @@ struct GarmentInputCompletionTests {
         #expect(saved.measurement("sleeveLengthRight")?.label == "오른쪽 소매")
         #expect(saved.sleeveCm == 63.5)
         let exported = ExportProduct(garment: saved, loadPhoto: { _ in nil })
-        #expect(exported.copyMeasurements.map(\.id) == ["sleeveLengthRight"])
-        #expect(exported.copyMeasurements.first?.value == "63.5")
+        #expect(exported.exportMeasurements.map(\.id) == ["sleeveLengthRight"])
+        #expect(exported.exportMeasurements.first?.value == "63.5")
     }
 
     @Test func usableLeftCanCompleteWhileInvalidRightOriginalRemainsStored() throws {

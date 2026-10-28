@@ -41,7 +41,8 @@ async function login(call) {
 function successMeta(url) {
   if (url.host === "api.instagram.com") return { access_token: "short-secret" };
   if (url.pathname === "/access_token") return { access_token: "long-secret", expires_in: 5184000 };
-  if (url.pathname.endsWith("/me")) return { user_id: "123", username: "testshop", account_type: "BUSINESS" };
+  if (url.pathname.endsWith("/me")) return { user_id: "123", username: "testshop", account_type: "BUSINESS",
+    profile_picture_url: "https://cdn.example/profile.jpg" };
   if (url.pathname.endsWith("/media")) return { id: "container" };
   if (url.pathname.endsWith("/container")) return { status_code: "FINISHED" };
   if (url.pathname.endsWith("/media_publish")) return { id: "published" };
@@ -78,6 +79,7 @@ test("successful callback is single-use, binds to originating installation and n
   assert.equal((await call(`/oauth/callback?code=test-code&state=${state}`)).status, 400);
   const own = await (await call("/account")).text();
   assert.equal(JSON.parse(own).account.username, "testshop");
+  assert.equal(JSON.parse(own).account.profilePictureURL, "https://cdn.example/profile.jpg");
   assert.ok(!own.includes("secret"));
   assert.equal((await (await call("/account", "GET", undefined, "b".repeat(64))).json()).connected, false);
 });

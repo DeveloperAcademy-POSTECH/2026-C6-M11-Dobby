@@ -8,7 +8,6 @@ export default {
       const url = new URL(request.url);
       const appEndpoint = url.pathname === "/oauth/start"
         || url.pathname === "/connection"
-        || url.pathname === "/disconnect"
         || url.pathname === "/products";
       if (appEndpoint && !validAppKey(request, env)) {
         return json({ error: "unauthorized", message: "인증되지 않은 앱 요청입니다." }, 401);
@@ -16,7 +15,7 @@ export default {
       if (request.method === "POST" && url.pathname === "/oauth/start") return await startOAuth(request, url, env);
       if (request.method === "GET" && url.pathname === "/oauth/callback") return await finishOAuth(url, env);
       if (request.method === "GET" && url.pathname === "/connection") return await connection(request, env);
-      if (request.method === "POST" && url.pathname === "/disconnect") return await disconnect(request, env);
+      if (request.method === "DELETE" && url.pathname === "/connection") return await disconnect(request, env);
       if (request.method === "POST" && url.pathname === "/products") return await createProduct(request, env);
       return json({ error: "not_found" }, 404);
     } catch (error) {
@@ -109,7 +108,7 @@ async function connection(request, env) {
 
 async function disconnect(request, env) {
   const deviceToken = bearer(request);
-  if (!deviceToken) return json({ error: "device_token_required" }, 400);
+  if (!deviceToken) return json({ error: "invalid_request" }, 400);
 
   const deviceKey = await tokenKey(deviceToken);
   const pendingDeviceKey = `pending-device:${deviceKey}`;
@@ -132,10 +131,16 @@ async function createProduct(request, env) {
   if (!input.productName || !Number.isInteger(input.price) || input.price < 0) {
     return json({ error: "invalid_product", message: "상품명과 판매가를 확인해 주세요." }, 400);
   }
+  const imagesBase64 = Array.isArray(input.imagesBase64)
+    ? input.imagesBase64
+    : input.imageBase64 ? [input.imageBase64] : [];
+  if (imagesBase64.length > 20 || imagesBase64.some((image) => typeof image !== "string" || !image)) {
+    return json({ error: "invalid_images", message: "상품 사진은 최대 20장까지 등록할 수 있습니다." }, 400);
+  }
   let imagePath = null;
-  if (input.imageBase64) {
+  if (imagesBase64.length) {
     const uploaded = await cafe24API(token, env, "/api/v2/admin/products/images", "POST", {
-      requests: [{ image: input.imageBase64 }],
+      requests: [{ image: imagesBase64[0] }],
     });
     imagePath = uploaded.images?.[0]?.path || uploaded.image?.path || null;
   }
@@ -158,6 +163,14 @@ async function createProduct(request, env) {
       request: {
         image_upload_type: "A",
         detail_image: imagePath,
+      },
+    });
+  }
+  if (imagesBase64.length > 1) {
+    await cafe24API(token, env, `/api/v2/admin/products/${product.product_no}/additionalimages`, "POST", {
+      shop_no: 1,
+      request: {
+        additional_image: imagesBase64.slice(1),
       },
     });
   }
