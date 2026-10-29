@@ -122,8 +122,8 @@ struct ProductCreationFlowView: View {
             }
         }
         .environment(\.modelContext, context)
-        .tint(path.last == .photoSelection ? .black
-            : path.last == .information || path.last == .completed ? .orange : .white)
+        .tint(path.last == .photoSelection || path.last == .information ? .black
+            : path.last == .completed ? .orange : .white)
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)
                 .environment(\.modelContext, context)
