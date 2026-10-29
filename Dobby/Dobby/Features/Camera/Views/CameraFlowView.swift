@@ -176,7 +176,7 @@ struct CameraFlowView: View {
                 Button(action: onSelectPhotos) { selectionLabel }
             } else {
                 NavigationLink {
-                    ProductPhotoSelectionView(model: model, onExit: onExit, onComplete: onComplete)
+                    ProductPhotoSelectionView(model: model, onComplete: onComplete)
                         .onAppear { onSelectionVisibilityChange(true) }
                         .onDisappear { onSelectionVisibilityChange(false) }
                 } label: { selectionLabel }

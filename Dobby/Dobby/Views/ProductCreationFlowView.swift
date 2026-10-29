@@ -90,7 +90,7 @@ struct ProductCreationFlowView: View {
                                     onExit: requestDraftExit,
                                     onComplete: receivePhotos)
                             case .photoSelection:
-                                ProductPhotoSelectionView(model: photoModel, onExit: requestDraftExit,
+                                ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
                                     onComplete: receivePhotos)
                             case .information:
                                 if resumeProductID == nil {
@@ -173,6 +173,12 @@ struct ProductCreationFlowView: View {
                 .font(.caption).frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
                 .accessibilityIdentifier("product-flow.fixture")
         }
+    }
+
+    private func returnToDetailCapture() {
+        guard path.last == .photoSelection else { return }
+        // Keep the current photo model and camera session alive for additional captures.
+        path.removeLast()
     }
 
     private func receiveMeasurement(_ record: SavedMeasurement) async throws {
