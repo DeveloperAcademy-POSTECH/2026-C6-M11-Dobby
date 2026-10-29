@@ -261,7 +261,39 @@ final class ProductDraftResumeTests: XCTestCase {
         attachScreenshot(app, name: "draft-restored-detail-originals")
     }
 
-    func testSelectionAndInformationDraftsRestoreExactlyAndCompleteTheSameProduct() {
+    func testSelectionOrderSurvivesReturningToDetailsAndRelaunch() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openMeasurementResult(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        app.buttons["confirmGarmentMeasurement"].tap()
+        captureTwoDetails(in: app)
+        app.buttons["camera.selectPhotos"].tap()
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
+        for index in [0, 2, 0, 1] { selectionControl(index, in: app).tap() }
+        assertSelectionOrder(in: app)
+        returnFromSelectionToDetails(in: app)
+        let productID = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
+        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
+        XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists)
+        app.buttons["camera.selectPhotos"].tap()
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "camera.grid.select.")).count, 3)
+        assertSelectionOrder(in: app)
+        app.buttons["camera.grid.preview.2"].tap()
+        let toggle = app.buttons["camera.selectionPreviewToggle"]
+        waitEnabled(toggle)
+        XCTAssertEqual(toggle.value as? String, "1번째 선택")
+        XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요."].exists)
+        app.buttons["camera.closeSelectionPreview"].tap()
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 5))
+        assertSelectionOrder(in: app)
+    }
+
+    func testSelectionSurvivesDetailReturnAndDraftResumeThenCompletesTheSameProduct() {
         continueAfterFailure = false
         let app = fixtureApp()
         let suffix = String(UUID().uuidString.prefix(8))
@@ -285,13 +317,17 @@ final class ProductDraftResumeTests: XCTestCase {
         selectionControl(0, in: app).tap()
         XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
         XCTAssertFalse(completePhotos.isEnabled)
-        cancelExitAndStay(title: "제품 사진 선택", app: app)
+        returnFromSelectionToDetails(in: app)
+        app.buttons["camera.selectPhotos"].tap()
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
         XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
         XCTAssertFalse(completePhotos.isEnabled)
-        let productID = saveDraftViaHome(stage: "제품 사진 선택 단계", app: app)
+        returnFromSelectionToDetails(in: app)
+        let productID = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
         attachScreenshot(app, name: "draft-library-photo-selection")
 
-        relaunchAndResume(productID: productID, stage: "제품 사진 선택 단계", app: app)
+        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
+        app.buttons["camera.selectPhotos"].tap()
         assertResumedStage("제품 사진 선택", app: app)
         XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
         XCTAssertFalse(completePhotos.isEnabled)
@@ -302,10 +338,14 @@ final class ProductDraftResumeTests: XCTestCase {
 
         for index in [2, 0, 1] { selectionControl(index, in: app).tap() }
         assertSelectionOrder(in: app)
-        cancelExitAndStay(title: "제품 사진 선택", app: app)
+        returnFromSelectionToDetails(in: app)
+        app.buttons["camera.selectPhotos"].tap()
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
         assertSelectionOrder(in: app)
-        XCTAssertEqual(saveDraftViaHome(stage: "제품 사진 선택 단계", app: app), productID)
-        relaunchAndResume(productID: productID, stage: "제품 사진 선택 단계", app: app)
+        returnFromSelectionToDetails(in: app)
+        XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
+        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
+        app.buttons["camera.selectPhotos"].tap()
         assertResumedStage("제품 사진 선택", app: app)
         assertSelectionOrder(in: app)
         XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요"].exists)
@@ -374,6 +414,16 @@ final class ProductDraftResumeTests: XCTestCase {
         reveal(row, in: app)
         let labels = [row.label] + row.descendants(matching: .staticText).allElementsBoundByIndex.map(\.label)
         XCTAssertTrue(labels.contains { $0.contains("67cm") })
+    }
+
+    private func returnFromSelectionToDetails(in app: XCUIApplication) {
+        let back = app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)
+        XCTAssertNotNil(back)
+        back?.tap()
+        XCTAssertTrue(app.buttons["camera.captureDetail"].waitForExistence(timeout: 10))
+        XCTAssertFalse(exitConfirmation(in: app).exists)
+        XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists)
     }
 
     private func fixtureApp() -> XCUIApplication {
