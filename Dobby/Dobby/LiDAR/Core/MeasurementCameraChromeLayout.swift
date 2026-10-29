@@ -11,6 +11,67 @@ nonisolated struct MeasurementCameraChromeLayout: Sendable, Equatable {
     var guidanceCenterX: Double? { guidanceFrame.map { $0.x + $0.width / 2 } }
     var guidanceCenterY: Double? { guidanceFrame.map { $0.y + $0.height / 2 } }
 
+    nonisolated struct Controls: Sendable, Equatable {
+        let shutter: CameraPhotoViewport
+        let more: CameraPhotoViewport
+        let accessory: CameraPhotoViewport
+    }
+
+    /// Keep the row entirely below the photograph when it fits. Tall ratios
+    /// instead put it entirely inside the photograph, clear of its lower edge.
+    /// This moves chrome only: the photograph and its sensor transform stay intact.
+    static func controls(containerWidth: Double, containerHeight: Double,
+                         photo: CameraPhotoViewport, bottomSafeAreaInset: Double = 0,
+                         diameter: Double = 92, edgeClearance: Double = 16) -> Controls? {
+        guard [containerWidth, containerHeight, photo.x, photo.y, photo.width, photo.height,
+               bottomSafeAreaInset, diameter, edgeClearance].allSatisfy(\.isFinite),
+              containerWidth > 0, containerHeight > 0, bottomSafeAreaInset >= 0,
+              diameter >= 44, edgeClearance >= 0,
+              photo.x >= 0, photo.y >= 0, photo.width > 0, photo.height > 0,
+              photo.x + photo.width <= containerWidth,
+              photo.y + photo.height <= containerHeight else { return nil }
+        let side = 48.0, radius = diameter / 2
+        let usableBottom = containerHeight - bottomSafeAreaInset
+        let photoRight = photo.x + photo.width, photoBottom = photo.y + photo.height
+        let centerX: Double, centerY: Double
+        let moreX: Double, moreY: Double, accessoryX: Double, accessoryY: Double
+        if containerWidth <= containerHeight {
+            guard containerWidth >= diameter + side * 2 + edgeClearance * 4 else { return nil }
+            centerX = containerWidth / 2
+            if usableBottom - photoBottom >= diameter + edgeClearance * 2 {
+                centerY = (photoBottom + usableBottom) / 2
+            } else {
+                centerY = min(photoBottom, usableBottom) - edgeClearance - radius
+                guard centerY - radius >= photo.y + edgeClearance else { return nil }
+            }
+            let sideCenter = max(side / 2 + edgeClearance,
+                min(72, centerX - radius - edgeClearance - side / 2))
+            accessoryX = sideCenter; moreX = containerWidth - sideCenter
+            accessoryY = centerY; moreY = centerY
+        } else {
+            // The existing landscape viewport reserves a sidebar. Anchor its
+            // centre to the actual photo edge so square/tall ratios follow it.
+            guard containerWidth - photoRight >= diameter + edgeClearance * 2,
+                  usableBottom >= diameter + side * 2 + edgeClearance * 4 else { return nil }
+            centerX = (photoRight + containerWidth) / 2
+            centerY = usableBottom / 2
+            let offset = radius + side / 2 + edgeClearance
+            moreX = centerX; accessoryX = centerX
+            moreY = centerY + offset; accessoryY = centerY - offset
+        }
+        let shutter = CameraPhotoViewport(x: centerX - radius, y: centerY - radius,
+            width: diameter, height: diameter)
+        let more = CameraPhotoViewport(x: moreX - side / 2, y: moreY - side / 2, width: side, height: side)
+        let accessory = CameraPhotoViewport(x: accessoryX - side / 2,
+            y: accessoryY - side / 2, width: side, height: side)
+        guard [shutter, more, accessory].allSatisfy({ frame in
+            frame.x >= edgeClearance && frame.y >= edgeClearance
+                && frame.x + frame.width <= containerWidth - edgeClearance
+                && frame.y + frame.height <= usableBottom - edgeClearance
+        }) else { return nil }
+        return Controls(shutter: shutter, more: more, accessory: accessory)
+    }
+
     /// The measurement screen may show the tall photograph behind the shutter
     /// chrome. Fit the whole selected photo inside a 9:16 camera canvas, rather
     /// than reserving a second empty 192pt region in its pixel transform.
@@ -44,9 +105,8 @@ nonisolated struct MeasurementCameraChromeLayout: Sendable, Equatable {
         return .init(x: x, y: y, width: width, height: height)
     }
 
-    /// Match the detail camera's 114pt bottom controls row. Safe-area padding
-    /// belongs below the row, so the shutter centre is 57pt above that boundary.
-    /// Ratios never move this anchor or alter the calibrated photograph.
+    /// Compatibility entry point. Views pass their actual photo to controls()
+    /// so the selected crop, rather than the native source ratio, drives placement.
     static func shutterFrame(containerWidth: Double, containerHeight: Double,
                              sourceAspectRatio: Double = 0.75,
                              diameter: Double = 92, edgeClearance: Double = 8,
@@ -57,21 +117,15 @@ nonisolated struct MeasurementCameraChromeLayout: Sendable, Equatable {
               containerWidth > 0, containerHeight > 0, sourceAspectRatio > 0,
               diameter >= 44, edgeClearance >= 0, landscapeControlsWidth >= 0,
               bottomSafeAreaInset >= 0 else { return nil }
-        let controlsHeight = 114.0
-        guard diameter <= controlsHeight,
-              containerWidth >= diameter + 48 * 2 + 16 * 4 else { return nil }
-        let radius = diameter / 2
-        let centerX = containerWidth / 2
-        let centerY = containerHeight - bottomSafeAreaInset - controlsHeight / 2
-        guard centerX - radius >= 8, centerX + radius <= containerWidth - 8,
-              centerY - radius >= 16,
-              centerY + radius <= containerHeight - bottomSafeAreaInset else { return nil }
-        return .init(x: centerX - radius, y: centerY - radius, width: diameter, height: diameter)
+        guard let photo = photoViewport(containerWidth: containerWidth, containerHeight: containerHeight,
+            photoAspectRatio: sourceAspectRatio) else { return nil }
+        return controls(containerWidth: containerWidth, containerHeight: containerHeight,
+            photo: photo, bottomSafeAreaInset: bottomSafeAreaInset,
+            diameter: diameter, edgeClearance: max(16, edgeClearance))?.shutter
     }
 
-    /// The fixed shutter row remains independent of the selected aspect ratio.
-    /// The zoom follows the photo's lower edge until it reaches that row's
-    /// safety margin. In landscape it stays in the photo, left of the sidebar.
+    /// Zoom follows the photograph and yields space to a shutter that overlaps
+    /// the same horizontal region. A sidebar shutter does not shorten the photo.
     static func layout(containerWidth: Double, containerHeight: Double,
                        photo: CameraPhotoViewport, zoomDiameter: Double = 48,
                        guidanceHeight: Double = 44,
@@ -97,8 +151,11 @@ nonisolated struct MeasurementCameraChromeLayout: Sendable, Equatable {
                   shutter.y + shutter.height <= containerHeight else { return nil }
         }
         let footerBottom = portrait ? containerHeight - bottomControlsHeight - 12 : containerHeight
-        let shutterBottom = shutter.map { $0.y - 12 } ?? footerBottom
-        let usableBottom = min(footerBottom, shutterBottom)
+        let intersectsShutter = shutter.map { $0.x < photoRight && $0.x + $0.width > photo.x } ?? false
+        let usableBottom: Double
+        if let shutter {
+            usableBottom = intersectsShutter ? shutter.y - 12 : photoBottom
+        } else { usableBottom = footerBottom }
         let right = min(photoRight, usableRight), bottom = min(photoBottom, usableBottom)
         let width = right - photo.x, height = bottom - photo.y
         guard width.isFinite, height.isFinite, width >= zoomDiameter, height >= zoomDiameter else { return nil }

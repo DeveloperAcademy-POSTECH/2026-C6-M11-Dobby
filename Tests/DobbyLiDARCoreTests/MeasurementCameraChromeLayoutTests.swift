@@ -2,54 +2,92 @@ import XCTest
 @testable import DobbyLiDARCore
 
 final class MeasurementCameraChromeLayoutTests: XCTestCase {
-    func testDefaultShutterMatchesDetailCameraBottomRowAndSafeArea() throws {
-        let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 402,
-            containerHeight: 874, bottomSafeAreaInset: 34))
-        XCTAssertEqual(shutter, .init(x: 155, y: 737, width: 92, height: 92))
-        XCTAssertEqual(shutter.y + shutter.height / 2, 874 - 34 - 114 / 2)
-        for aspect in [0.75, 1, 9.0 / 16] {
+    func testPortraitControlsFollowEachSelectedPhotoRatio() throws {
+        var rowCenters: [Double] = []
+        var zoomCenters: [Double] = []
+        for aspect in [1.0, 0.75, 9.0 / 16] {
+            let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: 402,
+                containerHeight: 874, photoAspectRatio: aspect))
+            let originalPhoto = photo
+            let controls = try XCTUnwrap(MeasurementCameraChromeLayout.controls(containerWidth: 402,
+                containerHeight: 874, photo: photo, bottomSafeAreaInset: 34))
+            let chrome = try XCTUnwrap(MeasurementCameraChromeLayout.layout(containerWidth: 402,
+                containerHeight: 874, photo: photo, shutter: controls.shutter))
+            let rowCenter = controls.shutter.y + controls.shutter.height / 2
+            rowCenters.append(rowCenter)
+            zoomCenters.append(chrome.zoomCenterY)
+            XCTAssertEqual(controls.more.y + controls.more.height / 2, rowCenter)
+            XCTAssertEqual(controls.accessory.y + controls.accessory.height / 2, rowCenter)
             XCTAssertEqual(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 402,
-                containerHeight: 874, sourceAspectRatio: aspect, bottomSafeAreaInset: 34), shutter)
+                containerHeight: 874, sourceAspectRatio: aspect, bottomSafeAreaInset: 34), controls.shutter)
+            XCTAssertEqual(photo, originalPhoto, "Moving the controls must preserve the calibrated photograph")
         }
+        XCTAssertEqual(Set(rowCenters).count, 3)
+        XCTAssertEqual(Set(zoomCenters).count, 3)
+        XCTAssertEqual(zoomCenters[0], 539.25, accuracy: 1e-10)
+        XCTAssertEqual(zoomCenters[1], 623, accuracy: 1e-10)
+        XCTAssertEqual(zoomCenters[2], 630.6666666666666, accuracy: 1e-10)
     }
 
-    func testOneFixedDetailShutterRowAcrossPhonesAndTablets() throws {
+    func testPortraitControlsStayWhollyBelowOrInsideThePhotoAcrossPhonesAndTablets() throws {
         for (width, height) in [(375.0, 667.0), (390, 844), (402, 874), (430, 932),
                                 (768, 1024), (1024, 1366)] {
             for safeArea in [0.0, 21, 34] {
-                let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: width,
-                    containerHeight: height, bottomSafeAreaInset: safeArea))
-                XCTAssertEqual(shutter.x + shutter.width / 2, width / 2)
-                XCTAssertEqual(shutter.y + shutter.height / 2, height - safeArea - 57)
-                XCTAssertGreaterThanOrEqual(shutter.x, 0)
-                XCTAssertGreaterThanOrEqual(shutter.y, 0)
-                XCTAssertLessThanOrEqual(shutter.x + shutter.width, width)
-                XCTAssertLessThanOrEqual(shutter.y + shutter.height, height - safeArea)
-                XCTAssertEqual(shutter.width, 92)
+                for aspect in [1.0, 0.75, 9.0 / 16] {
+                    let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: width,
+                        containerHeight: height, photoAspectRatio: aspect))
+                    let controls = try XCTUnwrap(MeasurementCameraChromeLayout.controls(containerWidth: width,
+                        containerHeight: height, photo: photo, bottomSafeAreaInset: safeArea))
+                    let shutter = controls.shutter
+                    XCTAssertEqual(shutter.x + shutter.width / 2, width / 2)
+                    XCTAssertEqual(shutter.width, 92)
+                    XCTAssertEqual(controls.more.width, 48)
+                    XCTAssertEqual(controls.accessory.width, 48)
+                    let photoBottom = photo.y + photo.height
+                    let usableBottom = height - safeArea
+                    if usableBottom - photoBottom >= 92 + 16 * 2 {
+                        XCTAssertGreaterThanOrEqual(shutter.y, photoBottom + 16 - 1e-9)
+                        XCTAssertEqual(shutter.y + 46, (photoBottom + usableBottom) / 2, accuracy: 1e-10)
+                    } else {
+                        XCTAssertGreaterThanOrEqual(shutter.y, photo.y + 16 - 1e-9)
+                        XCTAssertLessThanOrEqual(shutter.y + shutter.height, photoBottom - 16 + 1e-9)
+                    }
+                    for frame in [shutter, controls.more, controls.accessory] {
+                        XCTAssertGreaterThanOrEqual(frame.x, 16)
+                        XCTAssertGreaterThanOrEqual(frame.y, 16)
+                        XCTAssertLessThanOrEqual(frame.x + frame.width, width - 16 + 1e-9)
+                        XCTAssertLessThanOrEqual(frame.y + frame.height, usableBottom - 16 + 1e-9)
+                    }
+                    XCTAssertLessThanOrEqual(controls.accessory.x + controls.accessory.width, shutter.x - 16 + 1e-9)
+                    XCTAssertGreaterThanOrEqual(controls.more.x, shutter.x + shutter.width + 16 - 1e-9)
+                }
             }
         }
     }
 
-    func testCompactShutterRetainsTheSameDetailCameraBottomAnchor() throws {
-        let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 375,
-            containerHeight: 667))
-        XCTAssertEqual(shutter.y + shutter.height / 2, 610, accuracy: 1e-10)
-        XCTAssertEqual(shutter.x + shutter.width / 2, 187.5)
+    func testCompactTallPhotoKeepsTheShutterInsideInsteadOfCrossingThePhotoBorder() throws {
+        let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: 375,
+            containerHeight: 667, photoAspectRatio: 9.0 / 16))
+        let controls = try XCTUnwrap(MeasurementCameraChromeLayout.controls(containerWidth: 375,
+            containerHeight: 667, photo: photo, bottomSafeAreaInset: 34))
+        XCTAssertEqual(controls.shutter.y + controls.shutter.height, photo.y + photo.height - 16, accuracy: 1e-10)
+        XCTAssertEqual(controls.shutter.x + 46, 187.5)
     }
 
-    func testZoomStaysAboveTheDetailAlignedShutterWhileKeepingItsTouchAreaAndPhotoCoordinates() throws {
+    func testZoomStaysAboveTheResponsiveShutterWithoutChangingItsTouchAreaOrPhotoCoordinates() throws {
         for (width, height) in [(375.0, 667.0), (390, 844), (402, 874), (430, 932), (1024, 1366)] {
-            let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: width,
-                containerHeight: height))
             for aspect in [0.75, 1, 9.0 / 16] {
                 let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: width,
                     containerHeight: height, photoAspectRatio: aspect))
                 let originalPhoto = photo
+                let controls = try XCTUnwrap(MeasurementCameraChromeLayout.controls(containerWidth: width,
+                    containerHeight: height, photo: photo, bottomSafeAreaInset: 34))
                 let chrome = try XCTUnwrap(MeasurementCameraChromeLayout.layout(containerWidth: width,
-                    containerHeight: height, photo: photo, shutter: shutter))
-                XCTAssertLessThanOrEqual(chrome.zoomFrame.y + chrome.zoomFrame.height, shutter.y - 12 + 1e-9)
+                    containerHeight: height, photo: photo, shutter: controls.shutter))
+                XCTAssertLessThanOrEqual(chrome.zoomFrame.y + chrome.zoomFrame.height, controls.shutter.y - 12 + 1e-9)
                 XCTAssertEqual(chrome.zoomFrame.width, 48)
                 XCTAssertGreaterThanOrEqual(chrome.zoomFrame.y, photo.y)
+                XCTAssertLessThanOrEqual(chrome.zoomFrame.y + chrome.zoomFrame.height, photo.y + photo.height)
                 XCTAssertEqual(photo, originalPhoto)
                 if let guidance = chrome.guidanceFrame {
                     XCTAssertEqual(guidance.y + guidance.height + 12, chrome.zoomFrame.y, accuracy: 1e-10)
@@ -58,56 +96,72 @@ final class MeasurementCameraChromeLayoutTests: XCTestCase {
         }
     }
 
-    func testLandscapeShutterMatchesTheDetailCameraBottomRow() throws {
+    func testLandscapeControlsFollowThePhotoSidebarWithoutShorteningTheZoomArea() throws {
         for (width, height) in [(874.0, 402.0), (667, 375), (1366, 1024)] {
-            let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: width,
-                containerHeight: height, sourceAspectRatio: 4.0 / 3, bottomSafeAreaInset: 21))
-            XCTAssertEqual(shutter.x + 46, width / 2)
-            XCTAssertEqual(shutter.y + 46, height - 21 - 57)
+            var shutterCenters: [Double] = []
             for aspect in [4.0 / 3, 1, 16.0 / 9] {
                 let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: width,
                     containerHeight: height, photoAspectRatio: aspect))
+                let controls = try XCTUnwrap(MeasurementCameraChromeLayout.controls(containerWidth: width,
+                    containerHeight: height, photo: photo, bottomSafeAreaInset: 21))
+                let shutter = controls.shutter
+                let photoRight = photo.x + photo.width
+                let centerX = shutter.x + 46
+                shutterCenters.append(centerX)
+                XCTAssertEqual(centerX, (photoRight + width) / 2, accuracy: 1e-10)
+                XCTAssertEqual(shutter.y + 46, (height - 21) / 2)
+                XCTAssertGreaterThanOrEqual(shutter.x, photoRight + 16 - 1e-9)
+                XCTAssertLessThanOrEqual(controls.accessory.y + 48, shutter.y - 16 + 1e-9)
+                XCTAssertGreaterThanOrEqual(controls.more.y, shutter.y + 92 + 16 - 1e-9)
+                for frame in [shutter, controls.more, controls.accessory] {
+                    XCTAssertGreaterThanOrEqual(frame.x, photoRight + 16 - 1e-9)
+                    XCTAssertGreaterThanOrEqual(frame.y, 16)
+                    XCTAssertLessThanOrEqual(frame.x + frame.width, width - 16 + 1e-9)
+                    XCTAssertLessThanOrEqual(frame.y + frame.height, height - 21 - 16 + 1e-9)
+                }
                 let chrome = try XCTUnwrap(MeasurementCameraChromeLayout.layout(containerWidth: width,
                     containerHeight: height, photo: photo, shutter: shutter))
-                XCTAssertLessThanOrEqual(chrome.zoomFrame.y + chrome.zoomFrame.height, shutter.y - 12 + 1e-9)
-                if let guidance = chrome.guidanceFrame {
-                    XCTAssertLessThanOrEqual(guidance.y + guidance.height, shutter.y - 12 + 1e-9)
-                }
+                XCTAssertEqual(chrome.zoomCenterY, photo.y + photo.height - 40, accuracy: 1e-10)
+                XCTAssertLessThanOrEqual(chrome.zoomFrame.x + chrome.zoomFrame.width, photoRight)
             }
+            XCTAssertGreaterThan(Set(shutterCenters).count, 1)
         }
     }
 
-    func testShutterRejectsInvalidDimensionsAndAWindowThatCannotFitIt() {
+    func testControlsRejectInvalidDimensionsOrAWindowThatCannotFitAllTouchTargets() {
+        let photo = CameraPhotoViewport(x: 0, y: 127, width: 402, height: 536)
         for invalid in [Double.nan, .infinity, -.infinity, -1, 0] {
-            XCTAssertNil(MeasurementCameraChromeLayout.shutterFrame(containerWidth: invalid, containerHeight: 874))
-            XCTAssertNil(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 402, containerHeight: invalid))
+            XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: invalid, containerHeight: 874, photo: photo))
+            XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: 402, containerHeight: invalid, photo: photo))
             XCTAssertNil(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 402,
                 containerHeight: 874, sourceAspectRatio: invalid))
         }
-        XCTAssertNil(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 402, containerHeight: 874, diameter: 20))
-        XCTAssertNil(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 402, containerHeight: 874, edgeClearance: .nan))
-        XCTAssertNil(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 120, containerHeight: 200))
-        XCTAssertNil(MeasurementCameraChromeLayout.layout(containerWidth: 402, containerHeight: 874,
-            photo: .init(x: 0, y: 127, width: 402, height: 536),
-            shutter: .init(x: 155, y: .nan, width: 92, height: 92)))
-    }
-
-    func testSquareMovesTheZoomUpWhileFourByThreeAndTallPhotoStayAboveTheFixedShutterRow() throws {
-        let standard = try layout(width: 402, height: 874, aspect: 0.75)
-        let square = try layout(width: 402, height: 874, aspect: 1)
-        let tall = try layout(width: 402, height: 874, aspect: 9.0 / 16)
-        XCTAssertEqual(standard.zoomCenterY, 623, accuracy: 1e-10)
-        XCTAssertEqual(square.zoomCenterY, 539.25, accuracy: 1e-10)
-        XCTAssertEqual(tall.zoomCenterY, 646)
-        XCTAssertEqual(standard.zoomCenterX, 201)
-        XCTAssertEqual(square.zoomCenterX, 201)
-        XCTAssertLessThan(square.zoomCenterY, standard.zoomCenterY)
-        for position in [standard, square, tall] {
-            XCTAssertLessThanOrEqual(position.zoomFrame.y + position.zoomFrame.height, 874 - 192 - 12)
+        for invalidPhoto in [CameraPhotoViewport(x: -1, y: 127, width: 402, height: 536),
+                             .init(x: 0, y: 127, width: 403, height: 536),
+                             .init(x: 0, y: 127, width: 402, height: .infinity),
+                             .init(x: 0, y: 127, width: 402, height: 0)] {
+            XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: 402,
+                containerHeight: 874, photo: invalidPhoto))
         }
+        for invalid in [Double.nan, .infinity, -1] {
+            XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: 402,
+                containerHeight: 874, photo: photo, bottomSafeAreaInset: invalid))
+            XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: 402,
+                containerHeight: 874, photo: photo, edgeClearance: invalid))
+        }
+        XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: 402,
+            containerHeight: 874, photo: photo, bottomSafeAreaInset: 874))
+        XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: 402,
+            containerHeight: 874, photo: photo, diameter: 20))
+        XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: 250,
+            containerHeight: 500, photo: .init(x: 0, y: 100, width: 250, height: 250)))
+        XCTAssertNil(MeasurementCameraChromeLayout.controls(containerWidth: 667,
+            containerHeight: 240, photo: .init(x: 0, y: 0, width: 320, height: 240)))
+        XCTAssertNil(MeasurementCameraChromeLayout.layout(containerWidth: 402, containerHeight: 874,
+            photo: photo, shutter: .init(x: 155, y: .nan, width: 92, height: 92)))
     }
 
-    func testPortraitPhotoBoundsFollowTheReferenceRatiosAndTallImageExtendsBehindShutter() throws {
+    func testPortraitPhotoBoundsFollowTheReferenceRatiosWithoutReservingChromeSpace() throws {
         let references: [(Double, Double, Double)] = [(9.0 / 16, 60, 714.6666666666666),
                                                        (0.75, 127, 536), (1, 177.25, 402)]
         for (aspect, y, height) in references {
@@ -122,7 +176,7 @@ final class MeasurementCameraChromeLayoutTests: XCTestCase {
         let tall = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: 402,
             containerHeight: 874, photoAspectRatio: 9.0 / 16))
         XCTAssertGreaterThan(tall.y + tall.height, 874 - 192 + 80,
-            "The actual camera photograph must remain behind the fixed shutter area")
+            "Control placement must not shrink the actual tall photograph")
     }
 
     func testPhotoBoundsRemainInsideCompactPhonesAndTabletsWithoutChangingSelectedAspect() throws {
@@ -193,7 +247,7 @@ final class MeasurementCameraChromeLayoutTests: XCTestCase {
         }
     }
 
-    func testPhotoExtendingBehindShutterCapsZoomBeforeControlsWithoutChangingPhoto() throws {
+    func testLegacyLayoutWithoutAnExplicitShutterRetainsItsFooterFallback() throws {
         let photo = CameraPhotoViewport(x: 0, y: 100, width: 402, height: 730)
         let chrome = try XCTUnwrap(MeasurementCameraChromeLayout.layout(containerWidth: 402,
             containerHeight: 874, photo: photo))
@@ -248,13 +302,6 @@ final class MeasurementCameraChromeLayoutTests: XCTestCase {
         }
         XCTAssertNil(MeasurementCameraChromeLayout.photoViewport(containerWidth: 90,
             containerHeight: 120, photoAspectRatio: 0.75))
-    }
-
-    private func layout(width: Double, height: Double, aspect: Double) throws -> MeasurementCameraChromeLayout {
-        let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: width,
-            containerHeight: height, photoAspectRatio: aspect))
-        return try XCTUnwrap(MeasurementCameraChromeLayout.layout(containerWidth: width,
-            containerHeight: height, photo: photo))
     }
 
 }

@@ -6,6 +6,7 @@ struct CameraExposureView: View {
     let state: CameraOptionsState
     let onChangeExposure: (Double) -> Void
     let presentation: DetailCaptureOptionsPresentation
+    private let embeddedInPanel: Bool
     let onBack: () -> Void
     @State private var value = 0.0
     @State private var dragStart: Double?
@@ -20,6 +21,7 @@ struct CameraExposureView: View {
 
     init(state: CameraOptionsState, presentation: DetailCaptureOptionsPresentation = .standard,
          forceReduceMotion: Bool = false, selectionFeedbackEnabled: Bool? = nil,
+         embeddedInPanel: Bool = false,
          onChangeExposure: @escaping (Double) -> Void,
          onBack: @escaping () -> Void) {
         self.state = state
@@ -27,30 +29,22 @@ struct CameraExposureView: View {
         self.presentation = presentation
         self.forceReduceMotion = forceReduceMotion
         self.selectionFeedbackEnabled = selectionFeedbackEnabled ?? (presentation == .measurement)
+        self.embeddedInPanel = embeddedInPanel
         self.onBack = onBack
     }
 
     var body: some View {
-        VStack(spacing: 8) {
-            header
-            Text(state.appliedExposure == nil ? "—" : valueText)
-                .font(presentation == .measurement ? .title2 : .largeTitle).monospacedDigit()
-                .accessibilityIdentifier("camera.exposureValue")
-            if let range = state.exposureRange, range.lowerBound < range.upperBound {
-                ruler(range: range)
-            } else {
-                Text("카메라가 준비되면 조절할 수 있어요.").font(.footnote)
-            }
-            if state.hasExposureFailure {
-                Text("노출을 적용하지 못했어요. 다시 조절해 주세요.").font(.footnote)
-                    .accessibilityIdentifier("camera.exposureError")
+        Group {
+            if embeddedInPanel { controls }
+            else {
+                controls
+                    .padding(presentation == .measurement ? 12 : 16)
+                    .padding(.bottom, presentation == .measurement ? 8 : 12)
+                    .frame(maxWidth: .infinity)
+                    .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 40))
+                    .padding(.horizontal, 8).padding(.bottom, presentation == .measurement ? 16 : 24)
             }
         }
-        .padding(presentation == .measurement ? 12 : 16)
-        .padding(.bottom, presentation == .measurement ? 8 : 12)
-        .frame(maxWidth: .infinity)
-        .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 40))
-        .padding(.horizontal, 8).padding(.bottom, presentation == .measurement ? 16 : 24)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("camera.exposurePanel")
         .accessibilityAction(.escape, onBack)
@@ -71,9 +65,31 @@ struct CameraExposureView: View {
         .onDisappear { dragStart = nil }
     }
 
+    private var controls: some View {
+        VStack(spacing: 8) {
+            header
+            Text(state.appliedExposure == nil ? "—" : valueText)
+                .font(embeddedInPanel ? .system(.title, design: .rounded).weight(.light)
+                    : presentation == .measurement ? .title2 : .largeTitle).monospacedDigit()
+                .accessibilityIdentifier("camera.exposureValue")
+            if let range = state.exposureRange, range.lowerBound < range.upperBound {
+                ruler(range: range)
+                    .frame(maxWidth: embeddedInPanel ? 200 : .infinity)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Text("카메라가 준비되면 조절할 수 있어요.").font(.footnote)
+            }
+            if state.hasExposureFailure {
+                Text("노출을 적용하지 못했어요. 다시 조절해 주세요.").font(.footnote)
+                    .accessibilityIdentifier("camera.exposureError")
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var header: some View {
         Group {
-            if presentation == .measurement && dynamicTypeSize.isAccessibilitySize {
+            if (embeddedInPanel || presentation == .measurement) && dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 8) {
                     headerButtons
                     Text("노출").font(.caption)
