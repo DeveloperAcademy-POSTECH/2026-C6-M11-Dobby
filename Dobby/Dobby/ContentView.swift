@@ -69,7 +69,8 @@ struct ContentView: View {
 #endif
                     .navigationDestination(for: UUID.self) { productID in
                         if let garment = garments.first(where: { $0.id == productID }) {
-                            ProductSavedDetailView(garment: garment, controller: controller)
+                            ProductSavedDetailView(garment: garment, controller: controller,
+                                                   onExitToLibrary: { libraryPath.removeAll() })
                         }
                     }
                 }
@@ -200,8 +201,10 @@ struct ProductSavedDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var garment: Garment
     let controller: CopyActivityController
+    let onExitToLibrary: () -> Void
     @State private var showInformation = false
-    @State private var measurementInput = GarmentMeasurementInputState()
+    @State private var editSession: ProductInformationEditSession?
+    @State private var editError: String?
     @State private var exportProduct: ExportProduct?
     @State private var showFruits = false
 
@@ -235,16 +238,30 @@ struct ProductSavedDetailView: View {
         .tint(.primary)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("수정") { showInformation = true }
+                Button("수정", action: openInformation)
                     .foregroundStyle(.primary)
                     .accessibilityIdentifier("library.edit")
             }
         }
         .navigationDestination(isPresented: $showInformation) {
-            InfoInputView(garment: garment, measurementInput: $measurementInput,
-                          allowsPhotoEditing: true) { _ in
-                showInformation = false
+            if let editSession {
+                ProductInformationEditingView(session: editSession,
+                    onExit: { showInformation = false },
+                    onDiscard: {
+                        showInformation = false
+                        onExitToLibrary()
+                    }, onComplete: { _ in
+                        editSession.reflectSavedChanges(in: garment)
+                        showInformation = false
+                    })
             }
+        }
+        .alert("제품 정보를 열 수 없어요", isPresented: Binding(
+            get: { editError != nil }, set: { if !$0 { editError = nil } }
+        )) {
+            Button("확인", role: .cancel) { editError = nil }
+        } message: {
+            Text(editError ?? "")
         }
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)
@@ -259,6 +276,16 @@ struct ProductSavedDetailView: View {
     private func openExport() {
         showFruits = false
         exportProduct = ExportProduct(garment: garment)
+    }
+
+    private func openInformation() {
+        do {
+            editSession = try ProductInformationEditSession(garmentID: garment.id,
+                                                          container: context.container)
+            showInformation = true
+        } catch {
+            editError = "저장된 상품을 불러오지 못했어요. 다시 시도해 주세요."
+        }
     }
 }
 
