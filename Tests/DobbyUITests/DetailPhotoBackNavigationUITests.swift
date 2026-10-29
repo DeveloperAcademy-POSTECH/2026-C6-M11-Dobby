@@ -93,7 +93,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             assertSelection(in: app)
         }
         app.buttons["camera.completePhotos"].tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
     }
 
     @MainActor

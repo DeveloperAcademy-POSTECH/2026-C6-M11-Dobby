@@ -4,6 +4,92 @@ import XCTest
 /// Relaunches prove that a new flow restores saved state rather than live view state.
 @MainActor
 final class ProductDraftResumeTests: XCTestCase {
+    func testInformationBackUsesDoneStateBeforeAndAfterHomeResume() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openNewInformation(in: app)
+
+        let done = app.buttons["product-info.done"]
+        XCTAssertFalse(done.isEnabled)
+        returnFromEmptyInformationToSelection(in: app)
+        app.buttons["camera.completePhotos"].tap()
+        assertResumedStage("제품 정보 입력", app: app)
+
+        // One populated field enables Done even while other required fields are missing.
+        let name = "QA partial information"
+        replaceText(in: field("name", in: app), with: name, app: app)
+        XCTAssertTrue(done.isEnabled)
+        presentExitConfirmation(in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        attachScreenshot(app, name: "information-back-confirmation-keyboard-dismissed")
+        app.buttons["product-flow.exit-cancel"].tap()
+        XCTAssertTrue(exitConfirmation(in: app).waitForNonExistence(timeout: 5))
+        XCTAssertEqual(field("name", in: app).value as? String, name)
+        saveAndReturnHome(app: app)
+        expectHomeResume(stage: "제품 정보 입력 단계", app: app)
+
+        // Restore from disk, not the same live NavigationStack.
+        app.terminate()
+        app.launch()
+        expectHomeResume(stage: "제품 정보 입력 단계", app: app)
+        app.buttons["home.resume"].tap()
+        assertResumedStage("제품 정보 입력", app: app)
+        XCTAssertFalse(app.navigationBars["제품 정보 수정"].exists)
+        XCTAssertEqual(field("name", in: app).value as? String, name)
+        XCTAssertTrue(done.isEnabled)
+        cancelExitAndStay(title: "제품 정보 입력", app: app)
+
+        // Clearing the last value must restore the selection-return route on a resumed draft too.
+        replaceText(in: field("name", in: app), with: "", app: app)
+        XCTAssertFalse(done.isEnabled)
+        returnFromEmptyInformationToSelection(in: app)
+    }
+
+    func testDiscardingNewInformationReturnsHomeWithoutResumeCard() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openNewInformation(in: app)
+        replaceText(in: field("name", in: app), with: "Discard unfinished information", app: app)
+        presentExitConfirmation(in: app)
+        app.buttons["product-flow.exit-discard"].tap()
+        expectHomeAfterDiscard(in: app)
+        XCTAssertFalse(app.buttons["home.resume"].exists)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["home.resume"].exists)
+    }
+
+    private func openNewInformation(in app: XCUIApplication) {
+        openMeasurementResult(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        app.buttons["confirmGarmentMeasurement"].tap()
+        captureTwoDetails(in: app)
+        app.buttons["camera.selectPhotos"].tap()
+        assertResumedStage("제품 사진 선택", app: app)
+        for index in [1, 2] { selectionControl(index, in: app).tap() }
+        waitEnabled(app.buttons["camera.completePhotos"])
+        app.buttons["camera.completePhotos"].tap()
+        assertResumedStage("제품 정보 입력", app: app)
+    }
+
+    private func returnFromEmptyInformationToSelection(in app: XCUIApplication) {
+        app.buttons["product-flow.back"].tap()
+        assertResumedStage("제품 사진 선택", app: app)
+        XCTAssertFalse(exitConfirmation(in: app).exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "camera.grid.select.")).count, 3)
+        for index in 0...2 {
+            XCTAssertEqual(selectionControl(index, in: app).value as? String, "\(index + 1)번째 선택")
+        }
+        XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요"].exists)
+    }
+
     func testClosingAndDiscardingNewMeasurementResultKeepsWorkUntilDiscardAndLeavesNoDraft() throws {
         continueAfterFailure = false
         let app = fixtureApp()
