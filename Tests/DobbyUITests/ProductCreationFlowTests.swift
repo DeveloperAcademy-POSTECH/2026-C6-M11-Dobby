@@ -110,11 +110,11 @@ final class ProductCreationFlowTests: XCTestCase {
         attachScreenshot(app, name: "flow-top-detail-captured-original")
         choose.tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        let detail = app.buttons["camera.grid.select.1"]
+        let detail = app.buttons["camera.grid.select.2"]
         reveal(detail, in: app)
         XCTAssertTrue(detail.waitForExistence(timeout: 5))
         waitEnabled(detail)
-        XCTAssertTrue(app.buttons["camera.grid.preview.1"].exists)
+        XCTAssertTrue(app.buttons["camera.grid.preview.2"].exists)
         detail.tap()
         XCTAssertEqual(detail.value as? String, "2번째 선택")
         XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
@@ -380,7 +380,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
         waitEnabled(app.buttons["camera.selectPhotos"])
         app.buttons["camera.selectPhotos"].tap()
-        let secondSelection = app.buttons["camera.grid.select.1"]
+        let secondSelection = app.buttons["camera.grid.select.2"]
         waitEnabled(secondSelection)
         secondSelection.tap()
         XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 10))

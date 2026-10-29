@@ -60,8 +60,16 @@ final class MeasurementProductPhotoTests: XCTestCase {
         var input = f.input
         let visual = try await f.prepare()
         input.measurementVisualization = visual
+        let camera = CameraPhotoStore(directory: f.directory.appending(path: "captures"))
+        let first = try await camera.save(f.record.snapshot.imageJPEG,
+            sessionID: input.sessionID, garmentID: input.garmentID, capturedAt: .now)
+        let second = try await camera.save(f.record.snapshot.imageJPEG,
+            sessionID: input.sessionID, garmentID: input.garmentID, capturedAt: .now)
+        let selected = [second.id, visual.id, input.measurement.id, first.id]
         let model = try ProductPhotoModel(input: input, captureProvider: NoCapture(),
-            initialSelectedPhotoIDs: [visual.id, input.measurement.id])
+            initialDetailPhotos: [first, second], initialSelectedPhotoIDs: selected)
+        XCTAssertEqual(model.selectablePhotos.map(\.id), [input.measurement.id, visual.id, first.id, second.id])
+        XCTAssertEqual(model.photos.map(\.id), [input.measurement.id, first.id, second.id])
         try ProductDraftStore.save(garment: f.garment, step: .photoSelection,
             measurementRecordID: f.record.id, photoModel: model, measurementInputData: nil, in: f.context)
 
@@ -76,11 +84,13 @@ final class MeasurementProductPhotoTests: XCTestCase {
             initialDetailPhotos: state.restoredDetailPhotos(for: restoredInput),
             initialSelectedPhotoIDs: state.selectedPhotoIDs)
         XCTAssertEqual(restoredInput.measurementVisualization, visual)
-        XCTAssertEqual(restored.output?.selectedPhotos.map(\.id), [visual.id, input.measurement.id])
-        XCTAssertTrue(restored.detailPhotos.isEmpty)
+        XCTAssertEqual(restored.selectablePhotos.map(\.id), [input.measurement.id, visual.id, first.id, second.id])
+        XCTAssertEqual(restored.output?.selectedPhotos.map(\.id), selected)
+        XCTAssertEqual(restored.output?.representativePhotoID, second.id)
+        XCTAssertEqual(restored.detailPhotos, [first, second])
         try await ProductPhotoHandoff.apply(XCTUnwrap(restored.output), to: saved, in: reader,
             input: restoredInput, photosDirectory: f.directory)
-        XCTAssertEqual(saved.productPhotos.map(\.id), [visual.id, input.measurement.id])
+        XCTAssertEqual(saved.productPhotos.map(\.id), selected)
     }
 
     func testConfirmedCorrectionReplacesSelectedVisualizationWithoutChangingOriginal() async throws {

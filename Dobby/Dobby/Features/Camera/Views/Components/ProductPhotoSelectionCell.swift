@@ -11,6 +11,7 @@ struct ProductPhotoSelectionCell: View {
     let photo: CapturedAsset
     let order: Int?
     let captureIndex: Int
+    let detailNumber: Int
     let onPreview: (() -> Void)?
     let onToggleSelection: () -> Void
     @State private var imageAvailable: Bool?
@@ -20,7 +21,7 @@ struct ProductPhotoSelectionCell: View {
         switch photo.purpose {
         case .measurement: "실측 사진"
         case .measurementVisualization: "실측값 표시 사진"
-        case .detail: "상세 사진 \(captureIndex)"
+        case .detail: "상세 사진 \(detailNumber)"
         }
     }
 

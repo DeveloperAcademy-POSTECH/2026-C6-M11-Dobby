@@ -72,7 +72,7 @@ final class ProductDraftResumeTests: XCTestCase {
         captureTwoDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         assertResumedStage("제품 사진 선택", app: app)
-        for index in [1, 2] { selectionControl(index, in: app).tap() }
+        for index in [2, 3] { selectionControl(index, in: app).tap() }
         waitEnabled(app.buttons["camera.completePhotos"])
         app.buttons["camera.completePhotos"].tap()
         assertResumedStage("제품 정보 입력", app: app)
@@ -84,8 +84,8 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertFalse(exitConfirmation(in: app).exists)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "camera.grid.select.")).count, 4)
-        for index in 0...2 {
-            XCTAssertEqual(selectionControl(index, in: app).value as? String, "\(index + 1)번째 선택")
+        for (order, index) in [0, 2, 3].enumerated() {
+            XCTAssertEqual(selectionControl(index, in: app).value as? String, "\(order + 1)번째 선택")
         }
         XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요"].exists)
     }
@@ -146,8 +146,8 @@ final class ProductDraftResumeTests: XCTestCase {
         captureTwoDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        selectionControl(1, in: app).tap()
         selectionControl(2, in: app).tap()
+        selectionControl(3, in: app).tap()
         waitEnabled(app.buttons["camera.completePhotos"])
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
@@ -358,7 +358,7 @@ final class ProductDraftResumeTests: XCTestCase {
         captureTwoDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        for index in [0, 2, 0, 1] { selectionControl(index, in: app).tap() }
+        for index in [0, 3, 0, 2] { selectionControl(index, in: app).tap() }
         assertSelectionOrder(in: app)
         returnFromSelectionToDetails(in: app)
         let productID = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
@@ -369,7 +369,7 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "camera.grid.select.")).count, 4)
         assertSelectionOrder(in: app)
-        app.buttons["camera.grid.preview.2"].tap()
+        app.buttons["camera.grid.preview.3"].tap()
         let toggle = app.buttons["camera.selectionPreviewToggle"]
         waitEnabled(toggle)
         XCTAssertEqual(toggle.value as? String, "1번째 선택")
@@ -417,12 +417,12 @@ final class ProductDraftResumeTests: XCTestCase {
         assertResumedStage("제품 사진 선택", app: app)
         XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
         XCTAssertFalse(completePhotos.isEnabled)
-        for index in 0..<3 {
+        for index in 0..<4 {
             XCTAssertEqual(selectionControl(index, in: app).value as? String, "선택 안 됨")
         }
         attachScreenshot(app, name: "draft-restored-zero-photo-selection")
 
-        for index in [2, 0, 1] { selectionControl(index, in: app).tap() }
+        for index in [3, 0, 2] { selectionControl(index, in: app).tap() }
         assertSelectionOrder(in: app)
         returnFromSelectionToDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
@@ -726,7 +726,7 @@ final class ProductDraftResumeTests: XCTestCase {
     }
 
     private func assertSelectionOrder(in app: XCUIApplication) {
-        for (captureIndex, order) in [(2, 1), (0, 2), (1, 3)] {
+        for (captureIndex, order) in [(3, 1), (0, 2), (2, 3)] {
             XCTAssertEqual(selectionControl(captureIndex, in: app).value as? String, "\(order)번째 선택")
         }
         let complete = app.buttons["camera.completePhotos"]

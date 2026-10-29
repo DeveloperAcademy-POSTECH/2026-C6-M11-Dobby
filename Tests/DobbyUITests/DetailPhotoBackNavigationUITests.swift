@@ -61,7 +61,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
         openSelection(in: app)
         XCTAssertEqual(selectionControls(in: app).count, 4)
         // Select the second detail as representative, the first detail second, measurement last.
-        for index in [0, 2, 1, 0] {
+        for index in [0, 3, 2, 0] {
             let photo = selectionControl(index, in: app)
             waitEnabled(photo)
             photo.tap()
@@ -81,7 +81,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             productID = restoredID
             XCTAssertEqual(selectionControls(in: app).count, 4)
             assertSelection(in: app)
-            let preview = app.buttons["camera.grid.preview.2"]
+            let preview = app.buttons["camera.grid.preview.3"]
             waitEnabled(preview)
             preview.tap()
             XCTAssertTrue(app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch.waitForExistence(timeout: 10))
@@ -182,7 +182,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
 
     @MainActor
     private func assertSelection(in app: XCUIApplication) {
-        for (index, order) in [(2, 1), (1, 2), (0, 3)] {
+        for (index, order) in [(3, 1), (2, 2), (0, 3)] {
             XCTAssertEqual(selectionControl(index, in: app).value as? String, "\(order)번째 선택")
         }
         XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "3장 선택 · 최소 1장 · 최대 10장")

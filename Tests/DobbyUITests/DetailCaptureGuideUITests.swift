@@ -73,7 +73,7 @@ final class DetailCaptureGuideUITests: XCTestCase {
         XCTAssertFalse(app.buttons["camera.grid.select.3"].exists)
 
         // 확대 사진의 보조 뒤로가기는 임시저장 확인창을 열지 않는다.
-        let preview = app.buttons["camera.grid.preview.1"]
+        let preview = app.buttons["camera.grid.preview.2"]
         waitEnabled(preview)
         preview.tap()
         XCTAssertTrue(app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch.waitForExistence(timeout: 10))

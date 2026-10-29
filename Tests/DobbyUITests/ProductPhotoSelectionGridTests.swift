@@ -4,9 +4,11 @@ import XCTest
 final class ProductPhotoSelectionGridTests: XCTestCase {
     @MainActor
     func testMeasurementVisualizationCanBePreviewedSelectedAndSaved() {
-        let app = openSelection(detailCount: 0)
+        let app = openSelection(detailCount: 2)
         defer { app.terminate() }
         XCTAssertEqual(app.buttons["camera.grid.select.1"].label, "실측값 표시 사진 선택")
+        XCTAssertEqual(app.buttons["camera.grid.select.2"].label, "상세 사진 1 선택")
+        XCTAssertEqual(app.buttons["camera.grid.select.3"].label, "상세 사진 2 선택")
         tap(app, "camera.grid.select.0")
         tap(app, "camera.grid.preview.1")
         XCTAssertTrue(app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch.waitForExistence(timeout: 5))
@@ -31,8 +33,8 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
         let app = openSelection(detailCount: 2)
         defer { app.terminate() }
         tap(app, "camera.grid.select.0")
-        for index in [2, 0, 1] { tap(app, "camera.grid.select.\(index)") }
-        let originalOrder = (0..<3).map { value(app, $0) }
+        for index in [3, 0, 2] { tap(app, "camera.grid.select.\(index)") }
+        let originalOrder = [0, 2, 3].map { value(app, $0) }
         let back = app.buttons.matching(identifier: "product-flow.back")
             .allElementsBoundByIndex.first(where: \.isHittable)
         XCTAssertNotNil(back)
@@ -48,11 +50,11 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
         tap(app, "camera.captureDetail")
         tap(app, "camera.selectPhotos")
         XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        XCTAssertEqual((0..<3).map { value(app, $0) }, originalOrder)
-        XCTAssertEqual(value(app, 3), "선택 안 됨")
+        XCTAssertEqual([0, 2, 3].map { value(app, $0) }, originalOrder)
+        XCTAssertEqual(value(app, 4), "선택 안 됨")
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "camera.grid.select.")).count, 5)
-        tap(app, "camera.grid.preview.2")
+        tap(app, "camera.grid.preview.3")
         XCTAssertTrue(app.buttons["camera.selectionPreviewToggle"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요."].exists)
     }

@@ -33,8 +33,8 @@ final class ProductPhotoModel {
     @ObservationIgnored private var discardRevision = 0
 
     var photos: [CapturedAsset] { [input.measurement] + detailPhotos }
-    /// 촬영 목록의 인덱스를 유지하고, 별도 생성한 실측값 표시본을 선택 후보에 추가한다.
-    var selectablePhotos: [CapturedAsset] { photos + [input.measurementVisualization].compactMap { $0 } }
+    /// 같은 촬영의 원본·실측값 표시본을 나란히 두고 상세 사진은 촬영 순서로 이어 붙인다.
+    var selectablePhotos: [CapturedAsset] { input.measurementPhotos + detailPhotos }
 
     /// 하단 표시 전용. 상단 캐러셀이 사용하는 촬영 순서는 바꾸지 않는다.
     var selectionOrderedPhotos: [CapturedAsset] {
