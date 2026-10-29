@@ -1,0 +1,13 @@
+name = "dobby-openai"
+account_id = "1bd840ec9780970ad95e2dc88d9d452f"
+main = "src/index.js"
+compatibility_date = "2026-10-28"
+preview_urls = false
+
+[observability]
+enabled = false
+
+# Configure these with Wrangler secrets or an ignored local .dev.vars file.
+# OPENAI_API_KEY: Dobby's OpenAI project API key; never sent to the client.
+# DRAFT_API_TOKEN: development-only bearer token; not production app authentication.
+# No credentials or user data belong in this file.
