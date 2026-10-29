@@ -45,7 +45,6 @@ struct GarmentCaptureFlowView: View {
     @State private var previewFocusVisible = false
     @State private var syntheticOptions = SyntheticMeasurementCameraOptions()
     @State private var showsCameraOptions = false
-    @State private var optionsDestination: DetailCaptureOptionsDestination = .menu
     @State private var displayedAspectRatio: DetailPhotoAspectRatio = .fourThree
     @State private var isChangingAspectRatio = false
     @State private var aspectTransitionID: UUID?
@@ -95,7 +94,6 @@ struct GarmentCaptureFlowView: View {
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .topBarLeading) {
-                                if !showsCameraOptions {
                                 Button {
                                     cancel()
                                     if let onCancel { onCancel() } else { dismiss() }
@@ -103,7 +101,6 @@ struct GarmentCaptureFlowView: View {
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("촬영 닫기")
                                     .accessibilityIdentifier("closeGarmentCapture")
-                                }
                             }.sharedBackgroundVisibility(.hidden)
                         }
                 }
@@ -166,7 +163,7 @@ struct GarmentCaptureFlowView: View {
         }
         .onChange(of: scenePhase) { _, value in
             if value != .active {
-                closeCameraOptions(animated: false)
+                closeCameraOptions()
                 aspectTransitionID = nil
                 isChangingAspectRatio = false
                 levelGuide.stop(); clearPreviewFocus(); cancel(); camera.stop(); previewRecognized = false
@@ -176,7 +173,7 @@ struct GarmentCaptureFlowView: View {
             else if isPreview { synchronizePreviewOptions() }
         }
         .onDisappear {
-            closeCameraOptions(animated: false)
+            closeCameraOptions()
             aspectTransitionID = nil
             isChangingAspectRatio = false
             levelGuide.stop(); clearPreviewFocus(); cancel(); camera.stop()
@@ -215,43 +212,42 @@ struct GarmentCaptureFlowView: View {
     }
 
     private var cameraScreen: some View {
+        // Read the same navigation-safe container inset as CameraFlowView
+        // before the live canvas expands to the complete camera screen.
+        GeometryReader { safeGeometry in
+            cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom)
+        }
+        .background(GarmentCaptureStyle.background)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("garmentCaptureScreen")
+    }
+
+    private func cameraCanvas(bottomSafeAreaInset: CGFloat) -> some View {
         GeometryReader { geometry in
             let photoRect = photoViewport(in: geometry.size)
             ZStack {
                 Color.black
-                if !isPreview, camera.usesMultiCamera {
-                    // One synchronized GPU composition owns BOTH the central
-                    // calibrated wide image and the real ultra-wide periphery.
-                    // Native regular glass is a separate, single overlay;
-                    // the GPU keeps the entire continuous camera image clear.
-                    MultiCameraPreviewViewport(frames: camera.multiCamera.frames, photoRect: photoRect,
-                        orientation: orientation, zoom: selectedZoom,
-                        isActive: camera.isRunning && !isCapturing && scenePhase == .active)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                } else {
-                    cameraSurroundings
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
                 // A photo's 1x is its complete sensor field of view. Filling the
                 // entire tall phone first would add an unlabelled ~1.63x crop.
                 cameraImage
                     .modifier(MeasurementPhotoViewportModifier(rect: photoRect))
                     .accessibilityHidden(showsPlacementTutorial)
-                MeasurementCameraSurroundingsGlass(photoRect: photoRect)
+                CameraBlackSurroundings(photoRect: photoRect)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 cameraFeedback
                 if !showsCameraOptions {
-                    responsiveCameraChrome(in: geometry.size, photoRect: photoRect)
+                    responsiveCameraChrome(in: geometry.size, photoRect: photoRect,
+                        bottomSafeAreaInset: bottomSafeAreaInset)
+                        .animation(presentationReduceMotion ? nil : .smooth(duration: 0.30), value: displayedAspectRatio)
+                        .animation(nil, value: geometry.size)
                         .opacity(showsPlacementTutorial ? 0 : 1)
                         .accessibilityHidden(showsPlacementTutorial)
                         .transition(.opacity)
                 }
                 if !showsCameraOptions {
-                    captureControls(in: geometry.size)
+                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                        .animation(presentationReduceMotion ? nil : .smooth(duration: 0.30), value: displayedAspectRatio)
+                        .animation(nil, value: geometry.size)
                         .transition(.opacity)
                         .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)
                 }
@@ -272,7 +268,7 @@ struct GarmentCaptureFlowView: View {
                         showsPlacementTutorial = false
                     }
                 }
-                cameraOptionsOverlay(in: geometry.size)
+                cameraOptionsOverlay(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
                     .allowsHitTesting(showsCameraOptions)
                     .accessibilityHidden(!showsCameraOptions)
                     .zIndex(2)
@@ -288,9 +284,6 @@ struct GarmentCaptureFlowView: View {
             }
         }
         .ignoresSafeArea()
-        .background(GarmentCaptureStyle.background)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("garmentCaptureScreen")
     }
 
     private var cameraSourceAspectRatio: CGFloat {
@@ -344,7 +337,7 @@ struct GarmentCaptureFlowView: View {
     }
 
     @ViewBuilder
-    private func responsiveCameraChrome(in size: CGSize, photoRect: CGRect) -> some View {
+    private func responsiveCameraChrome(in size: CGSize, photoRect: CGRect, bottomSafeAreaInset: CGFloat) -> some View {
         let photo = CameraPhotoViewport(x: Double(photoRect.minX), y: Double(photoRect.minY),
             width: Double(photoRect.width), height: Double(photoRect.height))
         let labelWidth = max(44, min(380, photoRect.width - 32) - 32 - (isCapturing ? 26 : 0))
@@ -355,8 +348,7 @@ struct GarmentCaptureFlowView: View {
         let labelHeight = max(44, ceil(textHeight) + 20)
         if let chrome = MeasurementCameraChromeLayout.layout(containerWidth: Double(size.width),
             containerHeight: Double(size.height), photo: photo, guidanceHeight: Double(labelHeight),
-            bottomControlsHeight: showsPlacementTutorial ? 158 : 192,
-            shutter: shutterFrame(in: size)) {
+            shutter: shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset)) {
             if let frame = chrome.guidanceFrame {
                 recognitionGuidance
                     .frame(width: frame.width, height: frame.height)
@@ -401,83 +393,43 @@ struct GarmentCaptureFlowView: View {
     }
 
     private var cameraOptionsButton: some View {
-        Button(action: openCameraOptions) {
-            // This existing 48pt asset already includes the dark disc and
-            // white dots; template tinting would turn it into a solid circle.
-            Image("DetailCaptureMore").renderingMode(.original)
-                .frame(width: 48, height: 48)
-                .background(Color(white: 0.094), in: Circle()).contentShape(Circle())
-        }
-        .buttonStyle(.plain).disabled(isCapturing)
-        .accessibilityLabel("촬영 옵션")
-        .accessibilityIdentifier("garmentCaptureOptions")
-        .accessibilityHidden(showsCameraOptions)
+        CameraMoreButton(isEnabled: !isCapturing, action: openCameraOptions)
+            .accessibilityLabel("촬영 옵션")
+            .accessibilityIdentifier("garmentCaptureOptions")
+            .accessibilityHidden(showsCameraOptions)
     }
 
     private func openCameraOptions() {
         guard !isCapturing, model == nil else { return }
         if isPreview { synchronizePreviewOptions() }
         else { captureSession.synchronizeCameraOptions() }
-        optionsDestination = .menu
         clearPreviewFocus()
-        withAnimation(DetailCaptureOptionsPresentation.measurement.animation(reduceMotion: presentationReduceMotion)) {
-            showsCameraOptions = true
-        }
+        showsCameraOptions = true
     }
 
-    private func closeCameraOptions(animated: Bool = true) {
-        withAnimation(animated ? DetailCaptureOptionsPresentation.measurement.animation(reduceMotion: presentationReduceMotion) : nil) {
-            showsCameraOptions = false
-        }
+    private func closeCameraOptions() {
+        showsCameraOptions = false
     }
 
-    private func cameraOptionsOverlay(in size: CGSize) -> some View {
-        let landscape = size.width > size.height
-        let width = landscape ? min(340, size.width * 0.48) : size.width
-        return ZStack(alignment: landscape ? .bottomTrailing : .bottom) {
+    private func cameraOptionsOverlay(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
+        ZStack(alignment: .bottom) {
+            let panel = CameraOptionsPanelLayout(containerSize: size, bottomSafeAreaInset: bottomSafeAreaInset)
             if showsCameraOptions {
                 Button { closeCameraOptions() } label: { Color.clear.contentShape(Rectangle()) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
                     .accessibilityIdentifier("camera.dismissOptions")
-                    .transition(.opacity)
-                VStack(spacing: 0) {
-                    if optionsDestination == .menu {
-                        Button("촬영 가이드 다시 보기") {
-                            closeCameraOptions()
-                            showsPlacementTutorial = true
-                        }
-                        .font(.callout).padding(.horizontal, 16).padding(.vertical, 12)
-                        .contentShape(Rectangle())
-                        .accessibilityIdentifier("replayGarmentCaptureTutorial")
-                    }
-                    DetailCaptureOptionsView(options: captureOptions, presentation: .measurement,
-                        selection: $optionsDestination, forceReduceMotion: presentationReduceMotion,
-                        onClose: { closeCameraOptions() })
-                }
-                .frame(width: width)
-                .frame(maxHeight: max(1, size.height - (landscape ? 60 : 146)), alignment: .bottom)
-                .transition(presentationReduceMotion ? .opacity
-                    : .asymmetric(insertion: .offset(y: 24).combined(with: .opacity), removal: .opacity))
+                // Both cameras share the same 4:3-anchored panel bounds.
+                DetailCaptureOptionsView(options: captureOptions,
+                    exposureSelectionFeedbackEnabled: true,
+                    panelLayout: panel) { closeCameraOptions() }
+                    .position(x: panel.frame.midX, y: panel.frame.midY)
             }
         }
         .frame(width: size.width, height: size.height)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(showsCameraOptions ? .isModal : [])
         .accessibilityIdentifier("measurementCameraOptions")
-    }
-
-    /// Static fixture decoration only. Physical camera periphery is drawn in
-    /// the synchronized MultiCam compositor; fallback never repeats wide pixels.
-    @ViewBuilder
-    private var cameraSurroundings: some View {
-        if isPreview, let previewModel,
-                  let image = (isCapturing ? processingImage : nil) ?? SnapshotPresentation.image(for: previewModel.snapshot) {
-            Image(uiImage: image).resizable().scaledToFill()
-                .scaleEffect(selectedZoom == .double ? 2 : 1)
-        } else {
-            Color.black
-        }
     }
 
     private var cameraImage: some View {
@@ -538,14 +490,6 @@ struct GarmentCaptureFlowView: View {
                     .contentShape(Rectangle())
                     .onChange(of: geometry.size) { _, _ in clearPreviewFocus() }
                 }.clipped()
-            } else if !isPreview, camera.usesMultiCamera, camera.isSupported, loadingError == nil {
-                MultiCameraInteractionOverlay(frames: camera.multiCamera.frames,
-                    readiness: camera.liveReadiness, orientation: $orientation,
-                    imageSize: camera.frameStatus?.imageSize ?? .init(width: 1920, height: 1440),
-                    controlState: camera.cameraControls, capabilities: camera.cameraCapabilities,
-                    focusEnabled: canFocus, onFocus: camera.requestFocus,
-                    onExposure: camera.requestExposureBias,
-                    onExposureAdjustmentActive: camera.setExposureAdjustmentActive)
             } else if !isPreview, camera.isSupported, loadingError == nil {
                 ZoomedCameraPreview(session: camera.session, readiness: camera.liveReadiness, orientation: $orientation,
                     controlState: camera.cameraControls,
@@ -588,23 +532,6 @@ struct GarmentCaptureFlowView: View {
                     .background(.black.opacity(0.65), in: Capsule()).padding(.top, isCapturing ? 8 : 154)
                     .opacity(showsPlacementTutorial ? 0 : 1)
                     .accessibilityIdentifier("garmentPreviewProvenance")
-            }
-            if !isPreview, !isCapturing, !showsPlacementTutorial, !showsCameraOptions,
-               !camera.usesMultiCamera, camera.isRunning,
-               let reason = camera.surroundingsUnavailableReason {
-                VStack(spacing: 3) {
-                    Text("주변 화면을 사용할 수 없어 기본 미리보기로 전환했어요.")
-                        .font(.caption)
-                    Text(reason)
-                        .font(.caption2)
-                }
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16).padding(.vertical, 6)
-                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 14))
-                    .padding(.horizontal, 16).padding(.top, 103)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("camera.surroundingsFallback")
             }
             Spacer(minLength: 24)
         }.allowsHitTesting(false)
@@ -653,23 +580,30 @@ struct GarmentCaptureFlowView: View {
             .allowsHitTesting(false)
     }
 
-    private func shutterFrame(in size: CGSize) -> CameraPhotoViewport? {
-        MeasurementCameraChromeLayout.shutterFrame(containerWidth: Double(size.width),
-            containerHeight: Double(size.height), sourceAspectRatio: Double(cameraSourceAspectRatio))
+    private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
+        let rect = photoViewport(in: size)
+        return MeasurementCameraChromeLayout.controls(containerWidth: Double(size.width),
+            containerHeight: Double(size.height),
+            photo: .init(x: Double(rect.minX), y: Double(rect.minY),
+                width: Double(rect.width), height: Double(rect.height)),
+            bottomSafeAreaInset: Double(bottomSafeAreaInset))
+    }
+
+    private func shutterFrame(in size: CGSize, bottomSafeAreaInset: CGFloat) -> CameraPhotoViewport? {
+        captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset)?.shutter
     }
 
     @ViewBuilder
-    private func captureControls(in size: CGSize) -> some View {
-        if let shutter = shutterFrame(in: size) {
-            let landscape = size.width > size.height
+    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
+        if let controls = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset) {
+            let shutter = controls.shutter
             let centerX = shutter.x + shutter.width / 2
             let centerY = shutter.y + shutter.height / 2
-            let moreX = landscape ? centerX : Double(size.width) - 72
-            let moreY = landscape ? min(Double(size.height) - 24, shutter.y + shutter.height + 32) : centerY
             measurementShutter.position(x: centerX, y: centerY)
-            cameraOptionsButton.position(x: moreX, y: moreY)
+            cameraOptionsButton.position(x: controls.more.x + controls.more.width / 2,
+                y: controls.more.y + controls.more.height / 2)
                 .opacity(showsPlacementTutorial ? 0 : 1)
-            if !landscape || size.height >= 280 {
+            if size.height >= 280 {
                 VStack(spacing: 8) {
                     CameraControlPanel(errorMessage: isPreview ? nil : camera.controlError)
                     if isPreview, !isCapturing, !showsPlacementTutorial {
@@ -678,8 +612,8 @@ struct GarmentCaptureFlowView: View {
                             .accessibilityHidden(showsCameraOptions)
                     }
                 }
-                .frame(width: landscape ? 160 : min(380, size.width - 32))
-                .position(x: centerX, y: landscape ? moreY + 42 : shutter.y + shutter.height + 32)
+                .frame(width: min(380, size.width - 32), height: max(0, shutter.y - 16), alignment: .bottom)
+                .position(x: centerX, y: max(0, shutter.y - 16) / 2)
             }
         }
     }
@@ -739,6 +673,7 @@ struct GarmentCaptureFlowView: View {
     /// Synthetic 2x cannot claim a calibrated capture from its fixed 1x input.
     private var canTakePhoto: Bool {
         canUseCameraControls && silhouetteVisible && !showsPlacementTutorial && !showsCameraOptions
+            && (isPreview || (service != nil && camera.frameStatus?.hasDepth == true))
             && !isChangingAspectRatio && !captureOptions.isApplying && scenePhase == .active
             && (!isPreview || previewControls.selectedZoom != .double)
     }
@@ -752,7 +687,7 @@ struct GarmentCaptureFlowView: View {
     private var canUseCameraControls: Bool {
         guard !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
         if isPreview { return previewModel != nil }
-        return service != nil && camera.isRunning && camera.state == .ready
+        return camera.isRunning && camera.state == .ready
     }
     private var silhouetteVisible: Bool {
         !isCapturing && (isPreview ? previewRecognized : camera.liveReadiness.silhouette != nil)
@@ -773,15 +708,20 @@ struct GarmentCaptureFlowView: View {
         }
         if isPreview, previewControls.selectedZoom == .double { return "2× 조절 미리보기 · 합성 촬영은 1×에서 확인해요" }
         if captureOptions.isApplying { return "노출 설정을 적용하고 있어요" }
+        if !isPreview {
+            switch camera.state {
+            case .failed, .interrupted: return "카메라 연결이 중단됐어요. 다시 촬영 화면을 열어주세요"
+            case .requestingPermission: return "카메라 접근을 허용해 주세요"
+            case .ready: break
+            default: return "카메라를 준비하고 있어요"
+            }
+            guard camera.frameStatus?.hasDepth == true else { return "LiDAR 깊이 데이터를 준비하고 있어요" }
+            guard service != nil else { return "측정 기능을 준비하고 있어요" }
+        }
         if shouldShowLevelGuide { return "핸드폰을 수평으로 들어주세요" }
         if canTakePhoto { return "옷 인식 완료! 촬영 버튼을 눌러주세요" }
         if canUseCameraControls { return "옷이 잘리지 않게 카메라 안에 넣어주세요" }
         if isPreview { return "옷 한 벌 전체가 보이도록 평평하게 펼쳐주세요" }
-        switch camera.state {
-        case .failed, .interrupted: return "카메라 연결이 중단됐어요. 다시 촬영 화면을 열어주세요"
-        case .requestingPermission: return "카메라 접근을 허용해 주세요"
-        default: break
-        }
         return "카메라를 준비하고 있어요"
     }
 

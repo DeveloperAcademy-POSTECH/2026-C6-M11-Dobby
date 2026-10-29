@@ -10,24 +10,37 @@ struct ProductPhotoSelectionPreviewView: View {
     @State private var selectionLimitNoticeID: UUID?
     private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
     private var order: Int? { model.selectedPhotoIDs.firstIndex(of: photo.id).map { $0 + 1 } }
+    private var photoAspectRatio: CGFloat {
+        guard case let .localFile(_, metadata) = photo.source,
+              metadata.pixelWidth > 0, metadata.pixelHeight > 0 else { return 3 / 4 }
+        let swapsAxes = (5...8).contains(metadata.orientation.rawValue)
+        return swapsAxes ? CGFloat(metadata.pixelHeight) / CGFloat(metadata.pixelWidth)
+            : CGFloat(metadata.pixelWidth) / CGFloat(metadata.pixelHeight)
+    }
 
     var body: some View {
         GeometryReader { geometry in
+            // Figma 402×874: 사진 y146, 402×536. 내비게이션/안전 영역은 중복 가산하지 않는다.
+            let photoHeight = min(geometry.size.width * 4 / 3, geometry.size.height)
+            let topSpacing = min(max(0, 146 * geometry.size.width / 402 - geometry.frame(in: .global).minY),
+                                 max(0, geometry.size.height - photoHeight))
             VStack(spacing: 0) {
+                Spacer().frame(height: topSpacing)
                 CameraPhotoView(source: photo.source, contentMode: .fit, onLoad: { imageAvailable = $0 })
-                    .frame(height: min(geometry.size.width * 4 / 3, max(0, geometry.size.height - 12)))
+                    .aspectRatio(photoAspectRatio, contentMode: .fit)
                     .accessibilityLabel("확대 사진")
                     .accessibilityIdentifier("camera.selectionPreviewImage")
                     .overlay {
                         if imageAvailable == false { Text("사진을 불러올 수 없어요.").foregroundStyle(.white) }
                     }
                     .overlay(alignment: .topTrailing) { selectionButton.padding(8) }
+                    .frame(width: geometry.size.width, height: photoHeight)
                 Spacer(minLength: 0)
             }
-            .padding(.top, 12)
         }
         .background(background.ignoresSafeArea())
         .environment(\.colorScheme, .dark)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -36,7 +49,8 @@ struct ProductPhotoSelectionPreviewView: View {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.left").foregroundStyle(.black)
                 }
-                    .buttonStyle(.borderedProminent).tint(.white.opacity(0.5))
+                    .buttonStyle(.borderedProminent).buttonBorderShape(.circle)
+                    .tint(.white.opacity(0.5))
                     .accessibilityLabel("사진 선택으로 돌아가기")
                     .accessibilityIdentifier("camera.closeSelectionPreview")
             }

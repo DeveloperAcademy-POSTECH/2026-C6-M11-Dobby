@@ -130,6 +130,82 @@ final class GarmentPlaneIntegrationTests: XCTestCase {
         XCTAssertEqual(try value(mismatch).failure, .frameMismatch)
     }
 
+    func testAVFoundationWithoutConfidencePreservesKnownPhysicalLengthAcrossTiltAndRoll() throws {
+        // Analytic buffers exercise the AVFoundation source contract; these
+        // are not recordings or evidence of physical device accuracy.
+        let normal = unit(.init(x: 0.25, y: -0.1, z: 1)), offset = -1.1
+        let a = Point3D(x: -0.15, y: -0.1, z: -(normal.x * -0.15 + normal.y * -0.1 + offset) / normal.z)
+        let b = Point3D(x: 0.17, y: 0.12, z: -(normal.x * 0.17 + normal.y * 0.12 + offset) / normal.z)
+        let expected = hypot(hypot(a.x - b.x, a.y - b.y), a.z - b.z)
+        for (roll, tilt) in [(0.0, 0.0), (0.8, 0), (-1.1, 0.18), (0.35, -0.2)] {
+            func rotate(_ p: Point3D) -> Point3D {
+                let x = cos(roll) * p.x - sin(roll) * p.y, y = sin(roll) * p.x + cos(roll) * p.y
+                return .init(x: cos(tilt) * x + sin(tilt) * p.z, y: y, z: -sin(tilt) * x + cos(tilt) * p.z)
+            }
+            var candidate = scene(normal: rotate(normal), offset: offset)
+            candidate.frame.source = .avFoundationLiDAR
+            candidate.landmarks.points[0].point = try XCTUnwrap(GarmentPlaneGeometry.project(rotate(a), frame: candidate.frame))
+            candidate.landmarks.points[1].point = try XCTUnwrap(GarmentPlaneGeometry.project(rotate(b), frame: candidate.frame))
+            let withConfidence = try value(candidate)
+            candidate.frame.depth.confidence = nil
+            let unknownConfidence = try value(candidate)
+            XCTAssertEqual(try XCTUnwrap(unknownConfidence.meters), expected, accuracy: 0.000002)
+            XCTAssertEqual(unknownConfidence.meters, withConfidence.meters)
+            XCTAssertEqual(unknownConfidence.status, .uncertain)
+            XCTAssertNil(unknownConfidence.failure)
+            XCTAssertNil(unknownConfidence.failureFeedback)
+            XCTAssertTrue(unknownConfidence.points.allSatisfy {
+                !$0.quality.confidenceAvailable && $0.quality.method == .garmentPlane
+                    && $0.quality.garmentPlaneQuality != nil
+            })
+            XCTAssertNil(candidate.frame.depth.confidence, "Geometric support must not fabricate a confidence map")
+        }
+    }
+
+    func testMissingConfidenceRemainsAnInputFailureForSourcesThatRequireIt() throws {
+        for source in [DepthSource.sceneDepth, .smoothedSceneDepth, .synthetic] {
+            var candidate = scene()
+            candidate.frame.source = source
+            candidate.frame.depth.confidence = nil
+            let measured = try value(candidate)
+            XCTAssertEqual(measured.failure, .invalidDepthMap)
+            XCTAssertEqual(measured.failureContexts?.first?.reason, .missingDepthConfidence)
+            XCTAssertNil(measured.meters)
+        }
+    }
+
+    func testAVFoundationWithoutConfidenceStillRejectsAbsentMixedAndNarrowDepthSupport() throws {
+        let absent = scene(modify: { _, _, _ in 0 })
+        let mixed = scene(modify: { x, _, _ in x < 80 ? 1.0 : 1.15 })
+        var narrow = scene()
+        narrow.frame.intrinsics.fx = 20_000; narrow.frame.intrinsics.fy = 20_000
+        for (fixture, reason) in [(absent, MeasurementFailureReason.planeTooFewSamples),
+                                  (mixed, .planeInsufficientInliers), (narrow, .planeNarrowSupport)] {
+            var candidate = fixture
+            candidate.frame.source = .avFoundationLiDAR
+            candidate.frame.depth.confidence = nil
+            let measured = try value(candidate)
+            XCTAssertEqual(measured.failure, .insufficientGarmentPlane)
+            XCTAssertEqual(measured.failureContexts?.first?.reason, reason)
+            XCTAssertNil(measured.meters)
+            XCTAssertTrue(measured.points.isEmpty)
+        }
+    }
+
+    func testAVFoundationDoesNotIgnorePresentLowOrMalformedConfidenceMaps() throws {
+        let low = scene(confidence: { _, _ in 0 })
+        var badCount = scene(); badCount.frame.depth.confidence?.removeLast()
+        var invalidLevel = scene(); invalidLevel.frame.depth.confidence?[0] = 3
+        for (fixture, reason) in [(low, MeasurementFailureReason.lowSensorConfidence),
+                                  (badCount, .malformedConfidence), (invalidLevel, .malformedConfidence)] {
+            var candidate = fixture
+            candidate.frame.source = .avFoundationLiDAR
+            let measured = try value(candidate)
+            XCTAssertEqual(measured.failureContexts?.first?.reason, reason)
+            XCTAssertNil(measured.meters)
+        }
+    }
+
     func testMixedSurfacesCurvatureAndOneSidedOrNarrowSupportFailWithoutLocalFallback() throws {
         let mixed = scene(modify: { x, _, _ in x < 80 ? 1.0 : 1.15 })
         let curved = scene(modify: { x, y, _ in 1.2 + 0.14 * sin(Float(x) * 0.11) * cos(Float(y) * 0.09) })
@@ -259,6 +335,40 @@ final class GarmentPlaneIntegrationTests: XCTestCase {
     }
     private var topDefinitions: [MeasurementDefinition] {
         [.testDistance, .init(id: "top.totalLength", title: "총장", landmarkIDs: ["top_length_start", "hem_center"])]
+    }
+
+    func testAVFoundationUnknownConfidenceRemainsUnknownThroughContourAverageAndProjection() throws {
+        var candidate = top()
+        candidate.frame.source = .avFoundationLiDAR
+        candidate.landmarks.points.append(.init(id: "midpoint", point: .init(x: 0.5, y: 0.25), confidence: 1,
+            derivedFrom: ["neck_left", "neck_right"]))
+        let definitions = topDefinitions + [
+            .init(id: "average", title: "average", landmarkIDs: ["midpoint", "hem_center"]),
+            .init(id: "projected", title: "projected", landmarkIDs: ["A", "B"],
+                  projection: .init(referenceAxisLandmarkIDs: ["neck_left", "neck_right"]))
+        ]
+        let withConfidence = measure(candidate, definitions: definitions)
+        candidate.frame.depth.confidence = nil
+        let unknownConfidence = measure(candidate, definitions: definitions)
+        XCTAssertEqual(unknownConfidence.values.count, definitions.count)
+        for (measured, baseline) in zip(unknownConfidence.values, withConfidence.values) {
+            XCTAssertEqual(measured.status, .uncertain)
+            XCTAssertTrue(measured.hasUsableMeasurement)
+            XCTAssertEqual(measured.meters, baseline.meters)
+            XCTAssertNil(measured.failure)
+            XCTAssertNil(measured.failureFeedback)
+            XCTAssertEqual(measured.points.count, baseline.points.count)
+            for (point, known) in zip(measured.points, baseline.points) {
+                XCTAssertFalse(point.quality.confidenceAvailable)
+                XCTAssertEqual(point.quality.method, known.quality.method)
+                XCTAssertEqual(point.quality.garmentPlaneQuality, known.quality.garmentPlaneQuality)
+                XCTAssertEqual(point.sourceLandmarkIDs, known.sourceLandmarkIDs)
+                XCTAssertEqual(point.position, known.position)
+            }
+        }
+        XCTAssertEqual(unknownConfidence.values[1].points.first?.quality.method, .contourIntersection)
+        XCTAssertEqual(unknownConfidence.values[2].points.first?.quality.method, .spatialAverage)
+        XCTAssertEqual(unknownConfidence.values[3].points.last?.quality.method, .axisProjection)
     }
     func testContourIsPerpendicularInPlaneWithExactReturnedImageEndpointAndNoMidpointSubstitution() throws {
         let scene = top(), result = measure(scene, definitions: topDefinitions)

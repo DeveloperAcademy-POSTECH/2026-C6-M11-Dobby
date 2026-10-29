@@ -59,25 +59,29 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
         }
         _ = galleryEvidence(in: app, expectedPhotoCount: 4)
         openSelection(in: app)
-        XCTAssertEqual(selectionControls(in: app).count, 3)
+        XCTAssertEqual(selectionControls(in: app).count, 4)
         // Select the second detail as representative, the first detail second, measurement last.
-        for index in [0, 2, 1, 0] {
+        for index in [0, 3, 2, 0] {
             let photo = selectionControl(index, in: app)
             waitEnabled(photo)
             photo.tap()
         }
         assertSelection(in: app)
-        cancelExitAndStay(title: "제품 사진 선택", app: app)
+        returnToDetails(in: app)
+        openSelection(in: app)
         assertSelection(in: app)
 
         var productID: String?
         for _ in 0..<2 {
-            let restoredID = saveAndResumeDraft(stage: "제품 사진 선택 단계", title: "제품 사진 선택", app: app)
+            returnToDetails(in: app)
+            let restoredID = saveAndResumeDraft(stage: "상세 촬영 단계", title: "제품 상세 촬영", app: app)
+            waitForDetails(in: app, expectsGuide: false)
+            openSelection(in: app)
             if let productID { XCTAssertEqual(restoredID, productID) }
             productID = restoredID
-            XCTAssertEqual(selectionControls(in: app).count, 3)
+            XCTAssertEqual(selectionControls(in: app).count, 4)
             assertSelection(in: app)
-            let preview = app.buttons["camera.grid.preview.2"]
+            let preview = app.buttons["camera.grid.preview.3"]
             waitEnabled(preview)
             preview.tap()
             XCTAssertTrue(app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch.waitForExistence(timeout: 10))
@@ -159,6 +163,16 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
     }
 
     @MainActor
+    private func returnToDetails(in app: XCUIApplication) {
+        let back = app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)
+        XCTAssertNotNil(back)
+        back?.tap()
+        waitForDetails(in: app, expectsGuide: false)
+        XCTAssertFalse(exitConfirmation(in: app).exists)
+    }
+
+    @MainActor
     private func openSelection(in app: XCUIApplication) {
         let choose = app.buttons["camera.selectPhotos"]
         waitEnabled(choose)
@@ -168,7 +182,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
 
     @MainActor
     private func assertSelection(in app: XCUIApplication) {
-        for (index, order) in [(2, 1), (1, 2), (0, 3)] {
+        for (index, order) in [(3, 1), (2, 2), (0, 3)] {
             XCTAssertEqual(selectionControl(index, in: app).value as? String, "\(order)번째 선택")
         }
         XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "3장 선택 · 최소 1장 · 최대 10장")
@@ -250,7 +264,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
 
     @MainActor
     private func measurementLabels(in app: XCUIApplication) -> [String: String] {
-        Dictionary(uniqueKeysWithValues: app.buttons.matching(NSPredicate(
+        Dictionary(uniqueKeysWithValues: app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).allElementsBoundByIndex.map { ($0.identifier, $0.label) })
     }
 

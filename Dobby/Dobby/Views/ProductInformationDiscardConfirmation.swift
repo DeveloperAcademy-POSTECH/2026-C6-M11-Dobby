@@ -60,8 +60,8 @@ struct ProductInformationDiscardConfirmation: View {
     private var confirmationActions: some View {
         HStack(spacing: 12) {
             Button(role: .cancel, action: onCancel) {
-                actionLabel("닫기")
-                    .foregroundStyle(Color("BrandNeutral900"))
+                actionLabel("닫기", background: "BrandMain200")
+                    .foregroundStyle(Color("BrandMain900"))
             }
             .accessibilityIdentifier("product-info.discard-cancel")
 
@@ -75,12 +75,12 @@ struct ProductInformationDiscardConfirmation: View {
         .frame(height: 54, alignment: .topLeading)
     }
 
-    private func actionLabel(_ title: String) -> some View {
+    private func actionLabel(_ title: String, background: String = "BrandNeutral100") -> some View {
         styledText(title, fontName: "Pretendard-Medium",
                    size: buttonFontSize, lineHeight: buttonLineHeight)
             .padding(.horizontal, 28)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color("BrandNeutral100"), in: RoundedRectangle(cornerRadius: 60))
+            .background(Color(background), in: RoundedRectangle(cornerRadius: 60))
             .contentShape(RoundedRectangle(cornerRadius: 60))
     }
 

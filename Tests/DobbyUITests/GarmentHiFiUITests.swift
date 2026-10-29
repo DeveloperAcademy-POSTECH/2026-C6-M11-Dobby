@@ -36,7 +36,8 @@ final class GarmentHiFiUITests: XCTestCase {
             XCTAssertEqual(zoom.frame.minY, app.frame.minY + 617, accuracy: 1)
             XCTAssertEqual(zoom.frame.width, 48, accuracy: 1)
             XCTAssertEqual(zoom.frame.height, 48, accuracy: 1)
-            XCTAssertEqual(shutter.frame.minY, app.frame.minY + 716, accuracy: 1)
+            // Match detail capture: 34pt bottom safe area + half of its 114pt row.
+            XCTAssertEqual(shutter.frame.minY, app.frame.minY + 737, accuracy: 1)
             XCTAssertEqual(shutter.frame.width, 92, accuracy: 1)
             XCTAssertEqual(shutter.frame.height, 92, accuracy: 1)
             XCTAssertLessThanOrEqual(back.frame.maxY, app.frame.minY + 146)
@@ -71,7 +72,7 @@ final class GarmentHiFiUITests: XCTestCase {
     }
 
     @MainActor
-    func testCaptureTutorialCanBeDismissedAndReplayedBeforeRecognitionArmsTheShutter() throws {
+    func testCaptureTutorialAndDetailOptionsKeepRecognitionRequiredForTheShutter() throws {
         continueAfterFailure = false
         let app = openPreview(arguments: ["--garment-preview-top", "--garment-preview-capture-tutorial"])
         let tutorial = app.descendants(matching: .any)["garmentCaptureTutorial"].firstMatch
@@ -83,7 +84,6 @@ final class GarmentHiFiUITests: XCTestCase {
         let originalSelection = try XCTUnwrap(checkbox.value as? String)
         checkbox.tap()
         waitUntil { (checkbox.value as? String).map { $0 != originalSelection } == true }
-        let updatedSelection = try XCTUnwrap(checkbox.value as? String)
         screenshot("hifi96-capture-tutorial")
         continueButton.tap()
         waitUntil { !tutorial.exists }
@@ -94,15 +94,11 @@ final class GarmentHiFiUITests: XCTestCase {
         let options = app.buttons["garmentCaptureOptions"]
         XCTAssertTrue(options.isHittable)
         options.tap()
-        let replay = app.buttons["replayGarmentCaptureTutorial"]
-        XCTAssertTrue(replay.waitForExistence(timeout: 5))
-        replay.tap()
-        XCTAssertTrue(tutorial.waitForExistence(timeout: 5))
-        XCTAssertEqual(checkbox.value as? String, updatedSelection,
-                       "Replaying the guide must preserve the user's skip selection")
-        XCTAssertTrue(continueButton.isHittable)
-        continueButton.tap()
-        waitUntil { !tutorial.exists }
+        XCTAssertTrue(app.buttons["camera.exposureOption"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["camera.aspectRatioOption"].exists)
+        XCTAssertFalse(app.buttons["replayGarmentCaptureTutorial"].exists)
+        app.buttons["camera.closeOptions"].tap()
+        waitUntil { !app.descendants(matching: .any)["camera.optionsMenu"].firstMatch.exists }
         XCTAssertFalse(shutter.isEnabled)
         XCTAssertEqual(shutter.value as? String, "옷 인식 대기")
         recognizeGarment(in: app)
@@ -111,7 +107,7 @@ final class GarmentHiFiUITests: XCTestCase {
     }
 
     @MainActor
-    func testResultTutorialDismissalRestoresPointEditingAndDoesNotReturnAfterDetails() throws {
+    func testResultTutorialDismissalRestoresPointEditingAndDoesNotReturnAfterDragging() throws {
         continueAfterFailure = false
         let app = openPreview(arguments: ["--garment-preview-top", "--garment-preview-result-tutorial"])
         recognizeGarment(in: app)
@@ -132,15 +128,9 @@ final class GarmentHiFiUITests: XCTestCase {
         waitUntil { point.value as? String != original && confirm.isEnabled }
         XCTAssertFalse(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
         XCTAssertFalse(dismissTutorial.exists)
-        app.buttons["garmentResultActions"].tap()
-        let details = app.buttons["openGarmentMeasurementDetails"]
-        XCTAssertTrue(details.waitForExistence(timeout: 5))
-        details.tap()
-        let close = app.buttons["closeGarmentMeasurementDetails"]
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
-        close.tap()
-        waitUntil { confirm.isHittable }
-        XCTAssertFalse(dismissTutorial.exists, "Returning from details must not replay the first-result guide")
+        XCTAssertFalse(app.buttons["garmentResultActions"].exists)
+        XCTAssertTrue(confirm.isHittable)
+        XCTAssertFalse(dismissTutorial.exists, "Finishing a point drag must not replay the result guide")
         screenshot("hifi96-result-after-point-edit")
     }
 
@@ -178,7 +168,7 @@ final class GarmentHiFiUITests: XCTestCase {
         let viewport = app.descendants(matching: .any)["garmentResultPhotoViewport"].firstMatch
         let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
         let point = app.buttons["garmentMeasurementPoint_shoulder_left"]
-        let shoulder = app.buttons["garmentMeasurementLabel_top.shoulderWidth"]
+        let shoulder = app.descendants(matching: .any)["garmentMeasurementLabel_top.shoulderWidth"]
         let magnifier = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
         XCTAssertTrue(viewport.exists && photo.exists && point.isHittable)
         XCTAssertTrue(confirm.isEnabled && confirm.isHittable)

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 /// Transparent controls/outline only. Camera pixels are drawn once, behind
-/// this central photo window, by the synchronized wide/ultra Metal compositor.
+/// this central photo window, by the synchronized calibrated RGB Metal renderer.
 struct MultiCameraInteractionOverlay: UIViewRepresentable {
     let frames: MultiCameraFrameStore
     let readiness: LiveCaptureReadiness

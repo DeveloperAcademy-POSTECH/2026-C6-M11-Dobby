@@ -20,8 +20,8 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.totalLength"].exists)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.totalLength"].exists)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "garmentMeasurementLabel_top.")).count, 3)
 
         let notice = app.buttons["garmentUnavailableNotice"]
@@ -36,7 +36,7 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         XCTAssertFalse(app.buttons["applyTotalLengthCorrection"].isEnabled)
         app.buttons["cancelTotalLengthCorrection"].tap()
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.totalLength"].exists,
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.totalLength"].exists,
                        "Cancel must discard the draft's partial manual edit")
 
         notice.tap()
@@ -48,10 +48,10 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         let apply = app.buttons["applyTotalLengthCorrection"]
         XCTAssertTrue(apply.isEnabled)
         apply.tap()
-        let length = app.buttons["garmentMeasurementLabel_top.totalLength"]
+        let length = app.descendants(matching: .any)["garmentMeasurementLabel_top.totalLength"]
         XCTAssertTrue(length.waitForExistence(timeout: 10))
         XCTAssertFalse(notice.exists)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "garmentMeasurementLabel_top.")).count, 4)
         let labelParts = length.label.components(separatedBy: ", ")
         let centimeters = try XCTUnwrap(labelParts.dropFirst().first).replacingOccurrences(of: " cm", with: "")
@@ -59,26 +59,7 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         screenshot.name = "top-total-length-restored-current-result"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        // The same correction is reachable from nested measurement details.
-        // Previously corrected points still require confirmation in a new draft.
-        app.buttons["garmentResultActions"].tap()
-        app.buttons["openGarmentMeasurementDetails"].tap()
-        let reviewMenu = app.buttons["reviewAllGarmentMeasurementPoints"]
-        XCTAssertTrue(reviewMenu.waitForExistence(timeout: 5))
-        reviewMenu.tap()
-        app.buttons["reviewGarmentItem_top.totalLength"].tap()
-        XCTAssertTrue(app.navigationBars["총장 위치 지정"].waitForExistence(timeout: 5))
-        XCTAssertFalse(apply.isEnabled)
-        photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.24)).tap()
-        photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82)).tap()
-        XCTAssertTrue(apply.isEnabled)
-        apply.tap()
-        let closeDetails = app.buttons["closeGarmentMeasurementDetails"]
-        XCTAssertTrue(closeDetails.waitForExistence(timeout: 5))
-        closeDetails.tap()
-        XCTAssertTrue(length.waitForExistence(timeout: 5))
-        XCTAssertEqual(length.label.components(separatedBy: ", ").dropFirst().first,
-                       centimeters + " cm")
+        XCTAssertFalse(app.buttons["garmentResultActions"].exists)
         let enabled = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: confirm)
         wait(for: [enabled], timeout: 10)
         confirm.tap()

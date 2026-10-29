@@ -1,0 +1,13 @@
+name = "dobby-garment-ai-dev"
+account_id = "1bd840ec9780970ad95e2dc88d9d452f"
+main = "src/connection-test.js"
+compatibility_date = "2026-10-28"
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = false
+
+# Separate Cloudflare connection-test Worker; OpenAI is never called.
+# Configure DRAFT_API_TOKEN as a secret before testing photo requests.
+# Do not use the public local mock token or put secrets in this file.

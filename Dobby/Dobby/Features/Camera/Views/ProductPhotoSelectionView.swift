@@ -10,7 +10,7 @@ import SwiftUI
 /// 선택 데이터와 결과는 촬영 화면의 같은 MV Model을 사용한다.
 struct ProductPhotoSelectionView: View {
     let model: ProductPhotoModel
-    let onExit: (() -> Void)?
+    let onBack: (() -> Void)?
     let onComplete: (ProductPhotoOutput) async throws -> Void
     @State private var didComplete = false
     @State private var completionRequested = false
@@ -19,16 +19,16 @@ struct ProductPhotoSelectionView: View {
     @State private var previewPhoto: CapturedAsset?
     private let background = Color(.systemBackground)
 
-    init(model: ProductPhotoModel, onExit: (() -> Void)? = nil,
+    init(model: ProductPhotoModel, onBack: (() -> Void)? = nil,
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
-        self.onExit = onExit
+        self.onBack = onBack
         self.onComplete = onComplete
     }
 
     var body: some View {
         ProductPhotoSelectionGrid(
-            photos: model.photos,
+            photos: model.selectablePhotos,
             selectedPhotoIDs: model.selectedPhotoIDs,
             onPreview: { selectionLimitNoticeID = nil; previewPhoto = $0 },
             onToggleSelection: toggleSelection
@@ -40,7 +40,7 @@ struct ProductPhotoSelectionView: View {
         .tint(.primary)
         .navigationTitle("제품 사진 선택")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(onExit != nil)
+        .navigationBarBackButtonHidden(onBack != nil)
         .toolbarColorScheme(.light, for: .navigationBar)
         .toolbarBackground(background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -56,9 +56,9 @@ struct ProductPhotoSelectionView: View {
                 .preferredColorScheme(.dark)
         }
         .toolbar {
-            if let onExit {
+            if let onBack {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: onExit) {
+                    Button(action: onBack) {
                         Image(systemName: "chevron.left")
                     }
                         .disabled(model.isCapturing || model.isDeleting || completionRequested || didComplete)

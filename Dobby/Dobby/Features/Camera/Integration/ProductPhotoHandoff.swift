@@ -13,6 +13,11 @@ struct ProductPhotoInput: Equatable, Sendable {
     let sessionID: UUID
     let garmentID: UUID
     let measurement: CapturedAsset
+    var measurementVisualization: CapturedAsset? = nil
+
+    var measurementPhotos: [CapturedAsset] {
+        [measurement] + [measurementVisualization].compactMap { $0 }
+    }
 }
 
 /// 사진 선택의 완료 결과. ProductPhotoHandoff가 선택 사진을 같은 상품의 저장소로 복사한다.

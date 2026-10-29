@@ -84,11 +84,13 @@ struct InfoInputView: View {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        focusedMeasurementID = nil
+                        dismissKeyboard()
                         onExit()
                     } label: {
                         Image(systemName: "chevron.left")
+                            .foregroundStyle(.black)
                     }
+                    .tint(.black)
                     .accessibilityLabel("뒤로가기")
                     .accessibilityIdentifier("product-flow.back")
                 }

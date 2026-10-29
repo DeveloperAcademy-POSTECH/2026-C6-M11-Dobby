@@ -16,7 +16,7 @@ struct ProductDraftExitConfirmation: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.4)
+            Color.black.opacity(0.6)
                 .contentShape(Rectangle())
                 // Outside taps are consumed without dismissing the confirmation.
                 .onTapGesture { }

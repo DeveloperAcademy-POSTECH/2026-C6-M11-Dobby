@@ -21,12 +21,12 @@ final class ProductCreationFlowTests: XCTestCase {
             openCapture(in: app)
             recognizeAndCapture(in: app)
             XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
-            let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            let labels = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@",
                 "garmentMeasurementLabel_")).allElementsBoundByIndex
             XCTAssertEqual(Set(labels.map(\.identifier)), Set(fixture.labels.map { "garmentMeasurementLabel_" + $0.id }))
             for expected in fixture.labels {
-                let label = app.buttons["garmentMeasurementLabel_" + expected.id]
-                XCTAssertTrue(label.isHittable)
+                let label = app.descendants(matching: .any)["garmentMeasurementLabel_" + expected.id]
+                XCTAssertTrue(label.exists)
                 let parts = label.label.components(separatedBy: ", ")
                 XCTAssertEqual(parts.first, expected.title)
                 XCTAssertFalse(label.label.contains("(") || label.label.contains(")"),
@@ -67,10 +67,10 @@ final class ProductCreationFlowTests: XCTestCase {
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).count, 4)
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.hemWidth"].exists)
-        XCTAssertTrue(app.buttons["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).count, 4)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.hemWidth"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
         XCTAssertTrue(app.buttons["garmentMeasurementPoint_sleeve_end_left"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_sleeve_end_right"].exists)
 
@@ -110,11 +110,11 @@ final class ProductCreationFlowTests: XCTestCase {
         attachScreenshot(app, name: "flow-top-detail-captured-original")
         choose.tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        let detail = app.buttons["camera.grid.select.1"]
+        let detail = app.buttons["camera.grid.select.2"]
         reveal(detail, in: app)
         XCTAssertTrue(detail.waitForExistence(timeout: 5))
         waitEnabled(detail)
-        XCTAssertTrue(app.buttons["camera.grid.preview.1"].exists)
+        XCTAssertTrue(app.buttons["camera.grid.preview.2"].exists)
         detail.tap()
         XCTAssertEqual(detail.value as? String, "2번째 선택")
         XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
@@ -243,15 +243,13 @@ final class ProductCreationFlowTests: XCTestCase {
         assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
         attachScreenshot(app, name: "flow-top-library-after-unchanged-edit-67-display")
 
-        // A saved product keeps pending edits when returning to its detail
-        // page, and commits them only after completing Info again.
+        // 닫기는 편집을 계속하고, 완료할 때만 수정한 실측값을 저장한다.
         app.buttons["library.edit"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         replaceText(in: shoulder, with: "72.19", app: app)
-        tapBack(in: app)
-        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
-        assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
-        app.buttons["library.edit"].tap()
+        app.buttons["product-flow.back"].tap()
+        XCTAssertTrue(app.buttons["product-info.discard-cancel"].waitForExistence(timeout: 5))
+        app.buttons["product-info.discard-cancel"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "72.19")
@@ -260,7 +258,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["product-complete.library"].exists)
         XCTAssertTrue(app.buttons["library.edit"].exists)
-        assertSavedValue(key: "shoulderWidth", contains: "72cm", app: app)
+        assertSavedValue(key: "shoulderWidth", contains: "72.1cm", app: app)
         attachScreenshot(app, name: "flow-top-library-saved-restored-draft-72-display")
     }
 
@@ -290,12 +288,12 @@ final class ProductCreationFlowTests: XCTestCase {
         recognizeAndCapture(in: app)
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).count, 4)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).count, 4)
         for id in ["bottom.hem_left_outer.waist_left", "bottom.hem_left_inner.hem_left_outer"] {
-            XCTAssertTrue(app.buttons["garmentMeasurementLabel_" + id].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["garmentMeasurementLabel_" + id].exists)
         }
         for id in ["bottom.hem_right_outer.waist_right", "bottom.hem_right_inner.hem_right_outer", "bottom.crotch.hem_right_inner", "bottom.crotch.hem_left_inner"] {
-            XCTAssertFalse(app.buttons["garmentMeasurementLabel_" + id].exists)
+            XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_" + id].exists)
         }
         XCTAssertTrue(app.buttons["garmentMeasurementPoint_hem_left_inner"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_right_inner"].exists)
@@ -380,7 +378,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
         waitEnabled(app.buttons["camera.selectPhotos"])
         app.buttons["camera.selectPhotos"].tap()
-        let secondSelection = app.buttons["camera.grid.select.1"]
+        let secondSelection = app.buttons["camera.grid.select.2"]
         waitEnabled(secondSelection)
         secondSelection.tap()
         XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 10))
