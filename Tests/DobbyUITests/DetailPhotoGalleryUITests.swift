@@ -132,7 +132,7 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         measure.tap()
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.wait(for: \.isEnabled, toEqual: true, timeout: 20))
-        let labels = app.buttons.matching(NSPredicate(format:
+        let labels = app.descendants(matching: .any).matching(NSPredicate(format:
             "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).allElementsBoundByIndex.map(\.label)
         confirm.tap()
         let guide = app.buttons["camera.startDetailCapture"]

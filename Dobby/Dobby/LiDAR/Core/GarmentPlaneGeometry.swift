@@ -24,7 +24,7 @@ nonisolated struct GarmentPlane: Sendable {
 /// Frozen raw RGB/depth geometry. Display/device/garment rotations never enter
 /// unprojection. Only the lateral-clipping policy uses the composed upright angle.
 nonisolated enum GarmentPlaneGeometry {
-    static let algorithmVersion = "garment-plane-1"
+    static let algorithmVersion = "garment-plane-2"
     static let maximumSamples = 4096
     static let minimumSamples = 60
     static let minimumDepthMeters = 0.15
@@ -59,7 +59,10 @@ nonisolated enum GarmentPlaneGeometry {
         samples.reserveCapacity(maximumSamples)
         var interiorCount = 0, inRangeInteriorCount = 0
         var interiorBounds = Bounds()
-        let confidence = frame.depth.confidence! // validate requires this exact frame's confidence.
+        // AVDepthData has metric depth but no ARKit per-pixel confidence map.
+        // Keep unknown confidence absent; the same geometric support checks
+        // below still determine whether these depth samples form a usable plane.
+        let confidence = frame.depth.confidence
         for y in stride(from: 1, to: height - 1, by: step) {
             for x in stride(from: 1, to: width - 1, by: step) {
                 guard isInterior(x: x, y: y, depthSize: frame.depth.size, mask: mask) else { continue }
@@ -69,7 +72,7 @@ nonisolated enum GarmentPlaneGeometry {
                 let index = y * width + x, z = Double(frame.depth.values[y * width + x])
                 guard z.isFinite, (minimumDepthMeters...maximumDepthMeters).contains(z) else { continue }
                 inRangeInteriorCount += 1
-                guard (1...2).contains(confidence[index]) else { continue }
+                if let confidence, !(1...2).contains(confidence[index]) { continue }
                 let position = scale(ray(location, frame: frame), z)
                 guard finite(position) else { continue }
                 samples.append(.init(position: position, raw: location))
@@ -201,11 +204,14 @@ nonisolated enum GarmentPlaneGeometry {
               frame.depth.values.count == size.width * size.height,
               size.width * frame.imageSize.height == size.height * frame.imageSize.width
         else { throw failure(.invalidDepthMap, .malformedDepth, stage: .input) }
-        guard let confidence = frame.depth.confidence else {
+        if let confidence = frame.depth.confidence {
+            guard confidence.count == frame.depth.values.count, confidence.allSatisfy({ $0 <= 2 }) else {
+                throw failure(.invalidDepthMap, .malformedConfidence, stage: .input)
+            }
+        } else if frame.source != .avFoundationLiDAR {
+            // The AVFoundation provider explicitly has no confidence channel.
+            // Do not hide a missing ARKit channel or reinterpret it as high quality.
             throw failure(.invalidDepthMap, .missingDepthConfidence, stage: .input)
-        }
-        guard confidence.count == frame.depth.values.count, confidence.allSatisfy({ $0 <= 2 }) else {
-            throw failure(.invalidDepthMap, .malformedConfidence, stage: .input)
         }
         guard mask.size.isValid, mask.size.width <= maximumBufferPixels / mask.size.height,
               mask.values.count == mask.size.width * mask.size.height,

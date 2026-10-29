@@ -21,12 +21,12 @@ final class ProductCreationFlowTests: XCTestCase {
             openCapture(in: app)
             recognizeAndCapture(in: app)
             XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
-            let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            let labels = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@",
                 "garmentMeasurementLabel_")).allElementsBoundByIndex
             XCTAssertEqual(Set(labels.map(\.identifier)), Set(fixture.labels.map { "garmentMeasurementLabel_" + $0.id }))
             for expected in fixture.labels {
-                let label = app.buttons["garmentMeasurementLabel_" + expected.id]
-                XCTAssertTrue(label.isHittable)
+                let label = app.descendants(matching: .any)["garmentMeasurementLabel_" + expected.id]
+                XCTAssertTrue(label.exists)
                 let parts = label.label.components(separatedBy: ", ")
                 XCTAssertEqual(parts.first, expected.title)
                 XCTAssertFalse(label.label.contains("(") || label.label.contains(")"),
@@ -67,10 +67,10 @@ final class ProductCreationFlowTests: XCTestCase {
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).count, 4)
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.hemWidth"].exists)
-        XCTAssertTrue(app.buttons["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).count, 4)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.hemWidth"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
         XCTAssertTrue(app.buttons["garmentMeasurementPoint_sleeve_end_left"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_sleeve_end_right"].exists)
 
@@ -290,12 +290,12 @@ final class ProductCreationFlowTests: XCTestCase {
         recognizeAndCapture(in: app)
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).count, 4)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).count, 4)
         for id in ["bottom.hem_left_outer.waist_left", "bottom.hem_left_inner.hem_left_outer"] {
-            XCTAssertTrue(app.buttons["garmentMeasurementLabel_" + id].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["garmentMeasurementLabel_" + id].exists)
         }
         for id in ["bottom.hem_right_outer.waist_right", "bottom.hem_right_inner.hem_right_outer", "bottom.crotch.hem_right_inner", "bottom.crotch.hem_left_inner"] {
-            XCTAssertFalse(app.buttons["garmentMeasurementLabel_" + id].exists)
+            XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_" + id].exists)
         }
         XCTAssertTrue(app.buttons["garmentMeasurementPoint_hem_left_inner"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_right_inner"].exists)

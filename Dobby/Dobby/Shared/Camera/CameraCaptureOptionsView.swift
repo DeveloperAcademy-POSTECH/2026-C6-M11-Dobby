@@ -40,6 +40,7 @@ struct CameraCaptureOptionsView: View {
     let presentation: DetailCaptureOptionsPresentation
     private let selection: Binding<DetailCaptureOptionsDestination>?
     private let forceReduceMotion: Bool
+    private let exposureSelectionFeedbackEnabled: Bool?
     let onClose: () -> Void
     @State private var localSelection: DetailCaptureOptionsDestination = .menu
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -50,6 +51,7 @@ struct CameraCaptureOptionsView: View {
          presentation: DetailCaptureOptionsPresentation = .standard,
          selection: Binding<DetailCaptureOptionsDestination>? = nil,
          forceReduceMotion: Bool = false,
+         exposureSelectionFeedbackEnabled: Bool? = nil,
          onClose: @escaping () -> Void) {
         self.state = state
         self.onExposureChange = onExposureChange
@@ -57,6 +59,7 @@ struct CameraCaptureOptionsView: View {
         self.presentation = presentation
         self.selection = selection
         self.forceReduceMotion = forceReduceMotion
+        self.exposureSelectionFeedbackEnabled = exposureSelectionFeedbackEnabled
         self.onClose = onClose
     }
 
@@ -84,7 +87,9 @@ struct CameraCaptureOptionsView: View {
         Group {
             if destination == .exposure, state.exposureRange != nil {
                 CameraExposureView(state: state, presentation: presentation,
-                    forceReduceMotion: effectiveReduceMotion, onChangeExposure: onExposureChange) { navigate(to: .menu) }
+                    forceReduceMotion: effectiveReduceMotion,
+                    selectionFeedbackEnabled: exposureSelectionFeedbackEnabled,
+                    onChangeExposure: onExposureChange) { navigate(to: .menu) }
             } else if destination == .aspectRatio, !state.aspectRatios.isEmpty {
                 CameraAspectRatioView(state: state, presentation: presentation,
                     onSelectRatio: onAspectRatioChange) { navigate(to: .menu) }

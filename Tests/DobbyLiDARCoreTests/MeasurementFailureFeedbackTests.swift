@@ -160,6 +160,39 @@ final class MeasurementFailureFeedbackTests: XCTestCase {
         }
     }
 
+    func testAVFoundationMissingConfidenceAloneDoesNotHideUsableLengthOrCreateFailureFeedback() throws {
+        var candidate = scene()
+        candidate.frame.source = .avFoundationLiDAR
+        candidate.frame.depth.confidence = nil
+        let measured = try first(candidate, plane: true)
+        XCTAssertEqual(measured.status, .uncertain)
+        XCTAssertTrue(measured.hasUsableMeasurement)
+        XCTAssertGreaterThan(try XCTUnwrap(measured.meters), 0)
+        XCTAssertNil(measured.failure)
+        XCTAssertNil(measured.failureContexts)
+        XCTAssertNil(measured.failureFeedback)
+        XCTAssertTrue(measured.points.allSatisfy { !$0.quality.confidenceAvailable })
+    }
+
+    func testAVFoundationWithoutConfidenceReportsActualDepthFailureRatherThanMissingMetadata() throws {
+        let absent = scene(depth: { _, _ in 0 })
+        let mixed = scene(depth: { x, _ in x < 40 ? 1 : 1.15 })
+        for (fixture, reason) in [(absent, MeasurementFailureReason.planeTooFewSamples),
+                                  (mixed, .planeInsufficientInliers)] {
+            var candidate = fixture
+            candidate.frame.source = .avFoundationLiDAR
+            candidate.frame.depth.confidence = nil
+            let measured = try first(candidate, plane: true)
+            let feedback = try XCTUnwrap(measured.failureFeedback)
+            XCTAssertEqual(measured.failureContexts?.first?.reason, reason)
+            XCTAssertTrue(feedback.reason.contains(reason.explanation))
+            XCTAssertFalse(feedback.reason.contains(MeasurementFailureReason.missingDepthConfidence.explanation))
+            XCTAssertTrue(feedback.isCaptureFailure)
+            XCTAssertEqual(feedback.suggestedAction, .retake)
+            XCTAssertNil(measured.meters)
+        }
+    }
+
     func testMaskMissingMalformedCoverageAndClippingAreDistinct() throws {
         var missing = scene(); missing.landmarks.mask = nil
         var malformed = scene(); malformed.landmarks.mask?.values[0] = 2

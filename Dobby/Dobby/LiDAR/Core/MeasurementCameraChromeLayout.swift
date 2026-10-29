@@ -44,69 +44,28 @@ nonisolated struct MeasurementCameraChromeLayout: Sendable, Equatable {
         return .init(x: x, y: y, width: width, height: height)
     }
 
-    /// One shutter position is shared by every selected ratio. In particular,
-    /// it must clear BOTH the 4:3 lower border and the 16:9 lower border rather
-    /// than moving with whichever photograph happens to be selected now.
+    /// Match the detail camera's 114pt bottom controls row. Safe-area padding
+    /// belongs below the row, so the shutter centre is 57pt above that boundary.
+    /// Ratios never move this anchor or alter the calibrated photograph.
     static func shutterFrame(containerWidth: Double, containerHeight: Double,
                              sourceAspectRatio: Double = 0.75,
                              diameter: Double = 92, edgeClearance: Double = 8,
-                             landscapeControlsWidth: Double = 180) -> CameraPhotoViewport? {
+                             landscapeControlsWidth: Double = 180,
+                             bottomSafeAreaInset: Double = 0) -> CameraPhotoViewport? {
         guard [containerWidth, containerHeight, sourceAspectRatio, diameter,
-               edgeClearance, landscapeControlsWidth].allSatisfy(\.isFinite),
+               edgeClearance, landscapeControlsWidth, bottomSafeAreaInset].allSatisfy(\.isFinite),
               containerWidth > 0, containerHeight > 0, sourceAspectRatio > 0,
-              diameter >= 44, edgeClearance >= 0, landscapeControlsWidth >= 0 else { return nil }
-        let portrait = containerWidth <= containerHeight
+              diameter >= 44, edgeClearance >= 0, landscapeControlsWidth >= 0,
+              bottomSafeAreaInset >= 0 else { return nil }
+        let controlsHeight = 114.0
+        guard diameter <= controlsHeight,
+              containerWidth >= diameter + 48 * 2 + 16 * 4 else { return nil }
         let radius = diameter / 2
-        let centerX = portrait ? containerWidth / 2 : containerWidth - landscapeControlsWidth / 2
-        guard centerX - radius >= 8, centerX + radius <= containerWidth - 8 else { return nil }
-        let lower = portrait ? max(146 + radius + edgeClearance, containerHeight * 0.4) : radius + 16
-        let upper = containerHeight - radius - 16
-        guard lower.isFinite, upper.isFinite, lower <= upper else { return nil }
-        let preferred = portrait ? containerHeight - 156 : containerHeight / 2
-        let clearanceRadius = radius + edgeClearance
-        guard clearanceRadius.isFinite else { return nil }
-        let aspects = [sourceAspectRatio, 1, portrait ? 9.0 / 16 : 16.0 / 9]
-        let photos = aspects.compactMap {
-            photoViewport(containerWidth: containerWidth, containerHeight: containerHeight, photoAspectRatio: $0)
-        }
-        guard photos.count == aspects.count else { return nil }
-
-        // Each interval contains shutter-centre positions that would bring its
-        // circular edge within edgeClearance of an actual photo border segment.
-        // Vertical segments matter too for narrow source photos and sidebars.
-        var excluded: [(lower: Double, upper: Double)] = []
-        for photo in photos {
-            let right = photo.x + photo.width, bottom = photo.y + photo.height
-            let horizontalDistance = max(photo.x - centerX, centerX - right, 0)
-            if horizontalDistance < clearanceRadius {
-                let reach = (clearanceRadius * clearanceRadius - horizontalDistance * horizontalDistance).squareRoot()
-                excluded.append((photo.y - reach, photo.y + reach))
-                excluded.append((bottom - reach, bottom + reach))
-            }
-            for x in [photo.x, right] {
-                let distance = abs(centerX - x)
-                if distance < clearanceRadius {
-                    let reach = (clearanceRadius * clearanceRadius - distance * distance).squareRoot()
-                    excluded.append((photo.y - reach, bottom + reach))
-                }
-            }
-        }
-        var candidates = [min(max(preferred, lower), upper), lower, upper]
-        for interval in excluded {
-            for endpoint in [interval.lower, interval.upper] where endpoint >= lower && endpoint <= upper {
-                candidates.append(endpoint)
-            }
-        }
-        let epsilon = 1e-9
-        let accepted = candidates.filter { candidate in
-            candidate.isFinite && !excluded.contains {
-                candidate > $0.lower + epsilon && candidate < $0.upper - epsilon
-            }
-        }
-        guard let centerY = accepted.min(by: { a, b in
-            let lhs = abs(a - preferred), rhs = abs(b - preferred)
-            return abs(lhs - rhs) > epsilon ? lhs < rhs : a < b
-        }) else { return nil }
+        let centerX = containerWidth / 2
+        let centerY = containerHeight - bottomSafeAreaInset - controlsHeight / 2
+        guard centerX - radius >= 8, centerX + radius <= containerWidth - 8,
+              centerY - radius >= 16,
+              centerY + radius <= containerHeight - bottomSafeAreaInset else { return nil }
         return .init(x: centerX - radius, y: centerY - radius, width: diameter, height: diameter)
     }
 
@@ -138,7 +97,7 @@ nonisolated struct MeasurementCameraChromeLayout: Sendable, Equatable {
                   shutter.y + shutter.height <= containerHeight else { return nil }
         }
         let footerBottom = portrait ? containerHeight - bottomControlsHeight - 12 : containerHeight
-        let shutterBottom = portrait ? shutter.map { $0.y - 12 } ?? footerBottom : containerHeight
+        let shutterBottom = shutter.map { $0.y - 12 } ?? footerBottom
         let usableBottom = min(footerBottom, shutterBottom)
         let right = min(photoRight, usableRight), bottom = min(photoBottom, usableBottom)
         let width = right - photo.x, height = bottom - photo.y

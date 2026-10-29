@@ -2,58 +2,42 @@ import XCTest
 @testable import DobbyLiDARCore
 
 final class MeasurementCameraChromeLayoutTests: XCTestCase {
-    func testDefaultShutterIsRaisedWithoutTouchingEitherFourByThreeOrTallBorder() throws {
+    func testDefaultShutterMatchesDetailCameraBottomRowAndSafeArea() throws {
         let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 402,
-            containerHeight: 874))
-        XCTAssertEqual(shutter, .init(x: 155, y: 672, width: 92, height: 92))
-        XCTAssertEqual(shutter.y + shutter.height / 2, 718)
-        XCTAssertLessThan(shutter.y + shutter.height / 2, 874 - 112,
-                          "The previous fixed centre crossed the tall photo's lower border")
+            containerHeight: 874, bottomSafeAreaInset: 34))
+        XCTAssertEqual(shutter, .init(x: 155, y: 737, width: 92, height: 92))
+        XCTAssertEqual(shutter.y + shutter.height / 2, 874 - 34 - 114 / 2)
         for aspect in [0.75, 1, 9.0 / 16] {
-            let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: 402,
-                containerHeight: 874, photoAspectRatio: aspect))
-            assertCircle(shutter, clears: photo, by: 8)
+            XCTAssertEqual(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 402,
+                containerHeight: 874, sourceAspectRatio: aspect, bottomSafeAreaInset: 34), shutter)
         }
-        let oldShutter = CameraPhotoViewport(x: 155, y: 716, width: 92, height: 92)
-        let tall = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: 402,
-            containerHeight: 874, photoAspectRatio: 9.0 / 16))
-        XCTAssertLessThan(distanceFromCircleCenter(oldShutter, toBorderOf: tall), 46,
-                          "This fixture must reproduce the actual old border intersection")
     }
 
-    func testOneFixedShutterClearsEveryRatioAcrossPhonesAndTablets() throws {
+    func testOneFixedDetailShutterRowAcrossPhonesAndTablets() throws {
         for (width, height) in [(375.0, 667.0), (390, 844), (402, 874), (430, 932),
                                 (768, 1024), (1024, 1366)] {
-            for sourceAspect in [0.75, 0.8] {
+            for safeArea in [0.0, 21, 34] {
                 let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: width,
-                    containerHeight: height, sourceAspectRatio: sourceAspect), "\(width)×\(height)/\(sourceAspect)")
+                    containerHeight: height, bottomSafeAreaInset: safeArea))
+                XCTAssertEqual(shutter.x + shutter.width / 2, width / 2)
+                XCTAssertEqual(shutter.y + shutter.height / 2, height - safeArea - 57)
                 XCTAssertGreaterThanOrEqual(shutter.x, 0)
                 XCTAssertGreaterThanOrEqual(shutter.y, 0)
                 XCTAssertLessThanOrEqual(shutter.x + shutter.width, width)
-                XCTAssertLessThanOrEqual(shutter.y + shutter.height, height)
+                XCTAssertLessThanOrEqual(shutter.y + shutter.height, height - safeArea)
                 XCTAssertEqual(shutter.width, 92)
-                for aspect in [sourceAspect, 1, 9.0 / 16] {
-                    let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: width,
-                        containerHeight: height, photoAspectRatio: aspect))
-                    assertCircle(shutter, clears: photo, by: 8)
-                }
             }
         }
     }
 
-    func testCompactShutterMovesInsideTheCommonPhotoWhenNoLowerGapCanFitIt() throws {
+    func testCompactShutterRetainsTheSameDetailCameraBottomAnchor() throws {
         let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: 375,
             containerHeight: 667))
-        XCTAssertEqual(shutter.y + shutter.height / 2, 445.5, accuracy: 1e-10)
-        for aspect in [0.75, 1, 9.0 / 16] {
-            let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: 375,
-                containerHeight: 667, photoAspectRatio: aspect))
-            XCTAssertGreaterThanOrEqual(shutter.y, photo.y + 8)
-            XCTAssertLessThanOrEqual(shutter.y + shutter.height, photo.y + photo.height - 8 + 1e-9)
-        }
+        XCTAssertEqual(shutter.y + shutter.height / 2, 610, accuracy: 1e-10)
+        XCTAssertEqual(shutter.x + shutter.width / 2, 187.5)
     }
 
-    func testZoomStaysAboveTheRaisedShutterWhileKeepingItsTouchAreaAndPhotoCoordinates() throws {
+    func testZoomStaysAboveTheDetailAlignedShutterWhileKeepingItsTouchAreaAndPhotoCoordinates() throws {
         for (width, height) in [(375.0, 667.0), (390, 844), (402, 874), (430, 932), (1024, 1366)] {
             let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: width,
                 containerHeight: height))
@@ -74,16 +58,21 @@ final class MeasurementCameraChromeLayoutTests: XCTestCase {
         }
     }
 
-    func testLandscapeShutterUsesTheSidebarAndClearsAllPhotoEdges() throws {
+    func testLandscapeShutterMatchesTheDetailCameraBottomRow() throws {
         for (width, height) in [(874.0, 402.0), (667, 375), (1366, 1024)] {
             let shutter = try XCTUnwrap(MeasurementCameraChromeLayout.shutterFrame(containerWidth: width,
-                containerHeight: height, sourceAspectRatio: 4.0 / 3))
-            XCTAssertEqual(shutter.x + 46, width - 90)
-            XCTAssertEqual(shutter.y + 46, height / 2)
+                containerHeight: height, sourceAspectRatio: 4.0 / 3, bottomSafeAreaInset: 21))
+            XCTAssertEqual(shutter.x + 46, width / 2)
+            XCTAssertEqual(shutter.y + 46, height - 21 - 57)
             for aspect in [4.0 / 3, 1, 16.0 / 9] {
                 let photo = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(containerWidth: width,
                     containerHeight: height, photoAspectRatio: aspect))
-                assertCircle(shutter, clears: photo, by: 8)
+                let chrome = try XCTUnwrap(MeasurementCameraChromeLayout.layout(containerWidth: width,
+                    containerHeight: height, photo: photo, shutter: shutter))
+                XCTAssertLessThanOrEqual(chrome.zoomFrame.y + chrome.zoomFrame.height, shutter.y - 12 + 1e-9)
+                if let guidance = chrome.guidanceFrame {
+                    XCTAssertLessThanOrEqual(guidance.y + guidance.height, shutter.y - 12 + 1e-9)
+                }
             }
         }
     }
@@ -268,20 +257,4 @@ final class MeasurementCameraChromeLayoutTests: XCTestCase {
             containerHeight: height, photo: photo))
     }
 
-    private func assertCircle(_ circle: CameraPhotoViewport, clears photo: CameraPhotoViewport,
-                              by clearance: Double, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertGreaterThanOrEqual(distanceFromCircleCenter(circle, toBorderOf: photo),
-            circle.width / 2 + clearance - 1e-9, "\(circle) intersects \(photo)", file: file, line: line)
-    }
-
-    /// Independent Euclidean point-to-segment distances, not the production
-    /// interval/candidate algorithm. This also detects vertical letterbox edges.
-    private func distanceFromCircleCenter(_ circle: CameraPhotoViewport,
-                                          toBorderOf photo: CameraPhotoViewport) -> Double {
-        let x = circle.x + circle.width / 2, y = circle.y + circle.height / 2
-        let right = photo.x + photo.width, bottom = photo.y + photo.height
-        let nearestX = min(max(x, photo.x), right), nearestY = min(max(y, photo.y), bottom)
-        return [hypot(x - nearestX, y - photo.y), hypot(x - nearestX, y - bottom),
-                hypot(x - photo.x, y - nearestY), hypot(x - right, y - nearestY)].min()!
-    }
 }

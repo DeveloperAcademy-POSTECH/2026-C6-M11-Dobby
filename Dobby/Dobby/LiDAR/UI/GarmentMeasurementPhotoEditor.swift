@@ -13,7 +13,6 @@ struct GarmentMeasurementPhotoEditor: View {
     let isEnabled: Bool
     let isRecalculating: Bool
     var showsEnlargeControl = true
-    let onSelect: (MeasurementDefinition) -> Void
     let onEnlarge: () -> Void
     let onMove: (String, ImagePoint) -> Void
     let onEditingChanged: (Bool) -> Void
@@ -199,24 +198,21 @@ struct GarmentMeasurementPhotoEditor: View {
     }
 
     private func measurementLabel(_ item: Annotation) -> some View {
-        Button { onSelect(item.definition) } label: {
-            HStack(spacing: 4) {
-                Text(GarmentMeasurementText.shortTitle(item.definition)).foregroundStyle(.white.opacity(0.95))
-                    .font(.system(size: labelFontSize, weight: .regular))
-                    .fixedSize(horizontal: true, vertical: false)
-                Text(drag != nil || isRecalculating ? "…" : visibleMeasurementValue(item.value))
-                    .font(.system(size: labelFontSize, weight: .regular))
-                    .monospacedDigit().fixedSize(horizontal: true, vertical: false)
-            }.font(.system(size: labelFontSize, weight: .regular)).foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.65), radius: 0.75, y: 0.5)
-                .lineLimit(1).padding(.horizontal, 4)
-                .frame(width: item.labelSize.width, height: item.labelSize.height)
-                .modifier(MeasurementGlassCapsule(reduceTransparency: reduceTransparency))
-                .frame(height: max(44, item.labelSize.height))
-                .contentShape(Rectangle())
-        }.buttonStyle(.plain)
+        HStack(spacing: 4) {
+            Text(GarmentMeasurementText.shortTitle(item.definition))
+                .font(.system(size: labelFontSize, weight: .medium))
+                .fixedSize(horizontal: true, vertical: false)
+            Text(drag != nil || isRecalculating ? "…" : visibleMeasurementValue(item.value))
+                .font(.system(size: labelFontSize, weight: .semibold))
+                .monospacedDigit().fixedSize(horizontal: true, vertical: false)
+        }.foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.65), radius: 0.75, y: 0.5)
+            .lineLimit(1).padding(.horizontal, 4)
+            .frame(width: item.labelSize.width, height: item.labelSize.height)
+            .modifier(MeasurementValueGlassCapsule(reduceTransparency: reduceTransparency))
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(item.definition.title), \(drag != nil || isRecalculating ? "재계산 중" : GarmentMeasurementText.value(item.value))")
-            .accessibilityHint("측정 항목 상세 보기")
             .accessibilityIdentifier("garmentMeasurementLabel_\(item.id)")
     }
 
@@ -309,18 +305,27 @@ struct GarmentMeasurementPhotoEditor: View {
             loupeSize: loupeSize, displayCrop: displayCrop)
         // A bounded canvas avoids a three-times-larger SwiftUI Image's
         // layout/accessibility bounds leaking outside the clipped inset.
-        return Canvas { context, _ in
+        return Canvas { context, size in
+            // Near the photo edge, keep the actual selected pixel under the
+            // fixed reticle instead of moving the reticle away from the centre.
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(white: 0.12)))
             context.draw(context.resolve(Image(uiImage: image)),
                 in: CGRect(origin: layout.imageOrigin, size: layout.imageSize))
-            let marker = CGRect(x: layout.crosshair.x - 12, y: layout.crosshair.y - 12, width: 24, height: 24)
+            let radius: CGFloat = 10, lineWidth: CGFloat = 1
+            // Use layout points, as with the surrounding iOS controls. The gap
+            // is measured to the ring's inner stroke edge, not its centreline.
+            let ringGap: CGFloat = 3.3
+            let crossExtent = radius - lineWidth / 2 - ringGap
+            let marker = CGRect(x: layout.crosshair.x - radius, y: layout.crosshair.y - radius,
+                width: radius * 2, height: radius * 2)
             context.fill(Path(ellipseIn: marker), with: .color(.black.opacity(0.2)))
-            context.stroke(Path(ellipseIn: marker), with: .color(.white), lineWidth: 1)
+            context.stroke(Path(ellipseIn: marker), with: .color(.white), lineWidth: lineWidth)
             var cross = Path()
-            cross.move(to: .init(x: layout.crosshair.x - 12, y: layout.crosshair.y))
-            cross.addLine(to: .init(x: layout.crosshair.x + 12, y: layout.crosshair.y))
-            cross.move(to: .init(x: layout.crosshair.x, y: layout.crosshair.y - 12))
-            cross.addLine(to: .init(x: layout.crosshair.x, y: layout.crosshair.y + 12))
-            context.stroke(cross, with: .color(.white), lineWidth: 1)
+            cross.move(to: .init(x: layout.crosshair.x - crossExtent, y: layout.crosshair.y))
+            cross.addLine(to: .init(x: layout.crosshair.x + crossExtent, y: layout.crosshair.y))
+            cross.move(to: .init(x: layout.crosshair.x, y: layout.crosshair.y - crossExtent))
+            cross.addLine(to: .init(x: layout.crosshair.x, y: layout.crosshair.y + crossExtent))
+            context.stroke(cross, with: .color(.white), style: .init(lineWidth: lineWidth, lineCap: .butt))
         }.frame(width: loupeSize.width, height: loupeSize.height)
             .clipShape(RoundedRectangle(cornerRadius: 18))
             .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white, lineWidth: 1.5))
@@ -365,10 +370,10 @@ struct GarmentMeasurementPhotoEditor: View {
                   value.points.count == 2, value.points.allSatisfy({ $0.imagePoint.isValid }) else { return nil }
             let start = screenPoint(value.points[0].imagePoint, size: size)
             let end = screenPoint(value.points[1].imagePoint, size: size)
-            // Match the regular title and monospaced value separately,
+            // Match the medium title and semibold monospaced value separately,
             // using the same compact unit spacing as the visible capsule.
-            let titleFont = UIFont.systemFont(ofSize: labelFontSize, weight: .regular)
-            let valueFont = UIFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .regular)
+            let titleFont = UIFont.systemFont(ofSize: labelFontSize, weight: .medium)
+            let valueFont = UIFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .semibold)
             let titleWidth = (GarmentMeasurementText.shortTitle(definition) as NSString)
                 .size(withAttributes: [.font: titleFont]).width
             let valueWidth = (visibleMeasurementValue(value) as NSString)
@@ -457,6 +462,20 @@ private struct MeasurementGlassCapsule: ViewModifier {
                 .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 0.75))
         } else {
             content.glassEffect(.clear.tint(.black.opacity(0.3)).interactive(), in: Capsule())
+        }
+    }
+}
+
+/// Static readings use regular glass for a stable dark backing and stronger
+/// text contrast. They do not advertise button interaction or open details.
+private struct MeasurementValueGlassCapsule: ViewModifier {
+    let reduceTransparency: Bool
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background(Color(white: 0.12), in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 0.75))
+        } else {
+            content.glassEffect(.regular.tint(.black.opacity(0.45)), in: Capsule())
         }
     }
 }
@@ -637,16 +656,15 @@ nonisolated enum GarmentPhotoGeometry {
         let fullPhoto = photoRect(photoSize: photoSize, displayCrop: displayCrop).size
         let enlarged = CGSize(width: fullPhoto.width * scale, height: fullPhoto.height * scale)
         let point = CGPoint(x: displayPoint.x * enlarged.width, y: displayPoint.y * enlarged.height)
-        let center = CGPoint(x: min(max(point.x, loupeSize.width / 2), enlarged.width - loupeSize.width / 2),
-            y: min(max(point.y, loupeSize.height / 2), enlarged.height - loupeSize.height / 2))
-        let origin = CGPoint(x: loupeSize.width / 2 - center.x, y: loupeSize.height / 2 - center.y)
+        let center = CGPoint(x: loupeSize.width / 2, y: loupeSize.height / 2)
+        let origin = CGPoint(x: center.x - point.x, y: center.y - point.y)
         return .init(imageSize: enlarged, imageOrigin: origin,
-            crosshair: .init(x: point.x + origin.x, y: point.y + origin.y))
+            crosshair: center)
     }
 
     /// Reserve full caption/control touch areas. Point markers only obstruct
     /// the visible capsule: point handles win touches in its transparent padding.
-    /// If no space remains, the value is still accessible in measurement details.
+    /// If no space remains, omit the caption instead of covering its endpoints.
     static func labelPlacement(near middle: CGPoint, labelSize: CGSize,
                                imageSize: CGSize, occupied: [CGRect], markers: [CGRect] = [],
                                visibleLabelHeight: CGFloat? = nil) -> CGRect? {
