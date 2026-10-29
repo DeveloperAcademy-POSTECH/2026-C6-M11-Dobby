@@ -93,16 +93,10 @@ struct ProductCreationFlowView: View {
                                 ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
                                     onComplete: receivePhotos)
                             case .information:
-                                if resumeProductID == nil {
-                                    InfoInputView(garment: garment, measurementInput: $measurementInput,
-                                        onExit: handleInformationBack) {
-                                        _ in path.append(.completed)
-                                    }
-                                } else {
-                                    ProductInformationEditingView(garment: garment,
-                                        measurementInput: $measurementInput, onExit: onCancel) {
-                                        _ in path.append(.completed)
-                                    }
+                                // Restored creation drafts continue input; they are not saved-product edits.
+                                InfoInputView(garment: garment, measurementInput: $measurementInput,
+                                    onExit: handleInformationBack) {
+                                    _ in path.append(.completed)
                                 }
                             case .completed:
                                 ProductInputCompletionView(garment: garment,
