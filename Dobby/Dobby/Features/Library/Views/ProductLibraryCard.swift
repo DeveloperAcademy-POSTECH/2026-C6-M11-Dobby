@@ -25,7 +25,7 @@ struct ProductLibraryCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(displayBrand)
                     .modifier(LibraryCardTextStyle(size: 16, lineHeight: 20, relativeTo: .callout))
-                    .foregroundStyle(LibraryCardStyle.brand)
+                    .foregroundStyle(garment.brand.isBlank ? Color("BrandNeutral500") : LibraryCardStyle.brand)
                     .lineLimit(1)
                     .frame(height: brandLineHeight, alignment: .topLeading)
 
@@ -99,7 +99,7 @@ struct ProductLibraryCard: View {
     }
 
     private var displayBrand: String {
-        garment.brand.isBlank && showsDraftPlaceholders ? "Brand Name" : garment.brand
+        garment.brand.isBlank ? "No Brand" : garment.brand
     }
 
     private var displayName: String {
