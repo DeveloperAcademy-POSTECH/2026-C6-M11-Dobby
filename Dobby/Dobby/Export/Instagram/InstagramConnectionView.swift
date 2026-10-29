@@ -52,6 +52,7 @@ struct InstagramConnectionView: View {
                     }
                     .font(.caption)
                     .underline()
+                    .foregroundStyle(Color(.brandNeutral700))
                 }
                 .frame(maxWidth: .infinity)
             }
