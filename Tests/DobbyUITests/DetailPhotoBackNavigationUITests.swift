@@ -67,12 +67,16 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             photo.tap()
         }
         assertSelection(in: app)
-        cancelExitAndStay(title: "제품 사진 선택", app: app)
+        returnToDetails(in: app)
+        openSelection(in: app)
         assertSelection(in: app)
 
         var productID: String?
         for _ in 0..<2 {
-            let restoredID = saveAndResumeDraft(stage: "제품 사진 선택 단계", title: "제품 사진 선택", app: app)
+            returnToDetails(in: app)
+            let restoredID = saveAndResumeDraft(stage: "상세 촬영 단계", title: "제품 상세 촬영", app: app)
+            waitForDetails(in: app, expectsGuide: false)
+            openSelection(in: app)
             if let productID { XCTAssertEqual(restoredID, productID) }
             productID = restoredID
             XCTAssertEqual(selectionControls(in: app).count, 3)
@@ -89,7 +93,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             assertSelection(in: app)
         }
         app.buttons["camera.completePhotos"].tap()
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 15))
     }
 
     @MainActor
@@ -156,6 +160,16 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 10))
         XCTAssertFalse(exitConfirmation(in: app).exists)
         return value
+    }
+
+    @MainActor
+    private func returnToDetails(in app: XCUIApplication) {
+        let back = app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)
+        XCTAssertNotNil(back)
+        back?.tap()
+        waitForDetails(in: app, expectsGuide: false)
+        XCTAssertFalse(exitConfirmation(in: app).exists)
     }
 
     @MainActor

@@ -3,6 +3,37 @@ import XCTest
 
 final class ProductPhotoSelectionGridTests: XCTestCase {
     @MainActor
+    func testBackKeepsPhotosAndSelectionOrderWhileAddingAnotherCapture() {
+        let app = openSelection(detailCount: 2)
+        defer { app.terminate() }
+        tap(app, "camera.grid.select.0")
+        for index in [2, 0, 1] { tap(app, "camera.grid.select.\(index)") }
+        let originalOrder = (0..<3).map { value(app, $0) }
+        let back = app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)
+        XCTAssertNotNil(back)
+        back?.tap()
+        XCTAssertTrue(app.buttons["camera.captureDetail"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["product-flow.exit-title"].exists)
+        XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists, "촬영 가이드를 다시 요구하지 않는다")
+        tap(app, "camera.openGallery")
+        let pager = app.descendants(matching: .any)["camera.galleryPager"].firstMatch
+        XCTAssertTrue(pager.waitForExistence(timeout: 5))
+        XCTAssertEqual(pager.value as? String, "4 / 4", "실측 원본·표시본과 상세 2장 유지")
+        tap(app, "촬영으로 돌아가기")
+        tap(app, "camera.captureDetail")
+        tap(app, "camera.selectPhotos")
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
+        XCTAssertEqual((0..<3).map { value(app, $0) }, originalOrder)
+        XCTAssertEqual(value(app, 3), "선택 안 됨")
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "camera.grid.select.")).count, 4)
+        tap(app, "camera.grid.preview.2")
+        XCTAssertTrue(app.buttons["camera.selectionPreviewToggle"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요."].exists)
+    }
+
+    @MainActor
     func testGridLimitFeedbackAndCompletion() {
         let app = openSelection(detailCount: 11)
         let grid = app.scrollViews["camera.selectionGrid"]
@@ -47,6 +78,7 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
     func testPreviewSharesSelectionAndRestoresScrolledGrid() {
         let app = openSelection(detailCount: 17)
         tap(app, "camera.grid.preview.0")
+        assertPreviewLayout(app)
         XCTAssertEqual(app.buttons["camera.selectionPreviewToggle"].value as? String, "1번째 선택")
         XCTAssertTrue(app.buttons["camera.completePhotos"].wait(for: \.isHittable, toEqual: false, timeout: 5))
         tap(app, "camera.selectionPreviewToggle")
@@ -109,5 +141,30 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
     @MainActor
     private func value(_ app: XCUIApplication, _ index: Int) -> String? {
         app.buttons["camera.grid.select.\(index)"].value as? String
+    }
+
+    @MainActor
+    private func assertPreviewLayout(_ app: XCUIApplication) {
+        let image = app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 5))
+        let bounds = app.windows.firstMatch.frame
+        let toggle = app.buttons["camera.selectionPreviewToggle"]
+        let back = app.buttons["camera.closeSelectionPreview"]
+        let photoTop = bounds.minY + 146 * bounds.width / 402
+        // 합성 사진은 4:5이므로 3:4 표시 영역 안에서 원본 비율대로 여백이 생긴다.
+        XCTAssertGreaterThanOrEqual(image.frame.minY, photoTop - 2)
+        XCTAssertLessThanOrEqual(image.frame.maxY, photoTop + bounds.width * 4 / 3 + 2)
+        XCTAssertEqual(image.frame.midX, bounds.midX, accuracy: 2)
+        XCTAssertEqual(image.frame.width / image.frame.height, 4 / 5, accuracy: 0.01)
+        XCTAssertEqual(toggle.frame.width, 45, accuracy: 1)
+        XCTAssertEqual(toggle.frame.height, 45, accuracy: 1)
+        XCTAssertEqual(toggle.frame.minY - image.frame.minY, 8, accuracy: 1)
+        XCTAssertEqual(image.frame.maxX - toggle.frame.maxX, 8, accuracy: 1)
+        XCTAssertTrue(back.isHittable)
+        XCTAssertLessThan(back.frame.maxY, image.frame.minY)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "selection-preview-figma-layout"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 }
