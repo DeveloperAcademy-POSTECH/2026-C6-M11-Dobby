@@ -3,7 +3,6 @@ import SwiftUI
 
 struct ExportView: View {
     let product: ExportProduct
-    let controller: CopyActivityController
     @Binding var showFruits: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -11,11 +10,9 @@ struct ExportView: View {
     @State private var selectionSaveError: String?
     @State private var showCafe24 = false
     @State private var showInstagram = false
-    @State private var showFruitsGuideOverlay = false
 
-    init(product: ExportProduct, controller: CopyActivityController, showFruits: Binding<Bool>) {
+    init(product: ExportProduct, showFruits: Binding<Bool>) {
         self.product = product
-        self.controller = controller
         _showFruits = showFruits
         _completedChannels = State(initialValue: product.completedChannels)
     }
@@ -41,7 +38,7 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showFruits) {
-                FruitsExportView(product: product, controller: controller) {
+                FruitsExportView(product: product) {
                     completedChannels.insert(.fruitsFamily)
                 }
             }
@@ -59,23 +56,7 @@ struct ExportView: View {
                                                          in: modelContext)
                 }
             }
-            .disabled(controller.busy)
         }
-        .overlay {
-            if showFruitsGuideOverlay {
-                FruitsExportGuideOverlay(
-                    product: product,
-                    controller: controller,
-                    onDismiss: { showFruitsGuideOverlay = false },
-                    onOpened: {
-                        completedChannels.insert(.fruitsFamily)
-                    }
-                )
-                .transition(.opacity)
-                .zIndex(1)
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: showFruitsGuideOverlay)
         .alert("플랫폼 기록을 저장하지 못했어요", isPresented: Binding(
             get: { selectionSaveError != nil },
             set: { if !$0 { selectionSaveError = nil } }
@@ -87,14 +68,14 @@ struct ExportView: View {
     }
 
     private func didSelectChannel(_ channel: ExportChannel) {
-        guard !controller.busy, recordSelection(channel) else { return }
+        guard recordSelection(channel) else { return }
         switch channel {
         case .instagram:
             showInstagram = true
         case .cafe24:
             showCafe24 = true
         case .fruitsFamily:
-            showFruitsGuideOverlay = true
+            showFruits = true
         case .naverStore:
             break
         }
@@ -112,5 +93,5 @@ struct ExportView: View {
 }
 
 #Preview {
-    ExportView(product: .demo, controller: CopyActivityController(), showFruits: .constant(false))
+    ExportView(product: .demo, showFruits: .constant(false))
 }
