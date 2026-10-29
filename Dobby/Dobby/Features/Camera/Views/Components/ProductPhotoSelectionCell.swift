@@ -17,7 +17,11 @@ struct ProductPhotoSelectionCell: View {
     private let shape = RoundedRectangle(cornerRadius: 12)
 
     private var photoLabel: String {
-        photo.purpose == .measurement ? "실측 사진" : "상세 사진 \(captureIndex)"
+        switch photo.purpose {
+        case .measurement: "실측 사진"
+        case .measurementVisualization: "실측값 표시 사진"
+        case .detail: "상세 사진 \(captureIndex)"
+        }
     }
 
     var body: some View {

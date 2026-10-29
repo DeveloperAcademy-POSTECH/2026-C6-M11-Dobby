@@ -15,7 +15,7 @@ final class ProductPhotoModel {
     static let maximumSelectionCount = 10
     enum SelectionResult: Equatable { case updated, limitReached, ignored }
 
-    let input: ProductPhotoInput
+    private(set) var input: ProductPhotoInput
     // 이전 화면의 확정 결과를 열람용으로 보관한다. 측정 계산·수정은 소유하지 않는다.
     private(set) var measurementRecord: SavedMeasurement?
     private(set) var detailPhotos: [CapturedAsset] = []
@@ -33,12 +33,14 @@ final class ProductPhotoModel {
     @ObservationIgnored private var discardRevision = 0
 
     var photos: [CapturedAsset] { [input.measurement] + detailPhotos }
+    /// 촬영 목록의 인덱스를 유지하고, 별도 생성한 실측값 표시본을 선택 후보에 추가한다.
+    var selectablePhotos: [CapturedAsset] { photos + [input.measurementVisualization].compactMap { $0 } }
 
     /// 하단 표시 전용. 상단 캐러셀이 사용하는 촬영 순서는 바꾸지 않는다.
     var selectionOrderedPhotos: [CapturedAsset] {
         let selected = Set(selectedPhotoIDs)
-        let assets = Dictionary(uniqueKeysWithValues: photos.map { ($0.id, $0) })
-        return selectedPhotoIDs.compactMap { assets[$0] } + photos.filter { !selected.contains($0.id) }
+        let assets = Dictionary(uniqueKeysWithValues: selectablePhotos.map { ($0.id, $0) })
+        return selectedPhotoIDs.compactMap { assets[$0] } + selectablePhotos.filter { !selected.contains($0.id) }
     }
 
     // 최소 한 장, 선택 순서 유지, 첫 선택이 대표 사진이다.
@@ -49,7 +51,7 @@ final class ProductPhotoModel {
         return ProductPhotoOutput(
             sessionID: input.sessionID, garmentID: input.garmentID,
             detailPhotos: detailPhotos,
-            selectedPhotos: selectedPhotoIDs.compactMap { id in photos.first { $0.id == id } },
+            selectedPhotos: selectedPhotoIDs.compactMap { id in selectablePhotos.first { $0.id == id } },
             representativePhotoID: representativeID
         )
     }
@@ -72,10 +74,11 @@ final class ProductPhotoModel {
                   return url.isFileURL && metadata.pixelWidth > 0 && metadata.pixelHeight > 0
               }),
               Set(initialSelectedPhotoIDs).count == initialSelectedPhotoIDs.count,
-              Set(initialSelectedPhotoIDs).isSubset(of: Set([input.measurement.id] + initialDetailPhotos.map(\.id))) else {
+              Set(initialSelectedPhotoIDs).isSubset(of: Set(input.measurementPhotos.map(\.id) + initialDetailPhotos.map(\.id))) else {
             throw CameraFailure.mismatchedCapture
         }
         self.input = input
+        try Self.validateVisualization(input.measurementVisualization, input: input, details: initialDetailPhotos)
         if let measurementRecord {
             guard measurementRecord.snapshot.frame.sessionID == input.sessionID else {
                 throw CameraFailure.mismatchedCapture
@@ -98,12 +101,27 @@ final class ProductPhotoModel {
 
     /// Point corrections keep the same frozen capture while replacing the
     /// confirmed record that the photo-flow measurement preview displays.
-    func updateMeasurementRecord(_ record: SavedMeasurement) throws {
+    func updateMeasurementRecord(_ record: SavedMeasurement, visualization: CapturedAsset? = nil) throws {
         guard record.snapshot.frame.sessionID == input.sessionID,
               measurementRecord.map({ $0.snapshot.frame.frameID == record.snapshot.frame.frameID }) ?? true else {
             throw CameraFailure.mismatchedCapture
         }
+        try Self.validateVisualization(visualization, input: input, details: detailPhotos)
+        if let old = input.measurementVisualization, old.id != visualization?.id {
+            selectedPhotoIDs = selectedPhotoIDs.compactMap { $0 == old.id ? visualization?.id : $0 }
+        }
+        input.measurementVisualization = visualization
         measurementRecord = record
+    }
+
+    private static func validateVisualization(_ asset: CapturedAsset?, input: ProductPhotoInput,
+                                               details: [CapturedAsset]) throws {
+        guard let asset else { return }
+        guard asset.purpose == .measurementVisualization, asset.id != input.measurement.id,
+              asset.sessionID == input.sessionID, asset.garmentID == input.garmentID,
+              !details.contains(where: { $0.id == asset.id }),
+              case let .localFile(url, metadata) = asset.source, url.isFileURL,
+              metadata.pixelWidth > 0, metadata.pixelHeight > 0 else { throw CameraFailure.mismatchedCapture }
     }
 
     /// Called only after the new payload is durable. A previous saved draft
@@ -144,13 +162,13 @@ final class ProductPhotoModel {
             try Task.checkCancellation()
             guard revision == discardRevision else { throw CancellationError() }
             guard asset.sessionID == input.sessionID, asset.garmentID == input.garmentID,
-                  asset.purpose == .detail, !photos.contains(where: { $0.id == asset.id }) else {
+                  asset.purpose == .detail, !selectablePhotos.contains(where: { $0.id == asset.id }) else {
                 throw CameraFailure.mismatchedCapture
             }
             detailPhotos.append(asset)
         } catch {
             // 이미 목록에 있는 ID는 중복 응답이므로 기존 원본을 지우지 않는다.
-            if !photos.contains(where: { $0.id == asset.id }) { try await captureProvider.discardUncommitted(asset) }
+            if !selectablePhotos.contains(where: { $0.id == asset.id }) { try await captureProvider.discardUncommitted(asset) }
             throw error
         }
     }
@@ -182,7 +200,7 @@ final class ProductPhotoModel {
 
     @discardableResult
     func toggleSelection(_ id: UUID) -> SelectionResult {
-        guard !isDeleting, !isDiscardingDetails, photos.contains(where: { $0.id == id }) else { return .ignored }
+        guard !isDeleting, !isDiscardingDetails, selectablePhotos.contains(where: { $0.id == id }) else { return .ignored }
         if selectedPhotoIDs.contains(id) {
             selectedPhotoIDs.removeAll { $0 == id }
         } else {

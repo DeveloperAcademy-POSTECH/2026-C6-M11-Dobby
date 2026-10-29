@@ -83,7 +83,7 @@ final class ProductDraftResumeTests: XCTestCase {
         assertResumedStage("제품 사진 선택", app: app)
         XCTAssertFalse(exitConfirmation(in: app).exists)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
-            "camera.grid.select.")).count, 3)
+            "camera.grid.select.")).count, 4)
         for index in 0...2 {
             XCTAssertEqual(selectionControl(index, in: app).value as? String, "\(index + 1)번째 선택")
         }
@@ -367,7 +367,7 @@ final class ProductDraftResumeTests: XCTestCase {
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
-            "camera.grid.select.")).count, 3)
+            "camera.grid.select.")).count, 4)
         assertSelectionOrder(in: app)
         app.buttons["camera.grid.preview.2"].tap()
         let toggle = app.buttons["camera.selectionPreviewToggle"]
@@ -397,7 +397,7 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
-            "camera.grid.select.")).count, 3)
+            "camera.grid.select.")).count, 4)
 
         let completePhotos = app.buttons["camera.completePhotos"]
         selectionControl(0, in: app).tap()

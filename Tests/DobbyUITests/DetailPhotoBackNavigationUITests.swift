@@ -59,7 +59,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
         }
         _ = galleryEvidence(in: app, expectedPhotoCount: 4)
         openSelection(in: app)
-        XCTAssertEqual(selectionControls(in: app).count, 3)
+        XCTAssertEqual(selectionControls(in: app).count, 4)
         // Select the second detail as representative, the first detail second, measurement last.
         for index in [0, 2, 1, 0] {
             let photo = selectionControl(index, in: app)
@@ -79,7 +79,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             openSelection(in: app)
             if let productID { XCTAssertEqual(restoredID, productID) }
             productID = restoredID
-            XCTAssertEqual(selectionControls(in: app).count, 3)
+            XCTAssertEqual(selectionControls(in: app).count, 4)
             assertSelection(in: app)
             let preview = app.buttons["camera.grid.preview.2"]
             waitEnabled(preview)

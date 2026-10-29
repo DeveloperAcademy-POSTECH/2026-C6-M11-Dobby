@@ -79,7 +79,7 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
               detailPhotos.allSatisfy({ $0.sessionID == input.sessionID && $0.garmentID == input.garmentID
                   && $0.id != input.measurement.id && $0.purpose == .detail }),
               Set(selectedPhotoIDs).count == selectedPhotoIDs.count,
-              Set(selectedPhotoIDs).isSubset(of: Set([input.measurement.id] + detailPhotos.map(\.id))) else {
+              Set(selectedPhotoIDs).isSubset(of: Set(input.measurementPhotos.map(\.id) + detailPhotos.map(\.id))) else {
             throw ProductDraftStore.DraftError.invalidPhotos
         }
         sessionID = input.sessionID
@@ -98,7 +98,7 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
               Set(detailPhotos.map { $0.url.standardizedFileURL }).count == detailPhotos.count,
               !detailPhotos.contains(where: { $0.id == measurementPhotoID }),
               Set(selectedPhotoIDs).count == selectedPhotoIDs.count,
-              Set(selectedPhotoIDs).isSubset(of: Set([measurementPhotoID] + detailPhotos.map(\.id))) else {
+              Set(selectedPhotoIDs).isSubset(of: Set(input.measurementPhotos.map(\.id) + detailPhotos.map(\.id))) else {
             throw ProductDraftStore.DraftError.invalidPhotos
         }
         return try detailPhotos.map { try $0.asset(sessionID: sessionID, garmentID: garmentID) }

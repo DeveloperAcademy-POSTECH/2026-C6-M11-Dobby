@@ -3,6 +3,30 @@ import XCTest
 
 final class ProductPhotoSelectionGridTests: XCTestCase {
     @MainActor
+    func testMeasurementVisualizationCanBePreviewedSelectedAndSaved() {
+        let app = openSelection(detailCount: 0)
+        defer { app.terminate() }
+        XCTAssertEqual(app.buttons["camera.grid.select.1"].label, "실측값 표시 사진 선택")
+        tap(app, "camera.grid.select.0")
+        tap(app, "camera.grid.preview.1")
+        XCTAssertTrue(app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요."].exists)
+        tap(app, "camera.selectionPreviewToggle")
+        XCTAssertEqual(app.buttons["camera.selectionPreviewToggle"].value as? String, "1번째 선택")
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "selected-measurement-visualization"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        tap(app, "camera.closeSelectionPreview")
+        tap(app, "camera.completePhotos")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        tap(app, "product-flow.back")
+        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
+        XCTAssertEqual(value(app, 0), "선택 안 됨")
+        XCTAssertEqual(value(app, 1), "1번째 선택")
+    }
+
+    @MainActor
     func testBackKeepsPhotosAndSelectionOrderWhileAddingAnotherCapture() {
         let app = openSelection(detailCount: 2)
         defer { app.terminate() }
@@ -27,7 +51,7 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
         XCTAssertEqual((0..<3).map { value(app, $0) }, originalOrder)
         XCTAssertEqual(value(app, 3), "선택 안 됨")
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
-            "camera.grid.select.")).count, 4)
+            "camera.grid.select.")).count, 5)
         tap(app, "camera.grid.preview.2")
         XCTAssertTrue(app.buttons["camera.selectionPreviewToggle"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요."].exists)
