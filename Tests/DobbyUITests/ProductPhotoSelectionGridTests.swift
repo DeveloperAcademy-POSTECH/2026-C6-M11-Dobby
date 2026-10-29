@@ -3,6 +3,37 @@ import XCTest
 
 final class ProductPhotoSelectionGridTests: XCTestCase {
     @MainActor
+    func testAIOptionTogglesAndSurvivesPhotoPreviewWithoutChangingSelection() {
+        let app = openSelection(detailCount: 2)
+        defer { app.terminate() }
+        let option = app.switches["camera.aiInformationToggle"]
+        XCTAssertTrue(option.waitForExistence(timeout: 5))
+        XCTAssertTrue(option.isEnabled)
+        XCTAssertTrue(option.label.contains("AI로 제품 정보 입력하기"))
+        XCTAssertEqual(option.value as? String, "1")
+        let selectedOrder = (0...3).map { value(app, $0) }
+        // SwiftUI Toggle의 접근성 프레임은 문구까지 포함하므로 오른쪽 스위치를 누른다.
+        let switchCenter = option.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
+        switchCenter.tap()
+        XCTAssertEqual(option.value as? String, "0")
+        XCTAssertEqual((0...3).map { value(app, $0) }, selectedOrder)
+        tap(app, "camera.grid.preview.0")
+        XCTAssertTrue(app.buttons["camera.closeSelectionPreview"].waitForExistence(timeout: 5))
+        tap(app, "camera.closeSelectionPreview")
+        XCTAssertTrue(option.waitForExistence(timeout: 5))
+        XCTAssertEqual(option.value as? String, "0")
+        switchCenter.tap()
+        XCTAssertEqual(option.value as? String, "1")
+        switchCenter.tap()
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "selection-ai-option-off"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        tap(app, "camera.completePhotos")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
     func testMeasurementVisualizationCanBePreviewedSelectedAndSaved() {
         let app = openSelection(detailCount: 2)
         defer { app.terminate() }
@@ -72,8 +103,10 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
         XCTAssertEqual(first.frame.minY, third.frame.minY, accuracy: 2)
         XCTAssertGreaterThan(fourth.frame.minY, first.frame.maxY)
         XCTAssertTrue(grid.isHittable)
-        XCTAssertFalse(app.staticTexts["AI로 제품 정보 입력하기"].exists)
-        XCTAssertEqual(app.switches.count, 0)
+        let option = app.switches["camera.aiInformationToggle"]
+        XCTAssertTrue(option.exists)
+        XCTAssertEqual(option.value as? String, "1")
+        XCTAssertLessThan(option.frame.maxY, first.frame.minY)
         tap(app, "camera.grid.select.0")
         XCTAssertFalse(app.buttons["camera.completePhotos"].isEnabled)
         for index in 1...10 { tap(app, "camera.grid.select.\(index)") }
