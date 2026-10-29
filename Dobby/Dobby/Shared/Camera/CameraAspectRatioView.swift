@@ -6,30 +6,51 @@ struct CameraAspectRatioView: View {
     let state: CameraOptionsState
     let onSelectRatio: (String) -> Void
     let presentation: DetailCaptureOptionsPresentation
+    private let embeddedInPanel: Bool
     let onBack: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(state: CameraOptionsState, presentation: DetailCaptureOptionsPresentation = .standard,
+         embeddedInPanel: Bool = false,
          onSelectRatio: @escaping (String) -> Void, onBack: @escaping () -> Void) {
         self.state = state
         self.onSelectRatio = onSelectRatio
         self.presentation = presentation
+        self.embeddedInPanel = embeddedInPanel
         self.onBack = onBack
     }
 
     private var ratioSide: CGFloat {
-        presentation == .measurement && dynamicTypeSize.isAccessibilitySize ? 64 : 28
+        (embeddedInPanel || presentation == .measurement) && dynamicTypeSize.isAccessibilitySize ? 64 : 28
     }
     private var ratioTouchSide: CGFloat { max(44, ratioSide) }
 
     var body: some View {
+        Group {
+            if embeddedInPanel { controls }
+            else {
+                controls
+                    .padding(presentation == .measurement ? 12 : 16)
+                    .padding(.bottom, presentation == .measurement ? 8 : 32)
+                    .frame(maxWidth: .infinity)
+                    .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 40))
+                    .padding(.horizontal, 8).padding(.bottom, presentation == .measurement ? 16 : 24)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("camera.aspectRatioPanel")
+        .accessibilityAction(.escape, onBack)
+    }
+
+    private var controls: some View {
         VStack(spacing: 8) {
             header
             Text(state.selectedAspectRatio)
-                .font(presentation == .measurement ? .title2 : .largeTitle).monospacedDigit()
+                .font(embeddedInPanel ? .system(.title, design: .rounded).weight(.light)
+                    : presentation == .measurement ? .title2 : .largeTitle).monospacedDigit()
                 .accessibilityIdentifier("camera.aspectRatioValue")
             Group {
-                if presentation == .measurement {
+                if embeddedInPanel || presentation == .measurement {
                     ViewThatFits(in: .horizontal) {
                         ratioRow(spacing: 20)
                         ratioRow(spacing: 0)
@@ -41,19 +62,12 @@ struct CameraAspectRatioView: View {
             }
             .padding(.top, 4)
         }
-        .padding(presentation == .measurement ? 12 : 16)
-        .padding(.bottom, presentation == .measurement ? 8 : 32)
         .frame(maxWidth: .infinity)
-        .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 40))
-        .padding(.horizontal, 8).padding(.bottom, presentation == .measurement ? 16 : 24)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("camera.aspectRatioPanel")
-        .accessibilityAction(.escape, onBack)
     }
 
     private var header: some View {
         Group {
-            if presentation == .measurement && dynamicTypeSize.isAccessibilitySize {
+            if (embeddedInPanel || presentation == .measurement) && dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 8) {
                     HStack { backButton; Spacer() }
                     Text("비율").font(.caption)

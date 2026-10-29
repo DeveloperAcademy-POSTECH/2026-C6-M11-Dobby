@@ -4,13 +4,31 @@ import XCTest
 /// Hardware capabilities and performance are still verified on an iPhone.
 /// These cases protect the format contract before opening any camera device.
 final class LiDARMultiCameraCaptureTests: XCTestCase {
+    func testDiagnosticsAdmitTheAtomicRGBDepthCollection() {
+        var diagnostics = LiDARMultiCameraDeliveryDiagnostics()
+        diagnostics.observe(wide: 0, depth: 0)
+        XCTAssertEqual(diagnostics.callbacks, 1)
+        XCTAssertEqual(diagnostics.wide.received, 1)
+        XCTAssertEqual(diagnostics.depth.received, 1)
+        XCTAssertEqual(diagnostics.completeCollections, 1)
+    }
+
+    func testDiagnosticsStillRequireRealDepthAndTheSameCollection() {
+        var diagnostics = LiDARMultiCameraDeliveryDiagnostics()
+        diagnostics.observe(wide: 0, depth: nil)
+        XCTAssertEqual(diagnostics.completeCollections, 0)
+        XCTAssertTrue(diagnostics.failureDescription.contains("LiDAR 깊이"))
+        diagnostics.observe(wide: nil, depth: 0)
+        XCTAssertEqual(diagnostics.completeCollections, 0,
+            "Independent callback counts cannot manufacture an atomic RGB/depth collection")
+    }
+
     func testDeliveryDiagnosticsDistinguishNoCallbacksFromAnAbsentDepthStream() {
         var diagnostics = LiDARMultiCameraDeliveryDiagnostics()
         XCTAssertTrue(diagnostics.failureDescription.contains("콜백이 한 번도"))
-        diagnostics.observe(wide: 0, ultra: 0, depth: nil)
+        diagnostics.observe(wide: 0, depth: nil)
         XCTAssertEqual(diagnostics.callbacks, 1)
         XCTAssertEqual(diagnostics.wide.received, 1)
-        XCTAssertEqual(diagnostics.ultra.received, 1)
         XCTAssertEqual(diagnostics.depth.received, 0)
         XCTAssertEqual(diagnostics.completeCollections, 0)
         XCTAssertTrue(diagnostics.failureDescription.contains("LiDAR 깊이"))
@@ -19,19 +37,17 @@ final class LiDARMultiCameraCaptureTests: XCTestCase {
 
     func testDeliveryDiagnosticsCountPartialCollectionsAndEachDroppedReasonBeforeValidation() {
         var diagnostics = LiDARMultiCameraDeliveryDiagnostics()
-        diagnostics.observe(wide: 0, ultra: nil, depth: 0)
-        diagnostics.observe(wide: nil, ultra: 0, depth: nil)
+        diagnostics.observe(wide: 0, depth: nil)
+        diagnostics.observe(wide: nil, depth: 0)
         XCTAssertEqual(diagnostics.completeCollections, 0,
-            "Separate callbacks must be observable without pretending they formed a complete triple")
+            "Separate callbacks must not count as a complete RGB/depth pair")
         XCTAssertTrue(diagnostics.failureDescription.contains("서로 다른 묶음"))
-        diagnostics.observe(wide: 1, ultra: 2, depth: 3)
+        diagnostics.observe(wide: 1, depth: 3)
         XCTAssertEqual(diagnostics.wide.dropped, 1)
-        XCTAssertEqual(diagnostics.ultra.dropped, 1)
         XCTAssertEqual(diagnostics.depth.dropped, 1)
         XCTAssertTrue(diagnostics.summary.contains("드롭1:1:1"))
-        XCTAssertTrue(diagnostics.summary.contains("드롭1:2:1"))
         XCTAssertTrue(diagnostics.summary.contains("드롭1:3:1"))
-        diagnostics.observe(wide: 0, ultra: 0, depth: 0)
+        diagnostics.observe(wide: 0, depth: 0)
         XCTAssertEqual(diagnostics.callbacks, 4)
         XCTAssertEqual(diagnostics.completeCollections, 1)
         let nextGeneration = LiDARMultiCameraDeliveryDiagnostics()
@@ -112,10 +128,9 @@ final class LiDARMultiCameraCaptureTests: XCTestCase {
         XCTAssertTrue(store.clear(sessionID: current))
     }
 
-    func testFullSensorWideAndUltraWideFormatsPreserveTheOneTimesFieldOfView() {
+    func testFullSensorMeasurementFormatsPreserveTheOneTimesFieldOfView() {
         XCTAssertTrue(eligible(width: 1_920, height: 1_440, minimum: 1_280, depth: true))
         XCTAssertTrue(eligible(width: 1_280, height: 960, minimum: 1_280, depth: true))
-        XCTAssertTrue(eligible(width: 960, height: 720, minimum: 960, depth: false))
         XCTAssertFalse(eligible(width: 1_920, height: 1_080, minimum: 1_280, depth: true),
             "A cropped 16:9 sensor format cannot silently replace the full 1x composition")
     }
@@ -126,55 +141,34 @@ final class LiDARMultiCameraCaptureTests: XCTestCase {
         XCTAssertFalse(eligible(width: 1_280, height: 0, minimum: 1_280, depth: true))
     }
 
-    func testMeasurementFormatMustHaveDepthAndSupportThirtyFPSMultiCam() {
+    func testMeasurementFormatMustHaveRealDepthAndSupportThirtyFPS() {
         XCTAssertFalse(LiDARMultiCameraFormatPolicy.isEligible(width: 1_280, height: 960,
-            multiCam: true, supportsFrameRate: true, minimumWidth: 1_280,
-            requiresDepth: true, hasDepth: false))
+            supportsFrameRate: true, minimumWidth: 1_280, hasDepth: false))
         XCTAssertFalse(LiDARMultiCameraFormatPolicy.isEligible(width: 1_280, height: 960,
-            multiCam: false, supportsFrameRate: true, minimumWidth: 1_280,
-            requiresDepth: true, hasDepth: true))
-        XCTAssertFalse(LiDARMultiCameraFormatPolicy.isEligible(width: 1_280, height: 960,
-            multiCam: true, supportsFrameRate: false, minimumWidth: 1_280,
-            requiresDepth: true, hasDepth: true))
-        XCTAssertTrue(LiDARMultiCameraFormatPolicy.isEligible(width: 960, height: 720,
-            multiCam: true, supportsFrameRate: true, minimumWidth: 960,
-            requiresDepth: false, hasDepth: false), "The display-only ultra-wide stream does not replace LiDAR depth")
-    }
-
-    func testDisplayOnlyUltraWideAcceptsSixteenByNineWhileMeasurementWideStaysFullFourByThree() {
-        for (width, height) in [(960, 540), (1280, 720), (1920, 1080), (3840, 2160)] {
-            XCTAssertTrue(eligible(width: width, height: height, minimum: 960, depth: false),
-                "The ultra-wide's own raster dimensions and K handle this display-only crop")
-            XCTAssertFalse(eligible(width: width, height: height, minimum: 960, depth: true),
-                "A 16:9 ultra-wide allowance must never change the calibrated wide/depth 1x contract")
-        }
-        XCTAssertFalse(LiDARMultiCameraFormatPolicy.isEligible(width: 1280, height: 720,
-            multiCam: false, supportsFrameRate: true, minimumWidth: 960, requiresDepth: false, hasDepth: false))
-        XCTAssertFalse(LiDARMultiCameraFormatPolicy.isEligible(width: 1280, height: 720,
-            multiCam: true, supportsFrameRate: false, minimumWidth: 960, requiresDepth: false, hasDepth: false))
-        XCTAssertFalse(eligible(width: 1280, height: 0, minimum: 960, depth: false))
-        XCTAssertFalse(eligible(width: 1280, height: 20_000, minimum: 960, depth: false))
+            supportsFrameRate: false, minimumWidth: 1_280, hasDepth: true))
+        XCTAssertTrue(LiDARMultiCameraFormatPolicy.isEligible(width: 1_280, height: 960,
+            supportsFrameRate: true, minimumWidth: 1_280, hasDepth: true))
     }
 
     func testFormatRejectionDetailsIdentifyTheCameraAndSeparateCandidatePixelAndZoomFailures() {
         var diagnostics = LiDARMultiCameraFormatDiagnostics(total: 7)
         diagnostics.eligible = 2
         diagnostics.reject(.aspect, count: 2)
-        diagnostics.reject(.multiCam)
+        diagnostics.reject(.depth)
         diagnostics.reject(.resolution, count: 2)
         XCTAssertTrue(diagnostics.summary.contains("전체 7 / 유효 2"))
         XCTAssertTrue(diagnostics.summary.contains("비율2"))
-        XCTAssertTrue(diagnostics.summary.contains("동시촬영1"))
+        XCTAssertTrue(diagnostics.summary.contains("깊이1"))
         XCTAssertTrue(diagnostics.summary.contains("해상도2"))
-        let candidates = LiDARMultiCameraCaptureError.noEligibleFormats(camera: "초광각", diagnostics: diagnostics.summary).localizedDescription
-        XCTAssertTrue(candidates.contains("초광각"))
+        let candidates = LiDARMultiCameraCaptureError.noEligibleFormats(camera: "일반·LiDAR", diagnostics: diagnostics.summary).localizedDescription
+        XCTAssertTrue(candidates.contains("일반·LiDAR"))
         XCTAssertTrue(candidates.contains(diagnostics.summary))
         let pixels = LiDARMultiCameraCaptureError.unsupportedPixelFormats(camera: "일반·LiDAR", supported: "0x34323066").localizedDescription
         XCTAssertTrue(pixels.contains("일반·LiDAR"))
         XCTAssertTrue(pixels.contains("픽셀 형식"))
         XCTAssertTrue(pixels.contains("0x34323066"))
-        let zoom = LiDARMultiCameraCaptureError.unsupportedPhysicalZoom(camera: "초광각", minimum: 2, maximum: 8, actual: 2).localizedDescription
-        XCTAssertTrue(zoom.contains("초광각"))
+        let zoom = LiDARMultiCameraCaptureError.unsupportedPhysicalZoom(camera: "일반·LiDAR", minimum: 2, maximum: 8, actual: 2).localizedDescription
+        XCTAssertTrue(zoom.contains("일반·LiDAR"))
         XCTAssertTrue(zoom.contains("배율"))
         XCTAssertTrue(zoom.contains("1x"))
         XCTAssertNotEqual(candidates, pixels)
@@ -199,26 +193,21 @@ final class LiDARMultiCameraCaptureTests: XCTestCase {
         XCTAssertEqual(ranked, [1_920, 1_440, 1_280, 2_560, 4_032])
     }
 
-    func testFullNativeHighResolutionFallbackIsConsideredWithoutRelaxingMeasurementRequirements() {
+    func testFullNativeHighResolutionFallbackStillRequiresFullFieldDepthAndFrameRate() {
         XCTAssertTrue(eligible(width: 4_032, height: 3_024, minimum: 1_280, depth: true),
             "A valid full-field format must reach the actual hardware-cost check")
         XCTAssertFalse(LiDARMultiCameraFormatPolicy.isEligible(width: 4_032, height: 3_024,
-            multiCam: false, supportsFrameRate: true, minimumWidth: 1_280, requiresDepth: true, hasDepth: true))
+            supportsFrameRate: false, minimumWidth: 1_280, hasDepth: true))
         XCTAssertFalse(LiDARMultiCameraFormatPolicy.isEligible(width: 4_032, height: 3_024,
-            multiCam: true, supportsFrameRate: false, minimumWidth: 1_280, requiresDepth: true, hasDepth: true))
-        XCTAssertFalse(LiDARMultiCameraFormatPolicy.isEligible(width: 4_032, height: 3_024,
-            multiCam: true, supportsFrameRate: true, minimumWidth: 1_280, requiresDepth: true, hasDepth: false))
+            supportsFrameRate: true, minimumWidth: 1_280, hasDepth: false))
         XCTAssertFalse(eligible(width: 4_032, height: 2_268, minimum: 1_280, depth: true))
-        XCTAssertFalse(LiDARMultiCameraFormatPolicy.isAffordable(hardware: 1.01, pressure: 0.5),
-            "Larger eligibility is not permission to exceed the measured hardware budget")
     }
 
-    func testDisplayOnlyUltraWideMayUseItsActualCheaperFieldOfViewWithoutNarrowingMeasurementOneTimes() {
-        XCTAssertTrue(LiDARMultiCameraFormatPolicy.acceptsFieldOfView(108, nativeReference: 120, requiresDepth: false))
-        XCTAssertFalse(LiDARMultiCameraFormatPolicy.acceptsFieldOfView(68, nativeReference: 74, requiresDepth: true))
-        XCTAssertTrue(LiDARMultiCameraFormatPolicy.acceptsFieldOfView(73.9, nativeReference: 74, requiresDepth: true))
+    func testMeasurementFieldOfViewCannotUseACroppedReference() {
+        XCTAssertFalse(LiDARMultiCameraFormatPolicy.acceptsFieldOfView(68, nativeReference: 74))
+        XCTAssertTrue(LiDARMultiCameraFormatPolicy.acceptsFieldOfView(73.9, nativeReference: 74))
         for invalid: Float in [.nan, .infinity, 0, 180] {
-            XCTAssertFalse(LiDARMultiCameraFormatPolicy.acceptsFieldOfView(invalid, nativeReference: 120, requiresDepth: false))
+            XCTAssertFalse(LiDARMultiCameraFormatPolicy.acceptsFieldOfView(invalid, nativeReference: 74))
         }
     }
 
@@ -235,33 +224,23 @@ final class LiDARMultiCameraCaptureTests: XCTestCase {
         XCTAssertFalse(LiDARMultiCameraFormatPolicy.preservesFieldOfView(0, widestCompatible: 74))
     }
 
-    func testNativeReferenceIncludesWiderFormatsUnavailableToMultiCam() throws {
+    func testNativeReferenceIncludesWiderFormatsBeforePreviewFiltering() throws {
         // The widest sensor format may be a high-resolution, single-camera or
         // lower-frame-rate native format. It still defines full wide 1x.
         let nativeReference = try XCTUnwrap(LiDARMultiCameraFormatPolicy.widestNativeFieldOfView([74, 68, 68, .nan, 180]))
         XCTAssertEqual(nativeReference, 74)
-        let multiCamOnly = [Float(68), 68]
-        XCTAssertFalse(multiCamOnly.contains {
+        let croppedCandidates = [Float(68), 68]
+        XCTAssertFalse(croppedCandidates.contains {
             LiDARMultiCameraFormatPolicy.preservesFieldOfView($0, widestCompatible: nativeReference)
-        }, "A consistently cropped MultiCam-only set must not redefine 1x")
+        }, "A consistently cropped candidate set must not redefine 1x")
         XCTAssertNil(LiDARMultiCameraFormatPolicy.widestNativeFieldOfView([.nan, .infinity, 0, 180]))
         XCTAssertTrue(LiDARMultiCameraFormatPolicy.isFullAspect(width: 4_032, height: 3_024),
             "Reference selection precedes the preview bandwidth/resolution ceiling")
     }
 
-    func testBothHardwareAndSustainedPressureBudgetsMustBeValid() {
-        XCTAssertTrue(LiDARMultiCameraFormatPolicy.isAffordable(hardware: 0.9, pressure: 1))
-        XCTAssertTrue(LiDARMultiCameraFormatPolicy.isAffordable(hardware: 0, pressure: 0))
-        for invalid: Float in [1.01, .infinity, -.infinity, .nan, -0.1] {
-            XCTAssertFalse(LiDARMultiCameraFormatPolicy.isAffordable(hardware: invalid, pressure: 0.5))
-            XCTAssertFalse(LiDARMultiCameraFormatPolicy.isAffordable(hardware: 0.5, pressure: invalid))
-        }
-    }
-
     private func eligible(width: Int, height: Int, minimum: Int, depth: Bool) -> Bool {
         LiDARMultiCameraFormatPolicy.isEligible(width: width, height: height,
-            multiCam: true, supportsFrameRate: true, minimumWidth: minimum,
-            requiresDepth: depth, hasDepth: depth)
+            supportsFrameRate: true, minimumWidth: minimum, hasDepth: depth)
     }
 
     nonisolated private enum GateFailure: Error, Equatable { case calibration, timeout }

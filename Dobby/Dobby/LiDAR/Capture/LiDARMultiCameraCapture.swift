@@ -12,48 +12,77 @@ nonisolated final class MultiCameraFrameStore: @unchecked Sendable {
     private struct State {
         var owner: UUID?
         var frame: MultiCameraFrame?
+        var preview: MultiCameraPreviewFrame?
         var pinned: MultiCameraFrame?
+        var revision: UInt64 = 0
     }
     private let state = Mutex(State())
 
-    func begin(sessionID: UUID) {
-        state.withLock { $0 = State(owner: sessionID) }
-    }
+    func begin(sessionID: UUID) { state.withLock { $0 = State(owner: sessionID) } }
 
     func publish(_ packet: MultiCameraFrame) {
         state.withLock {
-            guard $0.owner == packet.sessionID else { return }
+            guard $0.owner == packet.sessionID,
+                  $0.frame == nil || packet.timestamp > $0.frame!.timestamp else { return }
             $0.frame = packet
+            // Never rewind a newer depthless preview to an older depth pair.
+            guard $0.preview == nil || packet.timestamp >= $0.preview!.timestamp else { return }
+            $0.revision &+= 1
+            $0.preview = .init(packet, revision: $0.revision)
+        }
+    }
+
+    func publishPreview(sessionID: UUID, timestamp: TimeInterval,
+                        wideImage: CVPixelBuffer, calibration: MultiCameraLensCalibration) {
+        state.withLock {
+            guard $0.owner == sessionID, timestamp.isFinite, timestamp >= 0,
+                  $0.preview == nil || timestamp > $0.preview!.timestamp else { return }
+            $0.revision &+= 1
+            $0.preview = .init(sessionID: sessionID, timestamp: timestamp, wideImage: wideImage,
+                              calibration: calibration, revision: $0.revision)
         }
     }
 
     func latest() -> MultiCameraFrame? { state.withLock { $0.frame } }
+    func latestPreview() -> MultiCameraPreviewFrame? { state.withLock { $0.preview } }
 
     func pin(_ frame: MultiCameraFrame) {
         state.withLock {
             guard $0.owner == frame.sessionID else { return }
-            $0.pinned = frame
+            // Pin only the exact shutter winner, never substitute newer RGB.
+            $0.pinned = $0.frame?.timestamp == frame.timestamp ? $0.frame : frame
         }
     }
-
     func pinned() -> MultiCameraFrame? { state.withLock { $0.pinned } }
 
     @discardableResult
     func clear(sessionID: UUID) -> Bool {
         state.withLock {
             guard $0.owner == sessionID else { return false }
-            // A paused camera keeps the exact shutter winner available to the
-            // frozen composite. begin() clears it on a genuinely new session.
-            $0.owner = nil
-            $0.frame = nil
+            $0.owner = nil; $0.frame = nil; $0.preview = nil
             return true
         }
     }
 }
 
+/// Developer-only analysis isolation. No value or environment variable can
+/// change the camera graph: both modes acquire calibrated wide + LiDAR only.
+nonisolated enum CameraPerformanceExperiment: String, Sendable {
+    case full, measurementOnly
+    static let current: Self = {
+        #if DEBUG
+        let permitted = true
+        #else
+        let permitted = ProcessInfo.processInfo.environment["DOBBY_CAMERA_METRICS"] == "1"
+        #endif
+        guard permitted else { return .full }
+        return Self(rawValue: ProcessInfo.processInfo.environment["DOBBY_CAMERA_EXPERIMENT"] ?? "") ?? .full
+    }()
+    var analyzesForeground: Bool { self == .full }
+}
+
 nonisolated enum LiDARMultiCameraCaptureError: LocalizedError, Sendable {
-    case permission, unsupported, unavailableDevices, unsupportedCombination
-    case unsupportedFormats, invalidCalibration, missingUltraWideIntrinsics, connection, budget, startup
+    case permission, unavailableDevices, unsupportedFormats, connection, startup
     case narrowedFieldOfView(expected: Float, available: Float, diagnostics: String = "")
     case noEligibleFormats(camera: String, diagnostics: String)
     case unsupportedPixelFormats(camera: String, supported: String)
@@ -62,19 +91,14 @@ nonisolated enum LiDARMultiCameraCaptureError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .permission: "카메라 접근 권한이 필요해요. 설정에서 카메라 권한을 확인해 주세요."
-        case .unsupported: "이 기기는 LiDAR와 초광각 카메라를 동시에 사용할 수 없어요."
-        case .unavailableDevices: "LiDAR와 초광각 카메라를 찾지 못했어요. 다른 앱의 카메라 사용을 종료하고 다시 시도해 주세요."
-        case .unsupportedCombination: "이 기기에서는 LiDAR와 초광각 카메라의 동시 촬영 조합을 지원하지 않아요."
-        case .unsupportedFormats: "실측에 필요한 화각·깊이·동시 촬영 포맷을 준비하지 못했어요."
-        case .invalidCalibration: "두 카메라의 위치 보정 정보를 확인하지 못했어요. 잘못된 경계 영상과 측정값이 표시되지 않도록 촬영을 중단했어요."
-        case .missingUltraWideIntrinsics: "초광각 영상의 렌즈 보정 정보를 받을 수 없어 주변 화면을 연결하지 못했어요."
+        case .unavailableDevices: "LiDAR를 지원하는 후면 카메라를 찾지 못했어요. 다른 앱의 카메라 사용을 종료하고 다시 시도해 주세요."
+        case .unsupportedFormats: "실측에 필요한 일반 영상·LiDAR 깊이 포맷을 준비하지 못했어요."
         case .connection: "카메라 영상과 깊이 출력을 연결하지 못했어요. 다시 시도해 주세요."
-        case .budget: "LiDAR와 초광각 카메라를 함께 실행할 여유가 부족해요. 기기를 식힌 뒤 다시 시도해 주세요."
         case .startup: "카메라를 시작하지 못했어요. 다른 카메라 앱을 종료한 뒤 다시 시도해 주세요."
         case .narrowedFieldOfView(let expected, let available, let diagnostics):
             "일반·LiDAR의 기본 1x 화각을 유지할 수 없어요. 기준 \(String(format: "%.1f", expected))°, 지원 \(String(format: "%.1f", available))°예요. \(diagnostics)"
         case .noEligibleFormats(let camera, let diagnostics):
-            "\(camera) 카메라에서 사용할 수 있는 동시 촬영 포맷이 없어요. \(diagnostics)"
+            "\(camera) 카메라에서 실측에 사용할 수 있는 영상·깊이 포맷이 없어요. \(diagnostics)"
         case .unsupportedPixelFormats(let camera, let supported):
             "\(camera) 카메라의 영상 픽셀 형식을 연결하지 못했어요. 지원 형식: \(supported)"
         case .unsupportedPhysicalZoom(let camera, let minimum, let maximum, let actual):
@@ -83,9 +107,7 @@ nonisolated enum LiDARMultiCameraCaptureError: LocalizedError, Sendable {
     }
 }
 
-/// Full-sensor 4:3 is mandatory for the measurement wide/depth pair. The
-/// display-only ultra-wide may use a different aspect, projected with its own
-/// delivered K and raster dimensions; it never changes measurement 1x.
+/// Full-sensor 4:3 and real depth are mandatory for the measurement pair.
 nonisolated enum LiDARMultiCameraFormatPolicy {
     /// Small metadata/rounding tolerance only; not a substitute for a physical
     /// same-position comparison against the system Camera application.
@@ -95,13 +117,12 @@ nonisolated enum LiDARMultiCameraFormatPolicy {
     /// decide sustainability; a fixed 2560px cap could hide a supported camera.
     static let maximumOutputWidth = 4_096
 
-    static func isEligible(width: Int, height: Int, multiCam: Bool,
-                           supportsFrameRate: Bool, minimumWidth: Int,
-                           requiresDepth: Bool, hasDepth: Bool,
+    static func isEligible(width: Int, height: Int, supportsFrameRate: Bool,
+                           minimumWidth: Int, hasDepth: Bool,
                            maximumWidth: Int = maximumOutputWidth) -> Bool {
-        multiCam && supportsFrameRate && width >= minimumWidth && width <= maximumWidth
+        supportsFrameRate && width >= minimumWidth && width <= maximumWidth
             && hasValidRaster(width: width, height: height)
-            && (!requiresDepth || (isFullAspect(width: width, height: height) && hasDepth))
+            && isFullAspect(width: width, height: height) && hasDepth
     }
 
     static func hasValidRaster(width: Int, height: Int) -> Bool {
@@ -128,14 +149,8 @@ nonisolated enum LiDARMultiCameraFormatPolicy {
             && fieldOfView >= widestCompatible - maximumFieldOfViewLossDegrees
     }
 
-    static func acceptsFieldOfView(_ fieldOfView: Float, nativeReference: Float,
-                                   requiresDepth: Bool) -> Bool {
-        guard fieldOfView.isFinite, fieldOfView > 0, fieldOfView < 180,
-              nativeReference.isFinite, nativeReference > 0, nativeReference < 180 else { return false }
-        // Only the wide RGB/depth pair defines measurement 1x. The display-only
-        // ultra-wide can use a cheaper corrected FOV because its delivered K
-        // projects those exact pixels; it never replaces measurement RGB/depth.
-        return !requiresDepth || preservesFieldOfView(fieldOfView, widestCompatible: nativeReference)
+    static func acceptsFieldOfView(_ fieldOfView: Float, nativeReference: Float) -> Bool {
+        preservesFieldOfView(fieldOfView, widestCompatible: nativeReference)
     }
 
     static func preferredWidthPenalty(width: Int, preferred: Int) -> Int {
@@ -143,18 +158,13 @@ nonisolated enum LiDARMultiCameraFormatPolicy {
         // Formats larger than it are last, even when they are near that size.
         width <= preferred ? preferred - width : 10_000 + width - preferred
     }
-
-    static func isAffordable(hardware: Float, pressure: Float) -> Bool {
-        hardware.isFinite && pressure.isFinite && hardware >= 0 && pressure >= 0
-            && hardware <= 1 && pressure <= 1
-    }
 }
 
 /// First-rejection counts are disjoint, so a device screenshot can explain
 /// exactly why a camera's declared formats never reached the candidate graph.
 nonisolated struct LiDARMultiCameraFormatDiagnostics: Sendable {
     enum Rejection: String, CaseIterable, Sendable {
-        case raster = "크기", aspect = "비율", multiCam = "동시촬영", frameRate = "30fps"
+        case raster = "크기", aspect = "비율", frameRate = "30fps"
         case depth = "깊이", color = "색공간", fieldOfView = "화각", resolution = "해상도"
     }
     let total: Int
@@ -202,28 +212,26 @@ nonisolated struct LiDARMultiCameraDeliveryDiagnostics: Sendable {
 
     private(set) var callbacks = 0
     private(set) var wide = Stream()
-    private(set) var ultra = Stream()
     private(set) var depth = Stream()
     private(set) var completeCollections = 0
 
     /// nil is absent, zero is delivered, and positive values are AVFoundation
     /// AVCaptureOutput.DataDroppedReason raw values (1 late, 2 pool, 3 gap).
-    mutating func observe(wide: Int?, ultra: Int?, depth: Int?) {
+    mutating func observe(wide: Int?, depth: Int?) {
         callbacks += 1
         self.wide.observe(wide)
-        self.ultra.observe(ultra)
         self.depth.observe(depth)
-        if wide == 0, ultra == 0, depth == 0 { completeCollections += 1 }
+        if wide == 0, depth == 0 { completeCollections += 1 }
     }
 
     var summary: String {
-        "콜백\(callbacks) / 일반\(wide.summary)·초광각\(ultra.summary)·깊이\(depth.summary) / 전체묶음\(completeCollections)"
+        "콜백\(callbacks) / 일반\(wide.summary)·깊이\(depth.summary) / 전체묶음\(completeCollections)"
     }
 
     var failureDescription: String {
         if callbacks == 0 { return "동기화 콜백이 한 번도 도착하지 않았어요." }
-        let missing = [("일반 영상", wide.received), ("초광각 영상", ultra.received), ("LiDAR 깊이", depth.received)]
-            .filter { $0.1 == 0 }.map(\.0)
+        let required = [("일반 영상", wide.received), ("LiDAR 깊이", depth.received)]
+        let missing = required.filter { $0.1 == 0 }.map(\.0)
         if !missing.isEmpty { return "\(missing.joined(separator: "·")) 데이터가 도착하지 않았어요." }
         return "영상과 깊이가 서로 다른 묶음으로 도착하거나 드롭되어 동기화하지 못했어요."
     }
@@ -305,26 +313,13 @@ nonisolated private struct MultiCameraControlDevice: @unchecked Sendable {
     let device: AVCaptureDevice
 }
 
-/// Retain the real, read-only callback buffers while waiting for the other
-/// camera's nearby timestamp. RGB and LiDAR remain one atomic native pair.
-nonisolated private struct MultiCameraWideDepthSample: @unchecked Sendable {
-    let image: CMSampleBuffer
-    let imageTimestamp: CMTime
-    let depth: AVDepthData
-    let depthTimestamp: CMTime
-}
-
-nonisolated private struct MultiCameraUltraSample: @unchecked Sendable {
-    let image: CMSampleBuffer
-    let timestamp: CMTime
-}
-
-/// Owns every camera input in ONE AVFoundation session. ARKit must be paused
-/// before starting this owner. Only calibrated, synchronized triples leave the
-/// callback queue; neither preview nor measurement pairs a new frame with an
-/// old depth map or an old ultra-wide image.
+/// RGB and LiDAR remain one atomic native pair.
+/// Legacy type name retained at the provider boundary. Owns ONE LiDAR camera
+/// input in a standard AVCaptureSession: one wide RGB output + one depth output.
+/// ARKit stays paused while this session owns the device.
+/// Depthless display packets cannot enter the measurement worker.
 nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
-    let session = AVCaptureMultiCamSession()
+    let session = AVCaptureSession()
     let frames = MultiCameraFrameStore()
 
     private struct Ticket: Equatable, Sendable {
@@ -336,7 +331,6 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         var onFrame: (@Sendable (MultiCameraFrame) -> Void)?
         var onFailure: (@Sendable (UUID, String) -> Void)?
         var device: AVCaptureDevice?
-        var wideToUltra: simd_float4x3?
         var synchronizerID: ObjectIdentifier?
         var startup: MultiCameraFirstFrameGate<MultiCameraControlDevice>?
         var startedAt = 0.0
@@ -344,24 +338,26 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         var lastTimestamp: TimeInterval?
         var lastRejection: String?
         var delivery = LiDARMultiCameraDeliveryDiagnostics()
-        var pending: MultiCameraTimestampJoin<MultiCameraWideDepthSample, MultiCameraUltraSample>?
+        var previewCalibration: (time: TimeInterval, lens: MultiCameraLensCalibration)?
     }
     private let state = Mutex(RunState())
     private let sessionQueue = DispatchQueue(label: "com.dobby.lidar.multicam.session", qos: .userInitiated)
     private let outputQueue = DispatchQueue(label: "com.dobby.lidar.multicam.frames", qos: .userInteractive)
     private let wideOutput = AVCaptureVideoDataOutput()
-    private let ultraOutput = AVCaptureVideoDataOutput()
     private let depthOutput = AVCaptureDepthDataOutput()
 
     // The following properties belong exclusively to sessionQueue.
     private var configuredTicket: Ticket?
     private var wideInput: AVCaptureDeviceInput?
-    private var ultraInput: AVCaptureDeviceInput?
     private var synchronizer: AVCaptureDataOutputSynchronizer?
     private var notifications: [NSObjectProtocol] = []
     private var pressureObservations: [NSKeyValueObservation] = []
     private var watchdog: DispatchSourceTimer?
     private var reducedFrameRate = false
+    private var pressureLevels: [ObjectIdentifier: AVCaptureDevice.SystemPressureState.Level] = [:]
+    private var pressureRecovery: DispatchWorkItem?
+    private var pressureRecoveryToken: UUID?
+    private var lastCostReportAt: TimeInterval = -.infinity
     private let logger = Logger(subsystem: "com.dobby.camera", category: "LiDARMultiCam")
 
     func start(sessionID: UUID,
@@ -374,8 +370,8 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
             $0.startup?.fail(CancellationError())
             $0 = RunState(ticket: ticket, onFrame: onFrame, onFailure: onFailure)
             $0.startup = startup
-            $0.pending = .init(sessionID: sessionID, maxSkew: MultiCameraFrame.maximumSynchronizationSkew)
             frames.begin(sessionID: sessionID)
+            CameraFramePerformanceMetrics.shared.begin(sessionID: sessionID)
         }
         return try await withTaskCancellationHandler {
             do {
@@ -418,7 +414,7 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
                 // A watchdog may already have cleared RunState; the private
                 // ticket still identifies the configured hardware to retire.
                 let failure = startup.failure ?? error
-                logger.error("MultiCam startup failed: \(failure.localizedDescription, privacy: .public)")
+                logger.error("LiDAR capture startup failed: \(failure.localizedDescription, privacy: .public)")
                 await retire(ticket)
                 throw failure
             }
@@ -436,6 +432,7 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
             current.startup?.fail(CancellationError())
             current = RunState()
             frames.clear(sessionID: ticket.sessionID)
+            CameraFramePerformanceMetrics.shared.end(sessionID: ticket.sessionID)
             return ticket
         }
         await withCheckedContinuation { continuation in
@@ -470,6 +467,7 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
             current.startup?.fail(CancellationError())
             current = RunState()
             frames.clear(sessionID: ticket.sessionID)
+            CameraFramePerformanceMetrics.shared.end(sessionID: ticket.sessionID)
         }
     }
 
@@ -488,176 +486,91 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         let depth: AVCaptureDevice.Format?
         let width: Int
         let fieldOfView: Float
-        var referenceFieldOfView: Float = 0
     }
 
     private func configure(ticket: Ticket) throws -> AVCaptureDevice {
         guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
             throw LiDARMultiCameraCaptureError.permission
         }
-        guard AVCaptureMultiCamSession.isMultiCamSupported else {
-            throw LiDARMultiCameraCaptureError.unsupported
-        }
         let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInLiDARDepthCamera, .builtInUltraWideCamera, .builtInWideAngleCamera],
-            mediaType: .video, position: .back)
+            deviceTypes: [.builtInLiDARDepthCamera, .builtInWideAngleCamera], mediaType: .video, position: .back)
         guard let lidar = discovery.devices.first(where: { $0.deviceType == .builtInLiDARDepthCamera }),
-              let ultra = discovery.devices.first(where: { $0.deviceType == .builtInUltraWideCamera }),
               let physicalWide = lidar.constituentDevices.first(where: { $0.deviceType == .builtInWideAngleCamera })
                 ?? discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera && !$0.isVirtualDevice }) else {
             throw LiDARMultiCameraCaptureError.unavailableDevices
         }
-        // Some OS releases list the virtual LiDAR device; others expose its
-        // physical wide constituent in the supported camera set. canAddInput
-        // below is still the final authority for the actual LiDAR input pair.
-        guard discovery.supportedMultiCamDeviceSets.contains(where: { devices in
-            devices.contains(where: { $0.uniqueID == ultra.uniqueID })
-                && devices.contains(where: { $0.uniqueID == lidar.uniqueID || $0.uniqueID == physicalWide.uniqueID })
-        }) else { throw LiDARMultiCameraCaptureError.unsupportedCombination }
-        guard let data = AVCaptureDevice.extrinsicMatrix(from: physicalWide, to: ultra),
-              data.count == MemoryLayout<simd_float4x3>.size else {
-            throw LiDARMultiCameraCaptureError.invalidCalibration
-        }
-        var extrinsics = data.withUnsafeBytes { $0.loadUnaligned(as: simd_float4x3.self) }
-        extrinsics.columns.3 /= 1_000 // Factory baseline is millimetres; depth is metres.
-        guard (0..<4).allSatisfy({ index in
-            let column = extrinsics[index]
-            return column.x.isFinite && column.y.isFinite && column.z.isFinite
-        }) else { throw LiDARMultiCameraCaptureError.invalidCalibration }
-
-        let wideFormats = try formatChoices(for: lidar, minimumWidth: 1_280, preferredWidth: 1_920,
-                                           requiresDepth: true, nativeReferenceDevice: physicalWide)
-        let ultraFormats = try formatChoices(for: ultra, minimumWidth: 960, preferredWidth: 960, requiresDepth: false)
-        guard !wideFormats.isEmpty else {
-            throw LiDARMultiCameraCaptureError.noEligibleFormats(camera: "일반·LiDAR", diagnostics: "유효 0")
-        }
-        guard !ultraFormats.isEmpty else {
-            throw LiDARMultiCameraCaptureError.noEligibleFormats(camera: "초광각", diagnostics: "유효 0")
-        }
-        let lidarInput = try AVCaptureDeviceInput(device: lidar)
-        let peripheralInput = try AVCaptureDeviceInput(device: ultra)
+        let formats = try formatChoices(for: lidar, minimumWidth: 1_280, preferredWidth: 1_920,
+                                        nativeReferenceDevice: physicalWide)
+        let input = try AVCaptureDeviceInput(device: lidar)
         configuredTicket = ticket
         session.beginConfiguration()
         var configurationOpen = true
         defer { if configurationOpen { session.commitConfiguration() } }
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
-        guard session.canAddInput(lidarInput) else { throw LiDARMultiCameraCaptureError.connection }
-        session.addInputWithNoConnections(lidarInput)
-        guard session.canAddInput(peripheralInput) else { throw LiDARMultiCameraCaptureError.unsupportedCombination }
-        session.addInputWithNoConnections(peripheralInput)
-        wideInput = lidarInput
-        ultraInput = peripheralInput
-        guard let widePort = lidarInput.ports.first(where: { $0.mediaType == .video }),
-              let depthPort = lidarInput.ports.first(where: { $0.mediaType == .depthData }),
-              let ultraPort = peripheralInput.ports.first(where: { $0.mediaType == .video }) else {
+        guard session.canAddInput(input) else { throw LiDARMultiCameraCaptureError.connection }
+        session.addInputWithNoConnections(input)
+        wideInput = input
+        // Explicit formats preserve the complete 1x field; preset-driven
+        // reconfiguration must not silently resize/crop the calibrated pair.
+        guard session.canSetSessionPreset(.inputPriority) else { throw LiDARMultiCameraCaptureError.unsupportedFormats }
+        session.sessionPreset = .inputPriority
+        guard let widePort = input.ports.first(where: { $0.mediaType == .video }),
+              let depthPort = input.ports.first(where: { $0.mediaType == .depthData }) else {
             throw LiDARMultiCameraCaptureError.connection
         }
         wideOutput.alwaysDiscardsLateVideoFrames = true
-        ultraOutput.alwaysDiscardsLateVideoFrames = true
         wideOutput.automaticallyConfiguresOutputBufferDimensions = false
-        ultraOutput.automaticallyConfiguresOutputBufferDimensions = false
         wideOutput.deliversPreviewSizedOutputBuffers = false
-        ultraOutput.deliversPreviewSizedOutputBuffers = false
         depthOutput.alwaysDiscardsLateDepthData = true
         depthOutput.isFilteringEnabled = false
-        for output: AVCaptureOutput in [wideOutput, ultraOutput, depthOutput] {
+        for output: AVCaptureOutput in [wideOutput, depthOutput] {
             guard session.canAddOutput(output) else { throw LiDARMultiCameraCaptureError.connection }
             session.addOutputWithNoConnections(output)
         }
-        let wideConnection = try connect(widePort, to: wideOutput)
-        let ultraConnection = try connect(ultraPort, to: ultraOutput)
+        let connection = try connect(widePort, to: wideOutput)
         _ = try connect(depthPort, to: depthOutput)
-        for connection in [wideConnection, ultraConnection] {
-            if connection.isVideoStabilizationSupported { connection.preferredVideoStabilizationMode = .off }
-            if connection.isVideoMirroringSupported {
-                connection.automaticallyAdjustsVideoMirroring = false
-                connection.isVideoMirrored = false
-            }
-            if connection.isVideoRotationAngleSupported(0) { connection.videoRotationAngle = 0 }
+        if connection.isVideoStabilizationSupported { connection.preferredVideoStabilizationMode = .off }
+        if connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false; connection.isVideoMirrored = false
         }
+        if connection.isVideoRotationAngleSupported(0) { connection.videoRotationAngle = 0 }
 
-        var selectedPair: (wide: FormatChoice, ultra: FormatChoice)?
-        var checkedCalibratedPairBudget = false
+        var selected: FormatChoice?
         var lastPixelFormatFailure: LiDARMultiCameraCaptureError?
-        var pixelFormatRejectedPairs = 0
-        var missingIntrinsicsPairs = 0
-        for wide in wideFormats {
-            for peripheral in ultraFormats {
-                guard isCurrent(ticket) else { throw CancellationError() }
-                try select(wide, on: lidar, distortionCorrection: false)
-                try select(peripheral, on: ultra, distortionCorrection: true)
-                // Adding the input resets this override; apply it afterwards.
-                lidarInput.videoMinFrameDurationOverride = CMTime(value: 1, timescale: 30)
-                peripheralInput.videoMinFrameDurationOverride = CMTime(value: 1, timescale: 30)
-                var pairPixelFormatsSupported = true
-                for output in [wideOutput, ultraOutput] {
-                    let supported = output.availableVideoPixelFormatTypes
-                    guard let pixelFormat = [kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
-                                             kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-                                             kCVPixelFormatType_32BGRA].first(where: supported.contains) else {
-                        let camera = output === wideOutput ? "일반·LiDAR" : "초광각"
-                        let codes = supported.prefix(8).map { String(format: "0x%08X", $0) }.joined(separator: ",")
-                        lastPixelFormatFailure = .unsupportedPixelFormats(camera: camera,
-                            supported: codes.isEmpty ? "없음" : codes)
-                        pairPixelFormatsSupported = false
-                        break
-                    }
-                    output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: pixelFormat]
-                }
-                guard pairPixelFormatsSupported else { pixelFormatRejectedPairs += 1; continue }
-                // Probe capabilities and costs on the committed active graph,
-                // not the previous format while a transaction is still open.
-                session.commitConfiguration()
-                configurationOpen = false
-                // Paired LiDAR depth already carries the wide RGB reference K
-                // (Apple's synchronized LiDAR sample uses that calibration).
-                // A missing optional video attachment must not reject it.
-                // When delivered, the packet still checks it against depth K.
-                wideConnection.isCameraIntrinsicMatrixDeliveryEnabled =
-                    wideConnection.isCameraIntrinsicMatrixDeliverySupported
-                // The display-only ultra-wide has no corresponding depth
-                // calibration: its own per-frame K remains mandatory.
-                guard ultraConnection.isCameraIntrinsicMatrixDeliverySupported else {
-                    // This capability depends on the active format. The next
-                    // real ultra-wide format may deliver K even if this one
-                    // cannot; do not abandon the entire camera pair yet.
-                    missingIntrinsicsPairs += 1
-                    session.beginConfiguration()
-                    configurationOpen = true
-                    continue
-                }
-                ultraConnection.isCameraIntrinsicMatrixDeliveryEnabled = true
-                checkedCalibratedPairBudget = true
-                if LiDARMultiCameraFormatPolicy.isAffordable(hardware: session.hardwareCost,
-                                                             pressure: session.systemPressureCost) {
-                    selectedPair = (wide, peripheral)
-                    break
-                }
-                session.beginConfiguration()
-                configurationOpen = true
+        for choice in formats {
+            guard isCurrent(ticket) else { throw CancellationError() }
+            try select(choice, on: lidar)
+            input.videoMinFrameDurationOverride = CMTime(value: 1, timescale: 30)
+            let supported = wideOutput.availableVideoPixelFormatTypes
+            guard let pixelFormat = [kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                                     kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                                     kCVPixelFormatType_32BGRA].first(where: supported.contains) else {
+                let codes = supported.prefix(8).map { String(format: "0x%08X", $0) }.joined(separator: ",")
+                lastPixelFormatFailure = .unsupportedPixelFormats(camera: "일반·LiDAR", supported: codes)
+                continue
             }
-            if selectedPair != nil { break }
+            wideOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: pixelFormat]
+            session.commitConfiguration(); configurationOpen = false
+            connection.isCameraIntrinsicMatrixDeliveryEnabled = connection.isCameraIntrinsicMatrixDeliverySupported
+            // With one video output hardwareCost may be zero; it is not a
+            // sustained-performance proof. Runtime device pressure is observed.
+            if session.hardwareCost.isFinite, session.hardwareCost >= 0, session.hardwareCost <= 1 {
+                selected = choice; break
+            }
+            session.beginConfiguration(); configurationOpen = true
         }
-        guard let selectedPair else {
-            logger.error("Camera pair rejection: pixelFormats=\(pixelFormatRejectedPairs, privacy: .public) ultraIntrinsics=\(missingIntrinsicsPairs, privacy: .public) checkedBudget=\(checkedCalibratedPairBudget, privacy: .public)")
-            if checkedCalibratedPairBudget { throw LiDARMultiCameraCaptureError.budget }
-            if missingIntrinsicsPairs > 0 { throw LiDARMultiCameraCaptureError.missingUltraWideIntrinsics }
+        guard let selected else {
             if let lastPixelFormatFailure { throw lastPixelFormatFailure }
             throw LiDARMultiCameraCaptureError.unsupportedFormats
         }
-        #if DEBUG
-        let wideSize = CMVideoFormatDescriptionGetDimensions(selectedPair.wide.format.formatDescription)
-        let ultraSize = CMVideoFormatDescriptionGetDimensions(selectedPair.ultra.format.formatDescription)
-        let depthSize = selectedPair.wide.depth.map { CMVideoFormatDescriptionGetDimensions($0.formatDescription) }
-        logger.info("Selected wide=\(wideSize.width, privacy: .public)x\(wideSize.height, privacy: .public) fov=\(selectedPair.wide.fieldOfView, privacy: .public) requiredFov=\(selectedPair.wide.referenceFieldOfView, privacy: .public) ultra=\(ultraSize.width, privacy: .public)x\(ultraSize.height, privacy: .public) correctedFov=\(selectedPair.ultra.fieldOfView, privacy: .public) depth=\(depthSize?.width ?? 0, privacy: .public)x\(depthSize?.height ?? 0, privacy: .public) fps=30 hardwareCost=\(self.session.hardwareCost, privacy: .public) pressureCost=\(self.session.systemPressureCost, privacy: .public)")
-        #else
-        _ = selectedPair
-        #endif
-        state.withLock {
-            guard $0.ticket == ticket else { return }
-            $0.wideToUltra = extrinsics
+        if CameraFramePerformanceMetrics.shared.isEnabled {
+            let rgb = CMVideoFormatDescriptionGetDimensions(selected.format.formatDescription)
+            let depth = selected.depth.map { CMVideoFormatDescriptionGetDimensions($0.formatDescription) }
+            CameraFramePerformanceMetrics.shared.configuration(
+                "mode=\(CameraPerformanceExperiment.current.rawValue) inputs=1 wide=\(rgb.width)x\(rgb.height) depth=\(depth?.width ?? 0)x\(depth?.height ?? 0) targetFPS=30 hardwareCost=\(session.hardwareCost)",
+                sessionID: ticket.sessionID)
         }
-        let synchronizer = AVCaptureDataOutputSynchronizer(dataOutputs: [wideOutput, depthOutput, ultraOutput])
+        let synchronizer = AVCaptureDataOutputSynchronizer(dataOutputs: [wideOutput, depthOutput])
         state.withLock {
             guard $0.ticket == ticket else { return }
             $0.synchronizerID = ObjectIdentifier(synchronizer)
@@ -668,12 +581,12 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
     }
 
     private func formatChoices(for device: AVCaptureDevice, minimumWidth: Int,
-                               preferredWidth: Int, requiresDepth: Bool,
+                               preferredWidth: Int,
                                nativeReferenceDevice: AVCaptureDevice? = nil) throws -> [FormatChoice] {
         // Find the widest full-aspect source BEFORE applying our resolution /
         // bandwidth ceiling. A larger or lower-resolution full-sensor format
         // may reveal that an otherwise suitable 4:3 format is actually cropped.
-        let camera = requiresDepth ? "일반·LiDAR" : "초광각"
+        let camera = "일반·LiDAR"
         var diagnostics = LiDARMultiCameraFormatDiagnostics(total: device.formats.count)
         let compatible = device.formats.compactMap { format -> FormatChoice? in
             let size = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
@@ -689,32 +602,25 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
             guard LiDARMultiCameraFormatPolicy.hasValidRaster(width: Int(size.width), height: Int(size.height)) else {
                 diagnostics.reject(.raster); return nil
             }
-            guard !requiresDepth || LiDARMultiCameraFormatPolicy.isFullAspect(width: Int(size.width), height: Int(size.height)) else {
+            guard LiDARMultiCameraFormatPolicy.isFullAspect(width: Int(size.width), height: Int(size.height)) else {
                 diagnostics.reject(.aspect); return nil
             }
-            guard format.isMultiCamSupported else { diagnostics.reject(.multiCam); return nil }
             guard supports(30, format: format) else { diagnostics.reject(.frameRate); return nil }
-            guard !requiresDepth || depth != nil else { diagnostics.reject(.depth); return nil }
+            guard depth != nil else { diagnostics.reject(.depth); return nil }
             guard format.supportedColorSpaces.contains(.sRGB) else { diagnostics.reject(.color); return nil }
-            let corrected = format.geometricDistortionCorrectedVideoFieldOfView
-            let fieldOfView = !requiresDepth && corrected > 0 ? corrected : format.videoFieldOfView
+            let fieldOfView = format.videoFieldOfView
             guard fieldOfView.isFinite, fieldOfView > 0, fieldOfView < 180 else {
                 diagnostics.reject(.fieldOfView); return nil
             }
             return FormatChoice(format: format, depth: depth, width: Int(size.width), fieldOfView: fieldOfView)
         }
-        let referenceValues: [Float]
-        if requiresDepth {
-            // A MultiCam-only reference could still call a uniformly cropped
-            // set "1x". Use the full native LiDAR/physical wide sensor BEFORE
-            // filtering MultiCam, frame rate, depth or bandwidth capabilities.
-            referenceValues = ([device] + [nativeReferenceDevice].compactMap({ $0 })).flatMap(\.formats).compactMap { format in
-                let size = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                guard LiDARMultiCameraFormatPolicy.isFullAspect(width: Int(size.width), height: Int(size.height)) else { return nil }
-                return format.videoFieldOfView
-            }
-        } else {
-            referenceValues = compatible.map(\.fieldOfView)
+        // Full native LiDAR/physical-wide formats define 1x before frame-rate,
+        // depth or bandwidth filtering. Uniformly cropped candidates cannot
+        // redefine the normal lens's field of view.
+        let referenceValues: [Float] = ([device] + [nativeReferenceDevice].compactMap({ $0 })).flatMap(\.formats).compactMap { format in
+            let size = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            guard LiDARMultiCameraFormatPolicy.isFullAspect(width: Int(size.width), height: Int(size.height)) else { return nil }
+            return format.videoFieldOfView
         }
         guard let widest = LiDARMultiCameraFormatPolicy.widestNativeFieldOfView(referenceValues) else {
             diagnostics.reject(.fieldOfView, count: compatible.count)
@@ -726,15 +632,15 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         diagnostics.reject(.resolution, count: compatible.count - resolutionCandidates.count)
         let preserving = resolutionCandidates.filter {
             LiDARMultiCameraFormatPolicy.acceptsFieldOfView($0.fieldOfView,
-                nativeReference: widest, requiresDepth: requiresDepth)
+                nativeReference: widest)
         }
         diagnostics.reject(.fieldOfView, count: resolutionCandidates.count - preserving.count)
         diagnostics.eligible = preserving.count
         logger.info("\(camera, privacy: .public) format scan: \(diagnostics.summary, privacy: .public)")
-        if requiresDepth, preserving.isEmpty,
+        if preserving.isEmpty,
            let available = resolutionCandidates.map(\.fieldOfView).max() {
             #if DEBUG
-            logger.error("Full native 1x rejected: requiredFov=\(widest, privacy: .public) availableMultiCamFov=\(available, privacy: .public) tolerance=\(LiDARMultiCameraFormatPolicy.maximumFieldOfViewLossDegrees, privacy: .public)")
+            logger.error("Full native 1x rejected: requiredFov=\(widest, privacy: .public) availableLiDARFov=\(available, privacy: .public) tolerance=\(LiDARMultiCameraFormatPolicy.maximumFieldOfViewLossDegrees, privacy: .public)")
             #endif
             throw LiDARMultiCameraCaptureError.narrowedFieldOfView(expected: widest, available: available,
                 diagnostics: diagnostics.summary)
@@ -742,22 +648,13 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         guard !preserving.isEmpty else {
             throw LiDARMultiCameraCaptureError.noEligibleFormats(camera: camera, diagnostics: diagnostics.summary)
         }
-        return preserving.map {
-            var choice = $0
-            choice.referenceFieldOfView = widest
-            return choice
-        }.sorted {
+        return preserving.sorted {
             let firstPenalty = LiDARMultiCameraFormatPolicy.preferredWidthPenalty(width: $0.width, preferred: preferredWidth)
             let secondPenalty = LiDARMultiCameraFormatPolicy.preferredWidthPenalty(width: $1.width, preferred: preferredWidth)
-            if requiresDepth {
-                // Every surviving wide candidate already preserves native 1x.
-                // Prefer 1920/1280 before a 4032px fallback, not a negligible
-                // rounding difference in otherwise equivalent FOV metadata.
-                if firstPenalty != secondPenalty { return firstPenalty < secondPenalty }
-                return $0.fieldOfView > $1.fieldOfView
-            }
-            if $0.fieldOfView != $1.fieldOfView { return $0.fieldOfView > $1.fieldOfView }
-            return firstPenalty < secondPenalty
+            // Every surviving candidate preserves native 1x. Prefer 1920/1280
+            // before a 4032px fallback, not negligible rounding in FOV metadata.
+            if firstPenalty != secondPenalty { return firstPenalty < secondPenalty }
+            return $0.fieldOfView > $1.fieldOfView
         }
     }
 
@@ -765,7 +662,7 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         format.videoSupportedFrameRateRanges.contains { $0.minFrameRate <= fps && $0.maxFrameRate >= fps }
     }
 
-    private func select(_ choice: FormatChoice, on device: AVCaptureDevice, distortionCorrection: Bool) throws {
+    private func select(_ choice: FormatChoice, on device: AVCaptureDevice) throws {
         try device.lockForConfiguration()
         defer { device.unlockForConfiguration() }
         device.activeFormat = choice.format
@@ -776,7 +673,7 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         }
         device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
         device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 30)
-        let camera = device.deviceType == .builtInLiDARDepthCamera ? "일반·LiDAR" : "초광각"
+        let camera = "일반·LiDAR"
         let minimumZoom = Double(device.minAvailableVideoZoomFactor)
         let maximumZoom = Double(device.maxAvailableVideoZoomFactor)
         guard LiDARMultiCameraFormatPolicy.permitsPhysicalOneTimes(minimum: minimumZoom, maximum: maximumZoom) else {
@@ -788,12 +685,9 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
             throw LiDARMultiCameraCaptureError.unsupportedPhysicalZoom(camera: camera,
                 minimum: minimumZoom, maximum: maximumZoom, actual: Double(device.videoZoomFactor))
         }
-        if distortionCorrection && !device.isGeometricDistortionCorrectionSupported {
-            throw LiDARMultiCameraCaptureError.invalidCalibration
-        }
         if device.isGeometricDistortionCorrectionSupported {
             // Wide RGB AND depth are rectified together by MultiCameraFrame.
-            device.isGeometricDistortionCorrectionEnabled = distortionCorrection
+            device.isGeometricDistortionCorrectionEnabled = false
         }
         if choice.format.supportedColorSpaces.contains(.sRGB) { device.activeColorSpace = .sRGB }
         device.automaticallyAdjustsVideoHDREnabled = false
@@ -823,10 +717,10 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         notifications.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: nil) { [weak self] _ in
             self?.cancel(ticket)
         })
-        for source in [device] + [ultraInput?.device].compactMap({ $0 }) {
+        for source in [device] {
             pressureObservations.append(source.observe(\.systemPressureState, options: [.initial, .new]) { [weak self] device, _ in
                 let level = device.systemPressureState.level
-                self?.sessionQueue.async { [weak self] in self?.handlePressure(level, ticket: ticket) }
+                self?.sessionQueue.async { [weak self] in self?.handlePressure(level, sourceID: ObjectIdentifier(device), ticket: ticket) }
             })
         }
     }
@@ -842,6 +736,15 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
                 guard last > 0, ProcessInfo.processInfo.systemUptime - last > 3 else { return nil }
                 return (current.lastRejection ?? current.delivery.failureDescription, current.delivery.summary)
             }
+            let now = ProcessInfo.processInfo.systemUptime
+            if CameraFramePerformanceMetrics.shared.isEnabled, now - self.lastCostReportAt >= 5 {
+                self.lastCostReportAt = now
+                let wideFPS = self.wideInput.map { CMTimeGetSeconds($0.device.activeVideoMinFrameDuration) }.map { $0 > 0 ? 1 / $0 : 0 } ?? 0
+                let pressure = self.pressureLevels.values.map(\.rawValue).sorted().joined(separator: ",")
+                CameraFramePerformanceMetrics.shared.configuration(
+                    "wideFPS=\(wideFPS) hardwareCost=\(self.session.hardwareCost) pressure=\(pressure)",
+                    sessionID: ticket.sessionID)
+            }
             if let timeout {
                 let connections = self.connectionDiagnostics()
                 self.logger.error("Delivery timeout: \(timeout.summary, privacy: .public); \(connections.detailed, privacy: .public)")
@@ -855,7 +758,7 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
     /// Called only on sessionQueue. Reading connection state does not modify
     /// routing or bypass the native LiDAR RGB/depth pairing.
     private func connectionDiagnostics() -> (visible: String, detailed: String) {
-        let outputs: [(String, AVCaptureOutput)] = [("일반", wideOutput), ("초광각", ultraOutput), ("깊이", depthOutput)]
+        let outputs: [(String, AVCaptureOutput)] = [("일반", wideOutput), ("깊이", depthOutput)]
         let visible = outputs.map { name, output in
             "\(name)\(output.connections.contains(where: \.isActive) ? 1 : 0)"
         }.joined(separator: "·")
@@ -871,39 +774,82 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         return ("연결 활성 \(visible).", detailed)
     }
 
-    private func handlePressure(_ level: AVCaptureDevice.SystemPressureState.Level, ticket: Ticket) {
+    private func handlePressure(_ level: AVCaptureDevice.SystemPressureState.Level,
+                                sourceID: ObjectIdentifier, ticket: Ticket) {
         guard configuredTicket == ticket, isCurrent(ticket) else { return }
-        if level == .critical || level == .shutdown {
-            fail(ticket, message: "기기 온도가 높아 카메라 촬영을 중단했어요. 기기를 식힌 뒤 다시 시도해 주세요.")
-        } else if level == .serious, !reducedFrameRate,
-                  let wideInput, let ultraInput {
-            let inputs = [wideInput, ultraInput]
-            guard inputs.allSatisfy({ supports(15, format: $0.device.activeFormat) }),
-                  let depth = wideInput.device.activeDepthDataFormat, supports(15, format: depth) else {
-                fail(ticket, message: "기기 온도가 높아 두 카메라의 동기화를 유지할 수 없어요. 기기를 식힌 뒤 다시 시도해 주세요.")
-                return
-            }
+        pressureLevels[sourceID] = level
+        let levels = Array(pressureLevels.values)
+        if levels.contains(.critical) || levels.contains(.shutdown) {
+            pressureRecovery?.cancel(); pressureRecovery = nil; pressureRecoveryToken = nil
+            fail(ticket, message: "카메라 처리 부하가 높아 촬영을 중단했어요. 기기를 식힌 뒤 다시 시도해 주세요.")
+            return
+        }
+        if levels.contains(.serious) {
+            pressureRecovery?.cancel(); pressureRecovery = nil; pressureRecoveryToken = nil
+            guard !reducedFrameRate else { return }
             do {
-                session.beginConfiguration()
-                defer { session.commitConfiguration() }
-                for input in inputs {
-                    try input.device.lockForConfiguration()
-                    input.device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 15)
-                    input.device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 15)
-                    if input === wideInput {
-                        input.device.activeDepthDataMinFrameDuration = CMTime(value: 1, timescale: 15)
-                    }
-                    input.device.unlockForConfiguration()
-                    input.videoMinFrameDurationOverride = CMTime(value: 1, timescale: 15)
-                }
+                try applyFrameRate(15)
                 reducedFrameRate = true
-                #if DEBUG
-                logger.info("Thermal pressure: paired wide/ultra/depth reduced to 15fps")
-                #endif
+                CameraFramePerformanceMetrics.shared.configuration("pressure response: paired streams=15fps", sessionID: ticket.sessionID)
             } catch {
-                fail(ticket, message: "카메라의 기기 온도 대응 설정을 적용하지 못했어요. 기기를 식힌 뒤 다시 시도해 주세요.")
+                fail(ticket, message: "카메라 부하를 낮추면서 사진·깊이 동기화를 유지하지 못했어요. 촬영 화면을 다시 열어 주세요.")
+            }
+            return
+        }
+        guard reducedFrameRate, levels.count == pressureObservations.count,
+              levels.allSatisfy({ $0 == .nominal }) else {
+            pressureRecovery?.cancel(); pressureRecovery = nil; pressureRecoveryToken = nil
+            return
+        }
+        guard pressureRecovery == nil else { return }
+        schedulePressureRecovery(ticket: ticket, attempt: 0)
+    }
+
+    private func schedulePressureRecovery(ticket: Ticket, attempt: Int) {
+        // Ten seconds nominal initially; failed recovery retries at bounded
+        // 20/40-second intervals even if no further KVO notification arrives.
+        let token = UUID()
+        pressureRecoveryToken = token
+        let recovery = DispatchWorkItem { [weak self] in
+            guard let self, self.pressureRecoveryToken == token, self.configuredTicket == ticket,
+                  self.isCurrent(ticket), self.reducedFrameRate,
+                  self.pressureLevels.count == self.pressureObservations.count,
+                  self.pressureLevels.values.allSatisfy({ $0 == .nominal }) else { return }
+            self.pressureRecovery = nil; self.pressureRecoveryToken = nil
+            do {
+                try self.applyFrameRate(30)
+                self.reducedFrameRate = false
+                CameraFramePerformanceMetrics.shared.configuration("pressure recovered: paired streams=30fps", sessionID: ticket.sessionID)
+            } catch {
+                self.logger.error("Could not restore camera frame rate: \(error.localizedDescription, privacy: .public)")
+                if attempt < 2 { self.schedulePressureRecovery(ticket: ticket, attempt: attempt + 1) }
             }
         }
+        pressureRecovery = recovery
+        sessionQueue.asyncAfter(deadline: .now() + 10 * pow(2.0, Double(attempt)), execute: recovery)
+    }
+
+    /// Same-session FPS adjustment only: no active-format, K, LUT or depth
+    /// changes. Acquire every device lock before mutating any stream.
+    private func applyFrameRate(_ fps: Int32) throws {
+        guard let wideInput,
+              supports(Double(fps), format: wideInput.device.activeFormat),
+              let depth = wideInput.device.activeDepthDataFormat,
+              supports(Double(fps), format: depth) else { throw LiDARMultiCameraCaptureError.unsupportedFormats }
+        var locked: [AVCaptureDevice] = []
+        defer { locked.reversed().forEach { $0.unlockForConfiguration() } }
+        for input in [wideInput] {
+            try input.device.lockForConfiguration(); locked.append(input.device)
+        }
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
+        let duration = CMTime(value: 1, timescale: fps)
+        for input in [wideInput] {
+            input.device.activeVideoMinFrameDuration = duration
+            input.device.activeVideoMaxFrameDuration = duration
+            input.videoMinFrameDurationOverride = duration
+        }
+        wideInput.device.activeDepthDataMinFrameDuration = duration
     }
 
     private func fail(_ ticket: Ticket, message: String) {
@@ -913,6 +859,7 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
             let callback = startupFailed ? nil : current.onFailure
             current = RunState()
             frames.clear(sessionID: ticket.sessionID)
+            CameraFramePerformanceMetrics.shared.end(sessionID: ticket.sessionID)
             return callback
         }
         callback?(ticket.sessionID, message)
@@ -922,6 +869,9 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
     }
 
     private func tearDown() {
+        pressureRecovery?.cancel(); pressureRecovery = nil; pressureRecoveryToken = nil
+        pressureLevels.removeAll()
+        lastCostReportAt = -.infinity
         watchdog?.cancel()
         watchdog = nil
         pressureObservations.forEach { $0.invalidate() }
@@ -937,7 +887,6 @@ nonisolated final class LiDARMultiCameraCapture: NSObject, @unchecked Sendable {
         for input in session.inputs { session.removeInput(input) }
         session.commitConfiguration()
         wideInput = nil
-        ultraInput = nil
         configuredTicket = nil
         reducedFrameRate = false
     }
@@ -960,69 +909,93 @@ nonisolated private struct MultiCameraStartupFailure: LocalizedError, Sendable {
 /// Ownership transfers out of deinit to the same serial queue that owned all
 /// session configuration. No caller can access this one-shot teardown handle.
 nonisolated private struct SessionTeardown: @unchecked Sendable {
-    let session: AVCaptureMultiCamSession
-    func stop() { if session.isRunning { session.stopRunning() } }
+    let session: AVCaptureSession
+    func stop() {
+        if session.isRunning { session.stopRunning() }
+    }
 }
 
 extension LiDARMultiCameraCapture: AVCaptureDataOutputSynchronizerDelegate {
     func dataOutputSynchronizer(_ synchronizer: AVCaptureDataOutputSynchronizer,
-                                didOutput synchronizedDataCollection: AVCaptureSynchronizedDataCollection) {
-        // Identity protects callbacks that were queued before a restart, even
-        // if the caller happens to reuse the same public session UUID.
-        let wide = synchronizedDataCollection.synchronizedData(for: wideOutput) as? AVCaptureSynchronizedSampleBufferData
-        let ultra = synchronizedDataCollection.synchronizedData(for: ultraOutput) as? AVCaptureSynchronizedSampleBufferData
-        let depth = synchronizedDataCollection.synchronizedData(for: depthOutput) as? AVCaptureSynchronizedDepthData
-        let request = state.withLock { current -> (Ticket, simd_float4x3, MultiCameraWideDepthSample, MultiCameraUltraSample)? in
+                                didOutput collection: AVCaptureSynchronizedDataCollection) {
+        let wide = collection.synchronizedData(for: wideOutput) as? AVCaptureSynchronizedSampleBufferData
+        let depth = collection.synchronizedData(for: depthOutput) as? AVCaptureSynchronizedDepthData
+        let admission = state.withLock { current -> Ticket? in
             guard current.synchronizerID == ObjectIdentifier(synchronizer),
-                  let ticket = current.ticket, let extrinsics = current.wideToUltra else { return nil }
+                  let ticket = current.ticket else { return nil }
             current.delivery.observe(wide: wide.map { $0.sampleBufferWasDropped ? $0.droppedReason.rawValue : 0 },
-                                     ultra: ultra.map { $0.sampleBufferWasDropped ? $0.droppedReason.rawValue : 0 },
-                                     depth: depth.map { $0.depthDataWasDropped ? $0.droppedReason.rawValue : 0 })
-            // The synchronizer may deliver the secondary camera in a separate
-            // collection. Keep the calibrated wide/depth pair atomic, then
-            // join only a nearby ultra frame on the SAME session clock.
-            typealias Join = MultiCameraTimestampJoin<MultiCameraWideDepthSample, MultiCameraUltraSample>
-            var primary: Join.PrimaryEntry?
-            if let wide, let depth, !wide.sampleBufferWasDropped, !depth.depthDataWasDropped {
-                let times = (wide.timestamp.seconds, depth.timestamp.seconds)
-                primary = .init(value: .init(image: wide.sampleBuffer, imageTimestamp: wide.timestamp,
-                    depth: depth.depthData, depthTimestamp: depth.timestamp),
-                    timestamp: min(times.0, times.1), endTimestamp: max(times.0, times.1))
-            }
-            var secondary: Join.SecondaryEntry?
-            if let ultra, !ultra.sampleBufferWasDropped {
-                secondary = .init(value: .init(image: ultra.sampleBuffer, timestamp: ultra.timestamp),
-                    timestamp: ultra.timestamp.seconds)
-            }
-            guard let match = current.pending?.insert(primary: primary, secondary: secondary,
-                                                       sessionID: ticket.sessionID) else { return nil }
-            return (ticket, extrinsics, match.primary, match.secondary)
+                depth: depth.map { $0.depthDataWasDropped ? $0.droppedReason.rawValue : 0 })
+            return ticket
         }
-        guard let (ticket, extrinsics, wideDepth, ultraSample) = request else { return }
-        do {
-            let frame = try MultiCameraFrame.make(sessionID: ticket.sessionID,
-                wide: wideDepth.image, wideTimestamp: wideDepth.imageTimestamp,
-                ultraWide: ultraSample.image, ultraWideTimestamp: ultraSample.timestamp,
-                depth: wideDepth.depth, depthTimestamp: wideDepth.depthTimestamp, wideToUltra: extrinsics)
-            let callback = state.withLock { current -> (@Sendable (MultiCameraFrame) -> Void)? in
-                guard current.ticket == ticket,
-                      current.lastTimestamp == nil || frame.timestamp > current.lastTimestamp! else { return nil }
-                current.lastTimestamp = frame.timestamp
-                current.lastPacketAt = ProcessInfo.processInfo.systemUptime
-                current.lastRejection = nil
-                frames.publish(frame)
-                if let device = current.device {
-                    current.startup?.acceptFirstFrame(MultiCameraControlDevice(device: device))
+        guard let ticket = admission else { return }
+        let metrics = CameraFramePerformanceMetrics.shared
+        observe(wide, stage: .wideInput, late: .wideLate, ticket: ticket)
+        if let depth {
+            if depth.depthDataWasDropped { recordDrop(depth.droppedReason, late: .depthLate, ticket: ticket) }
+            else { metrics.event(.depthInput, timestamp: depth.timestamp.seconds, sessionID: ticket.sessionID) }
+        }
+        var primary: MultiCameraFrame?
+        if let wide, let depth, !wide.sampleBufferWasDropped, !depth.depthDataWasDropped {
+            do {
+                primary = try MultiCameraFrame.makePrimary(sessionID: ticket.sessionID,
+                    wide: wide.sampleBuffer, wideTimestamp: wide.timestamp,
+                    depth: depth.depthData, depthTimestamp: depth.timestamp)
+            } catch {
+                metrics.drop(.primaryRejected, sessionID: ticket.sessionID)
+                state.withLock { if $0.ticket == ticket { $0.lastRejection = error.localizedDescription } }
+            }
+        } else if let wide, !wide.sampleBufferWasDropped {
+            metrics.drop(.missingWideDepth, sessionID: ticket.sessionID)
+            // Current video K must prove a recent same-session LUT is still valid.
+            // A missing K fails closed; no old depth is ever attached to this RGB.
+            let calibration = state.withLock { $0.ticket == ticket ? $0.previewCalibration : nil }
+            if let calibration, wide.timestamp.seconds >= calibration.time,
+               wide.timestamp.seconds - calibration.time <= 0.10,
+               (try? MultiCameraFrame.validatePreviewCalibration(wide.sampleBuffer, calibration: calibration.lens)) != nil,
+               let image = CMSampleBufferGetImageBuffer(wide.sampleBuffer) {
+                state.withLock { current in
+                    guard current.ticket == ticket else { return }
+                    frames.publishPreview(sessionID: ticket.sessionID, timestamp: wide.timestamp.seconds,
+                                          wideImage: image, calibration: calibration.lens)
                 }
-                return current.onFrame
-            }
-            guard let callback else { return }
-            callback(frame)
-        } catch {
-            state.withLock {
-                guard $0.ticket == ticket else { return }
-                $0.lastRejection = error.localizedDescription
             }
         }
+
+        var admitted: MultiCameraFrame?
+        let callback = state.withLock { current -> (@Sendable (MultiCameraFrame) -> Void)? in
+            guard current.ticket == ticket, let primary,
+                  current.lastTimestamp == nil || primary.timestamp > current.lastTimestamp! else { return nil }
+            current.lastTimestamp = primary.timestamp
+            current.lastPacketAt = ProcessInfo.processInfo.systemUptime
+            current.lastRejection = nil
+            current.previewCalibration = (primary.timestamp, primary.wideCalibration)
+            frames.publish(primary)
+            if let device = current.device { current.startup?.acceptFirstFrame(MultiCameraControlDevice(device: device)) }
+            admitted = primary
+            return current.onFrame
+        }
+        if let admitted {
+            metrics.event(.primaryPublished, timestamp: admitted.timestamp, sessionID: ticket.sessionID)
+            callback?(admitted)
+        }
+    }
+
+    private func observe(_ sample: AVCaptureSynchronizedSampleBufferData?,
+                         stage: CameraFramePerformanceMetrics.Stage,
+                         late: CameraFramePerformanceMetrics.DropReason, ticket: Ticket) {
+        guard let sample else { return }
+        if sample.sampleBufferWasDropped { recordDrop(sample.droppedReason, late: late, ticket: ticket) }
+        else { CameraFramePerformanceMetrics.shared.event(stage, timestamp: sample.timestamp.seconds, sessionID: ticket.sessionID) }
+    }
+
+    private func recordDrop(_ reason: AVCaptureOutput.DataDroppedReason,
+                            late: CameraFramePerformanceMetrics.DropReason, ticket: Ticket) {
+        let drop: CameraFramePerformanceMetrics.DropReason
+        switch reason.rawValue {
+        case 2: drop = .outOfBuffers
+        case 3: drop = .discontinuity
+        default: drop = late
+        }
+        CameraFramePerformanceMetrics.shared.drop(drop, sessionID: ticket.sessionID)
     }
 }

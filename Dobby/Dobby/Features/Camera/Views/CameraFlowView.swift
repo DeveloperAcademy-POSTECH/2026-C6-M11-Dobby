@@ -12,6 +12,7 @@ import AVFoundation
 /// 상위 NavigationStack에 삽입하며 화면 이동 중 같은 Model을 유지한다.
 struct CameraFlowView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let model: ProductPhotoModel
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
@@ -20,8 +21,7 @@ struct CameraFlowView: View {
     let onExit: (() -> Void)?
     private let onSelectionVisibilityChange: (Bool) -> Void
     var previewSource: CapturedAsset.Source?
-    private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
-    @State private var controlsHeight: CGFloat = 148
+    private let background = Color.black
     @State private var captureRequested = false
     @State private var failureMessage: String?
     @State private var isCaptureGuidePresented = false
@@ -47,39 +47,8 @@ struct CameraFlowView: View {
 
     var body: some View {
         CameraPermissionGate(permission: permission) {
-            GeometryReader { geometry in
-                ratioPreview
-                    .modifier(DetailZoomModifier(options: camera?.options,
-                        enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
-                            && (previewSource != nil || camera?.state == .running),
-                        bottomInset: controlsHeight + 17))
-                    .overlay {
-                        if isMoreOptionsPresented {
-                            Button { isMoreOptionsPresented = false } label: {
-                                Color.clear.contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
-                            .accessibilityIdentifier("camera.dismissOptions")
-                        }
-                    }
-                    .overlay(alignment: .bottom) {
-                        VStack(spacing: 0) {
-                            if let failureMessage {
-                                Text(failureMessage).padding().background(.ultraThinMaterial)
-                            } else if model.isCapturing {
-                                ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
-                            }
-                            if isMoreOptionsPresented {
-                                DetailCaptureOptionsView(options: camera?.options) { isMoreOptionsPresented = false }
-                            } else {
-                                captureControls
-                                    .padding(.bottom, geometry.safeAreaInsets.bottom)
-                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
-                            }
-                        }
-                    }
-                    .ignoresSafeArea()
+            GeometryReader { safeGeometry in
+                cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -154,6 +123,72 @@ struct CameraFlowView: View {
         }
     }
 
+    /// Match the measurement camera's complete canvas and ratio-aware anchors.
+    /// Reading the safe inset outside ignoresSafeArea prevents a second offset.
+    private func cameraCanvas(bottomSafeAreaInset: CGFloat) -> some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
+                ratioPreview
+                    .modifier(DetailZoomModifier(options: camera?.options,
+                        enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
+                            && (previewSource != nil || camera?.state == .running),
+                        bottomSafeAreaInset: bottomSafeAreaInset))
+                if !isMoreOptionsPresented {
+                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.30),
+                            value: camera?.options.photoAspectRatio ?? .fourThree)
+                        .animation(nil, value: geometry.size)
+                }
+                captureFeedback(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                cameraOptionsOverlay(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                    .allowsHitTesting(isMoreOptionsPresented)
+                    .accessibilityHidden(!isMoreOptionsPresented)
+                    .zIndex(2)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private func captureFeedback(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
+        if let frame = shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset),
+           failureMessage != nil || model.isCapturing {
+            Group {
+                if let failureMessage {
+                    Text(failureMessage).multilineTextAlignment(.center)
+                } else {
+                    ProgressView("사진 촬영·저장 중")
+                }
+            }
+            .padding(12)
+            .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 12))
+            .frame(maxWidth: min(380, size.width - 32))
+            .position(x: size.width / 2, y: max(24, frame.y - 34))
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func cameraOptionsOverlay(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
+        ZStack(alignment: .bottom) {
+            let panel = CameraOptionsPanelLayout(containerSize: size, bottomSafeAreaInset: bottomSafeAreaInset)
+            if isMoreOptionsPresented {
+                Button { isMoreOptionsPresented = false } label: { Color.clear.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
+                    .accessibilityIdentifier("camera.dismissOptions")
+                DetailCaptureOptionsView(options: camera?.options,
+                    exposureSelectionFeedbackEnabled: true,
+                    panelLayout: panel) { isMoreOptionsPresented = false }
+                    .position(x: panel.frame.midX, y: panel.frame.midY)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isMoreOptionsPresented ? .isModal : [])
+    }
+
     @ViewBuilder
     private var ratioPreview: some View {
         let ratio = camera?.options.photoAspectRatio ?? .fourThree
@@ -194,47 +229,53 @@ struct CameraFlowView: View {
     }
 
     private var shutter: some View {
-        Button { captureRequested = true } label: {
-            Circle().fill(Color(red: 0.10, green: 0.10, blue: 0.10))
-                .overlay { Circle().stroke(.black.opacity(0.5), lineWidth: 2).padding(12) }
-                .overlay { Circle().fill(Color(red: 0.89, green: 0.35, blue: 0.24)).frame(width: 25, height: 25) }
-                .frame(width: 92, height: 92)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!canCapture)
-        .opacity(canCapture ? 1 : 0.5)
-        .accessibilityLabel("상세 사진 촬영")
-        .accessibilityHint(previewSource == nil ? "사진을 촬영하고 상세 사진 목록에 추가합니다." : "표시된 샘플 사진을 목록에 추가합니다.")
-        .accessibilityIdentifier("camera.captureDetail")
+        CameraShutterControl(isEnabled: canCapture, isCapturing: isPhotoOperationInProgress,
+            showsReadyState: canCapture, action: { captureRequested = true })
+            .accessibilityLabel(isPhotoOperationInProgress ? "상세 사진 처리 중" : "상세 사진 촬영")
+            .accessibilityValue(isPhotoOperationInProgress ? "촬영 중" : canCapture ? "촬영 가능" : "카메라 준비 중")
+            .accessibilityHint(previewSource == nil ? "사진을 촬영하고 상세 사진 목록에 추가합니다."
+                : "표시된 샘플 사진을 목록에 추가합니다.")
+            .accessibilityIdentifier("camera.captureDetail")
     }
 
-    private var captureControls: some View {
-        HStack {
-            Spacer(minLength: 16)
+    private func shutterFrame(in size: CGSize, bottomSafeAreaInset: CGFloat) -> CameraPhotoViewport? {
+        captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset)?.shutter
+    }
+
+    private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
+        let rect = DetailAspectRatioPreviewLayout(containerSize: size,
+            aspectRatio: camera?.options.photoAspectRatio ?? .fourThree).frame
+        return MeasurementCameraChromeLayout.controls(containerWidth: Double(size.width),
+            containerHeight: Double(size.height),
+            photo: .init(x: Double(rect.minX), y: Double(rect.minY),
+                width: Double(rect.width), height: Double(rect.height)),
+            bottomSafeAreaInset: Double(bottomSafeAreaInset))
+    }
+
+    @ViewBuilder
+    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
+        if let controls = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset) {
+            let frame = controls.shutter
+            let centerY = frame.y + frame.height / 2
+            shutter.position(x: frame.x + frame.width / 2, y: centerY)
+            CameraMoreButton(isEnabled: !isPhotoOperationInProgress) { isMoreOptionsPresented = true }
+                .position(x: controls.more.x + controls.more.width / 2,
+                    y: controls.more.y + controls.more.height / 2)
+                .accessibilityLabel("촬영 옵션 더보기")
+                .accessibilityIdentifier("camera.moreOptions")
             Button { isGalleryPresented = true } label: {
                 CameraPhotoView(source: (model.photos.last ?? model.input.measurement).source,
                                 maximumPixelSize: 192)
                     .frame(width: 48, height: 48).clipShape(Circle())
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .disabled(isPhotoOperationInProgress)
+            .position(x: controls.accessory.x + controls.accessory.width / 2,
+                y: controls.accessory.y + controls.accessory.height / 2)
             .accessibilityLabel("촬영한 사진 보기")
             .accessibilityIdentifier("camera.openGallery")
-            Spacer(minLength: 16)
-            shutter
-            Spacer(minLength: 16)
-            Button { isMoreOptionsPresented = true } label: {
-                Image("DetailCaptureMore").resizable().frame(width: 48, height: 48)
-            }
-            .buttonStyle(.plain)
-            .disabled(isPhotoOperationInProgress)
-            .accessibilityLabel("촬영 옵션 더보기")
-            .accessibilityIdentifier("camera.moreOptions")
-            Spacer(minLength: 16)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 114)
     }
 
     private var canCapture: Bool {
