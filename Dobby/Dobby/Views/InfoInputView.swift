@@ -88,8 +88,9 @@ struct InfoInputView: View {
                         onExit()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.black)
                     }
+                    .tint(.black)
                     .accessibilityLabel("뒤로가기")
                     .accessibilityIdentifier("product-flow.back")
                 }
