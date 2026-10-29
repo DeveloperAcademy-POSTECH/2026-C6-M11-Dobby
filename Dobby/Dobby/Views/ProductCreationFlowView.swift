@@ -95,7 +95,7 @@ struct ProductCreationFlowView: View {
                             case .information:
                                 if resumeProductID == nil {
                                     InfoInputView(garment: garment, measurementInput: $measurementInput,
-                                        onExit: requestDraftExit) {
+                                        onExit: handleInformationBack) {
                                         _ in path.append(.completed)
                                     }
                                 } else {
@@ -179,6 +179,17 @@ struct ProductCreationFlowView: View {
         guard path.last == .photoSelection else { return }
         // Keep the current photo model and camera session alive for additional captures.
         path.removeLast()
+    }
+
+    private func handleInformationBack() {
+        guard path.last == .information, !isFinishing, let garment else { return }
+        // Use the Done button's enabled condition, not full completion validation.
+        if GarmentInformationValidation.hasAnyInformation(garment) {
+            requestDraftExit()
+        } else {
+            // Retain the product, selected photos and measurement input in this flow.
+            path.removeLast()
+        }
     }
 
     private func receiveMeasurement(_ record: SavedMeasurement) async throws {
