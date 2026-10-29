@@ -243,15 +243,13 @@ final class ProductCreationFlowTests: XCTestCase {
         assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
         attachScreenshot(app, name: "flow-top-library-after-unchanged-edit-67-display")
 
-        // A saved product keeps pending edits when returning to its detail
-        // page, and commits them only after completing Info again.
+        // 닫기는 편집을 계속하고, 완료할 때만 수정한 실측값을 저장한다.
         app.buttons["library.edit"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         replaceText(in: shoulder, with: "72.19", app: app)
-        tapBack(in: app)
-        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
-        assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
-        app.buttons["library.edit"].tap()
+        app.buttons["product-flow.back"].tap()
+        XCTAssertTrue(app.buttons["product-info.discard-cancel"].waitForExistence(timeout: 5))
+        app.buttons["product-info.discard-cancel"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "72.19")
@@ -260,7 +258,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["product-complete.library"].exists)
         XCTAssertTrue(app.buttons["library.edit"].exists)
-        assertSavedValue(key: "shoulderWidth", contains: "72cm", app: app)
+        assertSavedValue(key: "shoulderWidth", contains: "72.1cm", app: app)
         attachScreenshot(app, name: "flow-top-library-saved-restored-draft-72-display")
     }
 
