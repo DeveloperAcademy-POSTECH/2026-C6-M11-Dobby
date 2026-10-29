@@ -4,7 +4,7 @@ import Foundation
 /// Fitting failure never falls back to local/median endpoint sampling. A bad
 /// endpoint or contour derivation affects only measurements that depend on it.
 nonisolated struct GarmentPlaneMeasurementEngine {
-    static let algorithmVersion = "garment-plane-neck-perpendicular-mask-1"
+    static let algorithmVersion = "garment-plane-neck-perpendicular-mask-2"
     private let options: MeasurementOptions
 
     init(options: MeasurementOptions = .init()) { self.options = options }
@@ -38,7 +38,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
         func quality(_ position: Point3D, method: DepthSamplingMethod) -> PointQuality {
             let support = plane!.quality
             return .init(validSamples: support.inlierCount, candidateSamples: support.candidateCount,
-                confidenceAvailable: true, depthSpreadMeters: 0, planeResidualMeters: nil, method: method,
+                confidenceAvailable: frame.depth.confidence != nil, depthSpreadMeters: 0, planeResidualMeters: nil, method: method,
                 viewingAngleDegrees: GarmentPlaneGeometry.viewingAngleDegrees(at: position, plane: plane!),
                 garmentPlaneQuality: support)
         }
@@ -191,7 +191,10 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                 }
             }
             if let failure { return unavailable(failure, points: points, failedIDs: definition.landmarkIDs) }
-            var uncertain = definition.landmarkIDs.contains(where: uncertainIDs.contains)
+            // Missing AVFoundation confidence is unknown quality, not a missing
+            // length. Preserve that provenance through direct and derived values.
+            var uncertain = frame.depth.confidence == nil
+                || definition.landmarkIDs.contains(where: uncertainIDs.contains)
             // Retain explicit archive projection semantics; new canonical
             // definitions have no projection. No hidden total-length correction.
             if let projection = definition.projection {

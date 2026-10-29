@@ -14,15 +14,19 @@ struct CameraExposureView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let forceReduceMotion: Bool
+    /// Feedback can stay enabled independently of the chosen visual presentation.
+    private let selectionFeedbackEnabled: Bool
     private var valueText: String { String(format: value > 0 ? "+%.1f" : "%.1f", value == 0 ? 0 : value) }
 
     init(state: CameraOptionsState, presentation: DetailCaptureOptionsPresentation = .standard,
-         forceReduceMotion: Bool = false, onChangeExposure: @escaping (Double) -> Void,
+         forceReduceMotion: Bool = false, selectionFeedbackEnabled: Bool? = nil,
+         onChangeExposure: @escaping (Double) -> Void,
          onBack: @escaping () -> Void) {
         self.state = state
         self.onChangeExposure = onChangeExposure
         self.presentation = presentation
         self.forceReduceMotion = forceReduceMotion
+        self.selectionFeedbackEnabled = selectionFeedbackEnabled ?? (presentation == .measurement)
         self.onBack = onBack
     }
 
@@ -146,7 +150,7 @@ struct CameraExposureView: View {
               range.lowerBound.isFinite, range.upperBound.isFinite else { return }
         let limited = min(max((proposed * 10).rounded() / 10, range.lowerBound), range.upperBound)
         guard limited != value || state.hasExposureFailure else { return }
-        if presentation == .measurement, generatesFeedback,
+        if selectionFeedbackEnabled, generatesFeedback,
            DetailExposureSelectionFeedback.hasChangedDisplayedStep(from: value, to: limited) {
             selectionFeedback &+= 1
         }

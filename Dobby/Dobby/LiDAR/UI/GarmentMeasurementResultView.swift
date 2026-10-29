@@ -15,13 +15,10 @@ struct GarmentMeasurementResultView: View {
     let allowsRetake: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("dobby.measurementResult.pointTutorial.v1.seen") private var hasSeenPointTutorial = false
     @State private var image: UIImage?
-    @State private var selectedDefinition: MeasurementDefinition?
     @State private var showPhoto = false
     @State private var showDetails = false
     @State private var showAuxiliaryDetails = false
-    @State private var detailDefinition: MeasurementDefinition?
     @State private var detailManualReview: ManualMeasurement?
     @State private var totalLengthCorrection: ManualMeasurement?
     @State private var detailTotalLengthCorrection: ManualMeasurement?
@@ -34,7 +31,7 @@ struct GarmentMeasurementResultView: View {
     @State private var pendingRecordRevision: UUID?
     @State private var pendingRecordArchived = false
     @State private var showsPointTutorial = false
-    @State private var hasPresentedPointTutorial = false
+    @State private var hasFinishedPointTutorial = false
     private let pipeline = MeasurementPipeline()
 
     init(model: AutomaticMeasurement, archive: MeasurementArchive,
@@ -61,6 +58,20 @@ struct GarmentMeasurementResultView: View {
     }
 
     private var isSynthetic: Bool { model.snapshot.frame.source == .synthetic }
+    private var shouldOfferPointTutorial: Bool {
+        guard model.visibleEditableLandmarks.points.contains(where: { $0.isVisible && $0.point.isValid }) else {
+            return false
+        }
+        if isSynthetic {
+            #if DEBUG
+            return ProcessInfo.processInfo.arguments.contains("--garment-preview-result-tutorial")
+            #else
+            return false
+            #endif
+        }
+        return true
+    }
+    private var awaitsPointTutorial: Bool { shouldOfferPointTutorial && !hasFinishedPointTutorial }
     private var failedValues: [MeasurementValue] {
         model.needsRecalculation ? [] : model.visibleValues.filter { !$0.hasUsableMeasurement }
     }
@@ -80,6 +91,7 @@ struct GarmentMeasurementResultView: View {
                 accessibleResult
             }
         }
+        .disabled(awaitsPointTutorial)
         .background { Color.white.ignoresSafeArea() }
         .navigationTitle("실측 결과")
         .navigationBarTitleDisplayMode(.inline)
@@ -105,8 +117,6 @@ struct GarmentMeasurementResultView: View {
                         .disabled(!allowsRetake || isSaving || isEditingPoint)
                 }
             }.sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .topBarTrailing) { resultActions }
-                .sharedBackgroundVisibility(.hidden)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ChakPrimaryButton(
@@ -115,7 +125,7 @@ struct GarmentMeasurementResultView: View {
             ) {
                 Task { await confirm() }
             }
-            .disabled(isSaving || isEditingPoint || model.needsRecalculation)
+            .disabled(isSaving || isEditingPoint || model.needsRecalculation || awaitsPointTutorial)
             .accessibilityHint(onConfirmedRecord == nil
                 ? "사진과 확인한 측정 결과를 저장하고 촬영을 마칩니다"
                 : "사진과 확인한 측정 결과를 저장하고 제품 상세 촬영으로 이동합니다")
@@ -128,6 +138,9 @@ struct GarmentMeasurementResultView: View {
                 image = decoded
             }
             guard !Task.isCancelled else { return }
+            // A missing photo cannot show a useful editing guide. Keep the
+            // existing recovery controls available instead of trapping entry.
+            if image == nil { hasFinishedPointTutorial = true }
             if dynamicTypeSize.isAccessibilitySize { showDetails = true }
             presentPointTutorialIfNeeded()
         }
@@ -139,9 +152,6 @@ struct GarmentMeasurementResultView: View {
             if phase == .active { presentPointTutorialIfNeeded() }
         }
         .task(id: model.calculationRevision) { await recalculate() }
-        .sheet(item: $selectedDefinition) { definition in
-            GarmentMeasurementItemSheet(model: model, definition: definition, archive: archive)
-        }
         .sheet(isPresented: $showPhoto) {
             if let image { GarmentMeasurementPhotoSheet(image: image) }
         }
@@ -153,9 +163,16 @@ struct GarmentMeasurementResultView: View {
         }
         .sheet(isPresented: $showAuxiliaryDetails) { auxiliaryDetailsSheet }
         .fullScreenCover(isPresented: $showsPointTutorial) {
-            GarmentResultPointTutorial {
-                if !isSynthetic { hasSeenPointTutorial = true }
-                showsPointTutorial = false
+            GarmentResultPointTutorial(title: incompleteCount == 0 ? "자동 실측 완료!" : "측정점을 확인해 주세요") {
+                // This full-screen button consumes the complete first touch;
+                // editing is enabled only after the user acknowledges it.
+                // Dismiss in place, without the system cover sliding down.
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    hasFinishedPointTutorial = true
+                    showsPointTutorial = false
+                }
             }
             .presentationBackground(.clear)
             .interactiveDismissDisabled()
@@ -229,32 +246,20 @@ struct GarmentMeasurementResultView: View {
             editableLandmarks: model.visibleEditableLandmarks,
             definitions: model.visibleDefinitions,
             values: model.visibleValues, showLabels: !dynamicTypeSize.isAccessibilitySize,
-            isEnabled: !isSaving, isRecalculating: model.needsRecalculation,
+            isEnabled: !isSaving && !awaitsPointTutorial, isRecalculating: model.needsRecalculation,
             showsEnlargeControl: showsEnlargeControl,
-            onSelect: { if !isEditingPoint && !model.needsRecalculation { selectedDefinition = $0 } },
-            onEnlarge: { showPhoto = true }, onMove: { id, point in
+            onEnlarge: { if !awaitsPointTutorial { showPhoto = true } }, onMove: { id, point in
+                guard !awaitsPointTutorial else { return }
                 _ = model.placePoint(originalPoint: point, id: id)
             }, onEditingChanged: { isEditingPoint = $0 })
     }
 
     private func presentPointTutorialIfNeeded() {
-        guard scenePhase == .active, !hasPresentedPointTutorial, image != nil,
+        guard scenePhase == .active, shouldOfferPointTutorial, !hasFinishedPointTutorial,
+              !showsPointTutorial, image != nil,
               !model.needsRecalculation, !isSaving, !isEditingPoint,
-              selectedDefinition == nil, manualReview == nil, totalLengthCorrection == nil,
-              !showPhoto, !showAuxiliaryDetails,
-              !model.visibleValues.isEmpty, incompleteCount == 0 else { return }
-        // Synthetic flows stay deterministic and never consume the real first-
-        // result preference. The opt-in exists only in Debug UI fixtures.
-        if isSynthetic {
-            #if DEBUG
-            guard ProcessInfo.processInfo.arguments.contains("--garment-preview-result-tutorial") else { return }
-            #else
-            return
-            #endif
-        } else if hasSeenPointTutorial {
-            return
-        }
-        hasPresentedPointTutorial = true
+              manualReview == nil, totalLengthCorrection == nil,
+              !showPhoto, !showAuxiliaryDetails else { return }
         showsPointTutorial = true
     }
 
@@ -313,37 +318,8 @@ struct GarmentMeasurementResultView: View {
             .accessibilityIdentifier("garmentPointRecalculation")
     }
 
-    private var resultActions: some View {
-        Menu {
-            Button("측정 항목 상세", systemImage: "list.bullet.rectangle") { openAuxiliaryDetails() }
-                .accessibilityIdentifier("openGarmentMeasurementDetails")
-            if model.canCorrectTotalLength {
-                Button("총장 위치 직접 지정", systemImage: "hand.point.up.left") {
-                    openManualReview(for: "top.totalLength")
-                }.disabled(model.needsRecalculation)
-                    .accessibilityIdentifier("correctGarmentTotalLength")
-            }
-            Button("촬영 사진 확대", systemImage: "arrow.up.left.and.arrow.down.right") { showPhoto = true }
-                .disabled(image == nil)
-                .accessibilityIdentifier("enlargeGarmentPhoto")
-            Button("측정점 확인·수정", systemImage: "point.topleft.down.curvedto.point.bottomright.up") {
-                openAuxiliaryDetails()
-            }.disabled(isSaving || isEditingPoint || model.needsRecalculation)
-            if model.hasPointAdjustments {
-                Button("원래 위치로", systemImage: "arrow.counterclockwise") { model.resetPointAdjustments() }
-                    .disabled(isSaving || isEditingPoint)
-                    .accessibilityIdentifier("resetGarmentMeasurementPoints")
-            }
-        } label: {
-            GarmentCaptureToolbarIcon(systemName: "ellipsis")
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("실측 결과 메뉴")
-        .accessibilityIdentifier("garmentResultActions")
-        .disabled(isSaving || isEditingPoint)
-    }
-
     private func openAuxiliaryDetails() {
+        guard !awaitsPointTutorial else { return }
         showDetails = true
         showAuxiliaryDetails = true
     }
@@ -362,9 +338,6 @@ struct GarmentMeasurementResultView: View {
                         .accessibilityIdentifier("closeGarmentMeasurementDetails")
                 }
             }
-            .sheet(item: $detailDefinition) { definition in
-                GarmentMeasurementItemSheet(model: model, definition: definition, archive: archive)
-            }
             .sheet(item: $detailManualReview) { measurement in
                 MeasurementDetailView(model: measurement, archive: archive)
             }
@@ -376,7 +349,7 @@ struct GarmentMeasurementResultView: View {
 
     private var auxiliaryContent: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("점을 끌어 위치를 수정할 수 있어요. 치수를 누르면 상세를 볼 수 있어요.")
+            Text("점을 끌어 위치를 수정할 수 있어요.")
                 .font(.caption).foregroundStyle(.secondary)
             if isSynthetic {
                 Label("화면 미리보기 · 합성 치수", systemImage: "cube.transparent")
@@ -422,10 +395,7 @@ struct GarmentMeasurementResultView: View {
             DisclosureGroup("측정 항목 상세", isExpanded: $showDetails) {
                 VStack(spacing: 0) {
                     ForEach(model.visibleValues) { value in
-                        if let definition = model.visibleDefinitions.first(where: { $0.id == value.id }) {
-                            Button { openMeasurementDetail(definition) } label: { measurementRow(value) }
-                                .buttonStyle(.plain).disabled(isEditingPoint || model.needsRecalculation)
-                        }
+                        measurementRow(value)
                     }
                 }.padding(.top, 8)
             }.accessibilityElement(children: .contain)
@@ -439,12 +409,8 @@ struct GarmentMeasurementResultView: View {
         }
     }
 
-    private func openMeasurementDetail(_ definition: MeasurementDefinition) {
-        if showAuxiliaryDetails { detailDefinition = definition }
-        else { selectedDefinition = definition }
-    }
-
     private func openManualReview(for definitionID: String) {
+        guard !awaitsPointTutorial else { return }
         let measurement = model.manualMeasurement(for: definitionID)
         if definitionID == "top.totalLength", model.canCorrectTotalLength {
             if showAuxiliaryDetails { detailTotalLengthCorrection = measurement }
@@ -666,9 +632,10 @@ private struct MeasurementCaptureFailureGroup: Identifiable {
     let feedback: MeasurementFailureFeedback
 }
 
-/// A first-result guide, rather than an extra step in the capture pipeline.
+/// Each result introduces point editing once before accepting any edits.
 /// The illustration is the original 76 × 111 Figma asset, not a symbol substitute.
 private struct GarmentResultPointTutorial: View {
+    let title: String
     let dismiss: () -> Void
     @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 18
 
@@ -688,7 +655,7 @@ private struct GarmentResultPointTutorial: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("자동 실측 완료. 직접 측정점을 움직일 수 있어요. 안내 닫기")
+            .accessibilityLabel("\(title) 직접 측정점을 움직일 수 있어요. 안내 닫기")
             .accessibilityHint("화면을 탭하면 측정점과 길이를 확인하고 수정할 수 있어요")
             .accessibilityIdentifier("dismissGarmentResultTutorial")
         }
@@ -698,7 +665,7 @@ private struct GarmentResultPointTutorial: View {
 
     private var content: some View {
         VStack(spacing: 22) {
-            Text("자동 실측 완료!")
+            Text(title)
                 .font(.system(size: titleSize, weight: .bold))
                 .frame(minHeight: 26)
             Image("MeasurementPointTutorial")
@@ -735,48 +702,6 @@ enum GarmentMeasurementText {
         default: fallback = definition.title
         }
         return GarmentMeasurementPresentation.shortTitle(for: definition.id, fallback: fallback)
-    }
-}
-
-private struct GarmentMeasurementItemSheet: View {
-    let model: AutomaticMeasurement
-    let definition: MeasurementDefinition
-    let archive: MeasurementArchive
-    @Environment(\.dismiss) private var dismiss
-    @State private var manualComparison: ManualMeasurement?
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                if let value = model.result.values.first(where: { $0.id == definition.id }) {
-                    Section {
-                        Text(GarmentMeasurementText.value(value)).font(.largeTitle.bold()).monospacedDigit()
-                        Text(value.hasUsableMeasurement ? "계산 완료" : "측정 불가")
-                            .foregroundStyle(value.hasUsableMeasurement ? Color.primary : GarmentCaptureStyle.accent)
-                        MeasurementFailureFeedbackView(value: value)
-                    }
-                }
-                Section {
-                    Text(definition.id == "top.totalLength"
-                         ? definition.landmarkIDs.first == "top_length_start"
-                            ? "총장 상단과 밑단 중앙 사이의 거리예요. 자동 상단은 옷 윤곽을 기준으로 잡으므로, 카라가 높은 옷은 위치를 확인해 주세요. 줄자도 같은 두 점을 기준으로 비교해 주세요."
-                            : definition.projection == nil
-                            ? "목 중앙과 밑단 중앙 사이의 직선거리예요. 줄자도 옷을 펼친 상태에서 같은 두 점을 기준으로 비교해 주세요."
-                            : "이 이전 기록은 목 좌우 축에 수직인 총장이에요. 줄자도 같은 기준으로 비교해 주세요."
-                         : "사진에 표시된 두 점 사이의 직선거리예요. 줄자도 같은 두 점 사이를 기준으로 비교해 주세요.")
-                    Button("이 사진에서 수동점 검증") {
-                        manualComparison = model.manualMeasurement(for: definition.id)
-                    }.disabled(definition.landmarkIDs.count != 2)
-                        .accessibilityIdentifier("verifyGarmentMeasurement_\(definition.id)")
-                } footer: {
-                    Text("수동점 검증은 별도 기록으로 저장돼요. 결과 화면에서 확인한 치수는 바뀌지 않아요.")
-                }
-            }.navigationTitle(definition.title).navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("닫기") { dismiss() } } }
-                .sheet(item: $manualComparison) { measurement in
-                    MeasurementDetailView(model: measurement, archive: archive)
-                }
-        }.tint(GarmentCaptureStyle.accent).preferredColorScheme(.dark)
     }
 }
 

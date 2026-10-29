@@ -250,7 +250,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
 
     @MainActor
     private func measurementLabels(in app: XCUIApplication) -> [String: String] {
-        Dictionary(uniqueKeysWithValues: app.buttons.matching(NSPredicate(
+        Dictionary(uniqueKeysWithValues: app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).allElementsBoundByIndex.map { ($0.identifier, $0.label) })
     }
 

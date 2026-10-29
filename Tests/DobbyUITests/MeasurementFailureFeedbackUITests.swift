@@ -4,7 +4,7 @@ import XCTest
 /// garment recognition, camera optics, or centimeter accuracy.
 final class MeasurementFailureFeedbackUITests: XCTestCase {
     @MainActor
-    func testUsableUncertainNumbersHaveNoWarningsInResultDetailsAndProductInput() throws {
+    func testUsableUncertainNumbersHaveNoWarningsOrValueSheetInResultAndProductInput() throws {
         continueAfterFailure = false
         for top in [true, false] {
             let app = launchFixture("--garment-preview-feedback-uncertain", top: top)
@@ -13,17 +13,18 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
             XCTAssertFalse(app.buttons["garmentUnavailableNotice"].exists)
             XCTAssertFalse(app.buttons["garmentUncertainNotice"].exists)
             XCTAssertTrue(app.staticTexts["자동으로 실측을 완료했어요"].exists)
-            let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_"))
+            let labels = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_"))
             XCTAssertEqual(labels.count, 4)
             for label in labels.allElementsBoundByIndex {
                 XCTAssertTrue(label.label.contains("cm"))
                 XCTAssertFalse(label.label.contains("확인 필요"))
             }
-            labels.element(boundBy: 0).tap()
-            XCTAssertTrue(app.staticTexts["계산 완료"].waitForExistence(timeout: 5))
+            labels.element(boundBy: 0).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTAssertTrue(app.navigationBars["실측 결과"].exists)
+            XCTAssertFalse(app.staticTexts["계산 완료"].exists)
             XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(
                 format: "identifier BEGINSWITH %@", "measurementFailureFeedback_")).firstMatch.exists)
-            app.buttons["닫기"].firstMatch.tap()
+            XCTAssertTrue(confirm.isEnabled && confirm.isHittable)
             confirm.tap()
             let select = app.buttons["camera.selectPhotos"]
             XCTAssertTrue(select.waitForExistence(timeout: 15))
@@ -46,7 +47,7 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
         XCTAssertTrue(notice.waitForExistence(timeout: 15))
         XCTAssertTrue(notice.label.contains("센서 신뢰도"))
         XCTAssertFalse(notice.label.contains("점을 찾지 못"))
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).count, 3)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).count, 3)
         notice.tap()
         XCTAssertTrue(app.navigationBars["측정 항목 상세"].waitForExistence(timeout: 5))
         let id = "bottom.waist_left.waist_right"
@@ -72,7 +73,7 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
         let notice = app.buttons["garmentUnavailableNotice"]
         XCTAssertTrue(notice.waitForExistence(timeout: 15))
         XCTAssertTrue(notice.label.contains("4개 측정 불가"))
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).count, 0)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).count, 0)
         notice.tap()
         XCTAssertTrue(app.navigationBars["측정 항목 상세"].waitForExistence(timeout: 5))
         let retakes = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "retakeForMeasurementFailure_"))

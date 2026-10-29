@@ -21,7 +21,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["captureGuidance"].firstMatch.exists)
         XCTAssertTrue(app.buttons["camera.exposureOption"].isEnabled)
         XCTAssertTrue(app.buttons["camera.aspectRatioOption"].isEnabled)
-        XCTAssertTrue(app.buttons["replayGarmentCaptureTutorial"].exists)
+        XCTAssertFalse(app.buttons["replayGarmentCaptureTutorial"].exists)
         attach(name: "measurement-options-menu-over-unchanged-photo")
 
         app.buttons["camera.exposureOption"].tap()
@@ -84,7 +84,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
     }
 
     @MainActor
-    func testExposureIndicatorReturnsAfterReleaseAndSaturatedDragsRemainResponsive() throws {
+    func testDetailStyleExposureIndicatorAndSaturatedDragsRemainResponsive() throws {
         continueAfterFailure = false
         let app = openPreview()
         openOptions(in: app)
@@ -94,11 +94,11 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         let value = app.staticTexts["camera.exposureValue"]
         let idle = XCUIScreen.main.screenshot()
         let idleHeight = try indicatorHeight(in: idle.image, ruler: ruler.frame, screen: app.frame)
-        XCTAssertTrue((14...18).contains(idleHeight), "The inactive marker should stay compact")
+        XCTAssertTrue((26...30).contains(idleHeight), "The marker uses detail capture's fixed 28pt height")
         attach(idle, name: "measurement-exposure-indicator-before-touch")
 
-        // The screen recording retains both the prolonged active marker and
-        // its release. Haptic sensation requires an actual iPhone separately.
+        // Detail capture keeps the marker height fixed during adjustment.
+        // Haptic sensation requires an actual iPhone separately.
         let start = ruler.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.8, thenDragTo: start.withOffset(CGVector(dx: -140, dy: 0)),
                     withVelocity: .slow, thenHoldForDuration: 0.8)
@@ -108,7 +108,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         let released = XCUIScreen.main.screenshot()
         let releasedHeight = try indicatorHeight(in: released.image, ruler: ruler.frame, screen: app.frame)
         XCTAssertEqual(releasedHeight, idleHeight, accuracy: 1,
-                       "After a completed gesture the marker returns independently of the camera receipt")
+                       "The detail-style marker stays the same height after a completed gesture")
         attach(released, name: "measurement-exposure-indicator-released-at-limit")
         drag(ruler, horizontally: 80)
         waitUntil { Self.number(in: value.label).map { $0 < 1.6 } == true }

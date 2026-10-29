@@ -43,7 +43,8 @@ final class GarmentCaptureDesignTests: XCTestCase {
             let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
             XCTAssertEqual(guidance.frame.height, 40, accuracy: 1)
             XCTAssertEqual(guidance.frame.minY, app.frame.minY + 560, accuracy: 1)
-            XCTAssertEqual(shutter.frame.minY, app.frame.minY + 716, accuracy: 1)
+            // Match detail capture: 34pt bottom safe area + half of its 114pt row.
+            XCTAssertEqual(shutter.frame.minY, app.frame.minY + 737, accuracy: 1)
             XCTAssertEqual(shutter.frame.width, 92, accuracy: 1)
             XCTAssertEqual(shutter.frame.height, 92, accuracy: 1)
             let zoom = app.buttons["cameraZoomSelector"]
@@ -96,31 +97,27 @@ final class GarmentCaptureDesignTests: XCTestCase {
         XCTAssertEqual(shoulder.frame.midY, sourceRect.minY + sourceRect.height * 0.302, accuracy: 1)
         let magnifier = app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch
         XCTAssertFalse(magnifier.exists, "An idle result must leave the photo unobstructed; the loupe appears only during a point drag.")
-        let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).allElementsBoundByIndex
+        let labels = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).allElementsBoundByIndex
         XCTAssertEqual(labels.count, 4)
         XCTAssertEqual(Set(labels.map(\.identifier)), Set(["top.totalLength", "top.shoulderWidth", "top.chestWidth", "top.sleeveLengthLeft"].map {
             "garmentMeasurementLabel_" + $0
         }))
-        XCTAssertTrue(app.buttons["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
         XCTAssertTrue(app.buttons["garmentMeasurementPoint_sleeve_end_left"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_sleeve_end_right"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_left"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_right"].exists)
         XCTAssertTrue(app.buttons["garmentMeasurementPoint_hem_center"].exists)
         for (index, label) in labels.enumerated() {
-            XCTAssertTrue(label.isHittable)
+            XCTAssertTrue(label.exists)
             for other in labels.dropFirst(index + 1) {
                 XCTAssertFalse(label.frame.intersects(other.frame))
             }
         }
         screenshot(app, "figma96-04-result")
 
-        app.buttons["garmentResultActions"].tap()
-        app.buttons["openGarmentMeasurementDetails"].tap()
-        XCTAssertTrue(app.buttons["closeGarmentMeasurementDetails"].waitForExistence(timeout: 5))
-        screenshot(app, "figma96-05-details")
-        app.buttons["closeGarmentMeasurementDetails"].tap()
+        XCTAssertFalse(app.buttons["garmentResultActions"].exists)
         XCTAssertTrue(confirm.isHittable)
         app.buttons["retakeGarmentMeasurement"].tap()
         XCTAssertTrue(shutter.waitForExistence(timeout: 5))
@@ -186,21 +183,8 @@ final class GarmentCaptureDesignTests: XCTestCase {
         waitForExpectations(timeout: 10)
         screenshot(app, "issue90-reference-result-after-drag")
 
-        app.buttons["garmentResultActions"].tap()
-        let enlarge = app.buttons["enlargeGarmentPhoto"]
-        XCTAssertTrue(enlarge.waitForExistence(timeout: 5))
-        enlarge.tap()
-        let enlargedPhoto = app.navigationBars["촬영 사진"]
-        XCTAssertTrue(enlargedPhoto.waitForExistence(timeout: 5))
-        XCTAssertFalse(magnifier.exists)
-        let originalPhoto = app.images["촬영한 원본 사진"].firstMatch
-        XCTAssertTrue(originalPhoto.waitForExistence(timeout: 5))
-        originalPhoto.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertFalse(magnifier.exists, "Tapping the enlarged photograph must not create a measurement loupe.")
-        enlargedPhoto.buttons["닫기"].tap()
-        expectation(for: NSPredicate { _, _ in confirm.isHittable }, evaluatedWith: confirm)
-        waitForExpectations(timeout: 5)
-        XCTAssertFalse(magnifier.exists, "Closing the photograph must not revive a completed drag's loupe.")
+        XCTAssertFalse(app.buttons["garmentResultActions"].exists)
+        XCTAssertTrue(confirm.isHittable)
     }
 
     @MainActor

@@ -7,17 +7,20 @@ struct DetailCaptureOptionsView: View {
     let presentation: DetailCaptureOptionsPresentation
     private let selection: Binding<DetailCaptureOptionsDestination>?
     private let forceReduceMotion: Bool
+    private let exposureSelectionFeedbackEnabled: Bool?
     let onClose: () -> Void
 
     init(options: DetailCameraOptions? = nil,
          presentation: DetailCaptureOptionsPresentation = .standard,
          selection: Binding<DetailCaptureOptionsDestination>? = nil,
          forceReduceMotion: Bool = false,
+         exposureSelectionFeedbackEnabled: Bool? = nil,
          onClose: @escaping () -> Void) {
         self.options = options
         self.presentation = presentation
         self.selection = selection
         self.forceReduceMotion = forceReduceMotion
+        self.exposureSelectionFeedbackEnabled = exposureSelectionFeedbackEnabled
         self.onClose = onClose
     }
 
@@ -28,7 +31,8 @@ struct DetailCaptureOptionsView: View {
                 guard let ratio = DetailPhotoAspectRatio(rawValue: value) else { return }
                 options?.photoAspectRatio = ratio
             }, presentation: presentation, selection: selection,
-            forceReduceMotion: forceReduceMotion, onClose: onClose)
+            forceReduceMotion: forceReduceMotion,
+            exposureSelectionFeedbackEnabled: exposureSelectionFeedbackEnabled, onClose: onClose)
     }
 
     private var state: CameraOptionsState {

@@ -250,22 +250,18 @@ final class GarmentPhotoGeometryTests: XCTestCase {
         XCTAssertEqual(layout.imageSize.width, photoSize.width * 3, accuracy: 1e-9, file: file, line: line)
         XCTAssertEqual(layout.imageSize.height, photoSize.height * 3, accuracy: 1e-9, file: file, line: line)
 
-        // The enlarged image covers the complete loupe, including near edges.
-        XCTAssertLessThanOrEqual(layout.imageOrigin.x, 0, file: file, line: line)
-        XCTAssertLessThanOrEqual(layout.imageOrigin.y, 0, file: file, line: line)
-        XCTAssertGreaterThanOrEqual(layout.imageOrigin.x + layout.imageSize.width + 1e-9, loupeSize.width,
+        // The selected pixel stays under the fixed centre, even when centring
+        // an edge pixel exposes the loupe's neutral backing around the image.
+        XCTAssertLessThanOrEqual(layout.imageOrigin.x, layout.crosshair.x + 1e-9, file: file, line: line)
+        XCTAssertLessThanOrEqual(layout.imageOrigin.y, layout.crosshair.y + 1e-9, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(layout.imageOrigin.x + layout.imageSize.width + 1e-9, layout.crosshair.x,
             file: file, line: line)
-        XCTAssertGreaterThanOrEqual(layout.imageOrigin.y + layout.imageSize.height + 1e-9, loupeSize.height,
+        XCTAssertGreaterThanOrEqual(layout.imageOrigin.y + layout.imageSize.height + 1e-9, layout.crosshair.y,
             file: file, line: line)
-        // Edge subtraction on sub-point viewports can differ by one floating
-        // representation step; allow no visually meaningful overflow.
-        XCTAssertGreaterThanOrEqual(layout.crosshair.x, -1e-9, file: file, line: line)
-        XCTAssertGreaterThanOrEqual(layout.crosshair.y, -1e-9, file: file, line: line)
-        XCTAssertLessThanOrEqual(layout.crosshair.x, loupeSize.width + 1e-9, file: file, line: line)
-        XCTAssertLessThanOrEqual(layout.crosshair.y, loupeSize.height + 1e-9, file: file, line: line)
+        assertPoint(layout.crosshair, .init(x: loupeSize.width / 2, y: loupeSize.height / 2),
+            file: file, line: line)
 
-        // Recover the selected image pixel from the crosshair. Clamping a crop
-        // must move the crosshair with the pixel rather than silently recenter it.
+        // Recover the same selected image pixel under the centred crosshair.
         assertPoint(.init(x: (layout.crosshair.x - layout.imageOrigin.x) / layout.imageSize.width,
                           y: (layout.crosshair.y - layout.imageOrigin.y) / layout.imageSize.height),
             display, accuracy: 1e-12, file: file, line: line)
@@ -324,7 +320,7 @@ final class GarmentPhotoGeometryTests: XCTestCase {
         }
     }
 
-    func testMagnifierCornersAndEdgesKeepCrosshairOnTheSamePixelForEveryOrientation() {
+    func testMagnifierCornersAndEdgesKeepSelectedPixelUnderFixedCentreForEveryOrientation() {
         let upper = Double(1).nextDown
         let originals: [ImagePoint] = [
             .init(x: 0, y: 0), .init(x: upper, y: 0), .init(x: upper, y: upper), .init(x: 0, y: upper),
@@ -339,10 +335,7 @@ final class GarmentPhotoGeometryTests: XCTestCase {
                     let layout = GarmentPhotoGeometry.magnifier(displayPoint: .init(x: display.x, y: display.y),
                         photoSize: size, loupeSize: loupe)
                     assertMagnifier(layout, display: display, photoSize: size, loupeSize: loupe)
-                    if display.x == 0 { XCTAssertEqual(layout.crosshair.x, 0, accuracy: 1e-9) }
-                    if display.y == 0 { XCTAssertEqual(layout.crosshair.y, 0, accuracy: 1e-9) }
-                    if display.x == 1 { XCTAssertEqual(layout.crosshair.x, loupe.width, accuracy: 1e-9) }
-                    if display.y == 1 { XCTAssertEqual(layout.crosshair.y, loupe.height, accuracy: 1e-9) }
+                    assertPoint(layout.crosshair, .init(x: loupe.width / 2, y: loupe.height / 2))
                 }
             }
         }

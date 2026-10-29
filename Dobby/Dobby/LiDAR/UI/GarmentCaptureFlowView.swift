@@ -45,7 +45,6 @@ struct GarmentCaptureFlowView: View {
     @State private var previewFocusVisible = false
     @State private var syntheticOptions = SyntheticMeasurementCameraOptions()
     @State private var showsCameraOptions = false
-    @State private var optionsDestination: DetailCaptureOptionsDestination = .menu
     @State private var displayedAspectRatio: DetailPhotoAspectRatio = .fourThree
     @State private var isChangingAspectRatio = false
     @State private var aspectTransitionID: UUID?
@@ -95,7 +94,6 @@ struct GarmentCaptureFlowView: View {
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .topBarLeading) {
-                                if !showsCameraOptions {
                                 Button {
                                     cancel()
                                     if let onCancel { onCancel() } else { dismiss() }
@@ -103,7 +101,6 @@ struct GarmentCaptureFlowView: View {
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("촬영 닫기")
                                     .accessibilityIdentifier("closeGarmentCapture")
-                                }
                             }.sharedBackgroundVisibility(.hidden)
                         }
                 }
@@ -166,7 +163,7 @@ struct GarmentCaptureFlowView: View {
         }
         .onChange(of: scenePhase) { _, value in
             if value != .active {
-                closeCameraOptions(animated: false)
+                closeCameraOptions()
                 aspectTransitionID = nil
                 isChangingAspectRatio = false
                 levelGuide.stop(); clearPreviewFocus(); cancel(); camera.stop(); previewRecognized = false
@@ -176,7 +173,7 @@ struct GarmentCaptureFlowView: View {
             else if isPreview { synchronizePreviewOptions() }
         }
         .onDisappear {
-            closeCameraOptions(animated: false)
+            closeCameraOptions()
             aspectTransitionID = nil
             isChangingAspectRatio = false
             levelGuide.stop(); clearPreviewFocus(); cancel(); camera.stop()
@@ -215,6 +212,17 @@ struct GarmentCaptureFlowView: View {
     }
 
     private var cameraScreen: some View {
+        // Read the same navigation-safe container inset as CameraFlowView
+        // before the live canvas expands to the complete camera screen.
+        GeometryReader { safeGeometry in
+            cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom)
+        }
+        .background(GarmentCaptureStyle.background)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("garmentCaptureScreen")
+    }
+
+    private func cameraCanvas(bottomSafeAreaInset: CGFloat) -> some View {
         GeometryReader { geometry in
             let photoRect = photoViewport(in: geometry.size)
             ZStack {
@@ -222,7 +230,7 @@ struct GarmentCaptureFlowView: View {
                 if !isPreview, camera.usesMultiCamera {
                     // One synchronized GPU composition owns BOTH the central
                     // calibrated wide image and the real ultra-wide periphery.
-                    // Native regular glass is a separate, single overlay;
+                    // A translucent fill is a separate, single overlay;
                     // the GPU keeps the entire continuous camera image clear.
                     MultiCameraPreviewViewport(frames: camera.multiCamera.frames, photoRect: photoRect,
                         orientation: orientation, zoom: selectedZoom,
@@ -245,13 +253,14 @@ struct GarmentCaptureFlowView: View {
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 cameraFeedback
                 if !showsCameraOptions {
-                    responsiveCameraChrome(in: geometry.size, photoRect: photoRect)
+                    responsiveCameraChrome(in: geometry.size, photoRect: photoRect,
+                        bottomSafeAreaInset: bottomSafeAreaInset)
                         .opacity(showsPlacementTutorial ? 0 : 1)
                         .accessibilityHidden(showsPlacementTutorial)
                         .transition(.opacity)
                 }
                 if !showsCameraOptions {
-                    captureControls(in: geometry.size)
+                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
                         .transition(.opacity)
                         .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)
                 }
@@ -288,9 +297,6 @@ struct GarmentCaptureFlowView: View {
             }
         }
         .ignoresSafeArea()
-        .background(GarmentCaptureStyle.background)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("garmentCaptureScreen")
     }
 
     private var cameraSourceAspectRatio: CGFloat {
@@ -344,7 +350,7 @@ struct GarmentCaptureFlowView: View {
     }
 
     @ViewBuilder
-    private func responsiveCameraChrome(in size: CGSize, photoRect: CGRect) -> some View {
+    private func responsiveCameraChrome(in size: CGSize, photoRect: CGRect, bottomSafeAreaInset: CGFloat) -> some View {
         let photo = CameraPhotoViewport(x: Double(photoRect.minX), y: Double(photoRect.minY),
             width: Double(photoRect.width), height: Double(photoRect.height))
         let labelWidth = max(44, min(380, photoRect.width - 32) - 32 - (isCapturing ? 26 : 0))
@@ -356,7 +362,7 @@ struct GarmentCaptureFlowView: View {
         if let chrome = MeasurementCameraChromeLayout.layout(containerWidth: Double(size.width),
             containerHeight: Double(size.height), photo: photo, guidanceHeight: Double(labelHeight),
             bottomControlsHeight: showsPlacementTutorial ? 158 : 192,
-            shutter: shutterFrame(in: size)) {
+            shutter: shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset)) {
             if let frame = chrome.guidanceFrame {
                 recognitionGuidance
                     .frame(width: frame.width, height: frame.height)
@@ -418,47 +424,25 @@ struct GarmentCaptureFlowView: View {
         guard !isCapturing, model == nil else { return }
         if isPreview { synchronizePreviewOptions() }
         else { captureSession.synchronizeCameraOptions() }
-        optionsDestination = .menu
         clearPreviewFocus()
-        withAnimation(DetailCaptureOptionsPresentation.measurement.animation(reduceMotion: presentationReduceMotion)) {
-            showsCameraOptions = true
-        }
+        showsCameraOptions = true
     }
 
-    private func closeCameraOptions(animated: Bool = true) {
-        withAnimation(animated ? DetailCaptureOptionsPresentation.measurement.animation(reduceMotion: presentationReduceMotion) : nil) {
-            showsCameraOptions = false
-        }
+    private func closeCameraOptions() {
+        showsCameraOptions = false
     }
 
     private func cameraOptionsOverlay(in size: CGSize) -> some View {
-        let landscape = size.width > size.height
-        let width = landscape ? min(340, size.width * 0.48) : size.width
-        return ZStack(alignment: landscape ? .bottomTrailing : .bottom) {
+        ZStack(alignment: .bottom) {
             if showsCameraOptions {
                 Button { closeCameraOptions() } label: { Color.clear.contentShape(Rectangle()) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
                     .accessibilityIdentifier("camera.dismissOptions")
-                    .transition(.opacity)
-                VStack(spacing: 0) {
-                    if optionsDestination == .menu {
-                        Button("촬영 가이드 다시 보기") {
-                            closeCameraOptions()
-                            showsPlacementTutorial = true
-                        }
-                        .font(.callout).padding(.horizontal, 16).padding(.vertical, 12)
-                        .contentShape(Rectangle())
-                        .accessibilityIdentifier("replayGarmentCaptureTutorial")
-                    }
-                    DetailCaptureOptionsView(options: captureOptions, presentation: .measurement,
-                        selection: $optionsDestination, forceReduceMotion: presentationReduceMotion,
-                        onClose: { closeCameraOptions() })
-                }
-                .frame(width: width)
-                .frame(maxHeight: max(1, size.height - (landscape ? 60 : 146)), alignment: .bottom)
-                .transition(presentationReduceMotion ? .opacity
-                    : .asymmetric(insertion: .offset(y: 24).combined(with: .opacity), removal: .opacity))
+                // Use the detail camera's standard presentation unchanged:
+                // same menu, panel dimensions, glass and child navigation.
+                DetailCaptureOptionsView(options: captureOptions,
+                    exposureSelectionFeedbackEnabled: true) { closeCameraOptions() }
             }
         }
         .frame(width: size.width, height: size.height)
@@ -653,23 +637,23 @@ struct GarmentCaptureFlowView: View {
             .allowsHitTesting(false)
     }
 
-    private func shutterFrame(in size: CGSize) -> CameraPhotoViewport? {
+    private func shutterFrame(in size: CGSize, bottomSafeAreaInset: CGFloat) -> CameraPhotoViewport? {
         MeasurementCameraChromeLayout.shutterFrame(containerWidth: Double(size.width),
-            containerHeight: Double(size.height), sourceAspectRatio: Double(cameraSourceAspectRatio))
+            containerHeight: Double(size.height), sourceAspectRatio: Double(cameraSourceAspectRatio),
+            bottomSafeAreaInset: Double(bottomSafeAreaInset))
     }
 
     @ViewBuilder
-    private func captureControls(in size: CGSize) -> some View {
-        if let shutter = shutterFrame(in: size) {
-            let landscape = size.width > size.height
+    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
+        if let shutter = shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset) {
             let centerX = shutter.x + shutter.width / 2
             let centerY = shutter.y + shutter.height / 2
-            let moreX = landscape ? centerX : Double(size.width) - 72
-            let moreY = landscape ? min(Double(size.height) - 24, shutter.y + shutter.height + 32) : centerY
+            let moreX = Double(size.width) - 72
+            let moreY = centerY
             measurementShutter.position(x: centerX, y: centerY)
             cameraOptionsButton.position(x: moreX, y: moreY)
                 .opacity(showsPlacementTutorial ? 0 : 1)
-            if !landscape || size.height >= 280 {
+            if size.height >= 280 {
                 VStack(spacing: 8) {
                     CameraControlPanel(errorMessage: isPreview ? nil : camera.controlError)
                     if isPreview, !isCapturing, !showsPlacementTutorial {
@@ -678,8 +662,8 @@ struct GarmentCaptureFlowView: View {
                             .accessibilityHidden(showsCameraOptions)
                     }
                 }
-                .frame(width: landscape ? 160 : min(380, size.width - 32))
-                .position(x: centerX, y: landscape ? moreY + 42 : shutter.y + shutter.height + 32)
+                .frame(width: min(380, size.width - 32), height: max(0, shutter.y - 16), alignment: .bottom)
+                .position(x: centerX, y: max(0, shutter.y - 16) / 2)
             }
         }
     }
