@@ -93,16 +93,10 @@ struct ProductCreationFlowView: View {
                                 ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
                                     onComplete: receivePhotos)
                             case .information:
-                                if resumeProductID == nil {
-                                    InfoInputView(garment: garment, measurementInput: $measurementInput,
-                                        onExit: requestDraftExit) {
-                                        _ in path.append(.completed)
-                                    }
-                                } else {
-                                    ProductInformationEditingView(garment: garment,
-                                        measurementInput: $measurementInput, onExit: onCancel) {
-                                        _ in path.append(.completed)
-                                    }
+                                // Restored creation drafts continue input; they are not saved-product edits.
+                                InfoInputView(garment: garment, measurementInput: $measurementInput,
+                                    onExit: handleInformationBack) {
+                                    _ in path.append(.completed)
                                 }
                             case .completed:
                                 ProductInputCompletionView(garment: garment,
@@ -128,8 +122,8 @@ struct ProductCreationFlowView: View {
             }
         }
         .environment(\.modelContext, context)
-        .tint(path.last == .photoSelection ? .black
-            : path.last == .information || path.last == .completed ? .orange : .white)
+        .tint(path.last == .photoSelection || path.last == .information ? .black
+            : path.last == .completed ? .orange : .white)
         .fullScreenCover(item: $exportProduct) { product in
             ExportView(product: product, controller: controller, showFruits: $showFruits)
                 .environment(\.modelContext, context)
@@ -181,16 +175,27 @@ struct ProductCreationFlowView: View {
         path.removeLast()
     }
 
+    private func handleInformationBack() {
+        guard path.last == .information, !isFinishing, let garment else { return }
+        // Use the Done button's enabled condition, not full completion validation.
+        if GarmentInformationValidation.hasAnyInformation(garment) {
+            requestDraftExit()
+        } else {
+            // Retain the product, selected photos and measurement input in this flow.
+            path.removeLast()
+        }
+    }
+
     private func receiveMeasurement(_ record: SavedMeasurement) async throws {
         guard record.result.values.contains(where: { value in
             value.status != .unavailable && (value.meters.map { $0.isFinite && $0 > 0 && ($0 * 100).isFinite } ?? false)
         }) else { throw GarmentStore.MeasurementImportError.noAvailableMeasurements }
-        let garment = try prepareProduct(for: record)
+        let garment = try await prepareProduct(for: record)
         try persistDraft(garment, step: .details)
         path.append(.details)
     }
 
-    private func prepareProduct(for record: SavedMeasurement, allowsUnavailableDraft: Bool = false) throws -> Garment {
+    private func prepareProduct(for record: SavedMeasurement, allowsUnavailableDraft: Bool = false) async throws -> Garment {
         if let garment, let photoModel, let permission {
             guard photoModel.input.garmentID == garment.id,
                   photoModel.input.sessionID == record.snapshot.frame.sessionID,
@@ -205,7 +210,8 @@ struct ProductCreationFlowView: View {
                 try GarmentStore.refreshMeasurement(record, for: garment, in: context,
                     allowsSynthetic: isFixture, allowsUnavailableDraft: allowsUnavailableDraft, save: { _ in })
             }
-            try photoModel.updateMeasurementRecord(record)
+            let visualization = try await MeasurementProductPhoto.prepare(record: record, garment: garment, in: context)
+            try photoModel.updateMeasurementRecord(record, visualization: visualization)
             measurementRecordID = record.id
             permission.refresh()
             return garment
@@ -225,15 +231,16 @@ struct ProductCreationFlowView: View {
                 pending.creationDraftData = initialDraftData
                 try insertionContext.save()
             })
-        try preparePhotoSession(for: imported, record: record)
+        try await preparePhotoSession(for: imported, record: record)
         garment = imported
         measurementRecordID = record.id
         return imported
     }
 
     private func preparePhotoSession(for garment: Garment, record: SavedMeasurement,
-                                     snapshot: ProductPhotoDraftSnapshot? = nil) throws {
-        let input = try ProductPhotoHandoff.makeInput(for: garment, sessionID: record.snapshot.frame.sessionID)
+                                     snapshot: ProductPhotoDraftSnapshot? = nil) async throws {
+        var input = try ProductPhotoHandoff.makeInput(for: garment, sessionID: record.snapshot.frame.sessionID)
+        input.measurementVisualization = try await MeasurementProductPhoto.prepare(record: record, garment: garment, in: context)
         let details = try snapshot?.restoredDetailPhotos(for: input) ?? []
         let selected = snapshot?.selectedPhotoIDs ?? [input.measurement.id]
         let model: ProductPhotoModel
@@ -287,7 +294,7 @@ struct ProductCreationFlowView: View {
         cleanupAction = .save
         isFinishing = true
         defer { isFinishing = false }
-        let garment = try prepareProduct(for: record, allowsUnavailableDraft: true)
+        let garment = try await prepareProduct(for: record, allowsUnavailableDraft: true)
         try persistDraft(garment, step: .measurementResult)
         onDraftSaved()
     }
@@ -402,7 +409,7 @@ struct ProductCreationFlowView: View {
             }
             // A failed restore must never discard photos owned by the saved draft.
             preservesDraftPhotos = true
-            try preparePhotoSession(for: saved, record: record, snapshot: draft.photoState)
+            try await preparePhotoSession(for: saved, record: record, snapshot: draft.photoState)
             if let data = draft.measurementInputData {
                 measurementInput = try JSONDecoder().decode(GarmentMeasurementInputState.self, from: data)
             }

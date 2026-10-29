@@ -28,7 +28,7 @@ struct ProductPhotoSelectionView: View {
 
     var body: some View {
         ProductPhotoSelectionGrid(
-            photos: model.photos,
+            photos: model.selectablePhotos,
             selectedPhotoIDs: model.selectedPhotoIDs,
             onPreview: { selectionLimitNoticeID = nil; previewPhoto = $0 },
             onToggleSelection: toggleSelection

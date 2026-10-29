@@ -102,13 +102,25 @@ enum ProductPhotoHandoff {
             }
         }
         for selected in output.selectedPhotos {
-            guard selected == input.measurement || output.detailPhotos.contains(selected) else {
+            guard input.measurementPhotos.contains(selected) || output.detailPhotos.contains(selected) else {
+                throw HandoffError.invalidOutput
+            }
+        }
+        if let visualization = input.measurementVisualization {
+            guard visualization.purpose == .measurementVisualization,
+                  visualization.sessionID == input.sessionID, visualization.garmentID == garment.id,
+                  visualization.id != measurement.id,
+                  !output.detailPhotos.contains(where: { $0.id == visualization.id }),
+                  let stored = garment.photos.first(where: { $0.id == visualization.id }),
+                  !stored.isMeasurementSource,
+                  case let .localFile(url, _) = visualization.source,
+                  url.standardizedFileURL == photosDirectory.appending(path: stored.fileName).standardizedFileURL else {
                 throw HandoffError.invalidOutput
             }
         }
     }
 
-    nonisolated private static func metadata(for url: URL) throws -> CapturedAsset.ImageMetadata {
+    nonisolated static func metadata(for url: URL) throws -> CapturedAsset.ImageMetadata {
         guard url.isFileURL,
               let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let type = CGImageSourceGetType(source) as String?,
