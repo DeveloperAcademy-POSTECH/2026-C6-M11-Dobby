@@ -17,6 +17,8 @@ struct ProductPhotoSelectionView: View {
     @State private var failureMessage: String?
     @State private var selectionLimitNoticeID: UUID?
     @State private var previewPhoto: CapturedAsset?
+    // UI 옵션만 보관한다. 실제 AI 요청과 저장 연동은 담당 기능에서 연결한다.
+    @State private var isAIInformationEnabled = true
     private let background = Color(.systemBackground)
 
     init(model: ProductPhotoModel, onBack: (() -> Void)? = nil,
@@ -27,12 +29,16 @@ struct ProductPhotoSelectionView: View {
     }
 
     var body: some View {
-        ProductPhotoSelectionGrid(
-            photos: model.selectablePhotos,
-            selectedPhotoIDs: model.selectedPhotoIDs,
-            onPreview: { selectionLimitNoticeID = nil; previewPhoto = $0 },
-            onToggleSelection: toggleSelection
-        )
+        VStack(spacing: 0) {
+            ProductPhotoAIOptionRow(isOn: $isAIInformationEnabled)
+            // 그리드 자체의 상단 4pt 여백을 사용해 옵션 행과 간격을 맞춘다.
+            ProductPhotoSelectionGrid(
+                photos: model.selectablePhotos,
+                selectedPhotoIDs: model.selectedPhotoIDs,
+                onPreview: { selectionLimitNoticeID = nil; previewPhoto = $0 },
+                onToggleSelection: toggleSelection
+            )
+        }
         .disabled(model.isCapturing || model.isDeleting || completionRequested || didComplete)
         .background(background.ignoresSafeArea())
         .environment(\.colorScheme, .light)
