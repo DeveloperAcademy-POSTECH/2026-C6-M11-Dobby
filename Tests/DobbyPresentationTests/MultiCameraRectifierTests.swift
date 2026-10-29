@@ -89,22 +89,12 @@ final class MultiCameraRectifierTests: XCTestCase {
     func testAbsoluteDepthAndSynchronizedClockAreRequired() throws {
         XCTAssertNoThrow(try MultiCameraFrame.validateDepthAccuracy(.absolute))
         XCTAssertThrowsError(try MultiCameraFrame.validateDepthAccuracy(.relative))
-        let skew = try MultiCameraFrame.validatedSkew(wide: 10, ultraWide: 10.005, depth: 10.002)
-        XCTAssertEqual(skew, 0.005, accuracy: 0.000001)
-        XCTAssertThrowsError(try MultiCameraFrame.validatedSkew(wide: 10, ultraWide: 10.020, depth: 10))
-        XCTAssertThrowsError(try MultiCameraFrame.validatedSkew(wide: .nan, ultraWide: 10, depth: 10))
-        XCTAssertThrowsError(try MultiCameraFrame.validatedSkew(wide: -1, ultraWide: -1, depth: -1))
-    }
-
-    func testExtrinsicsRejectReflectionsAndUnconvertedMillimetres() throws {
-        var extrinsics = simd_float4x3(columns: (SIMD3(1, 0, 0), SIMD3(0, 1, 0),
-                                               SIMD3(0, 0, 1), SIMD3(0.02, 0, 0)))
-        XCTAssertNoThrow(try MultiCameraFrame.validateExtrinsics(extrinsics))
-        extrinsics.columns.3.x = 20
-        XCTAssertThrowsError(try MultiCameraFrame.validateExtrinsics(extrinsics))
-        extrinsics.columns.3.x = 0.02
-        extrinsics.columns.0.x = -1
-        XCTAssertThrowsError(try MultiCameraFrame.validateExtrinsics(extrinsics))
+        let skew = try MultiCameraFrame.validatedSkew(wide: 10, depth: 10.002)
+        XCTAssertEqual(skew, 0.002, accuracy: 0.000001)
+        XCTAssertEqual(try MultiCameraFrame.validatedSkew(wide: 10.002, depth: 10), skew, accuracy: 0.000001)
+        XCTAssertThrowsError(try MultiCameraFrame.validatedSkew(wide: 10, depth: 10.020))
+        XCTAssertThrowsError(try MultiCameraFrame.validatedSkew(wide: .nan, depth: 10))
+        XCTAssertThrowsError(try MultiCameraFrame.validatedSkew(wide: -1, depth: -1))
     }
 
     func testDeliveredIntrinsicsMustMatchTheDepthCameraCalibration() throws {

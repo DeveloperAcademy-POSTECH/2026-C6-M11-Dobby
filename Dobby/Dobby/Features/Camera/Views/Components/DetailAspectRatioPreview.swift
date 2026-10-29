@@ -1,7 +1,7 @@
 // Created by mason on 10/24/26.
 import SwiftUI
 
-/// 하나의 전체 화면 영상 위에서 저장 영역 밖만 글라스로 구분한다.
+/// Keep only the saved photograph window visible; the shared camera surround is opaque black.
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
     @ViewBuilder var content: (CGRect) -> Content
@@ -15,11 +15,7 @@ struct DetailAspectRatioPreview<Content: View>: View {
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .clipped()
                 .overlay {
-                    DetailCaptureGlassBackground()
-                        .mask {
-                            DetailPreviewGlassMask(viewport: layout.frame)
-                                .fill(style: FillStyle(eoFill: true))
-                        }
+                    CameraBlackSurroundings(photoRect: layout.frame)
                         .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
                         .animation(nil, value: geometry.size)
                         .animation(nil, value: reduceMotion)
@@ -29,7 +25,7 @@ struct DetailAspectRatioPreview<Content: View>: View {
     }
 }
 
-/// 영상의 크기와 화각은 고정하고, 글라스 안쪽 경계만 보간한다.
+/// Legacy mask kept for existing geometry fixtures; production uses the shared surround.
 struct DetailPreviewGlassMask: Shape {
     var viewport: CGRect
     var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
@@ -49,11 +45,11 @@ nonisolated struct DetailAspectRatioPreviewLayout {
     let frame: CGRect
 
     init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio) {
-        let availableHeight = max(0, containerSize.height)
         let ratio = aspectRatio.previewRatio(isLandscape: containerSize.width > containerSize.height)
-        let width = min(containerSize.width, availableHeight * ratio)
-        let height = width / ratio
-        frame = CGRect(x: (containerSize.width - width) / 2,
-                       y: (availableHeight - height) / 2, width: width, height: height)
+        if let viewport = MeasurementCameraChromeLayout.photoViewport(
+            containerWidth: Double(containerSize.width), containerHeight: Double(containerSize.height),
+            photoAspectRatio: ratio) {
+            frame = CGRect(x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height)
+        } else { frame = .zero }
     }
 }
