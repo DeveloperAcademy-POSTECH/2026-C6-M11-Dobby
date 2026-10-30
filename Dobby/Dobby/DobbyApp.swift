@@ -9,6 +9,11 @@ struct DobbyApp: App {
     @State private var storageError: String?
 
     init() {
+#if DEBUG
+        if ProcessInfo.processInfo.environment["DOBBY_AI_AUTH_TOKEN"] != nil {
+            ProductAutofillDevelopmentAuth.bootstrapAtLaunch()
+        }
+#endif
         do { _container = State(initialValue: try ProductAppStorage.makeContainer()) }
         catch { _storageError = State(initialValue: error.localizedDescription) }
     }

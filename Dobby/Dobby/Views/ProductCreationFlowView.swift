@@ -34,6 +34,10 @@ struct ProductCreationFlowView: View {
     @State private var measurementRecordID: UUID?
     @State private var preservesDraftPhotos = false
     @State private var pendingExitAction: (() -> Void)?
+    @State private var usesProductAutofill = true
+    @State private var autofill = ProductAutofillSession()
+    @State private var autofillReviewNotes: [String] = []
+    @State private var autofillLoadingPresentation: ProductAutofillLoadingPresentation?
 
     init(container: ModelContainer, controller: CopyActivityController, isPresented: Binding<Bool>,
          copyHomeProduct: Binding<ExportProduct?>,
@@ -91,6 +95,11 @@ struct ProductCreationFlowView: View {
                                     onComplete: receivePhotos)
                             case .photoSelection:
                                 ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
+                                    usesAI: $usesProductAutofill,
+                                    hasProductInformation: ProductAutofillInputSnapshot(garment: garment).hasInformation,
+                                    onCancelGeneration: { autofill.cancel() },
+                                    onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 },
+                                    onCompleteWithAI: receiveSelectedPhotos,
                                     onComplete: receivePhotos)
                             case .information:
                                 // Restored creation drafts continue input; they are not saved-product edits.
@@ -108,7 +117,13 @@ struct ProductCreationFlowView: View {
                     }
                 }
         }
-        .disabled(isFinishing || pendingExitAction != nil)
+        .disabled(isFinishing || pendingExitAction != nil || autofillLoadingPresentation != nil)
+        .accessibilityHidden(autofillLoadingPresentation != nil)
+        .overlay {
+            if let presentation = autofillLoadingPresentation {
+                ProductAutofillLoadingView(onCancel: presentation.onCancel)
+            }
+        }
         .overlay {
             if isFinishing {
                 ProgressView(cleanupAction == .discard ? "작업을 삭제하는 중…" : "작업을 저장하는 중…")
@@ -151,6 +166,8 @@ struct ProductCreationFlowView: View {
             // A full-screen export covers the flow but keeps its draft alive.
             // Only the parent dismissing this flow releases temporary captures.
             if !presented {
+                autofill.cancel()
+                autofillLoadingPresentation = nil
                 pendingExitAction = nil
                 if !preservesDraftPhotos, let photoModel {
                     Task { try? await photoModel.discardUncommittedDetails() }
@@ -279,6 +296,46 @@ struct ProductCreationFlowView: View {
         path.append(.information)
     }
 
+    private func receiveSelectedPhotos(_ output: ProductPhotoOutput, usingAI: Bool) async throws {
+        guard let garment, let photoModel else { throw CameraFailure.mismatchedCapture }
+        // Save every selected product photo before the network request. AI uses at most five.
+        try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input)
+        try Task.checkCancellation()
+        try persistDraft(garment, step: .photoSelection)
+        guard usingAI else {
+            try persistDraft(garment, step: .information)
+            path.append(.information)
+            return
+        }
+
+        let before = ProductAutofillInputSnapshot(garment: garment)
+        do {
+            let draft = try await autofill.generate(photos: output.selectedPhotos)
+            try Task.checkCancellation()
+            guard isPresented, path.last == .photoSelection,
+                  self.garment?.id == output.garmentID,
+                  photoModel.output?.selectedPhotos == output.selectedPhotos else {
+                throw CancellationError()
+            }
+            try before.apply(draft, to: garment)
+            let previousReviewNotes = autofillReviewNotes
+            autofillReviewNotes = draft.reviewNotes
+            do {
+                try persistDraft(garment, step: .information)
+            } catch {
+                before.restore(to: garment)
+                autofillReviewNotes = previousReviewNotes
+                throw error
+            }
+            path.append(.information)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw ProductAutofillCompletionFailure.generation(error.localizedDescription)
+        }
+    }
+
     private func finishFlow() async {
         guard !isFinishing else { return }
         cleanupAction = .save
@@ -386,7 +443,8 @@ struct ProductCreationFlowView: View {
         guard let measurementRecordID else { throw CameraFailure.mismatchedCapture }
         let inputData = try JSONEncoder().encode(measurementInput)
         try ProductDraftStore.save(garment: garment, step: step, measurementRecordID: measurementRecordID,
-            photoModel: photoModel, measurementInputData: inputData, in: context)
+            photoModel: photoModel, measurementInputData: inputData,
+            aiReviewNotes: autofillReviewNotes, usesProductAutofill: usesProductAutofill, in: context)
         preservesDraftPhotos = true
     }
 
@@ -414,6 +472,8 @@ struct ProductCreationFlowView: View {
                 measurementInput = try JSONDecoder().decode(GarmentMeasurementInputState.self, from: data)
             }
             garment = saved
+            autofillReviewNotes = draft.aiReviewNotes ?? []
+            usesProductAutofill = draft.usesProductAutofill ?? true
             measurementRecordID = record.id
             restoredRecord = record
             switch draft.step {

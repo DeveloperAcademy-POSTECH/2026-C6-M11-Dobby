@@ -31,6 +31,7 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
             select.tap()
             let completePhotos = app.buttons["camera.completePhotos"]
             XCTAssertTrue(completePhotos.waitForExistence(timeout: 10))
+            disableProductAutofillIfPresent(in: app)
             completePhotos.tap()
             XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
             XCTAssertFalse(app.descendants(matching: .any)["product-info.measurement-warning"].firstMatch.exists)

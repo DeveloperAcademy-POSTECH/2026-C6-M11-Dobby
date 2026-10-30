@@ -22,6 +22,9 @@ nonisolated struct ProductCreationDraft: Codable, Sendable {
     let photoState: ProductPhotoDraftSnapshot?
     let measurementInputData: Data?
     let savedAt: Date
+    /// Optional so existing version-one drafts remain readable.
+    var aiReviewNotes: [String]? = nil
+    var usesProductAutofill: Bool? = nil
 }
 
 /// Captures remain in the camera's stable Application Support store until this
@@ -108,7 +111,9 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
 @MainActor
 enum ProductDraftStore {
     static func save(garment: Garment, step: ProductDraftStep, measurementRecordID: UUID,
-                     photoModel: ProductPhotoModel?, measurementInputData: Data?, in context: ModelContext,
+                     photoModel: ProductPhotoModel?, measurementInputData: Data?,
+                     aiReviewNotes: [String]? = nil, usesProductAutofill: Bool? = nil,
+                     in context: ModelContext,
                      persist: (ModelContext) throws -> Void = { try $0.save() }) throws {
         guard garment.modelContext === context, garment.informationCompletedAt == nil,
               garment.sourceMeasurementID == measurementRecordID else { throw DraftError.invalidProduct }
@@ -119,7 +124,9 @@ enum ProductDraftStore {
             throw DraftError.invalidPhotos
         }
         let draft = ProductCreationDraft(step: step, measurementRecordID: measurementRecordID,
-            photoState: photoState, measurementInputData: measurementInputData, savedAt: .now)
+            photoState: photoState, measurementInputData: measurementInputData, savedAt: .now,
+            aiReviewNotes: aiReviewNotes ?? garment.creationDraft?.aiReviewNotes,
+            usesProductAutofill: usesProductAutofill ?? garment.creationDraft?.usesProductAutofill)
         let data = try JSONEncoder().encode(draft)
         let previousData = garment.creationDraftData
         let previousUpdatedAt = garment.updatedAt

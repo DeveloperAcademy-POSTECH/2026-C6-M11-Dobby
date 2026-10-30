@@ -355,12 +355,16 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
             onPresented = nil
         }
         func present(afterDisplay: (@Sendable () -> Void)? = nil) {
+            #if !targetEnvironment(simulator)
+            // Simulator Metal has no presentation receipt API. Do not substitute
+            // GPU completion for proof that a drawable appeared on screen.
             if let afterDisplay {
                 drawable?.addPresentedHandler { presented in
                     guard presented.presentedTime.isFinite, presented.presentedTime > 0 else { return }
                     afterDisplay()
                 }
             }
+            #endif
             drawable?.present()
         }
         func complete(_ success: Bool) { completion?(success) }

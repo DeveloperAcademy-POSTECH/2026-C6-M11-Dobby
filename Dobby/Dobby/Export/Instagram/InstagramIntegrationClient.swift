@@ -1,6 +1,5 @@
 import AuthenticationServices
 import Foundation
-import Security
 import OSLog
 import UIKit
 
@@ -161,38 +160,18 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
     private struct LoginStart: Decodable { let authorizationURL: String; let attempt: String }
     private struct DisconnectResult: Decodable { let disconnected: Bool }
 
-    private func installationToken() throws -> String {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.dobby.instagram", kSecAttrAccount as String: "installation-token"]
-        var lookup = query
-        lookup[kSecReturnData as String] = true
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(lookup as CFDictionary, &result)
-        if status == errSecSuccess, let data = result as? Data, let token = String(data: data, encoding: .utf8) { return token }
-        guard status == errSecItemNotFound else { throw InstagramIntegrationError.message("안전한 연결 정보를 읽을 수 없습니다. 기기 잠금을 해제한 후 다시 시도해 주세요.") }
-        var bytes = [UInt8](repeating: 0, count: 32)
-        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw InstagramIntegrationError.message("연결 정보를 만들 수 없습니다.") }
-        let token = bytes.map { String(format: "%02x", $0) }.joined()
-        var add = query
-        add[kSecValueData as String] = Data(token.utf8)
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { throw InstagramIntegrationError.message("연결 정보를 안전하게 저장하지 못했습니다.") }
-        return token
-    }
-
     private func send<T: Decodable>(path: String, body: Data?) async throws -> T {
         guard let address = Bundle.main.object(forInfoDictionaryKey: "InstagramBackendBaseURL") as? String,
               let url = URL(string: address), url.scheme == "https", url.host != nil,
               !address.contains("YOUR-"), !address.contains("$("),
-              let key = Bundle.main.object(forInfoDictionaryKey: "InstagramAppAPIKey") as? String,
-              !key.isEmpty, !key.contains("YOUR_"), !key.contains("$(") else {
+              let key = DobbyInstallationAuth.appAPIKey() else {
             throw InstagramIntegrationError.message("Instagram 서버 주소와 앱 접근 키를 로컬 설정에 입력해 주세요.")
         }
         var request = URLRequest(url: url.appendingPathComponent(path))
         request.httpMethod = body == nil ? "GET" : "POST"
         request.timeoutInterval = 90
         request.setValue(key, forHTTPHeaderField: "X-Dobby-App-Key")
-        request.setValue("Bearer \(try installationToken())", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(try DobbyInstallationAuth.installationToken())", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
         let data: Data

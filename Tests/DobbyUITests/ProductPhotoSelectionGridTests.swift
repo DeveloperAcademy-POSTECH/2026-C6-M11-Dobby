@@ -20,6 +20,7 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         tap(app, "camera.closeSelectionPreview")
+        disableProductAutofillIfPresent(in: app)
         tap(app, "camera.completePhotos")
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
         tap(app, "product-flow.back")
@@ -72,8 +73,8 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
         XCTAssertEqual(first.frame.minY, third.frame.minY, accuracy: 2)
         XCTAssertGreaterThan(fourth.frame.minY, first.frame.maxY)
         XCTAssertTrue(grid.isHittable)
-        XCTAssertFalse(app.staticTexts["AI로 제품 정보 입력하기"].exists)
-        XCTAssertEqual(app.switches.count, 0)
+        XCTAssertTrue(app.switches["product-ai.toggle"].exists)
+        XCTAssertEqual(app.switches["product-ai.toggle"].value as? String, "1")
         tap(app, "camera.grid.select.0")
         XCTAssertFalse(app.buttons["camera.completePhotos"].isEnabled)
         for index in 1...10 { tap(app, "camera.grid.select.\(index)") }
@@ -96,6 +97,7 @@ final class ProductPhotoSelectionGridTests: XCTestCase {
         shot.name = "selection-grid-ten-selected"
         shot.lifetime = .keepAlways
         add(shot)
+        disableProductAutofillIfPresent(in: app)
         tap(app, "camera.completePhotos")
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
     }

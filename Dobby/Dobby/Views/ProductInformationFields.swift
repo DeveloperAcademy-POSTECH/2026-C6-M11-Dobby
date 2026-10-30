@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum ProductInformationStyle {
-    static let background = Color(red: 250 / 255, green: 249 / 255, blue: 249 / 255)
+    static let background = Color(.systemBackground)
     static let field = Color(red: 242 / 255, green: 241 / 255, blue: 240 / 255)
     static let accent = Color(red: 237 / 255, green: 77 / 255, blue: 41 / 255)
     static let accentSoft = Color("BrandMain300")
@@ -88,7 +88,7 @@ struct ProductInputField: View {
                 .font(.subheadline)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
-                .frame(minHeight: isMultiline ? 203 : 52, alignment: .topLeading)
+                .frame(minHeight: isMultiline ? 176 : 56, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(ProductInformationStyle.field, in: RoundedRectangle(cornerRadius: 14))
                 .overlay {
@@ -119,7 +119,7 @@ private struct ProductFieldEditor: View {
             TextEditor(text: $text)
                 .scrollContentBackground(.hidden)
                 .contentMargins(.all, 0)
-                .frame(height: 171)
+                .frame(height: 144)
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
                         Text(placeholder).foregroundStyle(.tertiary)
@@ -181,13 +181,22 @@ private struct ProductPriceInput: View {
             Text("원")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.secondary)
+                .opacity(priceText.isEmpty ? 0 : 1)
                 .accessibilityIdentifier("product-info.price.unit")
             Spacer(minLength: 0)
         }
         .font(.subheadline)
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
-        .frame(minHeight: 52)
+        .frame(minHeight: 56)
+        .overlay(alignment: .leading) {
+            if priceText.isEmpty && !isFocused {
+                Text("제품의 판매 가격을 입력해주세요")
+                    .font(.subheadline).foregroundStyle(.tertiary)
+                    .padding(.horizontal, 20)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture { isFocused = true }
         .onAppear { priceText = formatPrice(price) }

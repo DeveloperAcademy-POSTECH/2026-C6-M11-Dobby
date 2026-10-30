@@ -101,7 +101,7 @@ struct InfoInputView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 61, height: 44)
-                        .background(GarmentInformationValidation.hasAnyInformation(garment)
+                        .background(GarmentInformationValidation.isValid(garment)
                             ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
                             in: Capsule())
                 }

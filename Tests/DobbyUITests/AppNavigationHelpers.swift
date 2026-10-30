@@ -1,6 +1,25 @@
 import XCTest
 
 extension XCTestCase {
+    /// Existing manual-entry tests explicitly opt out of the AI request. The
+    /// production default and dedicated autofill tests keep the toggle on.
+    @MainActor
+    func disableProductAutofillIfPresent(in app: XCUIApplication,
+                                        file: StaticString = #filePath, line: UInt = #line) {
+        let toggle = app.switches["product-ai.toggle"]
+        guard toggle.exists else { return }
+        if toggle.value as? String == "1" {
+            // SwiftUI exposes the label and switch as one wide AX element;
+            // its center lies on the noninteractive text on iOS 26.
+            XCTContext.runActivity(named: "Turn AI off using the trailing switch control") { _ in
+                toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+            }
+        }
+        let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "0"), object: toggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 3), .completed, file: file, line: line)
+        XCTAssertEqual(toggle.value as? String, "0", file: file, line: line)
+    }
+
     /// Only synthetic capture fixtures expose this explicit recognition
     /// control. Initial-state and unsupported-device tests must opt in to this
     /// helper rather than having navigation silently arm their shutter.

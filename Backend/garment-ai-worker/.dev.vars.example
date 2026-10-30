@@ -2,4 +2,5 @@
 # Copy to .dev.vars and enter values locally. Never commit the real file.
 # npm run dev uses a local mock and does not need these values.
 OPENAI_API_KEY=
+DOBBY_APP_API_KEY=
 DRAFT_API_TOKEN=
