@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MeasurementPiPView: View {
-    static let size = CGSize(width: 379, height: 202)
+    static let renderSize = CGSize(width: 379, height: 202)
 
     let measurements: [ExportMeasurement]
 
@@ -9,10 +9,10 @@ struct MeasurementPiPView: View {
         ZStack(alignment: .topLeading) {
             Image("MeasurementPiPBackground")
                 .resizable()
-                .frame(width: Self.size.width, height: Self.size.height)
+                .frame(width: Self.renderSize.width, height: Self.renderSize.height)
             MeasurementPiPContent(measurements: measurements)
         }
-        .frame(width: Self.size.width, height: Self.size.height)
+        .frame(width: Self.renderSize.width, height: Self.renderSize.height)
         .environment(\.colorScheme, .light)
     }
 }
@@ -39,6 +39,8 @@ private struct MeasurementPiPContent: View {
 }
 
 private struct MeasurementPiPTable: View {
+    private static let tableHeight: CGFloat = 106
+
     let measurements: [ExportMeasurement]
 
     var body: some View {
@@ -54,11 +56,13 @@ private struct MeasurementPiPTable: View {
                     .foregroundStyle(.black)
             }
         }
-        .frame(height: 106)
+        .frame(height: Self.tableHeight)
     }
 }
 
 private struct MeasurementPiPRow<Content: View>: View {
+    private static var rowHeight: CGFloat { 48 }
+
     let measurements: [ExportMeasurement]
     @ViewBuilder let content: (ExportMeasurement) -> Content
 
@@ -72,29 +76,29 @@ private struct MeasurementPiPRow<Content: View>: View {
             }
         }
         .padding(.horizontal, 10)
-        .frame(height: 48)
+        .frame(height: Self.rowHeight)
     }
 }
 
 #Preview("상의 4개") {
-    MeasurementPiPView(measurements: .topPreview)
+    MeasurementPiPView(measurements: .upperBodyPreviewMeasurements)
         .padding()
 }
 
 #Preview("하의 5개") {
-    MeasurementPiPView(measurements: .bottomPreview)
+    MeasurementPiPView(measurements: .lowerBodyPreviewMeasurements)
         .padding()
 }
 
 private extension Array where Element == ExportMeasurement {
-    static let topPreview = [
+    static let upperBodyPreviewMeasurements = [
         ExportMeasurement(id: "shoulder", title: "어깨", value: "56"),
         ExportMeasurement(id: "chest", title: "가슴", value: "55"),
         ExportMeasurement(id: "length", title: "기장", value: "68"),
         ExportMeasurement(id: "sleeve", title: "소매", value: "52")
     ]
 
-    static let bottomPreview = [
+    static let lowerBodyPreviewMeasurements = [
         ExportMeasurement(id: "waist", title: "허리", value: "38"),
         ExportMeasurement(id: "rise", title: "밑위", value: "30"),
         ExportMeasurement(id: "thigh", title: "허벅지", value: "32"),

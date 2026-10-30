@@ -26,7 +26,10 @@ struct FruitsExportView: View {
     var body: some View {
         ZStack {
             MeasurementPiPSourceView(controller: pipController)
-                .frame(width: MeasurementPiPView.size.width, height: MeasurementPiPView.size.height)
+                .frame(
+                    width: MeasurementPiPView.renderSize.width,
+                    height: MeasurementPiPView.renderSize.height
+                )
                 .accessibilityHidden(true)
             FruitsExportContent(product: product, copiedField: copiedField, onCopy: copy)
         }

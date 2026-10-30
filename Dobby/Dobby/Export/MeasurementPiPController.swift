@@ -108,7 +108,10 @@ final class MeasurementPiPController: NSObject {
     private func makeSampleBuffer(measurements: [ExportMeasurement]) throws -> CMSampleBuffer {
         let renderer = ImageRenderer(
             content: MeasurementPiPView(measurements: measurements)
-                .frame(width: MeasurementPiPView.size.width, height: MeasurementPiPView.size.height)
+                .frame(
+                    width: MeasurementPiPView.renderSize.width,
+                    height: MeasurementPiPView.renderSize.height
+                )
         )
         renderer.scale = 2
         guard let image = renderer.uiImage,
