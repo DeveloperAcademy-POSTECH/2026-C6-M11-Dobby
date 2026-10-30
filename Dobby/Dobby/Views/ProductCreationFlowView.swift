@@ -87,7 +87,7 @@ struct ProductCreationFlowView: View {
                                 CameraFlowView(model: photoModel, permission: permission, camera: camera,
                                     previewSource: isFixture ? photoModel.input.measurement.source : nil,
                                     onSelectPhotos: { path.append(.photoSelection) },
-                                    onExit: requestDraftExit,
+                                    onExit: returnToMeasurementResult,
                                     onComplete: receivePhotos)
                             case .photoSelection:
                                 ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
@@ -167,6 +167,13 @@ struct ProductCreationFlowView: View {
                 .font(.caption).frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
                 .accessibilityIdentifier("product-flow.fixture")
         }
+    }
+
+    private func returnToMeasurementResult() {
+        guard path.last == .details, !isFinishing, pendingExitAction == nil,
+              let photoModel, !photoModel.isCapturing, !photoModel.isDeleting else { return }
+        // Pop only the detail screen; retain the measurement result and photo session.
+        path.removeLast()
     }
 
     private func returnToDetailCapture() {
