@@ -11,7 +11,7 @@ struct MeasurementPiPView: View {
                 .resizable()
                 .frame(width: Self.size.width, height: Self.size.height)
             Text("실측 사이즈를 보고 바로 입력해요")
-                .font(.system(size: 24, weight: .bold))
+                .font(.custom("Pretendard-Bold", fixedSize: 24))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .padding(.leading, 27)
@@ -20,12 +20,12 @@ struct MeasurementPiPView: View {
                 Color.clear.frame(height: 106)
                 MeasurementPiPRow(measurements: measurements, content: { measurement in
                     Text(measurement.title)
-                        .font(.system(size: 17, weight: .regular))
+                        .font(.custom("Pretendard-Regular", fixedSize: 17))
                         .foregroundStyle(.white)
                 })
                 MeasurementPiPRow(measurements: measurements, content: { measurement in
                     Text("\(measurement.displayValue)cm")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.custom("Pretendard-SemiBold", fixedSize: 17))
                         .foregroundStyle(.black)
                 })
             }
