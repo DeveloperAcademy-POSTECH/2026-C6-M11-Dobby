@@ -1,4 +1,5 @@
 import { buildOpenAIRequest, DraftResponseError, parseOpenAIResponse } from "./garment-draft.js";
+import { enforceAppUsageLimits, UsageProtectionFailure } from "./usage-protection.js";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MAX_PHOTOS = 5;
@@ -34,11 +35,11 @@ function json(body, status, requestId, extraHeaders = {}) {
 }
 
 function failureResponse(error, requestId) {
-  const failure = error instanceof Failure
+  const failure = error instanceof Failure || error instanceof UsageProtectionFailure
     ? error
     : new Failure(500, "internal_error", "서버 처리 중 오류가 발생했습니다.");
   return json({ error: { code: failure.code, message: failure.message }, requestId },
-    failure.status, requestId);
+    failure.status, requestId, failure.headers);
 }
 
 function hasSecret(value) {
@@ -60,14 +61,28 @@ async function equalSecrets(actual, expected) {
 }
 
 async function authorize(request, env) {
+  const bearer = request.headers.get("Authorization") || "";
+  const match = /^Bearer ([^\s]+)$/i.exec(bearer);
+  // An app header explicitly selects app authentication. Invalid app credentials
+  // never fall back to the trusted legacy development token.
+  if (request.headers.has("X-Dobby-App-Key")) {
+    if (!hasSecret(env?.DOBBY_APP_API_KEY) || !hasSecret(env?.OPENAI_API_KEY)) {
+      throw new Failure(503, "service_not_configured", "AI 연결 서버 설정이 필요합니다.");
+    }
+    const appKey = request.headers.get("X-Dobby-App-Key");
+    if (!hasSecret(appKey) || appKey.length > 1024 || !match || !/^[a-f0-9]{64}$/.test(match[1])
+      || !await equalSecrets(appKey, env.DOBBY_APP_API_KEY)) {
+      throw new Failure(401, "unauthorized", "요청 인증 정보를 확인해 주세요.");
+    }
+    return { kind: "app", installationID: match[1] };
+  }
   if (!hasSecret(env?.DRAFT_API_TOKEN) || !hasSecret(env?.OPENAI_API_KEY)) {
     throw new Failure(503, "service_not_configured", "AI 연결 서버 설정이 필요합니다.");
   }
-  const bearer = request.headers.get("Authorization") || "";
-  const match = /^Bearer ([^\s]+)$/i.exec(bearer);
   if (!match || match[1].length > 1024 || !await equalSecrets(match[1], env.DRAFT_API_TOKEN)) {
     throw new Failure(401, "unauthorized", "요청 인증 정보를 확인해 주세요.");
   }
+  return { kind: "legacy" };
 }
 
 async function readJSON(request) {
@@ -256,7 +271,10 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
           return json({ error: { code: "method_not_allowed", message: "지원하지 않는 요청 방식입니다." }, requestId },
             405, requestId, { Allow: method });
         }
-        await authorize(request, env);
+        const authentication = await authorize(request, env);
+        if (authentication.kind === "app") {
+          await enforceAppUsageLimits(env, authentication.installationID);
+        }
         const photos = validatePhotos(await readJSON(request));
         return json(await generateDraft(photos, env, fetchImpl, timeoutMs), 200, requestId);
       } catch (error) {
