@@ -6,40 +6,38 @@ struct MeasurementPiPView: View {
     let measurements: [ExportMeasurement]
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            Image("MeasurementPiPBackground")
-                .resizable()
-                .frame(width: Self.renderSize.width, height: Self.renderSize.height)
-            MeasurementPiPContent(measurements: measurements)
+        VStack(spacing: 0) {
+            MeasurementPiPHeader()
+            MeasurementPiPTable(measurements: measurements)
         }
         .frame(width: Self.renderSize.width, height: Self.renderSize.height)
+        .background(Color("MeasurementPiPBackgroundColor"))
         .environment(\.colorScheme, .light)
     }
 }
 
-private struct MeasurementPiPContent: View {
-    let measurements: [ExportMeasurement]
+private struct MeasurementPiPHeader: View {
+    private static let headerHeight: CGFloat = 106
 
     var body: some View {
-        VStack(alignment: .center) {
-            Text("실측 사이즈를 보고 바로 입력해요")
-                .font(.custom("Pretendard-Bold", fixedSize: 24))
-                .foregroundStyle(.white)
-                .padding(
-                    EdgeInsets(
-                        top: 41,
-                        leading: 37,
-                        bottom: 27,
-                        trailing: 27
-                    )
-                )
-            MeasurementPiPTable(measurements: measurements)
-        }
+        Image("MeasurementPiPHeaderGraphic")
+            .resizable()
+            .frame(
+                width: MeasurementPiPView.renderSize.width,
+                height: Self.headerHeight
+            )
+            .overlay(alignment: .topLeading) {
+                Text("실측 사이즈를 보고 바로 입력해요")
+                    .font(.custom("Pretendard-Bold", fixedSize: 24))
+                    .foregroundStyle(.white)
+                    .padding(.top, 41)
+                    .padding(.horizontal, 27)
+            }
     }
 }
 
 private struct MeasurementPiPTable: View {
-    private static let tableHeight: CGFloat = 106
+    private static let tableHeight: CGFloat = 96
 
     let measurements: [ExportMeasurement]
 
@@ -55,6 +53,7 @@ private struct MeasurementPiPTable: View {
                     .font(.custom("Pretendard-SemiBold", fixedSize: 17))
                     .foregroundStyle(.black)
             }
+            .background(Color("BrandNeutral50"))
         }
         .frame(height: Self.tableHeight)
     }
