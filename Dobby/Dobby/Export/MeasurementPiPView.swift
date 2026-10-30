@@ -6,46 +6,32 @@ struct MeasurementPiPView: View {
     let measurements: [ExportMeasurement]
 
     var body: some View {
-        VStack(spacing: 0) {
-            MeasurementPiPHeader()
-            MeasurementPiPRow(measurements: measurements, content: { measurement in
-                Text(measurement.title)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(.white)
-            })
-            .background(Color(red: 0.93, green: 0.31, blue: 0))
-            MeasurementPiPRow(measurements: measurements, content: { measurement in
-                Text("\(measurement.displayValue)cm")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.black)
-            })
-            .background(Color("BrandNeutral50"))
-        }
-        .frame(width: Self.size.width, height: Self.size.height)
-        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-        .environment(\.colorScheme, .light)
-    }
-}
-
-private struct MeasurementPiPHeader: View {
-    var body: some View {
         ZStack(alignment: .topLeading) {
-            Color("BrandPrimary100")
-            Image("MeasurementPiPWatermark")
+            Image("MeasurementPiPBackground")
                 .resizable()
-                .frame(width: 379, height: 106)
-                .opacity(0.16)
-            Image("MeasurementPiPStitch")
-                .resizable()
-                .frame(width: 55.34, height: 9.57)
-                .offset(x: 249, y: 91)
+                .frame(width: Self.size.width, height: Self.size.height)
             Text("실측 사이즈를 보고 바로 입력해요")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(.white)
-                .offset(x: 27, y: 40)
+                .lineLimit(1)
+                .padding(.leading, 27)
+                .padding(.top, 40)
+            VStack(spacing: 0) {
+                Color.clear.frame(height: 106)
+                MeasurementPiPRow(measurements: measurements, content: { measurement in
+                    Text(measurement.title)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(.white)
+                })
+                MeasurementPiPRow(measurements: measurements, content: { measurement in
+                    Text("\(measurement.displayValue)cm")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.black)
+                })
+            }
         }
-        .frame(height: 106)
-        .clipped()
+        .frame(width: Self.size.width, height: Self.size.height)
+        .environment(\.colorScheme, .light)
     }
 }
 
