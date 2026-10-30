@@ -2,17 +2,25 @@
 import CoreImage
 import CoreMedia
 import CoreVideo
+import OSLog
 import SwiftUI
 import UIKit
 
 @MainActor
 final class MeasurementPiPController: NSObject {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "Dobby",
+        category: "MeasurementPiP"
+    )
+
     private let displayLayer = AVSampleBufferDisplayLayer()
     private let imageContext = CIContext()
     private var pictureInPictureController: AVPictureInPictureController?
     private var startError: Error?
+    private weak var sourceView: UIView?
 
     func attach(to view: UIView) {
+        sourceView = view
         if displayLayer.superlayer !== view.layer {
             displayLayer.removeFromSuperlayer()
             view.layer.addSublayer(displayLayer)
@@ -45,6 +53,15 @@ final class MeasurementPiPController: NSObject {
         }
         if controller.isPictureInPictureActive { return }
 
+        sourceView?.layoutIfNeeded()
+        if let sourceView {
+            displayLayer.frame = sourceView.bounds
+        }
+        guard displayLayer.bounds.width > 0, displayLayer.bounds.height > 0 else {
+            Self.logger.error("PiP source has empty bounds.")
+            throw MeasurementPiPError.sourceNotReady
+        }
+
         try configureAudioSession()
         let sampleBuffer = try makeSampleBuffer(measurements: measurements)
         let renderer = displayLayer.sampleBufferRenderer
@@ -54,6 +71,9 @@ final class MeasurementPiPController: NSObject {
         renderer.enqueue(sampleBuffer)
 
         guard await waitUntilPossible(controller) else {
+            Self.logger.error(
+                "PiP remained unavailable. width=\(self.displayLayer.bounds.width) height=\(self.displayLayer.bounds.height) rendererStatus=\(self.displayLayer.sampleBufferRenderer.status.rawValue)"
+            )
             throw MeasurementPiPError.sourceNotReady
         }
 
@@ -178,6 +198,7 @@ extension MeasurementPiPController: AVPictureInPictureControllerDelegate {
         failedToStartPictureInPictureWithError error: Error
     ) {
         startError = error
+        Self.logger.error("PiP failed to start: \(error.localizedDescription, privacy: .public)")
         deactivateAudioSession()
     }
 
@@ -264,14 +285,32 @@ struct MeasurementPiPSourceView: UIViewRepresentable {
     let controller: MeasurementPiPController
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.backgroundColor = .clear
-        view.isUserInteractionEnabled = false
-        controller.attach(to: view)
-        return view
+        MeasurementPiPContainerView(controller: controller)
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
         controller.attach(to: uiView)
+    }
+}
+
+private final class MeasurementPiPContainerView: UIView {
+    private let controller: MeasurementPiPController
+
+    init(controller: MeasurementPiPController) {
+        self.controller = controller
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        controller.attach(to: self)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        controller.attach(to: self)
     }
 }
