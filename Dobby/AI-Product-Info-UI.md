@@ -18,46 +18,42 @@
 | `ProductCreationFlowView.swift` | 사진 저장·생성 호출·세 필드 적용·다음 화면 이동 |
 | `ProductAutofillSession.swift` | 중복/늦은 응답 차단, 필드 변경 보호 |
 | `ProductAutofillClient.swift` | 기존 `dobby-openai` Worker HTTP 호출·인증 주입·오류 처리 |
-| `ProductAutofillDevelopmentAuth.swift` | Debug 실행 인증 전달·기기 전용 Keychain 저장·재실행 복원 |
+| `DobbyInstallationAuth.swift` | Instagram과 AI가 공유하는 앱 접근 키 확인·기기별 인증값 자동 생성/복원 |
+| `ProductAutofillDevelopmentAuth.swift` | 기존 Debug 개발 토큰 연결의 선택적 호환 경로 |
 | `ProductAutofillPhotoEncoder.swift` | 업로드 사진 변환·용량 제한 |
 | `ProductInformationFields.swift` | 제품명·설명·가격·브랜드·실측 입력 필드 |
 
-공통 생성 클라이언트와 세 필드 적용 로직은 이후 B안에서도 사용할 수 있습니다. 이 브랜치는 A안만 포함하며, B안은 이 브랜치 위에서 분기해 함께 검토할 수 있습니다.
+공통 생성 클라이언트와 세 필드 적용 로직은 이후 B안에서도 사용할 수 있습니다. 현재 UI는 A안이며 B안은 별도 작업입니다.
 
 ## 실제 API 연결과 인증
 
-호출 주소는 기존 팀 Worker의 `https://dobby-openai.dobbyisvintage.workers.dev/v1/garments/autofill`입니다. OpenAI API 키와 프롬프트는 계속 Worker에서 관리하며 앱에 포함하지 않습니다. 이 작업은 Worker를 수정하거나 배포하지 않습니다.
+호출 주소는 기존 팀 Worker의 `https://dobby-openai.dobbyisvintage.workers.dev/v1/garments/autofill`입니다. OpenAI API 키와 프롬프트는 Worker에서 관리하며 앱에 포함하지 않습니다. 2026-10-31 승인 후 수정한 Worker를 배포했고 공통 인증이 통과하는 것을 확인했습니다. 앱은 이 브랜치의 인증 수정 코드로 다시 빌드해야 합니다.
 
-현재 Worker는 개발용 `DRAFT_API_TOKEN` 인증을 요구합니다. Debug 앱은 **실행 시 환경 변수 `DOBBY_AI_AUTH_TOKEN`**으로 전달받고, **앱이 시작하자마자 기기 전용 Keychain에 저장·검증**합니다. AI 요청 전에 디버그 연결이 끊어지더라도 이후 홈 화면에서 다시 실행하거나 일반 `Dobby` scheme으로 실행하면 같은 기기의 저장된 인증값을 사용합니다. 토큰 값은 Swift 코드, Info.plist, xcconfig, 공유 Xcode scheme, 앱 번들, 저장소에 넣지 않습니다. 이 값은 OpenAI API 키가 아닙니다.
+### 팀원이 일반 Dobby 설정으로 실행
 
-### 실제 아이폰에서 Xcode로 실행
+Debug·Release 모두 기존 Instagram 연동의 앱 설정을 사용합니다. 별도 AI 전용 설정 파일이나 개인 scheme, 기기별 개발 토큰 입력은 필요하지 않습니다.
 
-이 Mac에는 개인용 **Dobby AI Local** scheme을 준비했습니다. Xcode 상단 scheme을 `Dobby AI Local`, 실행 대상을 연결된 아이폰으로 선택하고 Run(⌘R)하면 됩니다. 사진 선택 화면에서 AI 토글을 켠 뒤 다음을 누르면 실제 팀 Worker를 호출합니다.
+1. 기존 `Config/DobbySecrets.xcconfig`의 `DOBBY_INSTAGRAM_APP_API_KEY`가 Info.plist의 `InstagramAppAPIKey`로 전달됩니다. 기존에 공유받은 앱 설정이 없는 Mac은 이 설정이 먼저 필요합니다.
+2. 앱은 설치별 인증값을 Keychain에서 읽고, 없으면 32바이트 난수로 한 번 생성합니다. Instagram이 사용하던 service `com.dobby.instagram` / account `installation-token`을 유지하므로 기존 Instagram 연결의 식별자를 교체하지 않습니다. 중복 생성이 겹치면 먼저 저장된 값을 다시 읽습니다.
+3. AI 요청에 `X-Dobby-App-Key: <기존 앱 접근 키>`와 `Authorization: Bearer <설치별 64자리 소문자 hex 인증값>`을 전송합니다. Instagram 로그인 완료 여부와 무관하게 준비할 수 있습니다.
+4. Worker는 앱 키·인증 형식을 검사하고 호출 횟수 제한을 통과한 요청만 OpenAI로 전달합니다. 실패한 요청을 다른 인증 방식으로 자동 재시도하지 않습니다.
 
-개인용 scheme은 Git에서 제외된 `Dobby/Dobby.xcodeproj/xcuserdata/<사용자>.xcuserdatad/xcschemes/`에만 저장되며 파일 권한은 600입니다. 토큰이 들어 있는 **Edit Scheme → Environment Variables 화면을 공유하거나 캡처하지 마세요.**
+설치별 인증값은 해당 기기 Keychain에 저장하고 iCloud로 동기화하지 않습니다. 기존 Instagram 인증값은 그대로 사용합니다. OpenAI 키는 이 값들과 별개이며 Worker Secret에만 둡니다.
 
-설정을 다시 만들어야 할 때는 로컬 Worker 개발용 인증 파일이 준비된 상태에서 다음 명령을 실행합니다. 기존 공유 scheme은 변경하지 않고 개인용 실행 설정만 생성·갱신합니다. 비밀값은 출력하지 않습니다.
+### Worker 반영 상태
 
-```sh
-python3 Tools/configure-ai-development-auth.py
-```
+- 사용자가 기존 `dobby-openai`에 Secret **`DOBBY_APP_API_KEY`**를 등록했습니다. 앱의 **`DOBBY_INSTAGRAM_APP_API_KEY`와 동일한 Instagram 앱 접근 키**를 사용하며 실제 인증 검사도 통과했습니다. Cafe24의 동명 설정과 혼동하지 않습니다.
+- `wrangler.toml`의 `AI_INSTALLATION_RATE_LIMITER`와 `AI_SHARED_RATE_LIMITER` 바인딩이 포함된 수정 코드를 같은 Worker에 배포했습니다. 버전 `c2b63e32-62bb-4631-b01b-a5858c0dca51`에 트래픽 100% 적용과 기존 `OPENAI_API_KEY`·`DRAFT_API_TOKEN` 유지를 확인했습니다.
+- 기본 제한은 설치별 60초에 5회, 공통 60초에 30회입니다. Cloudflare의 위치별 근사 제한이므로 전 세계 합산 과금 상한이 아닙니다.
+- 앱도 수정된 코드로 다시 빌드해야 합니다. 배포 후 검사는 빈 사진 요청으로 인증만 확인했으며 실제 OpenAI를 호출하지 않았습니다. 앱 설치·실제 사진 생성은 아직 수행하지 않았습니다.
 
-아이폰에서 앱을 삭제하거나 인증값이 바뀌면 개인용 scheme으로 다시 실행해 기기 인증을 갱신합니다. Keychain 항목은 iCloud와 동기화하지 않습니다.
+이 방식은 기존 앱 설정을 사용하는 팀 개발·테스트 연결입니다. 앱에 포함된 공통 키와 자가 생성 식별자가 실제 로그인 사용자나 정식 앱임을 증명하지는 않습니다. 사용자별 인증·정밀 과금 제한은 별도 범위입니다.
 
-Debug 앱은 `Documents/dobby-ai-auth-status.json`에 인증 준비 여부, 실행 환경 존재 여부, 저장된 인증 존재 여부, 저장 성공 여부와 확인 시각만 기록합니다. 인증값과 일부 문자열, 전체 실행 환경, 원본 오류는 기록하지 않습니다. 실제 기기에서 실행 환경 값 없이 재실행했을 때도 `readiness: true`, `runtimePresent: false`, `storedCredentialPresent: true`가 되는지 확인합니다. UI 테스트와 테스트 호스트에서는 시작 시 초기화를 건너뜁니다.
+### 이전 개발 연결 호환
 
-### 시뮬레이터에서 직접 실행
+공통 앱 키 설정이 없는 Debug 앱만 기존 `DOBBY_AI_AUTH_TOKEN` 실행 환경 또는 개발 Keychain 토큰을 사용할 수 있습니다. 이 경우에만 개인용 `Dobby AI Local` scheme이 선택적 호환 수단으로 남습니다. 명시적 실행 환경 값이 있을 때만 앱 시작 시 개발 토큰을 저장하며, 일반 실행에서는 이 초기화와 개발 상태 파일 기록을 하지 않습니다.
 
-실제 시뮬레이터 앱에 연결할 때는 빌드·설치 후 별도의 로컬 터미널에서 아래처럼 입력할 수 있습니다. `booted` 대신 원하는 시뮬레이터 UUID를 사용할 수 있습니다. 입력값은 화면과 셸 명령 기록에 남지 않습니다.
-
-```zsh
-read -rs 'dobby_preview_token?Worker 개발용 인증 토큰: '; print
-xcrun simctl terminate booted com.dobby.Dobby 2>/dev/null || true
-SIMCTL_CHILD_DOBBY_AI_AUTH_TOKEN="$dobby_preview_token" xcrun simctl launch booted com.dobby.Dobby
-unset dobby_preview_token
-```
-
-유효한 실행 환경 값이 우선이며, 없으면 기기 Keychain을 읽습니다. 둘 다 없으면 기기 인증 누락 안내와 직접 입력을 제공하며 테스트 응답으로 바꾸지 않습니다. Worker의 OpenAI 연결 설정 오류는 기기 인증 누락과 다른 안내로 구분합니다. Release의 실제 사용자 인증은 #123에서 제공할 인증 공급자를 주입해야 합니다. 공유 개발 토큰을 앱에 포함하는 방식으로 배포하지 않습니다.
+Worker는 앱 키 헤더가 없는 기존 `DRAFT_API_TOKEN` 요청도 계속 지원합니다. 앱 키 헤더가 있으면 공통 인증만 검사하며, 잘못된 앱 키를 개발 토큰으로 우회하지 않습니다. 개발 토큰을 공유 코드·Info.plist·공유 scheme에 추가하지 않습니다. Release에서는 개발 토큰 경로를 사용하지 않습니다.
 
 ## 비용 없는 화면 검증
 
@@ -70,3 +66,7 @@ bash Tools/run-ui-tests.sh 'platform=iOS Simulator,name=iPhone 17,OS=26.5' \
   -only-testing:DobbyPresentationTests/ProductAutofillSessionTests \
   -only-testing:DobbyUITests/ProductPhotoSelectionGridTests
 ```
+
+## 공통 인증 검증 결과
+
+2026-10-31: iOS 인증 관련 33개 테스트(클라이언트·공통 설치 인증·기존 개발 인증), A안 AI ON/OFF 화면 테스트 2개가 모두 통과했습니다. 인증 테스트는 메모리 저장소와 HTTP stub을 사용하며 실제 Keychain·OpenAI에 접근하지 않습니다. 화면 검증도 명시적 fixture를 사용합니다. 기본 `Dobby` scheme의 실제 기기 대상 Release 빌드(코드 서명 제외)와 Worker `dry-run`도 통과했습니다. 원격 Worker 배포 후 상태 확인 200, 정상 공통 인증 + 빈 사진 요청 400 `invalid_request`, 잘못된 공통 인증 401 `unauthorized`도 확인했습니다. 실제 기기에 설치하거나 실제 사진으로 AI를 호출하지 않았습니다.

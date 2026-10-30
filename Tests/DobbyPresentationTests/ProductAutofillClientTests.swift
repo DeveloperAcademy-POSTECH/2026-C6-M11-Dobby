@@ -7,11 +7,15 @@ import XCTest
 @MainActor
 final class ProductAutofillClientTests: XCTestCase {
     func testMissingAuthorizationStopsBeforeReadingPhotosOrSendingRequest() async throws {
-        let client = ProductAutofillClient(bearerTokenProvider: { nil })
+        let stub = AutofillHTTPStub(status: 200, body: Data())
+        defer { stub.remove() }
+        let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
+            bearerTokenProvider: { nil })
         do {
             _ = try await client.generate(photos: [])
             XCTFail("인증 없는 요청이 전송되면 안 됩니다.")
         } catch { XCTAssertEqual(error as? ProductAutofillError, .notConfigured) }
+        XCTAssertEqual(stub.requestCount, 0)
     }
 
     func testUploadUsesFirstFiveInSelectionOrderAndPreservesParagraphsAndNullBrand() async throws {
@@ -29,6 +33,8 @@ final class ProductAutofillClientTests: XCTestCase {
         let request = try XCTUnwrap(stub.request)
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer ui-test-authorization")
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-Dobby-App-Key"),
+                     "The legacy initializer retains its original Bearer-only contract")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
         let sent = try XCTUnwrap(object["photos"] as? [[String: String]])
@@ -38,6 +44,112 @@ final class ProductAutofillClientTests: XCTestCase {
         XCTAssertEqual(stub.requestCount, 1, "성공이나 실패를 자동으로 재요청하지 않는다")
         XCTAssertEqual(photos.count, 7, "AI 전송 제한이 제품 사진을 줄이면 안 된다")
     }
+
+    func testCommonAuthorizationAddsAppKeyAndInstallationBearerToTheExistingRequest() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let photos = try makePhotos(count: 2, directory: directory)
+        let draft = ProductAutofillDraft(productName: "공통 인증 테스트 후드", brand: nil,
+            description: "첫 문단입니다.\n\n두 번째 문단입니다.", reviewNotes: [])
+        let appKey = "unit-test-common-app-key"
+        let owner = String(repeating: "ab", count: 32)
+        let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft))
+        defer { stub.remove() }
+        let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
+            appAuthorizationProvider: { DobbyAppAuthorization(appAPIKey: appKey, installationToken: owner) })
+
+        let result = try await client.generate(photos: photos)
+        XCTAssertEqual(result, draft)
+        let request = try XCTUnwrap(stub.request)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Dobby-App-Key"), appKey)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer " + owner)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+        XCTAssertEqual(Set(object.keys), ["photos"], "Authorization must stay out of the photo payload")
+        let sent = try XCTUnwrap(object["photos"] as? [[String: String]])
+        XCTAssertEqual(sent.map { $0["id"] }, photos.map { Optional($0.id.uuidString) })
+        XCTAssertEqual(sent.map { $0["role"] }, ["detail", "detail"])
+        XCTAssertEqual(stub.requestCount, 1)
+    }
+
+    func testMissingOrInvalidCommonAppKeyStopsBeforePhotoReadOrNetwork() async throws {
+        let invalidKeys: [String?] = [nil, "", " ", "$(DOBBY_APP_API_KEY)", "YOUR_APP_API_KEY",
+                                      "YOUR_DOBBY_APP_API_KEY", "invalid\nheader", "invalid\rheader", "invalid\tkey"]
+        for key in invalidKeys {
+            let stub = AutofillHTTPStub(status: 200, body: Data())
+            defer { stub.remove() }
+            let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
+                appAuthorizationProvider: {
+                    key.map { DobbyAppAuthorization(appAPIKey: $0, installationToken: String(repeating: "a", count: 64)) }
+                })
+            do {
+                _ = try await client.generate(photos: [])
+                XCTFail("A missing, unresolved, or invalid app key must not be transmitted")
+            } catch {
+                XCTAssertEqual(error as? ProductAutofillError, .notConfigured)
+            }
+            XCTAssertEqual(stub.requestCount, 0)
+        }
+    }
+
+    func testInvalidCommonInstallationTokenStopsBeforePhotoReadOrNetwork() async throws {
+        for owner in ["", String(repeating: "a", count: 63), String(repeating: "a", count: 65),
+                      String(repeating: "A", count: 64), String(repeating: "g", count: 64),
+                      String(repeating: "é", count: 64), "invalid\nheader"] {
+            let stub = AutofillHTTPStub(status: 200, body: Data())
+            defer { stub.remove() }
+            let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
+                appAuthorizationProvider: {
+                    DobbyAppAuthorization(appAPIKey: "unit-test-common-app-key", installationToken: owner)
+                })
+            do {
+                _ = try await client.generate(photos: [])
+                XCTFail("An invalid installation identity must not be transmitted")
+            } catch { XCTAssertEqual(error as? ProductAutofillError, .notConfigured) }
+            XCTAssertEqual(stub.requestCount, 0)
+        }
+    }
+
+    func testCommonAuthenticationServerFailureNeverExposesRawCredentials() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let photos = try makePhotos(count: 1, directory: directory)
+        let key = "unit-test-upstream-credential-marker"
+        let owner = String(repeating: "cd", count: 32)
+        let body = try JSONSerialization.data(withJSONObject: [
+            "error": ["code": "unauthorized", "message": "Upstream echoed \(key) Bearer \(owner)"]
+        ])
+        let stub = AutofillHTTPStub(status: 401, body: body)
+        defer { stub.remove() }
+        let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
+            appAuthorizationProvider: { DobbyAppAuthorization(appAPIKey: key, installationToken: owner) })
+        do {
+            _ = try await client.generate(photos: photos)
+            XCTFail("Unauthorized response must not become a generated draft")
+        } catch {
+            XCTAssertEqual(error as? ProductAutofillError, .unauthorized)
+            XCTAssertFalse(error.localizedDescription.contains(key))
+            XCTAssertFalse(error.localizedDescription.contains(owner))
+            XCTAssertFalse(error.localizedDescription.contains("Upstream echoed"))
+        }
+        XCTAssertEqual(stub.requestCount, 1, "Authentication failures must not automatically retry")
+    }
+
+    #if DEBUG
+    func testSyntheticAIResponsesStillRequireBothFixtureContextAndExplicitKnownMode() {
+        XCTAssertNil(ProductAutofillClient.fixtureMode(environment: [:], isFixture: true))
+        for mode in ["success", "delay", "failure", "failure-once"] {
+            let environment = ["DOBBY_AI_FIXTURE_RESULT": mode]
+            XCTAssertEqual(ProductAutofillClient.fixtureMode(environment: environment, isFixture: true), mode)
+            XCTAssertNil(ProductAutofillClient.fixtureMode(environment: environment, isFixture: false))
+        }
+        for mode in ["", "unknown", "SUCCESS", " success", "success\n"] {
+            XCTAssertNil(ProductAutofillClient.fixtureMode(
+                environment: ["DOBBY_AI_FIXTURE_RESULT": mode], isFixture: true))
+        }
+    }
+    #endif
 
     func testKnownServerCodesBecomeSafeErrorsWithoutAutomaticRetry() async throws {
         let directory = try makeDirectory()

@@ -28,7 +28,7 @@ nonisolated enum ProductAutofillError: Error, Equatable, LocalizedError, Sendabl
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: "이 기기의 AI 연결 인증을 찾지 못했어요. 개발용 실행 설정으로 앱을 다시 실행해 주세요."
+        case .notConfigured: "AI 연결을 준비하지 못했어요. 지금은 제품 정보를 직접 입력해 주세요."
         case .serverNotConfigured: "AI 서버의 연결 설정을 확인해야 해요. 지금은 제품 정보를 직접 입력할 수 있어요."
         case .unauthorized: "AI 연결 인증을 확인해 주세요. 지금은 제품 정보를 직접 입력할 수 있어요."
         case .invalidPhotos: "같은 제품에서 선택한 사진이 필요해요. 사진을 다시 선택해 주세요."
@@ -47,36 +47,63 @@ nonisolated enum ProductAutofillError: Error, Equatable, LocalizedError, Sendabl
 /// The OpenAI key stays in the Worker. This client accepts an app authorization provider.
 actor ProductAutofillClient: ProductAutofillGenerating {
     typealias BearerTokenProvider = @Sendable () async throws -> String?
+    typealias AppAuthorizationProvider = @Sendable () async throws -> DobbyAppAuthorization?
     static let endpoint = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v1/garments/autofill")!
     private let endpoint: URL
     private let session: URLSession
-    private let bearerTokenProvider: BearerTokenProvider
+    private let authorizationProvider: @Sendable () async throws -> RequestAuthorization?
 
     init(endpoint: URL = ProductAutofillClient.endpoint, session: URLSession = .shared,
          bearerTokenProvider: @escaping BearerTokenProvider) {
         self.endpoint = endpoint
         self.session = session
-        self.bearerTokenProvider = bearerTokenProvider
+        self.authorizationProvider = {
+            guard let token = try await bearerTokenProvider() else { return nil }
+            return RequestAuthorization(token: token, appAPIKey: nil)
+        }
+    }
+
+    init(endpoint: URL = ProductAutofillClient.endpoint, session: URLSession = .shared,
+         appAuthorizationProvider: @escaping AppAuthorizationProvider) {
+        self.endpoint = endpoint
+        self.session = session
+        self.authorizationProvider = {
+            guard let authorization = try await appAuthorizationProvider() else { return nil }
+            return RequestAuthorization(token: authorization.installationToken, appAPIKey: authorization.appAPIKey)
+        }
     }
 
     @MainActor
     static func makeDefault() -> any ProductAutofillGenerating {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
-        if ProductAppStorage.fixtureDirectory != nil,
-           let mode = environment["DOBBY_AI_FIXTURE_RESULT"],
-           ["success", "failure", "delay", "failure-once"].contains(mode) {
+        if let mode = fixtureMode(environment: environment, isFixture: ProductAppStorage.fixtureDirectory != nil) {
             return ProductAutofillFixtureClient(mode: mode)
         }
-        // Seed at runtime, then reuse this device's development Keychain item on later launches.
-        // #123 replaces this temporary path with the signed-in user's authorization.
+        #endif
+        if let appAPIKey = DobbyInstallationAuth.appAPIKey() {
+            return ProductAutofillClient(appAuthorizationProvider: {
+                try DobbyInstallationAuth.authorization(appAPIKey: appAPIKey)
+            })
+        }
+        #if DEBUG
+        // Compatibility for explicitly provisioned development installs only.
+        // A configured common path never falls back or retries a failed AI request.
         return ProductAutofillClient(bearerTokenProvider: {
             try ProductAutofillDevelopmentAuth.token()
         })
         #else
-        return ProductAutofillClient(bearerTokenProvider: { nil })
+        return ProductAutofillClient(appAuthorizationProvider: { nil })
         #endif
     }
+
+    #if DEBUG
+    nonisolated static func fixtureMode(environment: [String: String], isFixture: Bool) -> String? {
+        guard isFixture, let mode = environment["DOBBY_AI_FIXTURE_RESULT"],
+              ["success", "failure", "delay", "failure-once"].contains(mode) else { return nil }
+        return mode
+    }
+    #endif
 
     func generate(photos: [CapturedAsset]) async throws -> ProductAutofillDraft {
         try Task.checkCancellation()
@@ -94,9 +121,15 @@ actor ProductAutofillClient: ProductAutofillGenerating {
 
     private func performRequest(photos: [CapturedAsset]) async throws -> ProductAutofillDraft {
         try Task.checkCancellation()
-        guard let token = try await bearerTokenProvider(), !token.isEmpty,
-              token.count <= 1024, !token.contains(where: \.isWhitespace) else {
+        guard let authorization = try await authorizationProvider(), !authorization.token.isEmpty,
+              authorization.token.count <= 1024, !authorization.token.contains(where: \.isWhitespace) else {
             throw ProductAutofillError.notConfigured
+        }
+        if let appAPIKey = authorization.appAPIKey {
+            guard DobbyInstallationAuth.isValidAppAPIKey(appAPIKey),
+                  DobbyInstallationAuth.isValidInstallationToken(authorization.token) else {
+                throw ProductAutofillError.notConfigured
+            }
         }
         let encodedPhotos = try ProductAutofillPhotoEncoder.encode(photos)
         try Task.checkCancellation()
@@ -105,7 +138,10 @@ actor ProductAutofillClient: ProductAutofillGenerating {
         var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer " + authorization.token, forHTTPHeaderField: "Authorization")
+        if let appAPIKey = authorization.appAPIKey {
+            request.setValue(appAPIKey, forHTTPHeaderField: "X-Dobby-App-Key")
+        }
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.httpBody = body
         do {
@@ -153,6 +189,7 @@ actor ProductAutofillClient: ProductAutofillGenerating {
     }
 
     private struct Request: Encodable, Sendable { let photos: [ProductAutofillPhotoEncoder.Photo] }
+    private struct RequestAuthorization: Sendable { let token: String; let appAPIKey: String? }
     private struct FailureEnvelope: Decodable { let error: FailureCode }
     private struct FailureCode: Decodable { let code: String }
 }
