@@ -35,6 +35,7 @@ struct ProductCreationFlowView: View {
     @State private var preservesDraftPhotos = false
     @State private var pendingExitAction: (() -> Void)?
     @State private var usesProductAutofill = true
+    @State private var autofillFlow: ProductAutofillFlow
     @State private var autofill = ProductAutofillSession()
     @State private var autofillReviewNotes: [String] = []
     @State private var autofillLoadingPresentation: ProductAutofillLoadingPresentation?
@@ -55,6 +56,7 @@ struct ProductCreationFlowView: View {
         self.onDraftSaved = onDraftSaved ?? onCancel
         self.onDraftDiscarded = onDraftDiscarded ?? onDraftSaved ?? onCancel
         self.resumeProductID = resumeProductID
+        _autofillFlow = State(initialValue: ProductAutofillFlowPreference.current)
         _isRestoring = State(initialValue: resumeProductID != nil)
         isFixture = ProductAppStorage.fixtureDirectory != nil
         archive = MeasurementArchive(folder: ProductAppStorage.fixtureDirectory?.appending(path: "measurements"))
@@ -84,40 +86,12 @@ struct ProductCreationFlowView: View {
             }
                 .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
                 .navigationDestination(for: Step.self) { step in
-                    if let garment, let photoModel, let permission {
-                        Group {
-                            switch step {
-                            case .details:
-                                CameraFlowView(model: photoModel, permission: permission, camera: camera,
-                                    previewSource: isFixture ? photoModel.input.measurement.source : nil,
-                                    onSelectPhotos: { path.append(.photoSelection) },
-                                    onExit: requestDraftExit,
-                                    onComplete: receivePhotos)
-                            case .photoSelection:
-                                ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
-                                    usesAI: $usesProductAutofill,
-                                    hasProductInformation: ProductAutofillInputSnapshot(garment: garment).hasInformation,
-                                    onCancelGeneration: { autofill.cancel() },
-                                    onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 },
-                                    onCompleteWithAI: receiveSelectedPhotos,
-                                    onComplete: receivePhotos)
-                            case .information:
-                                // Restored creation drafts continue input; they are not saved-product edits.
-                                InfoInputView(garment: garment, measurementInput: $measurementInput,
-                                    onExit: handleInformationBack) {
-                                    _ in path.append(.completed)
-                                }
-                            case .completed:
-                                ProductInputCompletionView(garment: garment,
-                                    onExport: { showFruits = false; exportProduct = ExportProduct(garment: garment) },
-                                    onLibrary: { Task { await finishFlow() } })
-                            }
-                        }.safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
-                            .preferredColorScheme(path.last == .photoSelection || path.last == .information || path.last == .completed ? .light : .dark)
-                    }
+                    destination(for: step)
                 }
         }
-        .disabled(isFinishing || pendingExitAction != nil || autofillLoadingPresentation != nil)
+        // Each generation screen locks its own controls. Disabling this ancestor
+        // would also disable native error-alert actions created as loading ends.
+        .disabled(isFinishing || pendingExitAction != nil)
         .accessibilityHidden(autofillLoadingPresentation != nil)
         .overlay {
             if let presentation = autofillLoadingPresentation {
@@ -175,6 +149,52 @@ struct ProductCreationFlowView: View {
             }
         }
         .task { if isRestoring { await restoreDraft() } }
+    }
+
+    @ViewBuilder
+    private func destination(for step: Step) -> some View {
+        if let garment, let photoModel, let permission {
+            Group {
+                switch step {
+                case .details:
+                    CameraFlowView(model: photoModel, permission: permission, camera: camera,
+                        previewSource: isFixture ? photoModel.input.measurement.source : nil,
+                        onSelectPhotos: { path.append(.photoSelection) },
+                        onExit: requestDraftExit, onComplete: receivePhotos)
+                case .photoSelection:
+                    ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
+                        usesAI: $usesProductAutofill,
+                        hasProductInformation: ProductAutofillInputSnapshot(garment: garment).hasInformation,
+                        onCancelGeneration: { autofill.cancel() },
+                        onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 },
+                        onCompleteWithAI: photoAICompletion, onComplete: receivePhotos)
+                case .information:
+                    // Restored creation drafts continue input; they are not saved-product edits.
+                    InfoInputView(garment: garment, measurementInput: $measurementInput,
+                        onExit: handleInformationBack, onGenerateAI: informationAICompletion,
+                        onCancelGeneration: { autofill.cancel() },
+                        onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 }) {
+                        _ in path.append(.completed)
+                    }
+                case .completed:
+                    ProductInputCompletionView(garment: garment,
+                        onExport: { showFruits = false; exportProduct = ExportProduct(garment: garment) },
+                        onLibrary: { Task { await finishFlow() } })
+                }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
+            .preferredColorScheme(step == .details ? .dark : .light)
+        }
+    }
+
+    private var photoAICompletion: ((ProductPhotoOutput, Bool) async throws -> Void)? {
+        guard autofillFlow == .photoSelection else { return nil }
+        return receiveSelectedPhotos
+    }
+
+    private var informationAICompletion: (() async throws -> Void)? {
+        guard autofillFlow == .information else { return nil }
+        return generateInformationFromButton
     }
 
     @ViewBuilder
@@ -308,11 +328,30 @@ struct ProductCreationFlowView: View {
             return
         }
 
+        try await generateAndApplyInformation(output, expectedStep: .photoSelection)
+        path.append(.information)
+    }
+
+    private func generateInformationFromButton() async throws {
+        guard let garment, let output = photoModel?.output,
+              autofillFlow == .information, path.last == .information else {
+            throw ProductAutofillError.invalidPhotos
+        }
+        // Retain the seller's latest input even if they cancel or close the app.
+        try persistDraft(garment, step: .information)
+        try await generateAndApplyInformation(output, expectedStep: .information)
+    }
+
+    private func generateAndApplyInformation(_ output: ProductPhotoOutput, expectedStep: Step) async throws {
+        guard let garment, let photoModel, isPresented, path.last == expectedStep else {
+            throw CancellationError()
+        }
+
         let before = ProductAutofillInputSnapshot(garment: garment)
         do {
             let draft = try await autofill.generate(photos: output.selectedPhotos)
             try Task.checkCancellation()
-            guard isPresented, path.last == .photoSelection,
+            guard isPresented, path.last == expectedStep,
                   self.garment?.id == output.garmentID,
                   photoModel.output?.selectedPhotos == output.selectedPhotos else {
                 throw CancellationError()
@@ -327,7 +366,6 @@ struct ProductCreationFlowView: View {
                 autofillReviewNotes = previousReviewNotes
                 throw error
             }
-            path.append(.information)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
