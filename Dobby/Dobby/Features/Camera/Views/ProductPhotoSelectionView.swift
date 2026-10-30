@@ -14,6 +14,7 @@ struct ProductPhotoSelectionView: View {
     let onComplete: (ProductPhotoOutput) async throws -> Void
     private let onCompleteWithAI: ((ProductPhotoOutput, Bool) async throws -> Void)?
     private let onCancelGeneration: () -> Void
+    private let onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)?
     private let hasProductInformation: Bool
     @Binding private var usesAI: Bool
     @State private var didComplete = false
@@ -29,6 +30,7 @@ struct ProductPhotoSelectionView: View {
     init(model: ProductPhotoModel, onExit: (() -> Void)? = nil,
          usesAI: Binding<Bool> = .constant(false), hasProductInformation: Bool = false,
          onCancelGeneration: @escaping () -> Void = {},
+         onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)? = nil,
          onCompleteWithAI: ((ProductPhotoOutput, Bool) async throws -> Void)? = nil,
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
@@ -37,6 +39,7 @@ struct ProductPhotoSelectionView: View {
         _usesAI = usesAI
         self.hasProductInformation = hasProductInformation
         self.onCancelGeneration = onCancelGeneration
+        self.onAIGenerationPresentationChange = onAIGenerationPresentationChange
         self.onCompleteWithAI = onCompleteWithAI
     }
 
@@ -81,7 +84,9 @@ struct ProductPhotoSelectionView: View {
         .overlay {
             if completionRequested {
                 if requestedAI {
-                    ProductAutofillLoadingView(onCancel: cancelGeneration)
+                    if onAIGenerationPresentationChange == nil {
+                        ProductAutofillLoadingView(onCancel: cancelGeneration)
+                    }
                 } else {
                     ProgressView("선택한 사진 저장 중").padding().background(.regularMaterial, in: Capsule())
                         .accessibilityIdentifier("camera.savingPhotos")
@@ -141,7 +146,10 @@ struct ProductPhotoSelectionView: View {
                     failureMessage = error.localizedDescription
                 }
             }
-            if completionID == identifier { completionID = nil }
+            if completionID == identifier {
+                completionID = nil
+                onAIGenerationPresentationChange?(nil)
+            }
         }
         .alert(isAIFailure ? "AI 정보를 생성하지 못했어요" : "사진을 저장하지 못했어요", isPresented: Binding(
             get: { failureMessage != nil }, set: { if !$0 { failureMessage = nil } }
@@ -180,11 +188,15 @@ struct ProductPhotoSelectionView: View {
         selectionLimitNoticeID = nil
         requestedAI = usingAI
         completionID = UUID()
+        if usingAI {
+            onAIGenerationPresentationChange?(ProductAutofillLoadingPresentation(onCancel: cancelGeneration))
+        }
     }
 
     private func cancelGeneration() {
         onCancelGeneration()
         completionID = nil
+        onAIGenerationPresentationChange?(nil)
     }
 
     private func toggleSelection(_ id: UUID) {

@@ -37,6 +37,7 @@ struct ProductCreationFlowView: View {
     @State private var usesProductAutofill = true
     @State private var autofill = ProductAutofillSession()
     @State private var autofillReviewNotes: [String] = []
+    @State private var autofillLoadingPresentation: ProductAutofillLoadingPresentation?
 
     init(container: ModelContainer, controller: CopyActivityController, isPresented: Binding<Bool>,
          copyHomeProduct: Binding<ExportProduct?>,
@@ -97,6 +98,7 @@ struct ProductCreationFlowView: View {
                                     usesAI: $usesProductAutofill,
                                     hasProductInformation: ProductAutofillInputSnapshot(garment: garment).hasInformation,
                                     onCancelGeneration: { autofill.cancel() },
+                                    onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 },
                                     onCompleteWithAI: receiveSelectedPhotos,
                                     onComplete: receivePhotos)
                             case .information:
@@ -122,7 +124,13 @@ struct ProductCreationFlowView: View {
                     }
                 }
         }
-        .disabled(isFinishing || pendingExitAction != nil)
+        .disabled(isFinishing || pendingExitAction != nil || autofillLoadingPresentation != nil)
+        .accessibilityHidden(autofillLoadingPresentation != nil)
+        .overlay {
+            if let presentation = autofillLoadingPresentation {
+                ProductAutofillLoadingView(onCancel: presentation.onCancel)
+            }
+        }
         .overlay {
             if isFinishing {
                 ProgressView(cleanupAction == .discard ? "작업을 삭제하는 중…" : "작업을 저장하는 중…")
@@ -166,6 +174,7 @@ struct ProductCreationFlowView: View {
             // Only the parent dismissing this flow releases temporary captures.
             if !presented {
                 autofill.cancel()
+                autofillLoadingPresentation = nil
                 pendingExitAction = nil
                 if !preservesDraftPhotos, let photoModel {
                     Task { try? await photoModel.discardUncommittedDetails() }
