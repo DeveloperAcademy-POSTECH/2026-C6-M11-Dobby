@@ -1,7 +1,7 @@
 // Created by mason on 10/24/26.
 import SwiftUI
 
-/// Keep only the saved photograph window visible; the shared camera surround is opaque black.
+/// Fit the camera itself to the photo window so fullscreen aspect-fill cannot add a hidden zoom.
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
     @ViewBuilder var content: (CGRect) -> Content
@@ -11,15 +11,17 @@ struct DetailAspectRatioPreview<Content: View>: View {
         GeometryReader { geometry in
             let layout = DetailAspectRatioPreviewLayout(containerSize: geometry.size,
                 aspectRatio: aspectRatio)
-            content(layout.frame)
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .clipped()
-                .overlay {
-                    CameraBlackSurroundings(photoRect: layout.frame)
-                        .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
-                        .animation(nil, value: geometry.size)
-                        .animation(nil, value: reduceMotion)
-                }
+            ZStack(alignment: .topLeading) {
+                content(layout.frame)
+                    .frame(width: layout.frame.width, height: layout.frame.height)
+                    .clipped()
+                    .position(x: layout.frame.midX, y: layout.frame.midY)
+                CameraBlackSurroundings(photoRect: layout.frame)
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
+                    .animation(nil, value: geometry.size)
+                    .animation(nil, value: reduceMotion)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .clipped()
     }

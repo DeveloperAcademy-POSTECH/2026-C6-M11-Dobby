@@ -12,7 +12,6 @@ import UIKit
 /// 영상 표시만 담당한다. 카메라 구성·시작·중지는 CameraPreviewSession의 책임이다.
 struct CameraPreviewSurface: UIViewRepresentable {
     let session: AVCaptureSession
-    var viewport: CGRect = .zero
     var onRotationChange: (CGFloat) -> Void = { _ in }
 
     var onFramingReady: (@escaping () -> CGRect?) -> Void = { _ in }
@@ -22,14 +21,12 @@ struct CameraPreviewSurface: UIViewRepresentable {
         view.previewLayer.videoGravity = .resizeAspectFill
         view.previewLayer.session = session
         view.onRotationChange = onRotationChange
-        view.viewport = viewport
         onFramingReady { [weak view] in view?.normalizedPhotoCrop() }
         return view
     }
 
     func updateUIView(_ view: PreviewView, context: Context) {
         view.onRotationChange = onRotationChange
-        view.viewport = viewport
         view.updateRotation()
         onFramingReady { [weak view] in view?.normalizedPhotoCrop() }
     }
@@ -42,13 +39,14 @@ struct CameraPreviewSurface: UIViewRepresentable {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
         var onRotationChange: (CGFloat) -> Void = { _ in }
-        var viewport: CGRect = .zero
 
-        /// 변환은 촬영 직전에 수행해 화면 크기·렌즈·줌의 최신 구도를 사용한다.
+        /// 프리뷰 자체가 사진 영역 크기이므로 화면 좌표가 아닌 로컬 bounds를 변환한다.
+        /// 촬영 직전의 실제 레이어 크기·렌즈·줌을 저장 크롭에도 동일하게 적용한다.
         func normalizedPhotoCrop() -> CGRect? {
+            layoutIfNeeded()
             guard let connection = previewLayer.connection, connection.isActive,
-                  !viewport.isEmpty, bounds.contains(viewport) else { return nil }
-            let sensorRect = previewLayer.metadataOutputRectConverted(fromLayerRect: viewport)
+                  !bounds.isEmpty else { return nil }
+            let sensorRect = previewLayer.metadataOutputRectConverted(fromLayerRect: bounds)
             return DetailPreviewCropMapping.uprightRect(sensorRect, rotationAngle: connection.videoRotationAngle)
         }
 
