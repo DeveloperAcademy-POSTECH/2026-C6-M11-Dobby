@@ -22,3 +22,8 @@ struct FruitsTransferIndicator: View {
         .accessibilityLabel("Dobby에서 후루츠패밀리로 내보내기")
     }
 }
+
+#Preview {
+    FruitsTransferIndicator()
+        .padding()
+}

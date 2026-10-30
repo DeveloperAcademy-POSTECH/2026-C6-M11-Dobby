@@ -31,3 +31,11 @@ struct FruitsExportContent: View {
         .background(.white)
     }
 }
+
+#Preview("기본") {
+    FruitsExportContent(product: .fruitsPreview, onCopy: { _ in })
+}
+
+#Preview("긴 내용") {
+    FruitsExportContent(product: .fruitsLongPreview, onCopy: { _ in })
+}
