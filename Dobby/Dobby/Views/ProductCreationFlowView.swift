@@ -73,9 +73,7 @@ struct ProductCreationFlowView: View {
                 } else {
                     GarmentCaptureFlowView(archive: archive, preview: isFixture,
                         onConfirmedRecord: receiveMeasurement, onCancel: onCancel, embedsNavigation: false,
-                        restoredRecord: restoredRecord, onExitRecord: saveResultAndExit,
-                        allowsRetake: garment == nil,
-                        onExitRequested: presentExitConfirmation)
+                        restoredRecord: restoredRecord)
                 }
             }
                 .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
@@ -316,15 +314,6 @@ struct ProductCreationFlowView: View {
         try? await photoModel?.discardUncommittedDetails()
         preservesDraftPhotos = false
         onFinish()
-    }
-
-    private func saveResultAndExit(_ record: SavedMeasurement) async throws {
-        guard !isFinishing else { return }
-        cleanupAction = .save
-        isFinishing = true
-        defer { isFinishing = false }
-        try await prepareAndSaveProduct(for: record, step: .measurementResult, allowsUnavailableDraft: true)
-        onDraftSaved()
     }
 
     private func requestSaveAndExit() {

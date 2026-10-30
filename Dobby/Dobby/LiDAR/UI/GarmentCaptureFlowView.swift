@@ -14,9 +14,7 @@ struct GarmentCaptureFlowView: View {
     private let previewBothSidesPartial: Bool
     private let previewMissingTopLength: Bool
     private let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
-    private let onExitRecord: ((SavedMeasurement) async throws -> Void)?
-    private let onExitRequested: ((@escaping () -> Void) -> Void)?
-    private let restoredRecord: SavedMeasurement?
+    @State private var restoredRecord: SavedMeasurement?
     private let allowsRetake: Bool
     private let onCancel: (() -> Void)?
     private let embedsNavigation: Bool
@@ -57,15 +55,11 @@ struct GarmentCaptureFlowView: View {
          onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
          onCancel: (() -> Void)? = nil, embedsNavigation: Bool = true,
          restoredRecord: SavedMeasurement? = nil,
-         onExitRecord: ((SavedMeasurement) async throws -> Void)? = nil,
-         allowsRetake: Bool = true,
-         onExitRequested: ((@escaping () -> Void) -> Void)? = nil) {
+         allowsRetake: Bool = true) {
         self.archive = archive
         self.isPreview = preview
         self.onConfirmedRecord = onConfirmedRecord
-        self.onExitRecord = onExitRecord
-        self.onExitRequested = onExitRequested
-        self.restoredRecord = restoredRecord
+        _restoredRecord = State(initialValue: restoredRecord)
         self.allowsRetake = allowsRetake
         _model = State(initialValue: restoredRecord.map(AutomaticMeasurement.init(record:)))
         self.onCancel = onCancel
@@ -86,8 +80,7 @@ struct GarmentCaptureFlowView: View {
                         initialImage: processingImage, onRetake: retake,
                         onConfirm: { if onConfirmedRecord == nil { dismiss() } },
                         onConfirmedRecord: onConfirmedRecord,
-                        onExitRecord: onExitRecord, initialRecord: restoredRecord,
-                        allowsRetake: allowsRetake, onExitRequested: onExitRequested)
+                        initialRecord: restoredRecord, allowsRetake: allowsRetake)
                 } else {
                     cameraScreen
                         .navigationTitle("실측 촬영")
@@ -933,7 +926,11 @@ struct GarmentCaptureFlowView: View {
         cameraRestartTask?.cancel()
         cameraRestartTask = Task {
             guard !Task.isCancelled else { return }
+            // A resumed draft starts at the result and skips initial camera
+            // setup. Prepare its existing service before allowing a new shot.
+            async let preparation: Void = captureSession.prepare()
             await camera.start()
+            await preparation
         }
     }
 
@@ -942,6 +939,8 @@ struct GarmentCaptureFlowView: View {
         cancel()
         clearPreviewFocus()
         model = nil
+        // Only the first restored result may reuse its archived record.
+        restoredRecord = nil
         recordingError = nil
         previewRecognized = false
         phase = .idle
