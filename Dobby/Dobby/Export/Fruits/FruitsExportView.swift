@@ -7,19 +7,16 @@ struct FruitsExportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
     @State private var pipController = MeasurementPiPController()
-    @State private var copiedField: ProductCopyField?
     @State private var opening: Bool
     @State private var alertMessage: String?
 
     init(
         product: ExportProduct,
         onOpened: @escaping () -> Void = { },
-        initialCopiedField: ProductCopyField? = nil,
         initialOpening: Bool = false
     ) {
         self.product = product
         self.onOpened = onOpened
-        _copiedField = State(initialValue: initialCopiedField)
         _opening = State(initialValue: initialOpening)
     }
 
@@ -31,7 +28,7 @@ struct FruitsExportView: View {
                     height: MeasurementPiPView.renderSize.height
                 )
                 .accessibilityHidden(true)
-            FruitsExportContent(product: product, copiedField: copiedField, onCopy: copy)
+            FruitsExportContent(product: product, onCopy: copy)
         }
         .background(.white)
         .navigationBarBackButtonHidden()
@@ -78,12 +75,6 @@ struct FruitsExportView: View {
 
     private func copy(_ field: ProductCopyField) {
         ClipboardWriter().copyText(product.marketplacePayload.value(for: field))
-        copiedField = field
-        Task {
-            try? await Task.sleep(for: .seconds(1.2))
-            guard copiedField == field else { return }
-            copiedField = nil
-        }
     }
 
     private func startPiPAndOpenFruits() {
@@ -130,12 +121,6 @@ struct FruitsExportView: View {
 #Preview("긴 내용") {
     NavigationStack {
         FruitsExportView(product: .fruitsLongPreview)
-    }
-}
-
-#Preview("복사 완료") {
-    NavigationStack {
-        FruitsExportView(product: .fruitsPreview, initialCopiedField: .description)
     }
 }
 

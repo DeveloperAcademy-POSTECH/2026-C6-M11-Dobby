@@ -2,7 +2,6 @@ import SwiftUI
 
 struct FruitsExportContent: View {
     let product: ExportProduct
-    let copiedField: ProductCopyField?
     let onCopy: (ProductCopyField) -> Void
 
     var body: some View {
@@ -15,7 +14,7 @@ struct FruitsExportContent: View {
                     .padding(.top, 40)
                     .padding(.bottom, 14)
 
-                FruitsCopyCard(product: product, copiedField: copiedField, onCopy: onCopy)
+                FruitsCopyCard(product: product, onCopy: onCopy)
 
                 Text("판매 페이지를 열고 제품명, 설명, 브랜드를 붙여 넣어주세요")
                     .padding(.top, 14)
@@ -35,7 +34,6 @@ struct FruitsExportContent: View {
 
 private struct FruitsCopyCard: View {
     let product: ExportProduct
-    let copiedField: ProductCopyField?
     let onCopy: (ProductCopyField) -> Void
 
     var body: some View {
@@ -43,14 +41,12 @@ private struct FruitsCopyCard: View {
             FruitsCopyFieldView(
                 field: .productName,
                 value: product.marketplacePayload.productName,
-                isCopied: copiedField == .productName,
                 onCopy: onCopy
             )
             Divider().overlay(Color("BrandNeutral200"))
             FruitsCopyFieldView(
                 field: .description,
                 value: product.marketplacePayload.description,
-                isCopied: copiedField == .description,
                 valueHeight: 100,
                 onCopy: onCopy
             )
@@ -58,7 +54,6 @@ private struct FruitsCopyCard: View {
             FruitsCopyFieldView(
                 field: .brand,
                 value: product.marketplacePayload.brand,
-                isCopied: copiedField == .brand,
                 onCopy: onCopy
             )
         }
@@ -71,7 +66,6 @@ private struct FruitsCopyCard: View {
 private struct FruitsCopyFieldView: View {
     let field: ProductCopyField
     let value: String
-    let isCopied: Bool
     var valueHeight: CGFloat? = nil
     let onCopy: (ProductCopyField) -> Void
 
@@ -83,7 +77,7 @@ private struct FruitsCopyFieldView: View {
                 HStack(spacing: 6) {
                     Text(title)
                         .font(.system(size: 17, weight: .semibold))
-                    Image(systemName: isCopied ? "checkmark" : "document.on.document")
+                    Image(systemName: "document.on.document")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color("BrandPrimary100"))
                 }
@@ -100,7 +94,7 @@ private struct FruitsCopyFieldView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title) 복사")
-        .accessibilityValue(isCopied ? "복사됨" : value)
+        .accessibilityValue(value)
     }
 
     private var title: String {
