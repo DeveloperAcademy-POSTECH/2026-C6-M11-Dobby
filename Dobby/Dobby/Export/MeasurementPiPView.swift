@@ -10,28 +10,51 @@ struct MeasurementPiPView: View {
             Image("MeasurementPiPBackground")
                 .resizable()
                 .frame(width: Self.size.width, height: Self.size.height)
-            Text("실측 사이즈를 보고 바로 입력해요")
-                .font(.custom("Pretendard-Bold", fixedSize: 24))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .padding(.leading, 27)
-                .padding(.top, 40)
-            VStack(spacing: 0) {
-                Color.clear.frame(height: 106)
-                MeasurementPiPRow(measurements: measurements, content: { measurement in
-                    Text(measurement.title)
-                        .font(.custom("Pretendard-Regular", fixedSize: 17))
-                        .foregroundStyle(.white)
-                })
-                MeasurementPiPRow(measurements: measurements, content: { measurement in
-                    Text("\(measurement.displayValue)cm")
-                        .font(.custom("Pretendard-SemiBold", fixedSize: 17))
-                        .foregroundStyle(.black)
-                })
-            }
+            MeasurementPiPContent(measurements: measurements)
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .environment(\.colorScheme, .light)
+    }
+}
+
+private struct MeasurementPiPContent: View {
+    let measurements: [ExportMeasurement]
+
+    var body: some View {
+        VStack(alignment: .center) {
+            Text("실측 사이즈를 보고 바로 입력해요")
+                .font(.custom("Pretendard-Bold", fixedSize: 24))
+                .foregroundStyle(.white)
+                .padding(
+                    EdgeInsets(
+                        top: 41,
+                        leading: 37,
+                        bottom: 27,
+                        trailing: 27
+                    )
+                )
+            MeasurementPiPTable(measurements: measurements)
+        }
+    }
+}
+
+private struct MeasurementPiPTable: View {
+    let measurements: [ExportMeasurement]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            MeasurementPiPRow(measurements: measurements) { measurement in
+                Text(measurement.title)
+                    .font(.custom("Pretendard-Regular", fixedSize: 17))
+                    .foregroundStyle(.white)
+            }
+            MeasurementPiPRow(measurements: measurements) { measurement in
+                Text("\(measurement.displayValue)cm")
+                    .font(.custom("Pretendard-SemiBold", fixedSize: 17))
+                    .foregroundStyle(.black)
+            }
+        }
+        .frame(height: 106)
     }
 }
 
