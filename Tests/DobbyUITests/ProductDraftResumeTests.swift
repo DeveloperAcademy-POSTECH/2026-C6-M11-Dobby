@@ -193,7 +193,7 @@ final class ProductDraftResumeTests: XCTestCase {
         assertOtherProductsSurviveDiscard(retainedID: retainedID, discardedID: discardedID, app: app)
     }
 
-    func testHomeCardResumesSavedDetailDraftAfterRelaunch() {
+    func testHomeCardResumesMeasurementResultWithDetailPhotosAfterRelaunch() {
         continueAfterFailure = false
         let app = fixtureApp()
         app.launch()
@@ -209,11 +209,11 @@ final class ProductDraftResumeTests: XCTestCase {
         waitEnabled(app.buttons["confirmGarmentMeasurement"])
         app.buttons["confirmGarmentMeasurement"].tap()
         captureTwoDetails(in: app)
-        let productID = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
+        let productID = saveDraftViaHome(stage: "실측 결과 단계", app: app)
         app.tabBars.buttons["홈"].tap()
         let resume = app.buttons["home.resume"]
         XCTAssertTrue(resume.waitForExistence(timeout: 10))
-        XCTAssertTrue(resume.label.contains("상세 촬영 단계"))
+        XCTAssertTrue(resume.label.contains("실측 결과 단계"))
         XCTAssertTrue(resume.isHittable)
         XCTAssertEqual(start.frame.width, initialShutterSize.width, accuracy: 1)
         XCTAssertEqual(start.frame.height, initialShutterSize.height, accuracy: 1)
@@ -226,11 +226,36 @@ final class ProductDraftResumeTests: XCTestCase {
         app.launch()
         XCTAssertTrue(resume.waitForExistence(timeout: 10))
         resume.tap()
+        continueFromResultToDetails(in: app)
         assertResumedStage("제품 상세 촬영", app: app)
         XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists)
         XCTAssertTrue(app.buttons["camera.captureDetail"].isHittable)
         XCTAssertEqual(detailPhotoCaptureIndices(in: app).count, 3)
-        XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
+        XCTAssertEqual(saveDraftViaHome(stage: "실측 결과 단계", app: app), productID)
+    }
+
+    func testRestoredDetailStageReturnsToMeasurementResult() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openMeasurementResult(in: app)
+        let confirm = app.buttons["confirmGarmentMeasurement"]
+        waitEnabled(confirm)
+        confirm.tap()
+        assertResumedStage("제품 상세 촬영", app: app)
+        // Confirmation already persists a detail-stage draft, without using the Back action.
+        app.terminate()
+        app.launch()
+        expectHomeResume(stage: "상세 촬영 단계", app: app)
+        app.buttons["home.resume"].tap()
+        assertResumedStage("제품 상세 촬영", app: app)
+        let guide = app.buttons["camera.startDetailCapture"]
+        if guide.waitForExistence(timeout: 5) { guide.tap() }
+        waitEnabled(app.buttons["camera.captureDetail"])
+        returnFromDetailsToResult(in: app)
+        continueFromResultToDetails(in: app)
+        XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists)
     }
 
     func testHomeUpdatesToOlderDraftAfterDeletionAndHidesWhenEmpty() {
@@ -252,7 +277,7 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertTrue(guide.waitForExistence(timeout: 10))
         guide.tap()
         saveAndReturnHome(app: app)
-        expectHomeResume(stage: "상세 촬영 단계", app: app)
+        expectHomeResume(stage: "실측 결과 단계", app: app)
         app.tabBars.buttons["보관함"].tap()
         let drafts = draftButtons(in: app)
         XCTAssertEqual(drafts.count, 2)
@@ -331,13 +356,16 @@ final class ProductDraftResumeTests: XCTestCase {
         waitEnabled(confirm)
         confirm.tap()
         captureTwoDetails(in: app)
-        cancelExitAndStay(title: "제품 상세 촬영", app: app)
+        returnFromDetailsToResult(in: app)
+        cancelExitAndStay(title: "실측 결과", app: app)
+        continueFromResultToDetails(in: app)
         let originalPhotoIndices = detailPhotoCaptureIndices(in: app)
         XCTAssertEqual(originalPhotoIndices.count, 3, "The measurement and both captured originals must be present")
-        XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
+        XCTAssertEqual(saveDraftViaHome(stage: "실측 결과 단계", app: app), productID)
         attachScreenshot(app, name: "draft-library-details")
 
-        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app, viaHome: false)
+        relaunchAndResume(productID: productID, stage: "실측 결과 단계", app: app, viaHome: false)
+        continueFromResultToDetails(in: app)
         assertResumedStage("제품 상세 촬영", app: app)
         XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists,
                        "A saved photo draft must retain the acknowledged capture guide")
@@ -361,8 +389,9 @@ final class ProductDraftResumeTests: XCTestCase {
         for index in [0, 3, 0, 2] { selectionControl(index, in: app).tap() }
         assertSelectionOrder(in: app)
         returnFromSelectionToDetails(in: app)
-        let productID = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
-        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
+        let productID = saveDraftViaHome(stage: "실측 결과 단계", app: app)
+        relaunchAndResume(productID: productID, stage: "실측 결과 단계", app: app)
+        continueFromResultToDetails(in: app)
         XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists)
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
@@ -409,10 +438,11 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
         XCTAssertFalse(completePhotos.isEnabled)
         returnFromSelectionToDetails(in: app)
-        let productID = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
+        let productID = saveDraftViaHome(stage: "실측 결과 단계", app: app)
         attachScreenshot(app, name: "draft-library-photo-selection")
 
-        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
+        relaunchAndResume(productID: productID, stage: "실측 결과 단계", app: app)
+        continueFromResultToDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         assertResumedStage("제품 사진 선택", app: app)
         XCTAssertEqual(completePhotos.value as? String, "0장 선택 · 최소 1장 · 최대 10장")
@@ -429,8 +459,9 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
         assertSelectionOrder(in: app)
         returnFromSelectionToDetails(in: app)
-        XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
-        relaunchAndResume(productID: productID, stage: "상세 촬영 단계", app: app)
+        XCTAssertEqual(saveDraftViaHome(stage: "실측 결과 단계", app: app), productID)
+        relaunchAndResume(productID: productID, stage: "실측 결과 단계", app: app)
+        continueFromResultToDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         assertResumedStage("제품 사진 선택", app: app)
         assertSelectionOrder(in: app)
@@ -512,6 +543,25 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists)
     }
 
+    private func returnFromDetailsToResult(in app: XCUIApplication) {
+        let back = app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)
+        XCTAssertNotNil(back)
+        back?.tap()
+        assertResumedStage("실측 결과", app: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        XCTAssertFalse(exitConfirmation(in: app).exists)
+    }
+
+    private func continueFromResultToDetails(in app: XCUIApplication) {
+        assertResumedStage("실측 결과", app: app)
+        let confirm = app.buttons["confirmGarmentMeasurement"]
+        waitEnabled(confirm)
+        confirm.tap()
+        assertResumedStage("제품 상세 촬영", app: app)
+        waitEnabled(app.buttons["camera.captureDetail"])
+    }
+
     private func fixtureApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString, "--garment-preview-top"]
@@ -590,6 +640,8 @@ final class ProductDraftResumeTests: XCTestCase {
     }
 
     private func saveAndReturnHome(app: XCUIApplication) {
+        // Detail Back now returns to the result; saving is offered from that result.
+        if app.buttons["camera.captureDetail"].isHittable { returnFromDetailsToResult(in: app) }
         presentExitConfirmation(in: app)
         app.buttons["product-flow.exit-save"].tap()
         let start = app.buttons["product-flow.start"]

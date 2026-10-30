@@ -264,6 +264,12 @@ final class AppRoutingTests: XCTestCase {
         assertGalleryPage(pager, in: app, page: 2, total: originalCount)
         let galleryDelete = app.buttons["product-gallery.delete"]
         XCTAssertTrue(galleryDelete.isHittable)
+        XCTAssertEqual(galleryDelete.label, "제품 사진 삭제")
+        XCTAssertEqual(galleryDelete.frame.width, 48, accuracy: 1)
+        XCTAssertEqual(galleryDelete.frame.height, 48, accuracy: 1)
+        XCTAssertFalse(galleryDelete.staticTexts["삭제"].exists)
+        XCTAssertEqual(pager.frame.maxX - galleryDelete.frame.maxX, 10, accuracy: 1)
+        XCTAssertEqual(galleryDelete.frame.minY - pager.frame.minY, 10, accuracy: 1)
         pager.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)))
         assertGalleryPage(pager, in: app, page: 3, total: originalCount)

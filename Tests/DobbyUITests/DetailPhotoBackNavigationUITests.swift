@@ -4,7 +4,7 @@ import XCTest
 /// Isolated synthetic fixtures verify navigation and draft retention, not camera accuracy.
 final class DetailPhotoBackNavigationUITests: XCTestCase {
     @MainActor
-    func testExitConfirmationRestoresTopAndBottomResultsAndOriginalEvidence() {
+    func testDetailBackReturnsToTopAndBottomResultsWithoutExitConfirmation() {
         for isTop in [true, false] {
             let app = launchResult(isTop: isTop)
             defer { app.terminate() }
@@ -36,8 +36,12 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             waitForDetails(in: app)
 
             let evidence = galleryEvidence(in: app, expectedPhotoCount: 2)
-            cancelExitAndStay(title: "제품 상세 촬영", app: app)
-            XCTAssertEqual(saveAndResumeDraft(stage: "상세 촬영 단계", title: "제품 상세 촬영", app: app), productID)
+            returnToMeasurementResult(in: app)
+            XCTAssertEqual(measurementLabels(in: app), labels)
+            XCTAssertEqual(measurementPoints(in: app), points)
+            XCTAssertEqual(saveAndResumeDraft(stage: "실측 결과 단계", title: "실측 결과", app: app), productID)
+            waitEnabled(confirm)
+            confirm.tap()
             waitForDetails(in: app, expectsGuide: false)
             XCTAssertEqual(galleryEvidence(in: app, expectedPhotoCount: 2), evidence)
             screenshot(app, name: isTop ? "top-result-and-evidence-after-resume" : "bottom-result-and-evidence-after-resume")
@@ -74,7 +78,11 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
         var productID: String?
         for _ in 0..<2 {
             returnToDetails(in: app)
-            let restoredID = saveAndResumeDraft(stage: "상세 촬영 단계", title: "제품 상세 촬영", app: app)
+            returnToMeasurementResult(in: app)
+            let restoredID = saveAndResumeDraft(stage: "실측 결과 단계", title: "실측 결과", app: app)
+            let confirm = app.buttons["confirmGarmentMeasurement"]
+            waitEnabled(confirm)
+            confirm.tap()
             waitForDetails(in: app, expectsGuide: false)
             openSelection(in: app)
             if let productID { XCTAssertEqual(restoredID, productID) }
@@ -170,6 +178,18 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
         back?.tap()
         waitForDetails(in: app, expectsGuide: false)
         XCTAssertFalse(exitConfirmation(in: app).exists)
+    }
+
+    @MainActor
+    private func returnToMeasurementResult(in app: XCUIApplication) {
+        let back = app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)
+        XCTAssertNotNil(back)
+        back?.tap()
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        XCTAssertTrue(app.navigationBars["실측 결과"].isHittable)
+        XCTAssertFalse(exitConfirmation(in: app).exists)
+        XCTAssertFalse(app.buttons["product-flow.start"].isHittable)
     }
 
     @MainActor
