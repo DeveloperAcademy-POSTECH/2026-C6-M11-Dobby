@@ -63,6 +63,7 @@ final class ProductDraftResumeTests: XCTestCase {
         selectionControl(1, in: app).tap()
         selectionControl(2, in: app).tap()
         waitEnabled(app.buttons["camera.completePhotos"])
+        disableProductAutofillIfPresent(in: app)
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         let draftName = "Discard this unfinished product"
@@ -310,6 +311,7 @@ final class ProductDraftResumeTests: XCTestCase {
         assertSelectionOrder(in: app)
         XCTAssertFalse(app.staticTexts["사진을 불러올 수 없어요"].exists)
         attachScreenshot(app, name: "draft-restored-photo-selection-order")
+        disableProductAutofillIfPresent(in: app)
         completePhotos.tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
 

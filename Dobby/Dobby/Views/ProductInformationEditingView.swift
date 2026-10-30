@@ -24,7 +24,8 @@ struct ProductInformationEditingView: View {
 
     var body: some View {
         InfoInputView(garment: garment, measurementInput: $measurementInput,
-                      allowsPhotoEditing: true, onExit: requestExit, onComplete: onComplete)
+                      allowsPhotoEditing: true,
+                      onExit: requestExit, onComplete: onComplete)
             .fullScreenCover(isPresented: $showsDiscardConfirmation) {
                 ProductInformationDiscardConfirmation(
                     onCancel: { showsDiscardConfirmation = false },
