@@ -34,29 +34,77 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         }
     }
 
-    func testRatioChangesKeepOneFullscreenPreview() async throws {
+    func testRatioChangesKeepOnePhotoSizedPreview() async throws {
         let fixture = try host()
         defer { fixture.close() }
         for ratio in DetailPhotoAspectRatio.allCases {
             fixture.options.photoAspectRatio = ratio
-            try await waitForSize(fixture, height: 800)
+            let expected = DetailAspectRatioPreviewLayout(containerSize: CGSize(width: 400, height: 800),
+                aspectRatio: ratio).frame.size
+            try await waitForSize(fixture, size: expected)
             try await Task.sleep(for: .milliseconds(400))
         }
         XCTAssertEqual(fixture.samples.creations, 1)
-        XCTAssertTrue(fixture.samples.sizes.filter { $0 != .zero }
-            .allSatisfy { $0 == CGSize(width: 400, height: 800) })
+        XCTAssertFalse(fixture.samples.sizes.contains(CGSize(width: 400, height: 800)))
     }
 
     func testResizeChangesSinglePreviewBounds() async throws {
         let fixture = try host(ratio: .square)
         defer { fixture.close() }
-        try await waitForSize(fixture, height: 800)
+        try await waitForSize(fixture, size: CGSize(width: 400, height: 400))
         let host = try XCTUnwrap(fixture.window.rootViewController as? UIHostingController<PreviewHarness>)
         host.rootView = PreviewHarness(options: fixture.options, samples: fixture.samples,
                                       size: CGSize(width: 800, height: 400))
-        try await eventually("회전 후에도 단일 프리뷰가 화면을 채워야 합니다.") {
-            fixture.samples.sizes.last == CGSize(width: 800, height: 400)
+        try await eventually("회전 후에도 프리뷰가 정사각형 사진 영역에 맞아야 합니다.") {
+            fixture.samples.sizes.last == CGSize(width: 400, height: 400)
         }
+        XCTAssertEqual(fixture.samples.creations, 1)
+    }
+
+    func testTransitionUpdatesActualLayerBoundsWithTheMaskViewport() async throws {
+        let fixture = try host()
+        defer { fixture.close() }
+        let initial = DetailAspectRatioPreviewLayout(containerSize: CGSize(width: 400, height: 800),
+            aspectRatio: .fourThree).frame.size
+        try await waitForSize(fixture, size: initial)
+        fixture.samples.sizes.removeAll()
+        fixture.samples.framings.removeAll()
+        fixture.options.photoAspectRatio = .square
+        try await waitForSize(fixture, size: CGSize(width: 400, height: 400))
+        XCTAssertTrue(fixture.samples.sizes.contains { $0.height > 401 && $0.height < initial.height - 1 },
+                      "실제 레이어가 중간 크기를 거쳐야 하며 최종 크기로 바로 점프하면 안 됩니다.")
+        for (bounds, viewport) in fixture.samples.framings where !bounds.isEmpty {
+            XCTAssertEqual(bounds.width, viewport.width, accuracy: 1)
+            XCTAssertEqual(bounds.height, viewport.height, accuracy: 1)
+        }
+        XCTAssertEqual(fixture.samples.creations, 1)
+    }
+
+    func testRapidChangesSettleOnLatestRatioWithoutReplacingPreview() async throws {
+        let fixture = try host(ratio: .square)
+        defer { fixture.close() }
+        try await waitForSize(fixture, size: CGSize(width: 400, height: 400))
+        fixture.options.photoAspectRatio = .sixteenNine
+        try await Task.sleep(for: .milliseconds(60))
+        fixture.options.photoAspectRatio = .fourThree
+        let expected = DetailAspectRatioPreviewLayout(containerSize: CGSize(width: 400, height: 800),
+            aspectRatio: .fourThree).frame.size
+        try await waitForSize(fixture, size: expected)
+        try await Task.sleep(for: .milliseconds(400))
+        try await waitForSize(fixture, size: expected)
+        XCTAssertEqual(fixture.samples.creations, 1)
+    }
+
+    func testDisabledAnimationsChangePhotoBoundsWithoutIntermediateSizes() async throws {
+        let fixture = try host(disablesAnimations: true)
+        defer { fixture.close() }
+        let initial = DetailAspectRatioPreviewLayout(containerSize: CGSize(width: 400, height: 800),
+            aspectRatio: .fourThree).frame.size
+        try await waitForSize(fixture, size: initial)
+        fixture.samples.sizes.removeAll()
+        fixture.options.photoAspectRatio = .square
+        try await waitForSize(fixture, size: CGSize(width: 400, height: 400))
+        XCTAssertFalse(fixture.samples.sizes.contains { $0.height > 401 && $0.height < initial.height - 1 })
         XCTAssertEqual(fixture.samples.creations, 1)
     }
 
@@ -95,7 +143,7 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         }
     }
 
-    private func host(ratio: DetailPhotoAspectRatio = .fourThree) throws -> Fixture {
+    private func host(ratio: DetailPhotoAspectRatio = .fourThree, disablesAnimations: Bool = false) throws -> Fixture {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previousKeyWindow = scene.windows.first { $0.isKeyWindow }
         let window = UIWindow(windowScene: scene)
@@ -103,16 +151,16 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         options.photoAspectRatio = ratio
         let samples = PreviewSamples()
         window.rootViewController = UIHostingController(rootView:
-            PreviewHarness(options: options, samples: samples))
+            PreviewHarness(options: options, samples: samples, disablesAnimations: disablesAnimations))
         window.makeKeyAndVisible()
         return Fixture(window: window, previousKeyWindow: previousKeyWindow, options: options,
                        samples: samples)
     }
 
-    private func waitForSize(_ fixture: Fixture, height: CGFloat,
+    private func waitForSize(_ fixture: Fixture, size: CGSize,
                              file: StaticString = #filePath, line: UInt = #line) async throws {
-        try await eventually("프리뷰가 400×\(height)에 도착해야 합니다.", file: file, line: line) {
-            fixture.samples.sizes.last.map { abs($0.width - 400) < 0.5 && abs($0.height - height) < 0.5 } ?? false
+        try await eventually("프리뷰가 \(size)에 도착해야 합니다.", file: file, line: line) {
+            fixture.samples.sizes.last.map { abs($0.width - size.width) < 0.5 && abs($0.height - size.height) < 0.5 } ?? false
         }
     }
 
@@ -131,6 +179,7 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
 
 @MainActor private final class PreviewSamples {
     var sizes: [CGSize] = []
+    var framings: [(CGRect, CGRect)] = []
     var creations = 0
 }
 
@@ -138,31 +187,37 @@ private struct PreviewHarness: View {
     let options: DetailCameraOptions
     let samples: PreviewSamples
     var size = CGSize(width: 400, height: 800)
+    var disablesAnimations = false
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio) { _ in
-            PreviewProbe(samples: samples)
+        DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio) { viewport in
+            PreviewProbe(samples: samples, viewport: viewport)
         }
         .frame(width: size.width, height: size.height)
+        .transaction { if disablesAnimations { $0.disablesAnimations = true } }
     }
 }
 
 private struct PreviewProbe: UIViewRepresentable {
     let samples: PreviewSamples
+    let viewport: CGRect
     func makeUIView(context: Context) -> RecordingPreviewView {
         samples.creations += 1
         let view = RecordingPreviewView()
         view.samples = samples
+        view.viewport = viewport
         (view.layer as? AVCaptureVideoPreviewLayer)?.videoGravity = .resizeAspectFill
         return view
     }
-    func updateUIView(_ uiView: RecordingPreviewView, context: Context) {}
+    func updateUIView(_ uiView: RecordingPreviewView, context: Context) { uiView.viewport = viewport }
 }
 
 private final class RecordingPreviewView: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var samples: PreviewSamples?
+    var viewport: CGRect = .zero
     override func layoutSubviews() {
         super.layoutSubviews()
         samples?.sizes.append(bounds.size)
+        samples?.framings.append((bounds, viewport))
     }
 }
