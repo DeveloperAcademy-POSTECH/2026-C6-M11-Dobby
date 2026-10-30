@@ -64,7 +64,7 @@ struct ProductFieldTitle: View {
         HStack(spacing: 2) {
             Text(title)
             if isRequired {
-                Text("*").foregroundStyle(ProductInformationStyle.accent).accessibilityHidden(true)
+                Text("*").foregroundStyle(Color(uiColor: .systemRed)).accessibilityHidden(true)
             }
         }
         .font(.headline)

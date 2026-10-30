@@ -12,28 +12,27 @@ nonisolated struct MultiCameraRenderInputs: @unchecked Sendable {
     let sessionID: UUID
     let timestamp: TimeInterval
     let wideImage: CVPixelBuffer
-    let ultraWideImage: CVPixelBuffer
-    let depth: CVPixelBuffer
-    let wideIntrinsics: simd_float3x3
-    let ultraWideIntrinsics: simd_float3x3
-    let wideToUltra: simd_float4x3
     let wideCalibration: MultiCameraLensCalibration
+    let revision: UInt64
 
-    init(sessionID: UUID, timestamp: TimeInterval, wideImage: CVPixelBuffer, ultraWideImage: CVPixelBuffer,
-         depth: CVPixelBuffer, wideIntrinsics: simd_float3x3, ultraWideIntrinsics: simd_float3x3,
-         wideToUltra: simd_float4x3, wideCalibration: MultiCameraLensCalibration) {
+    init(sessionID: UUID, timestamp: TimeInterval, wideImage: CVPixelBuffer,
+         wideCalibration: MultiCameraLensCalibration, revision: UInt64 = 0) {
         self.sessionID = sessionID; self.timestamp = timestamp
-        self.wideImage = wideImage; self.ultraWideImage = ultraWideImage; self.depth = depth
-        self.wideIntrinsics = wideIntrinsics; self.ultraWideIntrinsics = ultraWideIntrinsics
-        self.wideToUltra = wideToUltra; self.wideCalibration = wideCalibration
+        self.wideImage = wideImage; self.wideCalibration = wideCalibration; self.revision = revision
     }
 
     init(_ frame: MultiCameraFrame) {
         self.init(sessionID: frame.sessionID, timestamp: frame.timestamp,
-            wideImage: frame.wideImage, ultraWideImage: frame.ultraWideImage, depth: frame.depthData.depthDataMap,
-            wideIntrinsics: frame.wideIntrinsics, ultraWideIntrinsics: frame.ultraWideIntrinsics,
-            wideToUltra: frame.wideToUltra, wideCalibration: frame.wideCalibration)
+            wideImage: frame.wideImage, wideCalibration: frame.wideCalibration)
     }
+
+    init(_ preview: MultiCameraPreviewFrame) {
+        // Rendering keeps only wide RGB + lens calibration. No depth camera
+        // pool buffer is retained or uploaded by the display path.
+        self.init(sessionID: preview.sessionID, timestamp: preview.timestamp,
+            wideImage: preview.wideImage, wideCalibration: preview.wideCalibration, revision: preview.revision)
+    }
+
 }
 
 /// A latest-frame, one-command GPU compositor. It never copies a camera raster
@@ -42,6 +41,7 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
     private struct Key: Equatable {
         let sessionID: UUID
         let timestamp: TimeInterval
+        let revision: UInt64
         let width: CGFloat
         let height: CGFloat
         let generation: UInt64
@@ -52,6 +52,8 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
         var ready = false
         var busy = false
         var lastKey: Key?
+        var lastRejectedKey: Key?
+        var presentedSessionID: UUID?
     }
     private let state = Mutex(State())
     private let device: any MTLDevice
@@ -60,8 +62,7 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
     private var pipeline: (any MTLRenderPipelineState)?
     private var textureCache: CVMetalTextureCache?
     private var neutralChroma: (any MTLTexture)?
-    private var colorGain = SIMD3<Float>(repeating: 1)
-    private var colorSessionID: UUID?
+    private var cachedLookup: (table: [Float], buffer: any MTLBuffer)?
     private static let logger = Logger(subsystem: "com.dobby.lidar", category: "multicam-preview")
 
     init(device: any MTLDevice) {
@@ -69,30 +70,52 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
         queue.async { [self] in prepare() }
     }
 
+    /// Prepares immutable graphics resources only. It never opens a camera or
+    /// changes capture ownership, and concurrent callers share one compilation.
+    static func prewarm() {
+        PipelineCache.shared.prewarm()
+    }
+
     func invalidate() {
         state.withLock { value in
             value.generation &+= 1
             value.lastKey = nil
+            value.presentedSessionID = nil
         }
     }
 
-    func needsFrame(sessionID: UUID, timestamp: TimeInterval, canvasSize: CGSize) -> Bool {
-        state.withLock { value in
+    func needsFrame(sessionID: UUID, timestamp: TimeInterval, revision: UInt64 = 0, canvasSize: CGSize) -> Bool {
+        let decision = state.withLock { value -> (Bool, CameraFramePerformanceMetrics.DropReason?) in
             if value.sessionID != sessionID {
-                value.sessionID = sessionID
-                value.generation &+= 1
-                value.lastKey = nil
+                value.sessionID = sessionID; value.generation &+= 1
+                value.lastKey = nil; value.lastRejectedKey = nil
+                value.presentedSessionID = nil
             }
-            return value.ready && !value.busy && value.lastKey != Key(sessionID: sessionID,
-                timestamp: timestamp, width: canvasSize.width, height: canvasSize.height,
-                generation: value.generation)
+            let key = Key(sessionID: sessionID, timestamp: timestamp, revision: revision,
+                width: canvasSize.width, height: canvasSize.height, generation: value.generation)
+            guard value.ready, !value.busy else {
+                // Count each affected source/revision once, not every 60Hz poll.
+                guard value.lastRejectedKey != key else { return (false, nil) }
+                value.lastRejectedKey = key
+                return (false, value.busy ? .rendererBusy : .rendererUnavailable)
+            }
+            return (value.lastKey != key, nil)
         }
+        if let reason = decision.1 { CameraFramePerformanceMetrics.shared.drop(reason, sessionID: sessionID) }
+        return decision.0
     }
 
     func render(frame: MultiCameraFrame, geometry: MultiCameraPreviewGeometry.Mapping,
                 canvasSize: CGSize, drawable: any CAMetalDrawable) {
         submit(inputs: MultiCameraRenderInputs(frame), geometry: geometry, canvasSize: canvasSize,
                target: RenderTarget(drawable))
+    }
+
+    func render(preview: MultiCameraPreviewFrame, geometry: MultiCameraPreviewGeometry.Mapping,
+                canvasSize: CGSize, drawable: any CAMetalDrawable,
+                onPresented: (@Sendable (UUID) -> Void)? = nil) {
+        submit(inputs: MultiCameraRenderInputs(preview), geometry: geometry, canvasSize: canvasSize,
+               target: RenderTarget(drawable, onPresented: onPresented))
     }
 
     /// GPU fixture entry: identical textures, uniforms, shaders and completion
@@ -111,15 +134,27 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
     private func submit(inputs: MultiCameraRenderInputs, geometry: MultiCameraPreviewGeometry.Mapping,
                         canvasSize: CGSize, target: RenderTarget) {
         let key: Key? = state.withLock { value in
+            if value.sessionID != inputs.sessionID {
+                value.sessionID = inputs.sessionID; value.generation &+= 1
+                value.lastKey = nil; value.lastRejectedKey = nil
+                value.presentedSessionID = nil
+            }
             guard value.ready, !value.busy else { return nil }
-            let key = Key(sessionID: inputs.sessionID, timestamp: inputs.timestamp,
+            let key = Key(sessionID: inputs.sessionID, timestamp: inputs.timestamp, revision: inputs.revision,
                 width: canvasSize.width, height: canvasSize.height, generation: value.generation)
             guard key != value.lastKey else { return nil }
             value.busy = true
             return key
         }
         guard let key else { target.complete(false); return }
+        let metrics = CameraFramePerformanceMetrics.shared
+        let enqueuedAt = metrics.isEnabled ? ProcessInfo.processInfo.systemUptime : nil
+        if let enqueuedAt { metrics.queued(sourceTimestamp: inputs.timestamp, hostTimestamp: enqueuedAt, sessionID: inputs.sessionID) }
         queue.async { [self, inputs, target] in
+            if let enqueuedAt {
+                metrics.latency(.previewQueueWait, seconds: ProcessInfo.processInfo.systemUptime - enqueuedAt,
+                                sessionID: inputs.sessionID)
+            }
             autoreleasepool { encode(frame: inputs, geometry: geometry, canvasSize: canvasSize,
                                       target: target, key: key) }
         }
@@ -130,27 +165,7 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
             Self.logger.error("Multi-camera preview could not create its Metal command queue")
             return
         }
-        let library: any MTLLibrary
-        do { library = try device.makeLibrary(source: Self.shaderSource, options: nil) }
-        catch {
-            Self.logger.error("Multi-camera preview Metal source failed: \(error.localizedDescription, privacy: .public)")
-            return
-        }
-        guard let vertex = library.makeFunction(name: "cameraPreviewVertex"),
-              let fragment = library.makeFunction(name: "cameraPreviewFragment") else {
-            Self.logger.error("Multi-camera preview Metal entry functions are missing")
-            return
-        }
-        let descriptor = MTLRenderPipelineDescriptor()
-        descriptor.vertexFunction = vertex
-        descriptor.fragmentFunction = fragment
-        descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
-        let pipeline: any MTLRenderPipelineState
-        do { pipeline = try device.makeRenderPipelineState(descriptor: descriptor) }
-        catch {
-            Self.logger.error("Multi-camera preview pipeline failed: \(error.localizedDescription, privacy: .public)")
-            return
-        }
+        guard let resources = PipelineCache.shared.resources(device: device, pixelFormat: .bgra8Unorm) else { return }
         var cache: CVMetalTextureCache?
         guard CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache) == kCVReturnSuccess,
               let cache else { return }
@@ -162,7 +177,7 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
         neutralChroma.replace(region: .init(origin: .init(x: 0, y: 0, z: 0), size: .init(width: 1, height: 1, depth: 1)),
                               mipmapLevel: 0, withBytes: &neutral, bytesPerRow: 2)
         self.commandQueue = commandQueue
-        self.pipeline = pipeline
+        self.pipeline = resources.pipeline
         self.textureCache = cache
         self.neutralChroma = neutralChroma
         state.withLock { $0.ready = true }
@@ -172,58 +187,112 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
                         canvasSize: CGSize, target: RenderTarget, key: Key) {
         guard isCurrent(key), let pipeline, let commandQueue, let textureCache, let neutralChroma,
               let wide = VideoTextures.make(frame.wideImage, cache: textureCache),
-              let ultra = VideoTextures.make(frame.ultraWideImage, cache: textureCache),
-              let depth = depthTexture(frame.depth, cache: textureCache),
               let command = commandQueue.makeCommandBuffer() else { finish(key, presented: false, target: target); return }
-
-        if colorSessionID != frame.sessionID { colorSessionID = frame.sessionID; colorGain = SIMD3(repeating: 1) }
-        if let measured = MultiCameraPreviewColorMatch.gain(frame: frame) {
-            // Only low-frequency exposure/white-balance compensation is smoothed;
-            // camera pixels and their timing are never interpolated or delayed.
-            colorGain += (measured - colorGain) * 0.18
-        }
-        var uniforms = Uniforms(frame: frame, geometry: geometry, canvasSize: canvasSize,
-            wideFormat: wide.format, ultraFormat: ultra.format, colorGain: colorGain)
+        var uniforms = Uniforms(frame: frame, geometry: geometry, canvasSize: canvasSize, wideFormat: wide.format)
         let table = frame.wideCalibration.distortionLookupTable
-        guard let lookup = table.withUnsafeBytes({ bytes -> (any MTLBuffer)? in
-            guard let base = bytes.baseAddress else { return nil }
-            return device.makeBuffer(bytes: base, length: bytes.count, options: .storageModeShared)
-        }) else { finish(key, presented: false, target: target); return }
+        let lookup: any MTLBuffer
+        if let cachedLookup, cachedLookup.table == table { lookup = cachedLookup.buffer }
+        else {
+            guard let created = table.withUnsafeBytes({ bytes -> (any MTLBuffer)? in
+                guard let base = bytes.baseAddress else { return nil }
+                return device.makeBuffer(bytes: base, length: bytes.count, options: .storageModeShared)
+            }) else { finish(key, presented: false, target: target); return }
+            cachedLookup = (table, created); lookup = created
+        }
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = target.texture
-        pass.colorAttachments[0].loadAction = .dontCare
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
         pass.colorAttachments[0].storeAction = .store
         guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else {
             finish(key, presented: false, target: target); return
         }
         encoder.setRenderPipelineState(pipeline)
+        guard canvasSize.width.isFinite, canvasSize.height.isFinite,
+              canvasSize.width > 0, canvasSize.height > 0 else {
+            encoder.endEncoding(); finish(key, presented: false, target: target); return
+        }
+        let sx = CGFloat(target.texture.width) / canvasSize.width
+        let sy = CGFloat(target.texture.height) / canvasSize.height
+        let rect = geometry.photoRect.intersection(CGRect(origin: .zero, size: canvasSize))
+        guard !rect.isNull, rect.width > 0, rect.height > 0 else {
+            encoder.endEncoding(); finish(key, presented: false, target: target); return
+        }
+        let x = max(0, Int(floor(rect.minX * sx))), y = max(0, Int(floor(rect.minY * sy)))
+        let right = min(target.texture.width, Int(ceil(rect.maxX * sx)))
+        let bottom = min(target.texture.height, Int(ceil(rect.maxY * sy)))
+        guard right > x, bottom > y else {
+            encoder.endEncoding(); finish(key, presented: false, target: target); return
+        }
+        encoder.setScissorRect(MTLScissorRect(x: x, y: y, width: right - x, height: bottom - y))
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
         encoder.setFragmentBuffer(lookup, offset: 0, index: 1)
         encoder.setFragmentTexture(wide.luma, index: 0)
         encoder.setFragmentTexture(wide.chroma ?? neutralChroma, index: 1)
-        encoder.setFragmentTexture(ultra.luma, index: 2)
-        encoder.setFragmentTexture(ultra.chroma ?? neutralChroma, index: 3)
-        encoder.setFragmentTexture(depth.texture, index: 4)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
         encoder.endEncoding()
         // Retain all CVMetalTexture wrappers and their pixel buffers through GPU
         // completion. A resize/session change cannot present an obsolete frame.
         let retainedLookup = RetainedMetalBuffer(lookup)
-        command.addCompletedHandler { [self, frame, wide, ultra, depth, retainedLookup, target] command in
-            _ = (frame, wide, ultra, depth, retainedLookup)
+        let metrics = CameraFramePerformanceMetrics.shared
+        let submittedAt = metrics.isEnabled ? ProcessInfo.processInfo.systemUptime : nil
+        command.addCompletedHandler { [self, frame, wide, retainedLookup, target] command in
+            _ = (frame, wide, retainedLookup)
             let present = command.status == .completed && isCurrent(key)
-            if present { target.present() }
+            if let submittedAt {
+                let now = ProcessInfo.processInfo.systemUptime
+                metrics.event(.previewCompleted, timestamp: now, sessionID: frame.sessionID)
+                metrics.latency(.previewGPUCompletion, seconds: now - submittedAt, sessionID: frame.sessionID)
+            }
+            if present {
+                if let onPresented = target.onPresented, needsPresentationReceipt(key) {
+                    target.present { [weak self] in
+                        self?.didPresent(key, callback: onPresented)
+                    }
+                } else {
+                    target.present()
+                }
+                if metrics.isEnabled {
+                    metrics.presented(sourceTimestamp: frame.timestamp,
+                        hostTimestamp: ProcessInfo.processInfo.systemUptime, sessionID: frame.sessionID)
+                }
+            }
             finish(key, presented: present, target: target)
         }
         guard isCurrent(key) else { finish(key, presented: false, target: target); return }
+        if let submittedAt { metrics.event(.previewSubmitted, timestamp: submittedAt, sessionID: frame.sessionID) }
         command.commit()
     }
 
     private func isCurrent(_ key: Key) -> Bool { state.withLock { $0.generation == key.generation } }
+
+    /// A GPU completion or a request to present is not evidence that the user
+    /// has seen the image. Only an actually displayed, still-current drawable
+    /// can retire an initial native preview. At most one callback per generation.
+    private func didPresent(_ key: Key, callback: @Sendable (UUID) -> Void) {
+        let notify = state.withLock { value in
+            guard value.generation == key.generation, value.sessionID == key.sessionID,
+                  value.presentedSessionID != key.sessionID else { return false }
+            value.presentedSessionID = key.sessionID
+            return true
+        }
+        if notify { callback(key.sessionID) }
+    }
+
+    private func needsPresentationReceipt(_ key: Key) -> Bool {
+        state.withLock { value in
+            value.generation == key.generation && value.sessionID == key.sessionID
+                && value.presentedSessionID != key.sessionID
+        }
+    }
     private func finish(_ key: Key, presented: Bool, target: RenderTarget) {
         state.withLock { value in
             value.busy = false
             if presented, value.generation == key.generation { value.lastKey = key }
+        }
+        if !presented {
+            CameraFramePerformanceMetrics.shared.drop(isCurrent(key) ? .rendererUnavailable : .staleFrame,
+                sessionID: key.sessionID)
         }
         target.complete(presented)
     }
@@ -244,34 +313,6 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
     private struct RetainedMetalBuffer: @unchecked Sendable {
         let buffer: any MTLBuffer
         init(_ buffer: any MTLBuffer) { self.buffer = buffer }
-    }
-
-    private struct DepthTexture: @unchecked Sendable {
-        let texture: any MTLTexture
-        let retained: CVMetalTexture?
-    }
-
-    private func depthTexture(_ buffer: CVPixelBuffer, cache: CVMetalTextureCache) -> DepthTexture? {
-        if let source = Self.texture(buffer, plane: 0, format: .r32Float, cache: cache),
-           let texture = CVMetalTextureGetTexture(source) {
-            return .init(texture: texture, retained: source)
-        }
-        // AVDepthData does not promise a Metal-compatible IOSurface. Copy only
-        // this small Float32 depth raster when direct texture wrapping fails.
-        guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_DepthFloat32,
-              CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return nil }
-        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-        let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float,
-            width: width, height: height, mipmapped: false)
-        descriptor.storageMode = .shared
-        descriptor.usage = .shaderRead
-        guard let texture = device.makeTexture(descriptor: descriptor),
-              let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }
-        texture.replace(region: .init(origin: .init(x: 0, y: 0, z: 0),
-            size: .init(width: width, height: height, depth: 1)), mipmapLevel: 0,
-            withBytes: base, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer))
-        return .init(texture: texture, retained: nil)
     }
 
     private struct VideoTextures: @unchecked Sendable {
@@ -302,55 +343,109 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
 
     private final class RenderTarget: @unchecked Sendable {
         let texture: any MTLTexture
+        let onPresented: (@Sendable (UUID) -> Void)?
         private let drawable: (any CAMetalDrawable)?
         private let completion: (@Sendable (Bool) -> Void)?
-        init(_ drawable: any CAMetalDrawable) {
+        init(_ drawable: any CAMetalDrawable, onPresented: (@Sendable (UUID) -> Void)? = nil) {
             self.drawable = drawable; texture = drawable.texture; completion = nil
+            self.onPresented = onPresented
         }
         init(texture: any MTLTexture, completion: @escaping @Sendable (Bool) -> Void) {
             self.texture = texture; drawable = nil; self.completion = completion
+            onPresented = nil
         }
-        func present() { drawable?.present() }
+        func present(afterDisplay: (@Sendable () -> Void)? = nil) {
+            #if !targetEnvironment(simulator)
+            // Simulator Metal has no presentation receipt API. Do not substitute
+            // GPU completion for proof that a drawable appeared on screen.
+            if let afterDisplay {
+                drawable?.addPresentedHandler { presented in
+                    guard presented.presentedTime.isFinite, presented.presentedTime > 0 else { return }
+                    afterDisplay()
+                }
+            }
+            #endif
+            drawable?.present()
+        }
         func complete(_ success: Bool) { completion?(success) }
+    }
+
+    /// Metal libraries and render pipeline states are immutable and shareable.
+    /// The cache owns a background serial worker: no caller compiles or waits
+    /// for compilation on the main actor. Mutable texture caches and command
+    /// queues deliberately remain specific to each compositor instance.
+    private final class PipelineCache: @unchecked Sendable {
+        private struct CacheKey: Hashable {
+            let deviceID: UInt64
+            let pixelFormat: UInt
+        }
+        struct Resources: @unchecked Sendable {
+            let library: any MTLLibrary
+            let pipeline: any MTLRenderPipelineState
+        }
+        static let shared = PipelineCache()
+        private let worker = DispatchQueue(label: "com.dobby.lidar.preview-pipeline", qos: .userInitiated)
+        // Accessed only on worker. Successful entries last for this process.
+        private var entries: [CacheKey: Resources] = [:]
+
+        func prewarm() {
+            worker.async { [self] in
+                guard let device = MTLCreateSystemDefaultDevice() else { return }
+                _ = load(device: device, pixelFormat: .bgra8Unorm)
+            }
+        }
+
+        func resources(device: any MTLDevice, pixelFormat: MTLPixelFormat) -> Resources? {
+            // Called from the compositor's private preparation queue, never UI.
+            worker.sync { load(device: device, pixelFormat: pixelFormat) }
+        }
+
+        private func load(device: any MTLDevice, pixelFormat: MTLPixelFormat) -> Resources? {
+            let key = CacheKey(deviceID: device.registryID, pixelFormat: pixelFormat.rawValue)
+            if let existing = entries[key] { return existing }
+            do {
+                let library = try device.makeLibrary(source: MultiCameraPreviewCompositor.shaderSource, options: nil)
+                guard let vertex = library.makeFunction(name: "cameraPreviewVertex"),
+                      let fragment = library.makeFunction(name: "cameraPreviewFragment") else {
+                    MultiCameraPreviewCompositor.logger.error("Camera preview Metal entry functions are missing")
+                    return nil
+                }
+                let descriptor = MTLRenderPipelineDescriptor()
+                descriptor.vertexFunction = vertex
+                descriptor.fragmentFunction = fragment
+                descriptor.colorAttachments[0].pixelFormat = pixelFormat
+                let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
+                let resources = Resources(library: library, pipeline: pipeline)
+                entries[key] = resources
+                return resources
+            } catch {
+                MultiCameraPreviewCompositor.logger.error("Camera preview graphics preparation failed: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
+        }
     }
 
     private struct Uniforms {
         var canvasToSensor: simd_float3x3
-        var inverseWideK: simd_float3x3
-        var ultraK: simd_float3x3
-        var rotation: simd_float3x3
-        var translation: SIMD4<Float>
         var canvasAndWide: SIMD4<Float>
-        var ultraAndDepth: SIMD4<Float>
         var photoRect: SIMD4<Float>
         var distortion: SIMD4<Float>
-        var colorGain: SIMD4<Float>
         var formats: SIMD4<UInt32>
 
         init(frame: MultiCameraRenderInputs, geometry: MultiCameraPreviewGeometry.Mapping,
-             canvasSize: CGSize, wideFormat: UInt32, ultraFormat: UInt32, colorGain: SIMD3<Float>) {
+             canvasSize: CGSize, wideFormat: UInt32) {
             let a = geometry.canvasToSensor
             canvasToSensor = .init(columns: (SIMD3(Float(a.a), Float(a.b), 0),
                 SIMD3(Float(a.c), Float(a.d), 0), SIMD3(Float(a.tx), Float(a.ty), 1)))
-            inverseWideK = frame.wideIntrinsics.inverse
-            ultraK = frame.ultraWideIntrinsics
-            rotation = .init(columns: (frame.wideToUltra.columns.0, frame.wideToUltra.columns.1,
-                                       frame.wideToUltra.columns.2))
-            translation = SIMD4(frame.wideToUltra.columns.3, 0)
             canvasAndWide = SIMD4(Float(canvasSize.width), Float(canvasSize.height),
                 Float(CVPixelBufferGetWidth(frame.wideImage)), Float(CVPixelBufferGetHeight(frame.wideImage)))
-            ultraAndDepth = SIMD4(Float(CVPixelBufferGetWidth(frame.ultraWideImage)),
-                Float(CVPixelBufferGetHeight(frame.ultraWideImage)),
-                Float(CVPixelBufferGetWidth(frame.depth)), Float(CVPixelBufferGetHeight(frame.depth)))
             let rect = geometry.photoRect
             photoRect = SIMD4(Float(rect.minX), Float(rect.minY), Float(rect.maxX), Float(rect.maxY))
             let center = frame.wideCalibration.distortionCenter
-            let extent = SIMD2(canvasAndWide.z, canvasAndWide.w)
-            let farCorner = max(center, extent - center)
+            let farCorner = max(center, SIMD2(canvasAndWide.z, canvasAndWide.w) - center)
             distortion = SIMD4(center.x, center.y, simd_length(farCorner),
                                Float(frame.wideCalibration.distortionLookupTable.count))
-            self.colorGain = SIMD4(colorGain, 0)
-            formats = SIMD4(wideFormat, ultraFormat, 0, 0)
+            formats = SIMD4(wideFormat, 0, 0, 0)
         }
     }
 
@@ -360,8 +455,8 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
     #include <metal_stdlib>
     using namespace metal;
     struct U {
-        float3x3 canvasToSensor, inverseWideK, ultraK, rotation;
-        float4 translation, canvasAndWide, ultraAndDepth, photoRect, distortion, colorGain;
+        float3x3 canvasToSensor;
+        float4 canvasAndWide, photoRect, distortion;
         uint4 formats;
     };
     struct V { float4 position [[position]]; float2 uv; };
@@ -392,171 +487,17 @@ nonisolated final class MultiCameraPreviewCompositor: @unchecked Sendable {
             luma - (bt709 ? 0.187324 : 0.344136) * chroma.x - (bt709 ? 0.468124 : 0.714136) * chroma.y,
             luma + (bt709 ? 1.8556 : 1.7720) * chroma.x), 0.0, 1.0);
     }
-    float depthAt(float2 p, constant U& u, const device float* table, texture2d<float> depth) {
-        constexpr sampler s(coord::normalized, address::clamp_to_edge, filter::nearest);
-        float2 uv = distorted(p,u,table) / u.canvasAndWide.zw;
-        if (!inside(uv)) return 0;
-        float z = depth.sample(s,uv).r;
-        return isfinite(z) && z >= 0.15 && z <= 6.0 ? z : 0.0;
-    }
-    float3 borderPoint(float2 p, constant U& u, const device float* table, texture2d<float> depth) {
-        float2 size = u.canvasAndWide.zw;
-        float2 step = max(float2(4.0), size / u.ultraAndDepth.zw * 2.0);
-        // Fit inverse-depth on a 3x3 patch, which is exactly affine for a
-        // pinhole image of an arbitrarily tilted plane. A constant border Z
-        // would shear a sloping floor as soon as the ray leaves the wide image.
-        float2 margin = step * 2.0;
-        float2 anchor = clamp(p, margin, size - margin);
-        float3 anchorRay = u.inverseWideK * float3(anchor,1);
-        float3 features[9]; float values[9]; uint count = 0;
-        float3x3 normal = float3x3(0.0); float3 rhs = float3(0.0);
-        for (int y = -1; y <= 1; ++y) { for (int x = -1; x <= 1; ++x) {
-            float2 probe = anchor + float2(x,y)*step;
-            float z = depthAt(probe,u,table,depth);
-            if (z == 0.0) continue;
-            float3 ray = u.inverseWideK * float3(probe,1);
-            float3 f = float3(ray.xy-anchorRay.xy,1);
-            normal += float3x3(f*f.x,f*f.y,f*f.z); rhs += f/z;
-            features[count] = f; values[count] = 1.0/z; ++count;
-        } }
-        if (count < 5) return float3(0,0,-1);
-        float determinant = dot(normal[0],cross(normal[1],normal[2]));
-        if (abs(determinant) < 1e-10) return float3(0,0,-1);
-        float3 coefficients = float3(dot(rhs,cross(normal[1],normal[2])),
-            dot(normal[0],cross(rhs,normal[2])),dot(normal[0],cross(normal[1],rhs))) / determinant;
-        // Reject a mixed foreground/background patch rather than extrapolating
-        // a made-up slope. Refit with its coherent inliers to tolerate noise.
-        normal = float3x3(0.0); rhs = float3(0.0); uint inliers = 0;
-        for (uint i = 0; i < count; ++i) {
-            float z = 1.0/values[i];
-            float residualMetres = abs(dot(coefficients,features[i])-values[i])*z*z;
-            if (residualMetres <= 0.025) {
-                float3 f = features[i];
-                normal += float3x3(f*f.x,f*f.y,f*f.z); rhs += f*values[i]; ++inliers;
-            }
-        }
-        if (inliers < 5 || inliers*3 < count*2) return float3(0,0,-1);
-        determinant = dot(normal[0],cross(normal[1],normal[2]));
-        if (abs(determinant) < 1e-10) return float3(0,0,-1);
-        coefficients = float3(dot(rhs,cross(normal[1],normal[2])),
-            dot(normal[0],cross(rhs,normal[2])),dot(normal[0],cross(normal[1],rhs))) / determinant;
-        float3 ray = u.inverseWideK * float3(p,1);
-        float inverseZ = dot(coefficients,float3(ray.xy-anchorRay.xy,1));
-        if (!isfinite(inverseZ) || inverseZ <= 0.0) return float3(0,0,-1);
-        float z = 1.0/inverseZ;
-        return z >= 0.15 && z <= 6.0 ? ray*z : float3(0,0,-1);
-    }
     fragment float4 cameraPreviewFragment(V in [[stage_in]], constant U& u [[buffer(0)]],
         const device float* table [[buffer(1)]], texture2d<float> wideY [[texture(0)]],
-        texture2d<float> wideUV [[texture(1)]], texture2d<float> ultraY [[texture(2)]],
-        texture2d<float> ultraUV [[texture(3)]], texture2d<float> depth [[texture(4)]]) {
+        texture2d<float> wideUV [[texture(1)]]) {
         float2 canvas = in.uv * u.canvasAndWide.xy;
+        bool photo = all(canvas >= u.photoRect.xy) && all(canvas <= u.photoRect.zw);
+        if (!photo) return float4(0,0,0,1);
         float2 sensor = (u.canvasToSensor * float3(canvas,1)).xy;
         float2 widePixel = sensor * u.canvasAndWide.zw;
-        float2 wideUVPoint = distorted(widePixel,u,table) / u.canvasAndWide.zw;
-        bool wideValid = inside(sensor) && inside(wideUVPoint);
-        bool photo = all(canvas >= u.photoRect.xy) && all(canvas <= u.photoRect.zw);
-        float3 color = float3(0);
-        if (wideValid) color = rgb(wideY,wideUV,wideUVPoint,u.formats.x);
-        if (!photo) {
-            float3 point = borderPoint(widePixel,u,table,depth);
-            {
-                // A missing local plane must not punch a black hole in the
-                // wider live view. At infinity, translation vanishes: project
-                // only the calibrated ray direction. This display-only fallback
-                // never invents a depth or supplies pixels to measurement RGB.
-                float3 ray = u.inverseWideK * float3(widePixel,1);
-                float3 ultraPosition = point.z > 0 ? u.rotation*point+u.translation.xyz : u.rotation*ray;
-                float3 projected = u.ultraK * ultraPosition;
-                float2 ultraPoint = projected.xy / projected.z / u.ultraAndDepth.xy;
-                if (projected.z > 0 && inside(ultraPoint)) {
-                    float3 ultraColor = rgb(ultraY,ultraUV,ultraPoint,u.formats.y) * u.colorGain.rgb;
-                    float2 borderDistance = min(sensor,1.0-sensor)*u.canvasAndWide.zw;
-                    float2 rawBorderDistance = min(wideUVPoint,1.0-wideUVPoint)*u.canvasAndWide.zw;
-                    float edge = min(min(borderDistance.x,borderDistance.y),min(rawBorderDistance.x,rawBorderDistance.y));
-                    float2 rate = (u.canvasToSensor*float3(1,0,0)).xy * u.canvasAndWide.zw;
-                    float feather = max(2.0,length(rate)*4.0);
-                    float2 outsidePhoto = max(max(u.photoRect.xy-canvas,canvas-u.photoRect.zw),float2(0));
-                    float photoFade = smoothstep(0.0,4.0,length(outsidePhoto));
-                    float blend = (1.0-smoothstep(0.0,feather,edge))*photoFade;
-                    // Feather only captured overlap outside the strict photo.
-                    // At full 4:3 there is no spare wide overlap: project ultra
-                    // directly instead of repeating or stretching wide edges.
-                    color = wideValid ? mix(color,ultraColor,blend) : ultraColor;
-                }
-            }
-        }
-        // The compositor returns unshaded camera pixels across the complete
-        // canvas. Native SwiftUI regular Liquid Glass owns the chrome outside
-        // the photograph; doing both would darken and blur that area twice.
-        return float4(clamp(color,0.0,1.0),1);
+        float2 source = distorted(widePixel,u,table) / u.canvasAndWide.zw;
+        if (!inside(sensor) || !inside(source)) return float4(0,0,0,1);
+        return float4(clamp(rgb(wideY,wideUV,source,u.formats.x),0.0,1.0),1);
     }
     """
-}
-
-/// Match only a few LiDAR-registered overlap probes. Reading 25 pixels avoids a
-/// per-frame full-raster CPU conversion and does not change measurement RGB.
-nonisolated private enum MultiCameraPreviewColorMatch {
-    static func gain(frame: MultiCameraRenderInputs) -> SIMD3<Float>? {
-        let wide = frame.wideImage, ultra = frame.ultraWideImage, depth = frame.depth
-        guard CVPixelBufferLockBaseAddress(wide, .readOnly) == kCVReturnSuccess else { return nil }
-        defer { CVPixelBufferUnlockBaseAddress(wide, .readOnly) }
-        guard CVPixelBufferLockBaseAddress(ultra, .readOnly) == kCVReturnSuccess else { return nil }
-        defer { CVPixelBufferUnlockBaseAddress(ultra, .readOnly) }
-        guard CVPixelBufferLockBaseAddress(depth, .readOnly) == kCVReturnSuccess else { return nil }
-        defer { CVPixelBufferUnlockBaseAddress(depth, .readOnly) }
-        guard let depthBase = CVPixelBufferGetBaseAddress(depth) else { return nil }
-        let wideSize = PixelSize(width: CVPixelBufferGetWidth(wide), height: CVPixelBufferGetHeight(wide))
-        let ultraSize = SIMD2(Float(CVPixelBufferGetWidth(ultra)), Float(CVPixelBufferGetHeight(ultra)))
-        let depthWidth = CVPixelBufferGetWidth(depth), depthHeight = CVPixelBufferGetHeight(depth)
-        let depthStride = CVPixelBufferGetBytesPerRow(depth)
-        let inverseK = frame.wideIntrinsics.inverse
-        let rotation = simd_float3x3(columns: (frame.wideToUltra.columns.0, frame.wideToUltra.columns.1, frame.wideToUltra.columns.2))
-        var ratios: [SIMD3<Float>] = []
-        for y in 1...5 { for x in 1...5 {
-            let pixel = SIMD2(Float(wideSize.width) * Float(x) / 6, Float(wideSize.height) * Float(y) / 6)
-            guard let source = frame.wideCalibration.sourcePoint(forRectifiedPixel: pixel, in: wideSize) else { continue }
-            let uv = source / SIMD2(Float(wideSize.width), Float(wideSize.height))
-            let dx = min(depthWidth-1,max(0,Int(uv.x*Float(depthWidth))))
-            let dy = min(depthHeight-1,max(0,Int(uv.y*Float(depthHeight))))
-            let z = depthBase.advanced(by: dy*depthStride).assumingMemoryBound(to: Float.self)[dx]
-            guard z.isFinite, z >= 0.15, z <= 6 else { continue }
-            let point = inverseK * SIMD3(pixel,1) * z
-            let projected = frame.ultraWideIntrinsics * (rotation*point+frame.wideToUltra.columns.3)
-            guard projected.z > 0 else { continue }
-            let ultraPoint = SIMD2(projected.x,projected.y) / projected.z / ultraSize
-            guard let w = color(wide,at: uv), let u = color(ultra,at: ultraPoint),
-                  simd_reduce_min(w) > 0.08, simd_reduce_min(u) > 0.08,
-                  simd_reduce_max(w) < 0.92, simd_reduce_max(u) < 0.92 else { continue }
-            ratios.append(w/u)
-        } }
-        guard ratios.count >= 5 else { return nil }
-        let median = SIMD3(ratios.map(\.x).sorted()[ratios.count/2],
-                          ratios.map(\.y).sorted()[ratios.count/2], ratios.map(\.z).sorted()[ratios.count/2])
-        return min(max(median,SIMD3(repeating:0.75)),SIMD3(repeating:1.33))
-    }
-
-    private static func color(_ buffer: CVPixelBuffer, at uv: SIMD2<Float>) -> SIMD3<Float>? {
-        guard uv.x.isFinite, uv.y.isFinite, uv.x >= 0, uv.y >= 0, uv.x < 1, uv.y < 1 else { return nil }
-        let x = Int(uv.x*Float(CVPixelBufferGetWidth(buffer))), y = Int(uv.y*Float(CVPixelBufferGetHeight(buffer)))
-        let format = CVPixelBufferGetPixelFormatType(buffer)
-        if format == kCVPixelFormatType_32BGRA, let base = CVPixelBufferGetBaseAddress(buffer) {
-            let p = base.advanced(by: y*CVPixelBufferGetBytesPerRow(buffer)+x*4).assumingMemoryBound(to: UInt8.self)
-            return SIMD3(Float(p[2]),Float(p[1]),Float(p[0])) / 255
-        }
-        guard CVPixelBufferGetPlaneCount(buffer) == 2,
-              let yBase = CVPixelBufferGetBaseAddressOfPlane(buffer,0),
-              let uvBase = CVPixelBufferGetBaseAddressOfPlane(buffer,1) else { return nil }
-        var luma = Float(yBase.advanced(by: y*CVPixelBufferGetBytesPerRowOfPlane(buffer,0)+x).load(as: UInt8.self)) / 255
-        let chroma = uvBase.advanced(by: (y/2)*CVPixelBufferGetBytesPerRowOfPlane(buffer,1)+(x/2)*2).assumingMemoryBound(to: UInt8.self)
-        var cb = (Float(chroma[0])-128)/255, cr = (Float(chroma[1])-128)/255
-        if format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange {
-            luma = (luma-16/255)*(255/219); cb *= 255/224; cr *= 255/224
-        }
-        let matrix = CVBufferCopyAttachment(buffer,kCVImageBufferYCbCrMatrixKey,nil)
-        let bt709 = (matrix as? String) == (kCVImageBufferYCbCrMatrix_ITU_R_709_2 as String)
-        return SIMD3(luma+(bt709 ? 1.5748:1.402)*cr,
-            luma-(bt709 ? 0.187324:0.344136)*cb-(bt709 ? 0.468124:0.714136)*cr,
-            luma+(bt709 ? 1.8556:1.772)*cb)
-    }
 }

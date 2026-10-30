@@ -11,13 +11,18 @@ struct ProductPhotoSelectionCell: View {
     let photo: CapturedAsset
     let order: Int?
     let captureIndex: Int
+    let detailNumber: Int
     let onPreview: (() -> Void)?
     let onToggleSelection: () -> Void
     @State private var imageAvailable: Bool?
     private let shape = RoundedRectangle(cornerRadius: 12)
 
     private var photoLabel: String {
-        photo.purpose == .measurement ? "실측 사진" : "상세 사진 \(captureIndex)"
+        switch photo.purpose {
+        case .measurement: "실측 사진"
+        case .measurementVisualization: "실측값 표시 사진"
+        case .detail: "상세 사진 \(detailNumber)"
+        }
     }
 
     var body: some View {

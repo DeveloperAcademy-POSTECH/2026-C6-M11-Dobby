@@ -67,7 +67,13 @@ struct ProductAutofillSessionTests {
     @Test func onlyTheFirstFivePhotosAreSentInSelectionOrder() async throws {
         let generator = ControlledAutofillGenerator()
         let session = ProductAutofillSession(generator: generator)
-        let selected = Array(makePhotos(count: 10).reversed())
+        var selected = Array(makePhotos(count: 10).reversed())
+        // A selected visualization is a normal upload candidate under the
+        // existing first-five policy; it must not silently reorder details.
+        let visualization = selected[1]
+        selected[1] = CapturedAsset(id: visualization.id, sessionID: visualization.sessionID,
+            garmentID: visualization.garmentID, purpose: .measurementVisualization,
+            capturedAt: visualization.capturedAt, source: visualization.source)
         let request = Task { try await session.generate(photos: selected) }
         await generator.waitForRequests(1)
         #expect(await generator.photos(for: 0) == Array(selected.prefix(5)))

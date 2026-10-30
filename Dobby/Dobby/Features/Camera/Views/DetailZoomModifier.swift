@@ -4,7 +4,8 @@ import SwiftUI
 struct DetailZoomModifier: ViewModifier {
     let options: DetailCameraOptions?
     let enabled: Bool
-    var bottomInset: CGFloat = 0
+    var bottomSafeAreaInset: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stops = DetailZoomStops()
     @State private var pinchStart: Double?
     @GestureState private var pinching = false
@@ -21,28 +22,49 @@ struct DetailZoomModifier: ViewModifier {
                 })
             .onChange(of: pinching) { _, active in if !active { pinchStart = nil } }
             .onChange(of: enabled) { _, active in if !active { pinchStart = nil } }
-            .overlay(alignment: .bottom) {
-                if enabled, let options, let range = options.capabilities.zoom, options.appliedZoom != nil {
-                    VStack(spacing: 4) {
-                        if options.failure != nil, case .zoom = options.requested {
-                            Text("줌을 적용하지 못했어요. 다시 시도해 주세요.").font(.caption)
+            .overlay {
+                GeometryReader { geometry in
+                    ZStack {
+                        if enabled, let options, let range = options.capabilities.zoom,
+                           options.appliedZoom != nil, let chrome = zoomLayout(in: geometry.size) {
+                            Button {
+                                options.requestZoom(stops.next(from: value, range: range))
+                            } label: {
+                                Text(label).font(.system(size: 16, weight: .semibold)).monospacedDigit()
+                                    .foregroundStyle(.white)
+                                    .frame(width: 48, height: 48)
+                                    .glassEffect(.regular.tint(.black.opacity(0.18)).interactive(), in: Circle())
+                                    .contentShape(Circle())
+                            }
+                            .buttonStyle(.plain).disabled(options.isApplying || pinching)
+                            .position(x: chrome.zoomCenterX, y: chrome.zoomCenterY)
+                            .accessibilityLabel("촬영 배율").accessibilityValue(label)
+                            .accessibilityHint("탭하여 배율을 변경하거나 미리보기를 두 손가락으로 확대하세요.")
+                            .accessibilityIdentifier("camera.zoom")
+                            if options.failure != nil, case .zoom = options.requested {
+                                Text("줌을 적용하지 못했어요. 다시 시도해 주세요.")
+                                    .font(.caption).multilineTextAlignment(.center)
+                                    .position(x: chrome.zoomCenterX, y: max(12, chrome.zoomFrame.y - 18))
+                                    .allowsHitTesting(false)
+                            }
                         }
-                        Button {
-                            options.requestZoom(stops.next(from: value, range: range))
-                        } label: {
-                            Text(label).font(.footnote.weight(.semibold)).monospacedDigit()
-                                .foregroundStyle(label == "1x" ? .white : .yellow)
-                                .frame(width: 48, height: 48)
-                                .background(.black.opacity(0.55), in: Circle())
-                        }
-                        .buttonStyle(.plain).disabled(options.isApplying || pinching)
-                        .accessibilityLabel("카메라 줌").accessibilityValue(label)
-                        .accessibilityHint("탭하여 배율을 변경하거나 미리보기를 두 손가락으로 확대하세요.")
-                        .accessibilityIdentifier("camera.zoom")
                     }
-                    // 호출 화면에서 측정한 조작부 높이에 맞춰 간격을 유지한다.
-                    .padding(.bottom, bottomInset)
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.30),
+                        value: options?.photoAspectRatio ?? .fourThree)
+                    .animation(nil, value: geometry.size)
                 }
             }
+    }
+
+    private func zoomLayout(in size: CGSize) -> MeasurementCameraChromeLayout? {
+        let ratio = (options?.photoAspectRatio ?? .fourThree)
+            .previewRatio(isLandscape: size.width > size.height)
+        guard let photo = MeasurementCameraChromeLayout.photoViewport(containerWidth: Double(size.width),
+                  containerHeight: Double(size.height), photoAspectRatio: ratio),
+              let controls = MeasurementCameraChromeLayout.controls(containerWidth: Double(size.width),
+                  containerHeight: Double(size.height), photo: photo,
+                  bottomSafeAreaInset: Double(bottomSafeAreaInset)) else { return nil }
+        return MeasurementCameraChromeLayout.layout(containerWidth: Double(size.width),
+            containerHeight: Double(size.height), photo: photo, guidanceHeight: 0, shutter: controls.shutter)
     }
 }

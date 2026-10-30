@@ -137,7 +137,7 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
 
     func submit(frame: MultiCameraFrame, sessionID: UUID,
                 completion: @escaping @Sendable (UUID, LiveCaptureReadiness) -> Void) {
-        submit(source: SourceBuffer(buffer: frame.wideImage, multiCamera: frame), timestamp: frame.timestamp,
+        submit(source: SourceBuffer(buffer: frame.wideImage, calibration: frame.wideCalibration), timestamp: frame.timestamp,
                sessionID: sessionID, completion: completion)
     }
 
@@ -192,6 +192,14 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     }
 
     private func render(_ source: SourceBuffer, job: AnalysisJob) -> CGImage? {
+        let metrics = CameraFramePerformanceMetrics.shared
+        let startedAt = metrics.isEnabled ? ProcessInfo.processInfo.systemUptime : nil
+        defer {
+            if let startedAt {
+                metrics.latency(.foregroundRaster,
+                    seconds: ProcessInfo.processInfo.systemUptime - startedAt, sessionID: job.sessionID)
+            }
+        }
         guard let rawSize = LivePreviewRasterGeometry.analysisSize(for: job.imageSize,
             maximumDimension: LiveForegroundPreviewSelectionPolicy.maximumRasterDimension) else { return nil }
         let exif: Int32
@@ -205,10 +213,11 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         let uprightSize = quarterTurn ? PixelSize(width: rawSize.height, height: rawSize.width) : rawSize
         let scale = Double(rawSize.width) / Double(job.imageSize.width)
         let sensorImage: CIImage
-        if let frame = source.multiCamera {
+        if let calibration = source.calibration {
             // Live contours and captured landmarks share the rectified pinhole
             // grid. Raw distorted RGB would place the outline on other pixels.
-            guard let corrected = try? multiCameraRectifier.image(frame: frame,
+            guard let corrected = try? multiCameraRectifier.image(pixelBuffer: source.buffer,
+                calibration: calibration,
                 maximumDimension: LiveForegroundPreviewSelectionPolicy.maximumRasterDimension) else { return nil }
             sensorImage = CIImage(cgImage: corrected)
         } else {
@@ -237,6 +246,8 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         if canRegister { activeRequest = request }
         lock.unlock()
         guard canRegister else { finish(nil, job: job, completion: completion); return }
+        let metrics = CameraFramePerformanceMetrics.shared
+        let startedAt = metrics.isEnabled ? ProcessInfo.processInfo.systemUptime : nil
         let result: LiveCaptureReadiness = autoreleasepool {
             do {
                 let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
@@ -251,8 +262,8 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
                 }
                 let buffer = try observation.generateScaledMaskForImage(
                     forInstances: IndexSet(integer: instance), from: handler)
-                let upright = try Self.copyMask(buffer, expectedSize: .init(width: image.width, height: image.height))
-                let raw = try GarmentMaskOrientation.originalMask(fromUpright: upright, orientation: job.orientation)
+                let raw = try Self.copyMaskRestoringOrientation(buffer,
+                    expectedSize: .init(width: image.width, height: image.height), orientation: job.orientation)
                 return LiveForegroundPreviewSelectionPolicy.select(masks: [raw], imageSize: job.imageSize)
                     .readiness(timestamp: job.timestamp)
             } catch {
@@ -260,6 +271,10 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
                 // have no outline and do not masquerade as recognized clothing.
                 return .status(.analysisFailed, timestamp: job.timestamp)
             }
+        }
+        if let startedAt {
+            metrics.latency(.foregroundAnalysis,
+                seconds: ProcessInfo.processInfo.systemUptime - startedAt, sessionID: job.sessionID)
         }
         finish(result, job: job, completion: completion)
     }
@@ -283,7 +298,11 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         completion(job.sessionID, result)
     }
 
-    private static func copyMask(_ buffer: CVPixelBuffer, expectedSize: PixelSize) throws -> GarmentMask {
+    /// Threshold and restore the raw grid in one pass. This is the exact pixel
+    /// permutation of GarmentMaskOrientation, with no resampling or changed
+    /// classification threshold. Only constructed 0/1 values enter selection.
+    static func copyMaskRestoringOrientation(_ buffer: CVPixelBuffer, expectedSize: PixelSize,
+                                            orientation: ImageOrientation) throws -> GarmentMask {
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         let format = CVPixelBufferGetPixelFormatType(buffer)
         guard expectedSize.isValid,
@@ -299,21 +318,37 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
         guard let base = CVPixelBufferGetBaseAddress(buffer), stride >= width * bytesPerPixel else {
             throw GarmentMaskAssociationError.invalidMask
         }
+        let quarterTurn = orientation == .right || orientation == .left
+        let rawWidth = quarterTurn ? height : width
+        let rawHeight = quarterTurn ? width : height
+        let origin: Int, columnStep: Int, rowStep: Int
+        switch orientation {
+        case .up:
+            origin = 0; columnStep = bytesPerPixel; rowStep = stride
+        case .right:
+            origin = (width - 1) * bytesPerPixel; columnStep = stride; rowStep = -bytesPerPixel
+        case .down:
+            origin = (height - 1) * stride + (width - 1) * bytesPerPixel
+            columnStep = -bytesPerPixel; rowStep = -stride
+        case .left:
+            origin = (height - 1) * stride; columnStep = -stride; rowStep = bytesPerPixel
+        }
         var values = [UInt8](repeating: 0, count: width * height)
-        for y in 0..<height {
-            let row = base.advanced(by: y * stride)
-            for x in 0..<width {
+        for y in 0..<rawHeight {
+            let row = base.advanced(by: origin + y * rowStep)
+            for x in 0..<rawWidth {
+                let pixel = row.advanced(by: x * columnStep)
                 let foreground: Bool
                 if format == kCVPixelFormatType_OneComponent32Float {
-                    let value = row.assumingMemoryBound(to: Float.self)[x]
+                    let value = pixel.assumingMemoryBound(to: Float.self).pointee
                     foreground = value.isFinite && value >= 0.5
                 } else {
-                    foreground = row.assumingMemoryBound(to: UInt8.self)[x] >= 128
+                    foreground = pixel.assumingMemoryBound(to: UInt8.self).pointee >= 128
                 }
-                values[y * width + x] = foreground ? 1 : 0
+                values[y * rawWidth + x] = foreground ? 1 : 0
             }
         }
-        return .init(size: expectedSize, values: values)
+        return .init(size: .init(width: rawWidth, height: rawHeight), values: values)
     }
 
     private struct AnalysisJob: Sendable {
@@ -328,7 +363,9 @@ nonisolated final class LiveForegroundAnalyzer: @unchecked Sendable {
     /// Read only on the render queue. Vision receives an independent small CGImage.
     private struct SourceBuffer: @unchecked Sendable {
         let buffer: CVPixelBuffer
-        var multiCamera: MultiCameraFrame? = nil
+        // Keep only wide pixels until the <=512px raster is ready. A live
+        // outline must not retain the capture pair's depth pool buffers.
+        var calibration: MultiCameraLensCalibration? = nil
     }
     /// Fully rendered, immutable pixels; the buffer pool is no longer involved.
     private struct PreviewRaster: @unchecked Sendable { let image: CGImage }

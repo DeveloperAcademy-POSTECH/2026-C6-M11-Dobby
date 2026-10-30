@@ -14,13 +14,17 @@ final class ProductAutofillFlowTests: XCTestCase {
         XCTAssertEqual(app.switches["product-ai.toggle"].value as? String, "1")
         XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists,
                        "Changing photo selection or the toggle must not start generation")
+        // The newly selectable measurement visualization must coexist with
+        // the original and the captured detail in the A flow's saved output.
+        tap(app, "camera.grid.select.1")
+        XCTAssertEqual(app.buttons["camera.grid.select.1"].value as? String, "3번째 선택")
         screenshot(app, name: "a-flow-photo-selection-ai-enabled")
         tap(app, "camera.completePhotos")
         XCTAssertTrue(app.descendants(matching: .any)["product-ai.loading"].firstMatch.waitForExistence(timeout: 5))
         screenshot(app, name: "a-flow-generating-information")
         waitForInformation(in: app)
         assertGeneratedFields(in: app)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo.")).count, 2)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo.")).count, 3)
         XCTAssertEqual(field("price", in: app).value as? String, "")
         app.swipeUp()
         XCTAssertTrue(field("measurement.shoulderWidth", in: app).exists)
@@ -77,7 +81,7 @@ final class ProductAutofillFlowTests: XCTestCase {
         tap(app, "product-ai.cancel")
         XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["camera.grid.select.0"].value as? String, "1번째 선택")
-        XCTAssertEqual(app.buttons["camera.grid.select.1"].value as? String, "2번째 선택")
+        XCTAssertEqual(app.buttons["camera.grid.select.2"].value as? String, "2번째 선택")
         XCTAssertFalse(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 6),
                        "A cancelled response must not move the user or fill a later screen")
         disableProductAutofillIfPresent(in: app)
@@ -101,8 +105,10 @@ final class ProductAutofillFlowTests: XCTestCase {
         tap(app, "camera.captureDetail")
         tap(app, "camera.selectPhotos")
         XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        tap(app, "camera.grid.select.1")
-        XCTAssertEqual(app.buttons["camera.grid.select.1"].value as? String, "2번째 선택")
+        XCTAssertEqual(app.buttons["camera.grid.select.1"].label, "실측값 표시 사진 선택")
+        XCTAssertEqual(app.buttons["camera.grid.select.2"].label, "상세 사진 1 선택")
+        tap(app, "camera.grid.select.2")
+        XCTAssertEqual(app.buttons["camera.grid.select.2"].value as? String, "2번째 선택")
         return app
     }
 

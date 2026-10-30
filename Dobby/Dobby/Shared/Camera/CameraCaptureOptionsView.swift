@@ -41,6 +41,7 @@ struct CameraCaptureOptionsView: View {
     private let selection: Binding<DetailCaptureOptionsDestination>?
     private let forceReduceMotion: Bool
     private let exposureSelectionFeedbackEnabled: Bool?
+    private let panelLayout: CameraOptionsPanelLayout?
     let onClose: () -> Void
     @State private var localSelection: DetailCaptureOptionsDestination = .menu
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -52,6 +53,7 @@ struct CameraCaptureOptionsView: View {
          selection: Binding<DetailCaptureOptionsDestination>? = nil,
          forceReduceMotion: Bool = false,
          exposureSelectionFeedbackEnabled: Bool? = nil,
+         panelLayout: CameraOptionsPanelLayout? = nil,
          onClose: @escaping () -> Void) {
         self.state = state
         self.onExposureChange = onExposureChange
@@ -60,6 +62,7 @@ struct CameraCaptureOptionsView: View {
         self.selection = selection
         self.forceReduceMotion = forceReduceMotion
         self.exposureSelectionFeedbackEnabled = exposureSelectionFeedbackEnabled
+        self.panelLayout = panelLayout
         self.onClose = onClose
     }
 
@@ -68,7 +71,9 @@ struct CameraCaptureOptionsView: View {
 
     var body: some View {
         Group {
-            if presentation == .measurement {
+            if let panelLayout {
+                CameraOptionsPanelSurface(layout: panelLayout) { panel }
+            } else if presentation == .measurement {
                 ViewThatFits(in: .vertical) {
                     panel.fixedSize(horizontal: false, vertical: true)
                     ScrollView(.vertical) { panel }
@@ -89,9 +94,11 @@ struct CameraCaptureOptionsView: View {
                 CameraExposureView(state: state, presentation: presentation,
                     forceReduceMotion: effectiveReduceMotion,
                     selectionFeedbackEnabled: exposureSelectionFeedbackEnabled,
+                    embeddedInPanel: panelLayout != nil,
                     onChangeExposure: onExposureChange) { navigate(to: .menu) }
             } else if destination == .aspectRatio, !state.aspectRatios.isEmpty {
                 CameraAspectRatioView(state: state, presentation: presentation,
+                    embeddedInPanel: panelLayout != nil,
                     onSelectRatio: onAspectRatioChange) { navigate(to: .menu) }
             } else {
                 menu
@@ -107,6 +114,21 @@ struct CameraCaptureOptionsView: View {
     }
 
     private var menu: some View {
+        Group {
+            if panelLayout != nil {
+                menuContent
+                    .padding(.top, 44)
+                    .overlay(alignment: .topTrailing) { closeButton }
+            } else {
+                standaloneMenu
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("camera.optionsMenu")
+        .accessibilityAction(.escape, onClose)
+    }
+
+    private var menuContent: some View {
         HStack(spacing: presentation == .measurement ? 16 : 24) {
             option("노출", identifier: "camera.exposureOption", enabled: state.exposureRange != nil,
                    action: { navigate(to: .exposure) }) {
@@ -117,6 +139,10 @@ struct CameraCaptureOptionsView: View {
                 Text(state.selectedAspectRatio).font(.headline).monospacedDigit()
             }
         }
+    }
+
+    private var standaloneMenu: some View {
+        menuContent
         .padding(.horizontal, presentation == .measurement ? 12 : 52)
         // Reserve the close button's complete row in narrow landscape panels.
         .padding(.top, presentation == .measurement ? 52 : 24)
@@ -124,23 +150,23 @@ struct CameraCaptureOptionsView: View {
         .frame(maxWidth: .infinity)
         .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 32))
         .overlay(alignment: .topTrailing) {
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(4)
-            .accessibilityLabel("촬영 옵션 닫기")
-            .accessibilityIdentifier("camera.closeOptions")
+            closeButton.padding(4)
         }
         .padding(.horizontal, presentation == .measurement ? 8 : 16)
         .padding(.bottom, presentation == .measurement ? 16 : 24)
         .frame(minHeight: 148, alignment: .bottom)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("camera.optionsMenu")
-        .accessibilityAction(.escape, onClose)
+    }
+
+    private var closeButton: some View {
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .font(.body.weight(.semibold))
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("촬영 옵션 닫기")
+        .accessibilityIdentifier("camera.closeOptions")
     }
 
     private func option<Icon: View>(_ title: String, identifier: String,
