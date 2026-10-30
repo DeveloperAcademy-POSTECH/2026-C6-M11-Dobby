@@ -197,9 +197,31 @@ struct ProductCreationFlowView: View {
         guard record.result.values.contains(where: { value in
             value.status != .unavailable && (value.meters.map { $0.isFinite && $0 > 0 && ($0 * 100).isFinite } ?? false)
         }) else { throw GarmentStore.MeasurementImportError.noAvailableMeasurements }
-        let garment = try await prepareProduct(for: record)
-        try persistDraft(garment, step: .details)
+        try await prepareAndSaveProduct(for: record, step: .details)
         path.append(.details)
+    }
+
+    private func prepareAndSaveProduct(for record: SavedMeasurement, step: ProductDraftStep,
+                                       allowsUnavailableDraft: Bool = false) async throws {
+        if let garment, let photoModel,
+           garment.measurementPhoto?.measurementFrameID != record.snapshot.frame.frameID
+            || garment.measurementPhoto?.measurementSessionID != record.snapshot.frame.sessionID {
+            let replacementInput = GarmentMeasurementInputState()
+            let replacement = try await ProductMeasurementRetake.replace(record, garment: garment,
+                photoModel: photoModel, previousInputData: JSONEncoder().encode(measurementInput),
+                replacementInputData: JSONEncoder().encode(replacementInput), step: step, in: context,
+                allowsSynthetic: isFixture, allowsUnavailableDraft: allowsUnavailableDraft)
+            context = replacement.context
+            self.garment = replacement.garment
+            self.photoModel = replacement.photoModel
+            measurementRecordID = record.id
+            measurementInput = replacementInput
+            preservesDraftPhotos = true
+            permission?.refresh()
+        } else {
+            let garment = try await prepareProduct(for: record, allowsUnavailableDraft: allowsUnavailableDraft)
+            try persistDraft(garment, step: step)
+        }
     }
 
     private func prepareProduct(for record: SavedMeasurement, allowsUnavailableDraft: Bool = false) async throws -> Garment {
@@ -301,8 +323,7 @@ struct ProductCreationFlowView: View {
         cleanupAction = .save
         isFinishing = true
         defer { isFinishing = false }
-        let garment = try await prepareProduct(for: record, allowsUnavailableDraft: true)
-        try persistDraft(garment, step: .measurementResult)
+        try await prepareAndSaveProduct(for: record, step: .measurementResult, allowsUnavailableDraft: true)
         onDraftSaved()
     }
 

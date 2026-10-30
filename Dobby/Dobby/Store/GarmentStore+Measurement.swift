@@ -127,6 +127,49 @@ extension GarmentStore {
         return callerModel
     }
 
+    /// Stages a new capture on the existing draft. The caller owns the save or
+    /// rollback, and must remove the returned file if the transaction fails.
+    @MainActor
+    static func stageRetakenMeasurement(_ record: SavedMeasurement, for garment: Garment,
+                                       in context: ModelContext, photosDirectory directory: URL,
+                                       allowsSynthetic: Bool = false,
+                                       allowsUnavailableDraft: Bool = false) throws -> URL {
+        let kind = try validateProductMeasurement(record, allowsSynthetic: allowsSynthetic,
+            allowsUnavailableDraft: allowsUnavailableDraft)
+        guard garment.modelContext === context, garment.isCreationDraft,
+              let photo = garment.measurementPhoto else { throw MeasurementImportError.invalidRecord }
+        let data = try orientedMeasurementJPEG(record.snapshot)
+        let url = directory.appending(path: "\(record.id)-\(UUID()).jpg")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try writeMeasurementPhoto(data, to: url)
+        var staged = false
+        defer { if !staged { try? FileManager.default.removeItem(at: url) } }
+        photo.fileName = url.lastPathComponent
+        photo.capturedAt = record.snapshot.frame.capturedAt
+        photo.imageWidth = record.snapshot.frame.imageSize.width
+        photo.imageHeight = record.snapshot.frame.imageSize.height
+        photo.measurementSessionID = record.snapshot.frame.sessionID
+        photo.measurementFrameID = record.snapshot.frame.frameID
+        photo.measurementOrientationRaw = record.snapshot.frame.orientation.rawValue
+        let group: GarmentGroup = kind == .top ? .top : .pants
+        if garment.group != group {
+            garment.group = group
+            garment.category = kind == .top ? "상의" : "바지"
+        }
+        // Old typed values and landmarks belong to the old capture, including
+        // keys absent from the new garment kind. Reuse only the product/photo ID.
+        let measurements = garment.measurements
+        garment.measurements = []
+        for value in measurements { context.delete(value) }
+        let landmarks = photo.landmarks
+        photo.landmarks = []
+        for point in landmarks { context.delete(point) }
+        try refreshMeasurement(record, for: garment, in: context, allowsSynthetic: allowsSynthetic,
+            allowsUnavailableDraft: allowsUnavailableDraft, save: { _ in })
+        staged = true
+        return url
+    }
+
     /// A result correction belongs to the same frozen capture and product.
     /// Keep product/photo/measurement IDs so text drafts and selected photos
     /// still reference the same objects after the corrected archive is saved.

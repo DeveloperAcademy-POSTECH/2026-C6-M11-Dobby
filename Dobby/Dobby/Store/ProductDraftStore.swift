@@ -37,6 +37,9 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
 
     struct Photo: Codable, Sendable, Equatable {
         let id: UUID
+        /// Retained details may precede a measurement retake. Older drafts use
+        /// the enclosing snapshot's session ID when this field is absent.
+        let sessionID: UUID?
         let capturedAt: Date
         let url: URL
         let pixelWidth: Int
@@ -48,6 +51,7 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
             guard asset.purpose == .detail, case let .localFile(url, metadata) = asset.source,
                   url.isFileURL else { throw ProductDraftStore.DraftError.invalidPhotos }
             id = asset.id
+            sessionID = asset.sessionID
             capturedAt = asset.capturedAt
             self.url = url
             pixelWidth = metadata.pixelWidth
@@ -76,7 +80,7 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
     init(input: ProductPhotoInput, detailPhotos: [CapturedAsset], selectedPhotoIDs: [UUID],
          hasAcknowledgedCaptureGuide: Bool = false) throws {
         guard Set(detailPhotos.map(\.id)).count == detailPhotos.count,
-              detailPhotos.allSatisfy({ $0.sessionID == input.sessionID && $0.garmentID == input.garmentID
+              detailPhotos.allSatisfy({ $0.garmentID == input.garmentID
                   && $0.id != input.measurement.id && $0.purpose == .detail }),
               Set(selectedPhotoIDs).count == selectedPhotoIDs.count,
               Set(selectedPhotoIDs).isSubset(of: Set(input.measurementPhotos.map(\.id) + detailPhotos.map(\.id))) else {
@@ -101,7 +105,7 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
               Set(selectedPhotoIDs).isSubset(of: Set(input.measurementPhotos.map(\.id) + detailPhotos.map(\.id))) else {
             throw ProductDraftStore.DraftError.invalidPhotos
         }
-        return try detailPhotos.map { try $0.asset(sessionID: sessionID, garmentID: garmentID) }
+        return try detailPhotos.map { try $0.asset(sessionID: $0.sessionID ?? sessionID, garmentID: garmentID) }
     }
 }
 
@@ -149,7 +153,7 @@ enum ProductDraftStore {
         return snapshot.detailPhotos.compactMap { photo in
             guard photo.id != snapshot.measurementPhotoID, photo.url.isFileURL,
                   directories.contains(where: { directory in
-                      directory.appending(path: snapshot.sessionID.uuidString)
+                      directory.appending(path: (photo.sessionID ?? snapshot.sessionID).uuidString)
                           .appending(path: "\(photo.id.uuidString).jpg").standardizedFileURL
                           == photo.url.standardizedFileURL
                   }) else { return nil }
