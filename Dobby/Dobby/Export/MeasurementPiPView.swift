@@ -45,12 +45,12 @@ private struct MeasurementPiPTable: View {
         VStack(spacing: 0) {
             MeasurementPiPRow(measurements: measurements) { measurement in
                 Text(measurement.title)
-                    .font(.custom("Pretendard-Regular", fixedSize: 17))
+                    .font(.custom("Pretendard-Medium", fixedSize: 17))
                     .foregroundStyle(.white)
             }
             MeasurementPiPRow(measurements: measurements) { measurement in
                 Text("\(measurement.displayValue)cm")
-                    .font(.custom("Pretendard-SemiBold", fixedSize: 17))
+                    .font(.custom("Pretendard-Bold", fixedSize: 17))
                     .foregroundStyle(.black)
             }
             .background(Color("BrandNeutral50"))
