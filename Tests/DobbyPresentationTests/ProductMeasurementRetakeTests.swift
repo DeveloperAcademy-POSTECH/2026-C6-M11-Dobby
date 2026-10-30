@@ -89,6 +89,32 @@ final class ProductMeasurementRetakeTests: XCTestCase {
         XCTAssertEqual(try legacy.restoredDetailPhotos(for: f.model.input), [f.detail])
     }
 
+    func testConsecutiveRetakesReplaceEvidenceWithoutDuplicatingProductOrLosingDetailBytes() async throws {
+        let f = try await Fixture()
+        defer { f.remove() }
+        guard case let .localFile(detailURL, _) = f.detail.source else { return XCTFail("Missing detail") }
+        let detailBytes = try Data(contentsOf: detailURL)
+        let firstRecord = try GarmentCapturePreview.measurement(kind: .bottoms).makeRecord()
+        let first = try await f.replace(firstRecord)
+        let finalRecord = try GarmentCapturePreview.measurement(kind: .top).makeRecord()
+        let final = try await ProductMeasurementRetake.replace(finalRecord, garment: first.garment,
+            photoModel: first.photoModel, previousInputData: Data(), replacementInputData: Data(),
+            step: .details, in: first.context, directory: f.directory, allowsSynthetic: true)
+        XCTAssertEqual(final.garment.id, f.garment.id)
+        XCTAssertEqual(final.garment.sourceMeasurementID, finalRecord.id)
+        XCTAssertEqual(final.garment.measurementPhoto?.measurementFrameID, finalRecord.snapshot.frame.frameID)
+        XCTAssertNotEqual(final.photoModel.measurementRecord?.id, firstRecord.id)
+        let visual = try XCTUnwrap(final.photoModel.input.measurementVisualization)
+        XCTAssertEqual(final.photoModel.selectedPhotoIDs, [f.detail.id, visual.id, f.model.input.measurement.id])
+        XCTAssertEqual(final.photoModel.detailPhotos, [f.detail])
+        XCTAssertEqual(try Data(contentsOf: detailURL), detailBytes)
+        let reader = ModelContext(f.container)
+        XCTAssertEqual(try reader.fetchCount(FetchDescriptor<Garment>()), 1)
+        let saved = try XCTUnwrap(reader.fetch(FetchDescriptor<Garment>()).first)
+        XCTAssertEqual(Set(saved.photos.map(\.id)), [f.model.input.measurement.id, visual.id])
+        XCTAssertEqual(saved.creationDraft?.photoState?.selectedPhotoIDs, final.photoModel.selectedPhotoIDs)
+    }
+
     private enum TestError: Error { case save }
     private struct NoCapture: CaptureProviding {
         func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset { throw CameraFailure.captureFailed }
