@@ -51,16 +51,18 @@ struct ProductPhotoGalleryView: View {
             }
             .overlay(alignment: .topTrailing) {
                 if onDelete != nil {
-                    Button("삭제", role: .destructive, action: deleteCurrentPhoto)
-                        .font(.system(size: 15, weight: .semibold))
+                    Button("제품 사진 삭제", systemImage: "trash.fill", role: .destructive,
+                           action: deleteCurrentPhoto)
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 22, weight: .regular))
                         .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(controlBackground, in: Circle())
+                        .frame(width: 48, height: 48)
+                        .background(Color.black.opacity(0.2), in: Circle())
                         .contentShape(Rectangle())
                         .buttonStyle(.plain)
                         .disabled(photos.isEmpty || isPaging)
                         .accessibilityIdentifier("product-gallery.delete")
-                        .padding(12)
+                        .padding(10)
                 }
             }
             .overlay(alignment: .bottom) {
