@@ -185,6 +185,11 @@ final class AppRoutingTests: XCTestCase {
         attachScreenshot(app, name: "debug-library-sample-export-channels")
 
         app.buttons["export.close"].tap()
+        expectHome(in: app)
+        app.tabBars.buttons["보관함"].tap()
+        let exportedProduct = app.buttons["library.product.53E00000-0000-4000-8000-000000000053"]
+        XCTAssertTrue(exportedProduct.waitForExistence(timeout: 5))
+        exportedProduct.tap()
         XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
         app.buttons["library.edit"].tap()
         XCTAssertTrue(information.waitForExistence(timeout: 5))

@@ -31,7 +31,7 @@ struct DetailZoomModifier: ViewModifier {
                                 options.requestZoom(stops.next(from: value, range: range))
                             } label: {
                                 Text(label).font(.system(size: 16, weight: .semibold)).monospacedDigit()
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(CameraZoomStyle.selectedText)
                                     .frame(width: 48, height: 48)
                                     .glassEffect(.regular.tint(.black.opacity(0.18)).interactive(), in: Circle())
                                     .contentShape(Circle())

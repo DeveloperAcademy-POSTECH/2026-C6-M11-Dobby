@@ -16,6 +16,7 @@ struct InfoInputView: View {
     var onComplete: ((Garment) -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.returnHomeFromExport) private var returnHomeFromExport
 
     @State private var exportProduct: ExportProduct?
     @State private var copyController = CopyActivityController()
@@ -24,6 +25,7 @@ struct InfoInputView: View {
     private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
     @State private var saveError: String?
     @State private var hasAttemptedCompletion = false
+    @State private var returnsHomeAfterExport = false
     @FocusState private var focusedMeasurementID: UUID?
     static let measurementTableID = "product-info.measurement-table"
 
@@ -112,8 +114,13 @@ struct InfoInputView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
-        .sheet(item: $exportProduct) { product in
-            ExportView(product: product, controller: copyController, showFruits: $showFruits)
+        .sheet(item: $exportProduct, onDismiss: finishExportDismissal) { product in
+            ExportView(product: product, controller: copyController, showFruits: $showFruits) {
+                try modelContext.save()
+                returnsHomeAfterExport = true
+                showFruits = false
+                exportProduct = nil
+            }
         }
         .alert("제품 정보를 저장하지 못했어요", isPresented: Binding(
             get: { saveError != nil }, set: { if !$0 { saveError = nil } }
@@ -138,6 +145,7 @@ struct InfoInputView: View {
             if let onComplete {
                 onComplete(garment)
             } else {
+                returnsHomeAfterExport = false
                 showFruits = false
                 exportProduct = ExportProduct(garment: garment)
             }
@@ -148,6 +156,12 @@ struct InfoInputView: View {
                 saveError = "입력한 정보는 화면에 남아 있어요. 잠시 후 다시 저장해 주세요."
             }
         }
+    }
+
+    private func finishExportDismissal() {
+        guard returnsHomeAfterExport else { return }
+        returnsHomeAfterExport = false
+        returnHomeFromExport?()
     }
 
     private func revealMeasurements(using proxy: ScrollViewProxy) {

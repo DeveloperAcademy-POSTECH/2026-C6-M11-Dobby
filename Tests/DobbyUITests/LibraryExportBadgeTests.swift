@@ -42,8 +42,9 @@ final class LibraryExportBadgeTests: XCTestCase {
         XCTAssertTrue(closeGuide.waitForExistence(timeout: 10))
         closeGuide.tap()
         app.buttons["export.close"].tap()
-        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
-        app.navigationBars["90s 나이키 트랙탑"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
+        app.tabBars.buttons["보관함"].tap()
         assertOnlyFruitsBadge(on: app.buttons[cardID])
 
         app.terminate()

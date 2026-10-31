@@ -216,14 +216,15 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertFalse(app.otherElements["export.fruits.overlay"].waitForExistence(timeout: 1))
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 5))
         app.buttons["export.close"].tap()
-        XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
+        app.tabBars.buttons["보관함"].tap()
+        openLibraryProduct(named: name, app: app)
 
-        // Export returns to the completed product with both selected photos;
-        // main registration Back no longer navigates into an earlier stage.
+        // Closing export returns home. The saved product still owns both
+        // selected photos and its confirmed measurements when reopened.
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 2)
         attachScreenshot(app, name: "flow-top-selected-photos-retained-after-export")
-        app.buttons["product-complete.library"].tap()
-        openLibraryProduct(named: name, app: app)
         assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
         app.terminate()
         app.launch()
@@ -487,8 +488,9 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Design validation"].exists)
         app.buttons["export.close"].tap()
-        XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
-        app.buttons["product-complete.library"].tap()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
+        app.tabBars.buttons["보관함"].tap()
         openLibraryProduct(named: "Design validation", app: app)
     }
 
