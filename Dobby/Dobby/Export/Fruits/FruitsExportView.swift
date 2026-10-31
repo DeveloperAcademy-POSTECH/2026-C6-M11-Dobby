@@ -34,15 +34,13 @@ struct FruitsExportView: View {
                     height: MeasurementPiPView.renderSize.height
                 )
                 .accessibilityHidden(true)
-            VStack(spacing: 0) {
-                FruitsPhotoSaveSection(isSaving: isSavingPhotos, onSave: savePhotos)
-
-                if hasSavedPhotos {
-                    FruitsExportContent(product: product, onCopy: copy)
-                        .padding(.top, 28)
-                }
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
+            FruitsExportLayout(
+                product: product,
+                isSavingPhotos: isSavingPhotos,
+                hasSavedPhotos: hasSavedPhotos,
+                onSave: savePhotos,
+                onCopy: copy
+            )
         }
         .background(.white)
         .navigationBarBackButtonHidden()
