@@ -15,11 +15,30 @@
 
 **실제 AI용 Worker는 팀 계정에 배포됐고, 이름을 `dobby-garment-ai`에서 `dobby-openai`로 변경했습니다.** 현재 주소는 `https://dobby-openai.dobbyisvintage.workers.dev`입니다. 변경 후 두 Secret 이름과 기존 배포 이력이 유지되고, 새 주소의 `GET /health`가 HTTP 200을 반환함을 확인했습니다. 이 경로는 실행 상태만 확인하고 OpenAI를 호출하지 않습니다. 응답의 `service` 값 `dobby-garment-ai`는 코드 내부 식별자로 유지하며 Cloudflare Worker 이름과는 별개입니다.
 
-개발용 요청 인증 Secret `DRAFT_API_TOKEN`은 등록했고, 로컬 사본은 Git 제외 파일 `.dev.vars.live-check`에 권한 600으로 보관합니다. 사용자가 입력한 `OPENAI_API_KEY`도 Secret 이름 목록에서 등록을 확인했습니다. 키 값을 조회하지 않고 실제 의류 2벌에 각각 1회 요청해, OpenAI가 생성한 초안을 HTTP 200으로 받는 것까지 검증했습니다. 별도 모의 Worker `dobby-garment-ai-dev`는 아직 배포하지 않았습니다. 기존 카페24·Instagram Worker와 iOS 앱 코드는 변경하지 않았습니다.
+개발용 요청 인증 Secret `DRAFT_API_TOKEN`은 등록했고, 로컬 사본은 Git 제외 파일 `.dev.vars.live-check`에 권한 600으로 보관합니다. 사용자가 입력한 `OPENAI_API_KEY`도 Secret 이름 목록에서 등록을 확인했습니다. 키 값을 조회하지 않고 실제 의류 2벌에 각각 1회 요청해, OpenAI가 생성한 초안을 HTTP 200으로 받는 것까지 검증했습니다. 별도 모의 Worker `dobby-garment-ai-dev`는 아직 배포하지 않았습니다. 이는 당시 API 구현 검증 기록입니다. 아래 공통 인증 수정은 iOS 클라이언트도 변경하며 기존 카페24·Instagram Worker 코드는 변경하지 않습니다.
 
 여기서 **배포**는 이 폴더의 Worker 서버 코드를 Cloudflare에 올려 HTTPS 주소로 API 요청을 받게 만드는 작업입니다. Dobby 앱의 App Store 출시는 별도 작업입니다. 이번 서버 배포는 사용자 승인 후 진행했으며 커밋·푸시·PR 생성은 하지 않았습니다.
 
 개인 계정으로 인증했을 때 작성한 로컬 코드는 그대로 재사용합니다. 이번 작업에서 개인 Cloudflare 계정에 Worker를 배포하거나 Secret을 등록하지 않았으므로 이전할 서버는 없습니다. Wrangler 인증은 팀 계정으로 전환됐지만, 개인 계정의 기존 OAuth 승인을 철회한 것은 아닙니다. 별도 `Dobby-Plane-Test` 초기 작업본 대신 현재 Dobby 저장소의 이 폴더를 작업 기준으로 사용합니다.
+
+## 공통 앱 인증
+
+이번 수정은 기존 `dobby-openai`를 그대로 사용하면서 앱 공통 인증을 추가합니다. **2026-10-31 사용자 승인 후 수정 코드와 두 호출 제한 바인딩을 배포했습니다.** 공통 인증 배포 버전은 `c2b63e32-62bb-4631-b01b-a5858c0dca51`이며 트래픽 100% 적용을 확인했습니다. 위의 2026-10-29 기록은 기존 개발 토큰 방식의 기록입니다.
+
+| 요청 방식 | 필요한 설정 | 처리 |
+|---|---|---|
+| 기본 앱 공통 인증 | Secret `DOBBY_APP_API_KEY`, 두 Rate Limiting 바인딩 | `X-Dobby-App-Key` 확인 + 설치별 64자리 소문자 hex Bearer 검사 + 호출 횟수 제한 |
+| 기존 개발 연결 | Secret `DRAFT_API_TOKEN` | 앱 키 헤더가 없는 요청에서 기존 Bearer 인증 유지 |
+
+새 Secret **`DOBBY_APP_API_KEY`는 앱의 기존 `DOBBY_INSTAGRAM_APP_API_KEY`와 같은 값**으로 등록합니다. Instagram Worker가 검증하는 앱 접근 키이며, OpenAI 키나 Cafe24 설정의 동명 키를 복사하는 것이 아닙니다. Worker 사이에 Secret은 자동 공유되지 않습니다. 기존 `OPENAI_API_KEY`와 `DRAFT_API_TOKEN`은 유지합니다.
+
+앱은 `InstagramAppAPIKey` 설정과 기존 Instagram Keychain 설치별 인증값을 재사용합니다. 인증값이 없으면 최초 요청 때 자동 생성하므로 일반 Dobby scheme으로 빌드할 수 있습니다. 팀원 Mac에도 기존 앱 비밀 설정은 있어야 하며, AI 전용 scheme이나 기기별 개발 토큰 주입은 필요하지 않습니다. Instagram OAuth 로그인은 AI 사용의 전제조건이 아닙니다.
+
+앱 키 헤더가 있으면 공통 인증만 검사합니다. 잘못된 앱 키가 있는 요청은 유효한 개발 토큰이 있어도 거절합니다. 공통 인증용 바인딩이 빠졌거나 제한 검사가 실패하면 OpenAI를 호출하지 않습니다.
+
+`wrangler.toml`은 `AI_INSTALLATION_RATE_LIMITER`(설치별 60초에 5회)와 `AI_SHARED_RATE_LIMITER`(공통 60초에 30회)를 선언합니다. 제한 초과는 429 `rate_limited`, `Retry-After: 60`으로 반환합니다. 이는 [Cloudflare 공식 Rate Limiting 문서](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) 기준 위치별 근사 제한이며 전 세계 합산 과금 상한이 아닙니다. 배포 전 팀 계정 Worker 4개의 설정을 조회해 namespace ID `1211221`·`1211222`가 다른 Worker의 제한 설정과 겹치지 않음을 확인했습니다. 앱 공통 키와 자가 생성 설치 식별자는 사용자 로그인이나 앱 진위 증명을 대체하지 않습니다. 신뢰된 기존 개발 토큰은 호환성을 위해 이 새 제한 경로를 사용하지 않습니다.
+
+사용자가 새 Secret을 등록한 뒤 같은 Worker에 수정 코드·바인딩 배포를 완료했습니다. 기존 `DOBBY_APP_API_KEY`·`OPENAI_API_KEY`·`DRAFT_API_TOKEN` Secret 이름 유지, `GET /health` 200, 정상 공통 인증 + 빈 사진 요청 400 `invalid_request`, 잘못된 공통 인증 401 `unauthorized`를 확인했습니다. 빈 사진 요청은 OpenAI 호출 전에 종료되며 실제 사진·AI 생성 요청을 보내지 않았습니다. 기존 Instagram Worker를 변경하거나 커밋·푸시·PR을 수행하지 않았습니다. **앱은 이 인증 수정 코드로 다시 빌드해야 합니다.**
 
 ## 바로 실행하기
 
@@ -56,7 +75,7 @@ npm run dry-run
 | 설정·진입점 | `wrangler.mock.toml`, `src/local-mock.js` | `wrangler.toml`, `src/index.js` |
 | AI 응답 | 코드에 고정된 연결 테스트 예시 | `gpt-6-luna` Responses API |
 | OpenAI 통신·사용료 | 없음 | 호출 시 사용량에 따른 요금 |
-| 인증 | 공개된 로컬 예시 토큰 | 별도로 설정한 개발용 비밀 토큰 |
+| 인증 | 공개된 로컬 예시 토큰 | 공통 앱 인증 또는 기존 개발용 비밀 토큰 |
 
 모의 진입점은 실제 키가 환경에 있어도 사용하지 않습니다. 외부 호스트 요청은 503 `local_only`로 차단하고, 모든 응답에 `X-Dobby-AI-Mode: mock`을 넣습니다. 초안의 설명과 확인 메모에도 모의 응답임을 표시합니다. 모의 설정은 배포용이 아닙니다.
 
@@ -64,7 +83,7 @@ npm run dry-run
 
 - `GET /health`: 실행 상태만 확인합니다. 실제 OpenAI 연결이나 키 유효성을 검사하지 않습니다.
 - `POST /v1/garments/autofill`: 같은 옷 사진 1~5장을 받아 초안 JSON을 반환합니다.
-- 요청 헤더: `Content-Type: application/json`, `Authorization: Bearer <토큰>`
+- 요청 헤더: `Content-Type: application/json`, `Authorization: Bearer <토큰>`. 공통 앱 인증은 `X-Dobby-App-Key`도 필요합니다.
 - 모의 서버 토큰: `local-dobby-demo-token` — 공개된 연결 확인용 값이며 실제 서비스에 사용하지 않습니다.
 
 ```json
@@ -103,7 +122,8 @@ npm run dry-run
 | 상태 | 의미 |
 |---|---|
 | 400 / 413 / 415 | 요청 형식·사진·용량 오류 |
-| 401 | 개발용 요청 인증 실패 |
+| 401 | 요청 인증 실패 |
+| 429 | 공통 앱 호출 횟수 제한 초과 (`Retry-After: 60`) |
 | 422 `photo_unusable` | 의류 식별이 어려워 추가 사진 필요 |
 | 503 | 서버 미설정·AI 연결 설정 오류·사용량 제한 |
 | 502 | AI 응답 오류·연결 실패 |
@@ -124,6 +144,9 @@ Cloudflare 화면의 저장·배포 동작으로 반영합니다. `DRAFT_API_TOK
 키 등록 후 사용자 승인으로 실제 사진 요청 2회를 실행했습니다. 아래의 `check:cloud` 명령은 별도 모의 Worker용이며 이 실제 AI 서버를 검사하는 명령이 아닙니다. 추가 유료 사진 분석은 사용자가 요청한 범위에서 진행합니다.
 
 ## 검증 결과
+
+2026-10-31 공통 인증 수정은 자동 테스트 **146개 전체 통과**, 실제 AI용 설정의 `npm run dry-run` 통과로 확인했습니다. 정상 공통 인증, 인증 오류, 바인딩 누락·실패, 설치별·공통 제한 초과, 개발 토큰 호환을 검증하며 실제 OpenAI를 호출하지 않습니다. 사용자가 새 Secret을 등록했고, 승인 후 Cloudflare 배포와 위의 비용 없는 인증 검사를 완료했습니다.
+
 
 2026-10-29 기준으로 자동 테스트 104개와 실제 AI용 설정의 배포 전 번들 확인(`npm run dry-run`)이 통과했습니다. 문단 유지·공백 정리·빈 설명·길이 제한·제어문자 검증을 포함합니다. 자동 테스트는 실제 OpenAI를 호출하지 않습니다.
 
@@ -163,11 +186,12 @@ npm run check:cloud -- https://dobby-garment-ai-dev.dobbyisvintage.workers.dev
 배포된 Worker의 Secret 설정과 별도로, 로컬에서 실제 AI를 호출하려면 `.dev.vars.example`을 `.dev.vars`로 복사한 뒤 **사용자가 직접** 다음 값을 입력합니다. 현재 이 로컬 키 파일은 만들지 않았습니다. 이 파일은 Git에서 제외되며 키를 채팅에 붙여넣을 필요가 없습니다.
 
 - `OPENAI_API_KEY`: OpenAI 프로젝트 API 키
-- `DRAFT_API_TOKEN`: 별도로 만든 긴 무작위 개발용 인증 토큰
+- `DOBBY_APP_API_KEY`: 기존 Instagram 앱 접근 키와 동일한 값 (공통 앱 인증)
+- `DRAFT_API_TOKEN`: 별도로 만든 긴 무작위 개발용 인증 토큰 (기존 연결 테스트)
 
 `npm run dev:live`는 Worker를 로컬에서 실행하지만 실제 API 요청을 받으면 OpenAI를 호출하므로 사용료가 발생할 수 있습니다. 키 파일 등록만으로 호출하지는 않습니다. 추가 코드 배포는 코드·테스트 결과 확인 후 별도 승인 범위에서 진행합니다.
 
-이 토큰은 개발자 연결 테스트용입니다. iOS 앱에 공통 토큰을 포함하지 않고, 사용자 배포 전에 요청 인증과 사용량 제한을 구현해야 합니다. 앱 화면 연결은 #122, 실제 연결·배포 준비는 #123 범위입니다.
+`DRAFT_API_TOKEN`은 개발자 연결 테스트용이며 앱 번들에 포함하지 않습니다. 일반 앱은 기존 Instagram 앱 접근 키와 자동 생성 설치 식별자를 사용합니다. 사용자 인증과 전역 과금 상한은 별도 검토가 필요합니다. 앱 화면 연결은 #122, 실제 연결·배포 준비는 #123 범위입니다.
 
 실제 사진 요청의 Cloudflare CPU 한도 충족 여부는 후속 측정이 필요합니다. OpenAI에는 `store: false`로 요청하지만 이는 모든 데이터 보관 정책을 해제한다는 뜻은 아닙니다.
 

@@ -70,6 +70,44 @@ struct SettingsNavigationRow: View {
     }
 }
 
+struct SettingsSelectionRow: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Text(title)
+                    .font(SettingsTypography.labelSmall)
+                    .tracking(SettingsTypography.labelSmallTracking)
+                    .foregroundStyle(SettingsStyle.primaryText)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(isSelected ? Color("HomeAccent") : SettingsStyle.separator)
+                    .frame(width: 24, height: 24)
+                    .accessibilityHidden(true)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .background(SettingsStyle.surface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color("HomeAccent") : SettingsStyle.separator, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(isSelected ? "선택됨" : "선택 안 됨")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 struct SettingsHeader: View {
     var body: some View {
         Text("설정")

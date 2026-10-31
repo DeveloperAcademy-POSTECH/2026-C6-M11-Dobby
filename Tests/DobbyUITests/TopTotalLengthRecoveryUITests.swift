@@ -68,6 +68,7 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         selectPhotos.tap()
         let completePhotos = app.buttons["camera.completePhotos"]
         XCTAssertTrue(completePhotos.waitForExistence(timeout: 10))
+        disableProductAutofillIfPresent(in: app)
         completePhotos.tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         let storedLength = app.textFields["product-info.measurement.totalLength"]

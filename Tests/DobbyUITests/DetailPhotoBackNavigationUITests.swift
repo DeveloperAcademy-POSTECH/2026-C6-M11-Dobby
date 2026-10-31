@@ -92,6 +92,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             XCTAssertFalse(exitConfirmation(in: app).exists, "Preview Back only closes the auxiliary preview")
             assertSelection(in: app)
         }
+        disableProductAutofillIfPresent(in: app)
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
     }
