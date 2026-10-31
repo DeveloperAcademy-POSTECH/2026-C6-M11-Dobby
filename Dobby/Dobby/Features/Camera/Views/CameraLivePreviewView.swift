@@ -17,8 +17,8 @@ struct CameraLivePreviewView: View {
     @State private var isVisible = false
 
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: aspectRatio) { viewport in
-            CameraPreviewSurface(session: camera.session, viewport: viewport,
+        DetailAspectRatioPreview(aspectRatio: aspectRatio) { _ in
+            CameraPreviewSurface(session: camera.session,
                 onRotationChange: { camera.rotationAngle = $0 },
                 onFramingReady: { camera.previewCrop = $0 })
         }

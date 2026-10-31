@@ -95,7 +95,7 @@ enum ProductPhotoHandoff {
             throw HandoffError.invalidOutput
         }
         for detail in output.detailPhotos {
-            guard detail.sessionID == input.sessionID, detail.garmentID == garment.id,
+            guard detail.garmentID == garment.id,
                   detail.purpose == .detail, detail.id != measurement.id,
                   case let .localFile(url, _) = detail.source, url.isFileURL else {
                 throw HandoffError.invalidOutput

@@ -79,9 +79,7 @@ struct ProductCreationFlowView: View {
                 } else {
                     GarmentCaptureFlowView(archive: archive, preview: isFixture,
                         onConfirmedRecord: receiveMeasurement, onCancel: onCancel, embedsNavigation: false,
-                        restoredRecord: restoredRecord, onExitRecord: saveResultAndExit,
-                        allowsRetake: garment == nil,
-                        onExitRequested: presentExitConfirmation)
+                        restoredRecord: restoredRecord)
                 }
             }
                 .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
@@ -160,7 +158,7 @@ struct ProductCreationFlowView: View {
                     CameraFlowView(model: photoModel, permission: permission, camera: camera,
                         previewSource: isFixture ? photoModel.input.measurement.source : nil,
                         onSelectPhotos: { path.append(.photoSelection) },
-                        onExit: requestDraftExit, onComplete: receivePhotos)
+                        onExit: returnToMeasurementResult, onComplete: receivePhotos)
                 case .photoSelection:
                     ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
                         usesAI: $usesProductAutofill,
@@ -206,6 +204,13 @@ struct ProductCreationFlowView: View {
         }
     }
 
+    private func returnToMeasurementResult() {
+        guard path.last == .details, !isFinishing, pendingExitAction == nil,
+              let photoModel, !photoModel.isCapturing, !photoModel.isDeleting else { return }
+        // Pop only the detail screen; retain the measurement result and photo session.
+        path.removeLast()
+    }
+
     private func returnToDetailCapture() {
         guard path.last == .photoSelection else { return }
         // Keep the current photo model and camera session alive for additional captures.
@@ -227,9 +232,31 @@ struct ProductCreationFlowView: View {
         guard record.result.values.contains(where: { value in
             value.status != .unavailable && (value.meters.map { $0.isFinite && $0 > 0 && ($0 * 100).isFinite } ?? false)
         }) else { throw GarmentStore.MeasurementImportError.noAvailableMeasurements }
-        let garment = try await prepareProduct(for: record)
-        try persistDraft(garment, step: .details)
+        try await prepareAndSaveProduct(for: record, step: .details)
         path.append(.details)
+    }
+
+    private func prepareAndSaveProduct(for record: SavedMeasurement, step: ProductDraftStep,
+                                       allowsUnavailableDraft: Bool = false) async throws {
+        if let garment, let photoModel,
+           garment.measurementPhoto?.measurementFrameID != record.snapshot.frame.frameID
+            || garment.measurementPhoto?.measurementSessionID != record.snapshot.frame.sessionID {
+            let replacementInput = GarmentMeasurementInputState()
+            let replacement = try await ProductMeasurementRetake.replace(record, garment: garment,
+                photoModel: photoModel, previousInputData: JSONEncoder().encode(measurementInput),
+                replacementInputData: JSONEncoder().encode(replacementInput), step: step, in: context,
+                allowsSynthetic: isFixture, allowsUnavailableDraft: allowsUnavailableDraft)
+            context = replacement.context
+            self.garment = replacement.garment
+            self.photoModel = replacement.photoModel
+            measurementRecordID = record.id
+            measurementInput = replacementInput
+            preservesDraftPhotos = true
+            permission?.refresh()
+        } else {
+            let garment = try await prepareProduct(for: record, allowsUnavailableDraft: allowsUnavailableDraft)
+            try persistDraft(garment, step: step)
+        }
     }
 
     private func prepareProduct(for record: SavedMeasurement, allowsUnavailableDraft: Bool = false) async throws -> Garment {
@@ -382,16 +409,6 @@ struct ProductCreationFlowView: View {
         try? await photoModel?.discardUncommittedDetails()
         preservesDraftPhotos = false
         onFinish()
-    }
-
-    private func saveResultAndExit(_ record: SavedMeasurement) async throws {
-        guard !isFinishing else { return }
-        cleanupAction = .save
-        isFinishing = true
-        defer { isFinishing = false }
-        let garment = try await prepareProduct(for: record, allowsUnavailableDraft: true)
-        try persistDraft(garment, step: .measurementResult)
-        onDraftSaved()
     }
 
     private func requestSaveAndExit() {

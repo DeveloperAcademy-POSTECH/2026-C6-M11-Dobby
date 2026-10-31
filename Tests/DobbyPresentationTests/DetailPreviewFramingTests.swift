@@ -4,6 +4,18 @@ import XCTest
 @testable import Dobby
 
 final class DetailPreviewFramingTests: XCTestCase {
+    func testFullFourThreePreviewPreservesAllSourcePixelsWhenSaved() throws {
+        for angle in [0.0, 90, 180, 270] {
+            let region = try XCTUnwrap(DetailPreviewCropMapping.uprightRect(
+                CGRect(x: 0, y: 0, width: 1, height: 1), rotationAngle: angle))
+            let crop = try XCTUnwrap(DetailPhotoCropGeometry(pixelWidth: 4032, pixelHeight: 3024,
+                orientation: angle == 90 || angle == 270 ? .right : .up,
+                aspectRatio: .fourThree, normalizedPreviewCrop: region))
+            XCTAssertEqual(crop.cropRect, CGRect(origin: .zero, size: crop.uprightPixelSize))
+            XCTAssertEqual(crop.outputPixelSize, crop.uprightPixelSize)
+        }
+    }
+
     func testSensorRectangleRotatesToUprightPhotoInEveryDeviceOrientation() throws {
         let rect = CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.4)
         for (angle, expected) in [(0.0, rect),

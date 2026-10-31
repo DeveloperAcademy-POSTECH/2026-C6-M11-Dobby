@@ -9,7 +9,8 @@ struct ProductPhotoGalleryView: View {
     @State private var showsDeletionError = false
     private let onDelete: ((UUID) throws -> Bool)?
 
-    private let controlBackground = Color.black.opacity(0.3)
+    private let controlBackground = Color.black.opacity(0.2)
+    private let controlFont = Font.system(size: 17, weight: .semibold)
 
     init(photos: [GarmentPhoto], initialPhotoID: UUID,
          onDelete: ((UUID) throws -> Bool)? = nil) {
@@ -38,29 +39,31 @@ struct ProductPhotoGalleryView: View {
             .accessibilityValue("\(selectedIndex + 1) / \(photos.count)")
             .background(.black)
             .overlay(alignment: .topLeading) {
-                Button("닫기", systemImage: "chevron.left", action: close)
+                Button("닫기", systemImage: "chevron.backward", action: close)
                     .labelStyle(.iconOnly)
-                    .font(.system(size: 22, weight: .medium))
+                    .font(controlFont)
                     .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 48, height: 48)
                     .background(controlBackground, in: Circle())
                     .contentShape(Rectangle())
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("product-gallery.close")
-                    .padding(12)
+                    .padding(10)
             }
             .overlay(alignment: .topTrailing) {
                 if onDelete != nil {
-                    Button("삭제", role: .destructive, action: deleteCurrentPhoto)
-                        .font(.system(size: 15, weight: .semibold))
+                    Button("제품 사진 삭제", systemImage: "trash.fill", role: .destructive,
+                           action: deleteCurrentPhoto)
+                        .labelStyle(.iconOnly)
+                        .font(controlFont)
                         .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 48, height: 48)
                         .background(controlBackground, in: Circle())
                         .contentShape(Rectangle())
                         .buttonStyle(.plain)
                         .disabled(photos.isEmpty || isPaging)
                         .accessibilityIdentifier("product-gallery.delete")
-                        .padding(12)
+                        .padding(10)
                 }
             }
             .overlay(alignment: .bottom) {
@@ -70,10 +73,9 @@ struct ProductPhotoGalleryView: View {
                         .frame(height: 44)
                         .padding(.horizontal, 10)
                         .background {
-                            Capsule().fill(controlBackground).frame(height: 26)
+                            Capsule().fill(.ultraThinMaterial).frame(height: 24)
                         }
-                        .scaleEffect(0.85)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 20)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -124,8 +126,8 @@ private struct ProductPhotoPageControl: UIViewRepresentable {
     func makeUIView(context: Context) -> UIPageControl {
         let control = UIPageControl()
         control.backgroundStyle = .minimal
-        control.pageIndicatorTintColor = .white.withAlphaComponent(0.4)
-        control.currentPageIndicatorTintColor = .white
+        control.pageIndicatorTintColor = .tertiaryLabel
+        control.currentPageIndicatorTintColor = .label
         control.overrideUserInterfaceStyle = .light
         control.accessibilityLabel = "제품 사진 페이지"
         control.accessibilityIdentifier = "product-gallery.page-control"

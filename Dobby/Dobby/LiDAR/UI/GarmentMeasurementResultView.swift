@@ -10,8 +10,6 @@ struct GarmentMeasurementResultView: View {
     let onRetake: () -> Void
     let onConfirm: () -> Void
     let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
-    let onExitRecord: ((SavedMeasurement) async throws -> Void)?
-    let onExitRequested: ((@escaping () -> Void) -> Void)?
     let allowsRetake: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
@@ -38,18 +36,14 @@ struct GarmentMeasurementResultView: View {
          recordingError: String? = nil, initialImage: UIImage? = nil, onRetake: @escaping () -> Void,
          onConfirm: @escaping () -> Void,
          onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
-         onExitRecord: ((SavedMeasurement) async throws -> Void)? = nil,
          initialRecord: SavedMeasurement? = nil,
-         allowsRetake: Bool = true,
-         onExitRequested: ((@escaping () -> Void) -> Void)? = nil) {
+         allowsRetake: Bool = true) {
         _model = State(initialValue: model)
         self.archive = archive
         self.recordingError = recordingError
         self.onRetake = onRetake
         self.onConfirm = onConfirm
         self.onConfirmedRecord = onConfirmedRecord
-        self.onExitRecord = onExitRecord
-        self.onExitRequested = onExitRequested
         self.allowsRetake = allowsRetake
         _image = State(initialValue: initialImage)
         _pendingRecord = State(initialValue: initialRecord)
@@ -101,21 +95,12 @@ struct GarmentMeasurementResultView: View {
         .toolbarColorScheme(.light, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                if onExitRecord != nil {
-                    Button(action: requestExit) {
-                        GarmentCaptureToolbarIcon(systemName: "chevron.left")
-                    }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("뒤로가기")
-                        .accessibilityIdentifier("product-flow.back")
-                        .disabled(isSaving || isEditingPoint || model.needsRecalculation)
-                } else {
-                    Button(action: retakeIfAllowed) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("다시 촬영")
-                        .accessibilityIdentifier("retakeGarmentMeasurement")
-                        .disabled(!allowsRetake || isSaving || isEditingPoint)
-                }
+                Button(action: retakeIfAllowed) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("뒤로가기")
+                    .accessibilityHint("실측 촬영 화면으로 돌아갑니다")
+                    .accessibilityIdentifier(onConfirmedRecord == nil ? "retakeGarmentMeasurement" : "product-flow.back")
+                    .disabled(!allowsRetake || isSaving || isEditingPoint || model.needsRecalculation)
             }.sharedBackgroundVisibility(.hidden)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -534,7 +519,7 @@ struct GarmentMeasurementResultView: View {
     }
 
     private func retakeIfAllowed() {
-        guard allowsRetake else { return }
+        guard allowsRetake, !isSaving, !isEditingPoint, !model.needsRecalculation else { return }
         onRetake()
     }
 
@@ -575,23 +560,6 @@ struct GarmentMeasurementResultView: View {
             // the already published immutable archive is not saved twice.
             try await onConfirmedRecord?(record)
             onConfirm()
-        } catch { saveError = error.localizedDescription }
-    }
-
-    private func requestExit() {
-        guard onExitRecord != nil, !isSaving, !isEditingPoint, !model.needsRecalculation else { return }
-        let save: () -> Void = { Task { await saveAndExit() } }
-        if let onExitRequested { onExitRequested(save) }
-        else { save() }
-    }
-
-    private func saveAndExit() async {
-        guard let onExitRecord, !isSaving, !isEditingPoint, !model.needsRecalculation else { return }
-        isSaving = true
-        defer { isSaving = false }
-        do {
-            let record = try await savedRecord()
-            try await onExitRecord(record)
         } catch { saveError = error.localizedDescription }
     }
 
