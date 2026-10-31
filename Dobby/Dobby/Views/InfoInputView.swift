@@ -21,7 +21,6 @@ struct InfoInputView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var exportProduct: ExportProduct?
-    @State private var copyController = CopyActivityController()
     @State private var showFruits = false
     @State private var localMeasurementInput = GarmentMeasurementInputState()
     private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
@@ -133,7 +132,7 @@ struct InfoInputView: View {
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
         .sheet(item: $exportProduct) { product in
-            ExportView(product: product, controller: copyController, showFruits: $showFruits)
+            ExportView(product: product, showFruits: $showFruits)
         }
         .alert("제품 정보를 저장하지 못했어요", isPresented: Binding(
             get: { saveError != nil }, set: { if !$0 { saveError = nil } }
