@@ -1,0 +1,288 @@
+import { buildOpenAIRequest, DraftResponseError, parseOpenAIResponse } from "./garment-draft.js";
+import { enforceAppUsageLimits, UsageProtectionFailure } from "./usage-protection.js";
+
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const MAX_PHOTOS = 5;
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+const MAX_TOTAL_PHOTO_BYTES = 8 * 1024 * 1024;
+const MAX_BODY_BYTES = 12 * 1024 * 1024;
+const PHOTO_ROLES = new Set(["front", "back", "label", "detail", "defect"]);
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const DATA_URL_MIME_TYPES = new Map([
+  ["data:image/jpeg;base64", "image/jpeg"],
+  ["data:image/png;base64", "image/png"],
+  ["data:image/webp;base64", "image/webp"],
+]);
+
+class Failure extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function json(body, status, requestId, extraHeaders = {}) {
+  return Response.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Request-Id": requestId,
+      ...extraHeaders,
+    },
+  });
+}
+
+function failureResponse(error, requestId) {
+  const failure = error instanceof Failure || error instanceof UsageProtectionFailure
+    ? error
+    : new Failure(500, "internal_error", "서버 처리 중 오류가 발생했습니다.");
+  return json({ error: { code: failure.code, message: failure.message }, requestId },
+    failure.status, requestId, failure.headers);
+}
+
+function hasSecret(value) {
+  return typeof value === "string" && value.length > 0 && !/\s/.test(value);
+}
+
+async function equalSecrets(actual, expected) {
+  // Compare fixed-length hashes so token length does not affect the comparison loop.
+  const encoder = new TextEncoder();
+  const [actualHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(actual)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  const left = new Uint8Array(actualHash);
+  const right = new Uint8Array(expectedHash);
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
+}
+
+async function authorize(request, env) {
+  const bearer = request.headers.get("Authorization") || "";
+  const match = /^Bearer ([^\s]+)$/i.exec(bearer);
+  // An app header explicitly selects app authentication. Invalid app credentials
+  // never fall back to the trusted legacy development token.
+  if (request.headers.has("X-Dobby-App-Key")) {
+    if (!hasSecret(env?.DOBBY_APP_API_KEY) || !hasSecret(env?.OPENAI_API_KEY)) {
+      throw new Failure(503, "service_not_configured", "AI 연결 서버 설정이 필요합니다.");
+    }
+    const appKey = request.headers.get("X-Dobby-App-Key");
+    if (!hasSecret(appKey) || appKey.length > 1024 || !match || !/^[a-f0-9]{64}$/.test(match[1])
+      || !await equalSecrets(appKey, env.DOBBY_APP_API_KEY)) {
+      throw new Failure(401, "unauthorized", "요청 인증 정보를 확인해 주세요.");
+    }
+    return { kind: "app", installationID: match[1] };
+  }
+  if (!hasSecret(env?.DRAFT_API_TOKEN) || !hasSecret(env?.OPENAI_API_KEY)) {
+    throw new Failure(503, "service_not_configured", "AI 연결 서버 설정이 필요합니다.");
+  }
+  if (!match || match[1].length > 1024 || !await equalSecrets(match[1], env.DRAFT_API_TOKEN)) {
+    throw new Failure(401, "unauthorized", "요청 인증 정보를 확인해 주세요.");
+  }
+  return { kind: "legacy" };
+}
+
+async function readJSON(request) {
+  const contentType = (request.headers.get("Content-Type") || "").split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "application/json") {
+    throw new Failure(415, "unsupported_content_type", "JSON 형식으로 사진을 전송해 주세요.");
+  }
+  const lengthHeader = request.headers.get("Content-Length");
+  if (lengthHeader !== null && (!/^\d+$/.test(lengthHeader) || Number(lengthHeader) > MAX_BODY_BYTES)) {
+    throw new Failure(413, "request_too_large", "요청 용량은 12MiB 이하여야 합니다.");
+  }
+  const reader = request.body?.getReader();
+  if (!reader) throw new Failure(400, "invalid_request", "사진 요청 내용이 필요합니다.");
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BODY_BYTES) {
+        try { await reader.cancel(); } catch { /* The size limit still takes precedence. */ }
+        throw new Failure(413, "request_too_large", "요청 용량은 12MiB 이하여야 합니다.");
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof Failure) throw error;
+    throw new Failure(400, "invalid_request", "사진 요청을 읽지 못했습니다.");
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    throw new Failure(400, "invalid_json", "요청 JSON 형식이 올바르지 않습니다.");
+  }
+}
+
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasOnlyKeys(value, allowed) {
+  return Object.keys(value).every(key => allowed.includes(key));
+}
+
+function hasImageSignature(prefix, mimeType) {
+  const byte = index => prefix.charCodeAt(index);
+  if (mimeType === "image/jpeg") {
+    return prefix.length >= 3 && byte(0) === 0xff && byte(1) === 0xd8 && byte(2) === 0xff;
+  }
+  if (mimeType === "image/png") {
+    return prefix.startsWith("\x89PNG\r\n\x1a\n");
+  }
+  return prefix.length >= 12 && prefix.slice(0, 4) === "RIFF" && prefix.slice(8, 12) === "WEBP";
+}
+
+function imageBytes(dataURL) {
+  if (typeof dataURL !== "string") {
+    throw new Failure(400, "invalid_photo", "사진은 JPEG, PNG, WebP 데이터 URL이어야 합니다.");
+  }
+  const comma = dataURL.indexOf(",");
+  const mimeType = DATA_URL_MIME_TYPES.get(dataURL.slice(0, comma));
+  if (comma < 0 || !mimeType) {
+    throw new Failure(400, "invalid_photo", "사진은 JPEG, PNG, WebP 데이터 URL이어야 합니다.");
+  }
+  const encoded = dataURL.slice(comma + 1);
+  const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
+  const size = encoded.length / 4 * 3 - padding;
+  if (size > MAX_PHOTO_BYTES) {
+    throw new Failure(413, "photo_too_large", "사진 한 장의 용량은 2MiB 이하여야 합니다.");
+  }
+  const firstPadding = encoded.indexOf("=");
+  const lastValue = BASE64_ALPHABET.indexOf(encoded[encoded.length - padding - 1]);
+  if (!encoded.length || encoded.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(encoded)
+      || (firstPadding !== -1 && firstPadding !== encoded.length - padding)
+      || (padding === 2 && lastValue % 16 !== 0)
+      || (padding === 1 && lastValue % 4 !== 0)) {
+    throw new Failure(400, "invalid_photo", "사진의 Base64 형식이 올바르지 않습니다.");
+  }
+  // Decode only a short prefix; the API receives the original data URL.
+  let prefix;
+  try { prefix = atob(encoded.slice(0, 24)); }
+  catch { throw new Failure(400, "invalid_photo", "사진의 Base64 형식이 올바르지 않습니다."); }
+  if (!hasImageSignature(prefix, mimeType)) {
+    throw new Failure(400, "invalid_photo", "사진 형식과 파일 내용이 일치하지 않습니다.");
+  }
+  return size;
+}
+
+function validatePhotos(body) {
+  if (!isObject(body) || !hasOnlyKeys(body, ["photos"]) || !Array.isArray(body.photos)
+      || body.photos.length < 1 || body.photos.length > MAX_PHOTOS) {
+    throw new Failure(400, "invalid_request", "같은 제품의 사진 1~5장을 전송해 주세요.");
+  }
+  const ids = new Set();
+  let totalBytes = 0;
+  return body.photos.map(photo => {
+    if (!isObject(photo) || !hasOnlyKeys(photo, ["id", "role", "imageDataUrl"])
+        || typeof photo.id !== "string" || !photo.id.length || photo.id.length > 100
+        || photo.id !== photo.id.trim() || /[\u0000-\u001f\u007f]/.test(photo.id)
+        || ids.has(photo.id)) {
+      throw new Failure(400, "invalid_photo", "사진마다 고유한 id를 지정해 주세요.");
+    }
+    ids.add(photo.id);
+    const role = photo.role === undefined ? "detail" : photo.role;
+    if (!PHOTO_ROLES.has(role)) {
+      throw new Failure(400, "invalid_photo_role", "사진 역할은 front, back, label, detail, defect 중 하나여야 합니다.");
+    }
+    totalBytes += imageBytes(photo.imageDataUrl);
+    if (totalBytes > MAX_TOTAL_PHOTO_BYTES) {
+      throw new Failure(413, "photos_too_large", "사진의 전체 용량은 8MiB 이하여야 합니다.");
+    }
+    return { id: photo.id, role, imageDataUrl: photo.imageDataUrl };
+  });
+}
+
+function upstreamFailure(status) {
+  if (status === 429) return new Failure(503, "ai_rate_limited", "AI 요청이 많습니다. 잠시 후 다시 시도해 주세요.");
+  if (status === 401 || status === 403) return new Failure(503, "ai_configuration_error", "AI 연결 서버 설정을 확인해 주세요.");
+  return new Failure(502, "ai_request_failed", "AI 초안을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+}
+
+async function generateDraft(photos, env, fetchImpl, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify(buildOpenAIRequest(photos)),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      try { await response.body?.cancel(); } catch { /* Do not read or relay upstream errors. */ }
+      throw upstreamFailure(response.status);
+    }
+    let payload;
+    try { payload = await response.json(); }
+    catch {
+      if (controller.signal.aborted) throw new Failure(504, "ai_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.");
+      throw new Failure(502, "invalid_ai_response", "AI 응답 형식을 확인할 수 없습니다.");
+    }
+    try { return parseOpenAIResponse(payload); }
+    catch (error) {
+      if (error instanceof DraftResponseError && error.code === "UNUSABLE_PHOTOS") {
+        throw new Failure(422, "photo_unusable", "사진에서 의류를 확인하기 어렵습니다. 제품 전체와 라벨이 선명한 사진을 추가해 주세요.");
+      }
+      throw new Failure(502, "invalid_ai_response", "AI 초안을 확인할 수 없습니다. 다시 시도해 주세요.");
+    }
+  } catch (error) {
+    if (error instanceof Failure) throw error;
+    if (controller.signal.aborted || error?.name === "AbortError" || error?.name === "TimeoutError") {
+      throw new Failure(504, "ai_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.");
+    }
+    throw new Failure(502, "ai_unavailable", "AI 서버에 연결하지 못했습니다. 다시 시도해 주세요.");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+  if (typeof fetchImpl !== "function" || !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000) {
+    throw new TypeError("Invalid Worker dependencies.");
+  }
+  return {
+    async fetch(request, env) {
+      const requestId = crypto.randomUUID();
+      try {
+        const path = new URL(request.url).pathname;
+        if (path === "/health" && request.method === "GET") {
+          return json({ service: "dobby-garment-ai", status: "ok" }, 200, requestId);
+        }
+        if (path !== "/v1/garments/autofill" && path !== "/health") {
+          throw new Failure(404, "not_found", "요청 경로를 확인해 주세요.");
+        }
+        const method = path === "/health" ? "GET" : "POST";
+        if (request.method !== method) {
+          return json({ error: { code: "method_not_allowed", message: "지원하지 않는 요청 방식입니다." }, requestId },
+            405, requestId, { Allow: method });
+        }
+        const authentication = await authorize(request, env);
+        if (authentication.kind === "app") {
+          await enforceAppUsageLimits(env, authentication.installationID);
+        }
+        const photos = validatePhotos(await readJSON(request));
+        return json(await generateDraft(photos, env, fetchImpl, timeoutMs), 200, requestId);
+      } catch (error) {
+        // Never log credentials, image data, model output, or raw upstream errors.
+        return failureResponse(error, requestId);
+      }
+    },
+  };
+}
+
+export default createWorker();

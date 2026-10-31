@@ -19,6 +19,7 @@ struct CapturedAsset: Identifiable, Equatable, Sendable {
 
     enum Purpose: String, Sendable {
         case measurement
+        case measurementVisualization
         case detail
     }
 

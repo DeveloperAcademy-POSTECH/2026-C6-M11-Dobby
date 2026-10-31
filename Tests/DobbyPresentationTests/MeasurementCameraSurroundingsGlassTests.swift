@@ -55,7 +55,9 @@ final class MeasurementCameraSurroundingsGlassTests: XCTestCase {
                 y: from.minY + (to.minY - from.minY) * fraction,
                 width: from.width + (to.width - from.width) * fraction,
                 height: from.height + (to.height - from.height) * fraction)
-            var view = MeasurementCameraSurroundingsGlass(photoRect: from)
+            // The measurement view is now a compatibility wrapper; the shared
+            // camera surroundings owns interpolation for both capture screens.
+            var view = CameraBlackSurroundings(photoRect: from)
             view.animatableData = .init(.init(expected.minX, expected.minY), .init(expected.width, expected.height))
             XCTAssertEqual(view.photoRect, expected)
             var shape = MeasurementCameraSurroundingsMask(photoRect: from)

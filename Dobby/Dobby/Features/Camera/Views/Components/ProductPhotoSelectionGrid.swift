@@ -22,6 +22,7 @@ struct ProductPhotoSelectionGrid: View {
                         photo: photo,
                         order: selectedPhotoIDs.firstIndex(of: photo.id).map { $0 + 1 },
                         captureIndex: index,
+                        detailNumber: photos.prefix(index).filter { $0.purpose == .detail }.count + 1,
                         onPreview: onPreview.map { preview in { preview(photo) } },
                         onToggleSelection: { onToggleSelection(photo.id) }
                     )

@@ -11,6 +11,7 @@ struct MultiCameraPreviewViewport: View, Animatable {
     let orientation: ImageOrientation
     let zoom: CameraZoom
     let isActive: Bool
+    var onPresented: @MainActor (UUID) -> Void = { _ in }
 
     var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
         get { .init(.init(photoRect.minX, photoRect.minY), .init(photoRect.width, photoRect.height)) }
@@ -22,31 +23,37 @@ struct MultiCameraPreviewViewport: View, Animatable {
 
     var body: some View {
         MultiCameraPreview(frames: frames, photoRect: photoRect, orientation: orientation,
-                           zoom: zoom, isActive: isActive)
+                           zoom: zoom, isActive: isActive, onPresented: onPresented)
             .transaction { $0.animation = nil }
     }
 }
 
-/// One GPU surface presents both synchronized cameras. The clear photograph's
-/// field of view remains the coordinate system used by focus and measurement.
+/// One GPU surface presents calibrated wide RGB inside the photo window.
+/// Opaque black chrome replaces all surrounding video. Focus and measurement
+/// keep the same rectified photo coordinate system.
 struct MultiCameraPreview: UIViewRepresentable {
     let frames: MultiCameraFrameStore
     let photoRect: CGRect
     let orientation: ImageOrientation
     let zoom: CameraZoom
     let isActive: Bool
+    var onPresented: @MainActor (UUID) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> MTKView {
         let view = MTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
-        view.framebufferOnly = false
+        view.framebufferOnly = true
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.preferredFramesPerSecond = 60
         view.isPaused = false
         view.enableSetNeedsDisplay = false
-        view.isOpaque = true
+        // Before the first calibrated drawable, expose the same camera's
+        // native startup preview beneath this surface instead of solid black.
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        view.layer.isOpaque = false
         view.isUserInteractionEnabled = false
         view.isAccessibilityElement = false
         view.accessibilityElementsHidden = true
@@ -57,7 +64,7 @@ struct MultiCameraPreview: UIViewRepresentable {
 
     func updateUIView(_ view: MTKView, context: Context) {
         context.coordinator.update(frames: frames, photoRect: photoRect,
-            orientation: orientation, zoom: zoom, isActive: isActive)
+            orientation: orientation, zoom: zoom, isActive: isActive, onPresented: onPresented)
     }
 
     static func dismantleUIView(_ view: MTKView, coordinator: Coordinator) {
@@ -74,13 +81,19 @@ struct MultiCameraPreview: UIViewRepresentable {
         private var zoom = CameraZoom.standard
         private var isActive = false
         private var compositor: MultiCameraPreviewCompositor?
+        private var onPresented: (@MainActor (UUID) -> Void)?
+        private var presentationEpoch = UUID()
 
         func configure(device: (any MTLDevice)?) {
             compositor = device.map { MultiCameraPreviewCompositor(device: $0) }
         }
 
         func update(frames: MultiCameraFrameStore, photoRect: CGRect,
-                    orientation: ImageOrientation, zoom: CameraZoom, isActive: Bool) {
+                    orientation: ImageOrientation, zoom: CameraZoom, isActive: Bool,
+                    onPresented: @escaping @MainActor (UUID) -> Void) {
+            if self.frames !== frames || self.isActive != isActive {
+                presentationEpoch = UUID()
+            }
             if self.frames !== frames || self.photoRect != photoRect
                 || self.orientation != orientation || self.zoom != zoom || self.isActive != isActive {
                 compositor?.invalidate()
@@ -90,6 +103,7 @@ struct MultiCameraPreview: UIViewRepresentable {
             self.orientation = orientation
             self.zoom = zoom
             self.isActive = isActive
+            self.onPresented = onPresented
         }
 
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
@@ -99,20 +113,31 @@ struct MultiCameraPreview: UIViewRepresentable {
         func draw(in view: MTKView) {
             // Pausing never substitutes a newer live frame. Once capture pins
             // its winning RGB/depth pair, render that exact pair once instead.
-            guard let frame = isActive ? frames?.latest() : frames?.pinned(),
+            let preview = isActive ? frames?.latestPreview()
+                : frames?.pinned().map { MultiCameraPreviewFrame($0, revision: 0) }
+            guard let frame = preview,
                   let geometry = MultiCameraPreviewGeometry.make(
                     imageSize: .init(width: CVPixelBufferGetWidth(frame.wideImage),
                                      height: CVPixelBufferGetHeight(frame.wideImage)),
                     photoRect: photoRect, orientation: orientation, zoom: zoom),
                   let compositor,
                   compositor.needsFrame(sessionID: frame.sessionID, timestamp: frame.timestamp,
-                    canvasSize: view.bounds.size),
+                    revision: frame.revision, canvasSize: view.bounds.size),
                   let drawable = view.currentDrawable else { return }
-            compositor.render(frame: frame, geometry: geometry, canvasSize: view.bounds.size,
-                              drawable: drawable)
+            let epoch = presentationEpoch
+            compositor.render(preview: frame, geometry: geometry, canvasSize: view.bounds.size,
+                drawable: drawable, onPresented: { [weak self] sessionID in
+                    Task { @MainActor [weak self] in
+                        guard let self, presentationEpoch == epoch, isActive,
+                              frames?.latestPreview()?.sessionID == sessionID else { return }
+                        onPresented?(sessionID)
+                    }
+                })
         }
 
         func tearDown() {
+            presentationEpoch = UUID()
+            onPresented = nil
             compositor?.invalidate()
             compositor = nil
             frames = nil

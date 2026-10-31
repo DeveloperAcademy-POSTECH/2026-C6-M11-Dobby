@@ -1,0 +1,11 @@
+name = "dobby-garment-ai-local"
+main = "src/local-mock.js"
+compatibility_date = "2026-10-28"
+workers_dev = false
+preview_urls = false
+
+[observability]
+enabled = false
+
+# Local mock credentials are fixed public fixtures in src/local-mock.js.
+# No OpenAI key or Cloudflare account is needed for npm run dev.

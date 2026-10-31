@@ -8,13 +8,15 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsHeader()
 
-            SettingsContent(
-                onPrivacyPolicy: openPrivacyPolicy,
-                onSupportMail: openSupportMail
-            )
-            .padding(.top, 29)
-
-            Spacer(minLength: 0)
+            ScrollView {
+                SettingsContent(
+                    onPrivacyPolicy: openPrivacyPolicy,
+                    onSupportMail: openSupportMail
+                )
+                .padding(.top, 29)
+                .padding(.bottom, 24)
+            }
+            .scrollIndicators(.hidden)
         }
         .padding(.horizontal, 20)
         .padding(.top, 3)
@@ -55,6 +57,8 @@ struct SettingsView: View {
 }
 
 private struct SettingsContent: View {
+    @AppStorage(ProductAutofillFlowPreference.key, store: ProductAutofillFlowPreference.defaults)
+    private var autofillFlow = ProductAutofillFlow.photoSelection.rawValue
     let onPrivacyPolicy: () -> Void
     let onSupportMail: () -> Void
 
@@ -67,6 +71,25 @@ private struct SettingsContent: View {
                     SettingsNavigationRow(title: "연결된 계정 관리", systemImage: "chevron.right")
                 }
                 .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("AI 생성 방식")
+                        .font(SettingsTypography.labelMedium)
+                        .tracking(SettingsTypography.labelMediumTracking)
+                        .foregroundStyle(SettingsStyle.primaryText)
+                        .accessibilityAddTraits(.isHeader)
+
+                    SettingsSelectionRow(title: "A안(사진 선택 뷰 토글)", isSelected: !usesInformationFlow) {
+                        autofillFlow = ProductAutofillFlow.photoSelection.rawValue
+                    }
+                    .accessibilityIdentifier("settings.aiFlow.a")
+
+                    SettingsSelectionRow(title: "B안(제품 정보 입력 뷰)", isSelected: usesInformationFlow) {
+                        autofillFlow = ProductAutofillFlow.information.rawValue
+                    }
+                    .accessibilityIdentifier("settings.aiFlow.b")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             SettingsSectionSeparator()
@@ -97,6 +120,10 @@ private struct SettingsContent: View {
                 SettingsTextGroup(title: SettingsInformation.versionText)
             }
         }
+    }
+
+    private var usesInformationFlow: Bool {
+        ProductAutofillFlowPreference.resolve(rawValue: autofillFlow) == .information
     }
 }
 

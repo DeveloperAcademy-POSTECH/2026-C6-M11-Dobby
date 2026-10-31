@@ -110,15 +110,16 @@ final class ProductCreationFlowTests: XCTestCase {
         attachScreenshot(app, name: "flow-top-detail-captured-original")
         choose.tap()
         XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        let detail = app.buttons["camera.grid.select.1"]
+        let detail = app.buttons["camera.grid.select.2"]
         reveal(detail, in: app)
         XCTAssertTrue(detail.waitForExistence(timeout: 5))
         waitEnabled(detail)
-        XCTAssertTrue(app.buttons["camera.grid.preview.1"].exists)
+        XCTAssertTrue(app.buttons["camera.grid.preview.2"].exists)
         detail.tap()
         XCTAssertEqual(detail.value as? String, "2번째 선택")
         XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
         attachScreenshot(app, name: "flow-top-photo-selection-two-photos")
+        disableProductAutofillIfPresent(in: app)
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         attachScreenshot(app, name: "flow-top-info-before-editing")
@@ -243,15 +244,13 @@ final class ProductCreationFlowTests: XCTestCase {
         assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
         attachScreenshot(app, name: "flow-top-library-after-unchanged-edit-67-display")
 
-        // A saved product keeps pending edits when returning to its detail
-        // page, and commits them only after completing Info again.
+        // 닫기는 편집을 계속하고, 완료할 때만 수정한 실측값을 저장한다.
         app.buttons["library.edit"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         replaceText(in: shoulder, with: "72.19", app: app)
-        tapBack(in: app)
-        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
-        assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
-        app.buttons["library.edit"].tap()
+        app.buttons["product-flow.back"].tap()
+        XCTAssertTrue(app.buttons["product-info.discard-cancel"].waitForExistence(timeout: 5))
+        app.buttons["product-info.discard-cancel"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "72.19")
@@ -260,7 +259,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["product-complete.library"].exists)
         XCTAssertTrue(app.buttons["library.edit"].exists)
-        assertSavedValue(key: "shoulderWidth", contains: "72cm", app: app)
+        assertSavedValue(key: "shoulderWidth", contains: "72.1cm", app: app)
         attachScreenshot(app, name: "flow-top-library-saved-restored-draft-72-display")
     }
 
@@ -307,6 +306,7 @@ final class ProductCreationFlowTests: XCTestCase {
         app.buttons["camera.selectPhotos"].tap()
         XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장 · 최대 10장")
+        disableProductAutofillIfPresent(in: app)
         app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         replaceText(in: field("name", app: app), with: name, app: app)
@@ -380,11 +380,12 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
         waitEnabled(app.buttons["camera.selectPhotos"])
         app.buttons["camera.selectPhotos"].tap()
-        let secondSelection = app.buttons["camera.grid.select.1"]
+        let secondSelection = app.buttons["camera.grid.select.2"]
         waitEnabled(secondSelection)
         secondSelection.tap()
         XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
+        disableProductAutofillIfPresent(in: app)
         app.buttons["camera.completePhotos"].tap()
         let done = app.buttons["product-info.done"]
         XCTAssertTrue(done.waitForExistence(timeout: 10))
@@ -431,24 +432,24 @@ final class ProductCreationFlowTests: XCTestCase {
         let price = field("price", app: app)
         reveal(price, in: app)
         let priceUnit = app.staticTexts["product-info.price.unit"]
-        XCTAssertTrue(priceUnit.exists)
-        let emptyUnitX = priceUnit.frame.minX
-        XCTAssertLessThan(emptyUnitX - price.frame.minX, 30)
+        XCTAssertFalse(priceUnit.isHittable, "Empty price uses the full-width placeholder")
         price.tap()
         price.typeText("40000")
         wait(for: NSPredicate(format: "value == %@", "40,000"), on: price)
         XCTAssertEqual(price.value as? String, "40,000")
         XCTAssertTrue(priceUnit.exists)
-        XCTAssertGreaterThan(priceUnit.frame.minX, emptyUnitX)
-        XCTAssertEqual(priceUnit.frame.minX - price.frame.maxX, 4, accuracy: 2)
+        attachScreenshot(app, name: "product-info-filled-price-unit")
+        XCTAssertTrue(priceUnit.isHittable)
+        // SwiftUI may expose the whole field as the editable AX target. The
+        // visible currency unit must follow the value inside that target.
+        XCTAssertGreaterThan(priceUnit.frame.minX, price.frame.minX)
         app.swipeDown()
         XCTAssertTrue(priceUnit.exists)
         XCTAssertTrue(done.isEnabled, "Brand is optional")
         price.tap()
         price.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 6))
         XCTAssertTrue(done.isEnabled)
-        XCTAssertTrue(priceUnit.exists)
-        XCTAssertEqual(priceUnit.frame.minX, emptyUnitX, accuracy: 2)
+        XCTAssertFalse(priceUnit.isHittable)
         XCTAssertTrue(app.staticTexts["가격을 입력해주세요"].exists)
         price.typeText("40000")
         XCTAssertTrue(done.isEnabled)

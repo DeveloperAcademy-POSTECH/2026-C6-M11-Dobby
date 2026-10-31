@@ -5,6 +5,7 @@ import SwiftUI
 struct DetailCaptureOptionsView: View {
     let options: DetailCameraOptions?
     let presentation: DetailCaptureOptionsPresentation
+    private let panelLayout: CameraOptionsPanelLayout?
     private let selection: Binding<DetailCaptureOptionsDestination>?
     private let forceReduceMotion: Bool
     private let exposureSelectionFeedbackEnabled: Bool?
@@ -15,12 +16,14 @@ struct DetailCaptureOptionsView: View {
          selection: Binding<DetailCaptureOptionsDestination>? = nil,
          forceReduceMotion: Bool = false,
          exposureSelectionFeedbackEnabled: Bool? = nil,
+         panelLayout: CameraOptionsPanelLayout? = nil,
          onClose: @escaping () -> Void) {
         self.options = options
         self.presentation = presentation
         self.selection = selection
         self.forceReduceMotion = forceReduceMotion
         self.exposureSelectionFeedbackEnabled = exposureSelectionFeedbackEnabled
+        self.panelLayout = panelLayout
         self.onClose = onClose
     }
 
@@ -32,7 +35,8 @@ struct DetailCaptureOptionsView: View {
                 options?.photoAspectRatio = ratio
             }, presentation: presentation, selection: selection,
             forceReduceMotion: forceReduceMotion,
-            exposureSelectionFeedbackEnabled: exposureSelectionFeedbackEnabled, onClose: onClose)
+            exposureSelectionFeedbackEnabled: exposureSelectionFeedbackEnabled,
+            panelLayout: panelLayout, onClose: onClose)
     }
 
     private var state: CameraOptionsState {

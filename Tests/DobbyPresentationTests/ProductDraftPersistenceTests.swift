@@ -34,6 +34,10 @@ final class ProductDraftPersistenceTests: XCTestCase {
                 initialDetailPhotos: [first, second], initialSelectedPhotoIDs: [second.id, input.measurement.id, first.id])
             model.acknowledgeCaptureGuide()
             try ProductDraftStore.save(garment: garment, step: .photoSelection,
+                measurementRecordID: record.id, photoModel: model, measurementInputData: inputData,
+                aiReviewNotes: ["라벨을 실물로 확인해 주세요."], usesProductAutofill: false, in: context)
+            // A save from another entry point must not erase the existing AI guidance.
+            try ProductDraftStore.save(garment: garment, step: .photoSelection,
                 measurementRecordID: record.id, photoModel: model, measurementInputData: inputData, in: context)
         }
 
@@ -45,6 +49,8 @@ final class ProductDraftPersistenceTests: XCTestCase {
             XCTAssertEqual(draft.step, .photoSelection)
             XCTAssertEqual(draft.measurementRecordID, record.id)
             XCTAssertEqual(draft.measurementInputData, inputData)
+            XCTAssertEqual(draft.aiReviewNotes, ["라벨을 실물로 확인해 주세요."])
+            XCTAssertEqual(draft.usesProductAutofill, false)
             XCTAssertEqual(garment.name, "아직 작성 중인 제품")
             XCTAssertEqual(garment.detail, "마저 적을 설명")
             let input = try ProductPhotoHandoff.makeInput(for: garment, sessionID: record.snapshot.frame.sessionID,
