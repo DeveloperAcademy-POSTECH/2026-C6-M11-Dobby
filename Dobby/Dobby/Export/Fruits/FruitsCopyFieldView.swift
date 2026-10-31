@@ -13,13 +13,14 @@ struct FruitsCopyFieldView: View {
                 HStack(spacing: 6) {
                     Text(title)
                         .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.labelPrimary)
                     Image(systemName: "document.on.document")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color("BrandPrimary100"))
                 }
                 Text(value)
                     .font(.system(size: 14))
-                    .foregroundStyle(.primary)
+                    .foregroundColor(.labelPrimary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(field == .description ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)

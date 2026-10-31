@@ -8,7 +8,7 @@ struct FruitsExportContent: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("복사 버튼을 누르고\n후루츠패밀리 판매 페이지를 열어주세요")
                 .font(.custom("Pretendard-Bold", fixedSize: 22))
-                .foregroundStyle(.primary)
+                .foregroundStyle(.labelPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 14)
 
