@@ -7,16 +7,22 @@ struct FruitsExportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
     @State private var pipController = MeasurementPiPController()
+    @State private var isSavingPhotos: Bool
+    @State private var hasSavedPhotos: Bool
     @State private var opening: Bool
     @State private var alertMessage: String?
 
     init(
         product: ExportProduct,
         onOpened: @escaping () -> Void = { },
+        initialIsSavingPhotos: Bool = false,
+        initialHasSavedPhotos: Bool = false,
         initialOpening: Bool = false
     ) {
         self.product = product
         self.onOpened = onOpened
+        _isSavingPhotos = State(initialValue: initialIsSavingPhotos)
+        _hasSavedPhotos = State(initialValue: initialHasSavedPhotos)
         _opening = State(initialValue: initialOpening)
     }
 
@@ -28,7 +34,15 @@ struct FruitsExportView: View {
                     height: MeasurementPiPView.renderSize.height
                 )
                 .accessibilityHidden(true)
-            FruitsExportContent(product: product, onCopy: copy)
+            VStack(spacing: 0) {
+                FruitsPhotoSaveSection(isSaving: isSavingPhotos, onSave: savePhotos)
+
+                if hasSavedPhotos {
+                    FruitsExportContent(product: product, onCopy: copy)
+                        .padding(.top, 28)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
         .background(.white)
         .navigationBarBackButtonHidden()
@@ -48,15 +62,17 @@ struct FruitsExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: opening) {
-                startPiPAndOpenFruits()
+            if hasSavedPhotos {
+                ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: opening) {
+                    startPiPAndOpenFruits()
+                }
+                .disabled(opening)
+                .accessibilityIdentifier("export.fruits.open")
+                .padding(.horizontal, 33)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .background(.white)
             }
-            .disabled(opening)
-            .accessibilityIdentifier("export.fruits.open")
-            .padding(.horizontal, 33)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .background(.white)
         }
         .onDisappear {
             if phase == .active {
@@ -75,6 +91,19 @@ struct FruitsExportView: View {
 
     private func copy(_ field: ProductCopyField) {
         ClipboardWriter().copyText(product.marketplacePayload.value(for: field))
+    }
+
+    private func savePhotos() {
+        isSavingPhotos = true
+        Task {
+            do {
+                try await FruitsPhotoLibraryWriter().save(photos: product.exportPhotos)
+                hasSavedPhotos = true
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+            isSavingPhotos = false
+        }
     }
 
     private func startPiPAndOpenFruits() {
@@ -112,20 +141,36 @@ struct FruitsExportView: View {
     }
 }
 
-#Preview("기본") {
+#Preview("저장 전") {
     NavigationStack {
         FruitsExportView(product: .fruitsPreview)
     }
 }
 
-#Preview("긴 내용") {
+#Preview("저장 중") {
     NavigationStack {
-        FruitsExportView(product: .fruitsLongPreview)
+        FruitsExportView(product: .fruitsPreview, initialIsSavingPhotos: true)
+    }
+}
+
+#Preview("저장 완료") {
+    NavigationStack {
+        FruitsExportView(product: .fruitsPreview, initialHasSavedPhotos: true)
+    }
+}
+
+#Preview("저장 완료 - 긴 내용") {
+    NavigationStack {
+        FruitsExportView(product: .fruitsLongPreview, initialHasSavedPhotos: true)
     }
 }
 
 #Preview("앱 여는 중") {
     NavigationStack {
-        FruitsExportView(product: .fruitsPreview, initialOpening: true)
+        FruitsExportView(
+            product: .fruitsPreview,
+            initialHasSavedPhotos: true,
+            initialOpening: true
+        )
     }
 }
