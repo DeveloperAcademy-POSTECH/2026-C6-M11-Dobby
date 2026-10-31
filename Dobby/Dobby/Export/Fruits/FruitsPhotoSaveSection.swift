@@ -24,25 +24,15 @@ private struct FruitsPhotoSaveButton: View {
 
     var body: some View {
         Button(action: onSave) {
-            HStack(alignment: .center, spacing: 12) {
-                if isSaving {
-                    ProgressView()
-                        .tint(Color("BrandNeutralWhite"))
-                } else {
-                    Text("저장하기")
-                        .font(.custom("Pretendard-Medium", fixedSize: 16))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Color("BrandNeutralWhite"))
-                }
-            }
-            .padding(.horizontal, 28)
-            .frame(width: 108, height: 48)
-            .background(Color("BrandMain100"))
-            .clipShape(.rect(cornerRadius: 60))
+            Text("저장하기")
+                .font(.custom("Pretendard-Medium", fixedSize: 16))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 26.5)
+                .padding(.vertical, 14)
+                .background(.brandMain500)
+                .foregroundColor(.brandNeutralWhite)
+                .clipShape(.rect(cornerRadius: 60))
         }
-        .buttonStyle(.plain)
-        .disabled(isSaving)
-        .accessibilityLabel(isSaving ? "사진 저장 중" : "사진 저장하기")
     }
 }
 
