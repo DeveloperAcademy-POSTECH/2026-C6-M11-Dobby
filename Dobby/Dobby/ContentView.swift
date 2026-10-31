@@ -113,7 +113,7 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(item: $exportProduct) { product in
-            ExportView(product: product, controller: controller, showFruits: $showFruits)
+            ExportView(product: product, showFruits: $showFruits)
                 .tint(Color("HomeAccent"))
         }
         .alert("내보내기를 열 수 없어요", isPresented: Binding(
@@ -264,7 +264,7 @@ struct ProductSavedDetailView: View {
             Text(editError ?? "")
         }
         .fullScreenCover(item: $exportProduct) { product in
-            ExportView(product: product, controller: controller, showFruits: $showFruits)
+            ExportView(product: product, showFruits: $showFruits)
         }
 #if DEBUG
         .task {
