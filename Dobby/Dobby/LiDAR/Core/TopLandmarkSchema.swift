@@ -54,6 +54,17 @@ nonisolated struct TopLandmarkSchema: Sendable {
             .init(id: "top.totalLength", title: "총장", landmarkIDs: ["top_length_start", "hem_center"])
         ]
 
+    /// Front length is a separate physical convention and product field. A
+    /// front neckline must never replace the back start of a saved total length.
+    static let frontLengthMeasurementDefinitions: [MeasurementDefinition] = canonicalMeasurementDefinitions.map {
+        $0.id == "top.totalLength" ? .init(id: "top.frontLength", title: "앞판 총장",
+            landmarkIDs: ["front_length_start", "hem_center"]) : $0
+    }
+
+    static func viewLengthMeasurementDefinitions(for view: String?) -> [MeasurementDefinition] {
+        view == "front" ? frontLengthMeasurementDefinitions : canonicalMeasurementDefinitions
+    }
+
     /// Exact previous top contract. Reopening a saved record must never silently
     /// reinterpret a neck midpoint as the new contour intersection.
     static let legacyMeasurementDefinitions: [MeasurementDefinition] = canonicalMeasurementDefinitions.map {

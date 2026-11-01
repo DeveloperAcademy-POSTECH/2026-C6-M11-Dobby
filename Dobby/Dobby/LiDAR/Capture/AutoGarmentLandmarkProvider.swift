@@ -20,13 +20,13 @@ nonisolated enum AutoGarmentRecognitionError: Error, LocalizedError, Sendable, E
         case .invalidProvenance: "인식한 옷 종류와 측정 모델이 일치하지 않습니다. 다시 촬영해 주세요."
         case .missingClassifier: "옷 종류 분류 모델이 앱에 포함되지 않았습니다."
         case .incompatibleClassifier: "옷 종류 분류 모델의 형식이 맞지 않습니다."
-        case .poseNotFound(let kind): "사진에서 \(kind.title)의 측정점을 찾지 못했어요. 소매나 바짓단까지 전체가 보이는지 확인하거나, 이 사진에서 점을 직접 지정해 주세요."
+        case .poseNotFound(let kind): "분류기는 \(kind.title)로 판단했지만 해당 측정점을 찾지 못했어요. 이 사진에서 점을 직접 지정할 수 있어요."
         case .foregroundNotFound: "사진에서 옷의 윤곽을 분리하지 못했어요. 옷과 구분되는 배경에서 촬영하거나, 이 사진에서 점을 확인해 주세요."
         case .foregroundMismatch(let kind): "\(kind.title)의 측정점과 사진 속 옷 윤곽이 충분히 일치하지 않아요. 옷과 구분되는 배경에서 촬영하거나, 이 사진에서 점을 확인해 주세요."
         case .shapeUnverified(let kind):
             kind == .top
-                ? "상의의 몸통과 소매 구조를 확인하지 못했어요. 소매를 몸통에서 조금 떨어뜨려 펼치거나, 이 사진에서 점을 확인해 주세요."
-                : "하의의 허리와 양쪽 다리 구조를 확인하지 못했어요. 두 바짓단 사이가 보이게 펼치거나, 이 사진에서 점을 확인해 주세요."
+                ? "분류기는 상의로 판단했지만 몸통과 소매 구조를 확인하지 못했어요. 옷 종류가 잘못 분류됐을 수 있어요."
+                : "분류기는 하의로 판단했지만 허리와 양쪽 다리 구조를 확인하지 못했어요. 옷 종류가 잘못 분류됐을 수 있어요."
         }
     }
 
@@ -61,6 +61,22 @@ nonisolated struct AutoGarmentRecognitionEvaluation: Sendable {
     var poseRequests: Int?
     var foregroundRequests: Int?
     var orientationPrediction: GarmentOrientationPrediction? = nil
+    var orientationResolution: GarmentOrientationResolution? = nil
+}
+
+nonisolated struct AutoGarmentImageClassification: Sendable {
+    var orientationResolution: GarmentOrientationResolution
+    var scores: [GarmentClassificationScore]
+    var route: GarmentClassifierRoute
+}
+
+nonisolated struct OuterwearComparisonClassification: Sendable {
+    var category: String
+    var orientation: ImageOrientation
+    var prediction: GarmentOrientationPrediction
+    var orientationResolution: GarmentOrientationResolution
+    var scores: [GarmentClassificationScore]
+    var route: GarmentClassifierRoute
 }
 
 /// The supplied fifteen-category classifier routes this exact RGB frame to one
@@ -72,6 +88,7 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
     private nonisolated let bottoms: CoreMLGarmentLandmarkProvider
     private let orientationProvider: GarmentOrientationModelProvider
     private let classifierURL: URL
+    private nonisolated let outerwear: (any OuterwearLandmarkProviding)?
     private var classifier: VNCoreMLModel?
     private let foreground = GarmentForegroundMaskAnalyzer()
     private let context = CIContext(options: [.cacheIntermediates: false])
@@ -83,13 +100,15 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
     private static let minimumCrossKindMargin = 0.01
 
     init(top: CoreMLGarmentLandmarkProvider, bottoms: CoreMLGarmentLandmarkProvider,
-         classifierModelURL: URL, orientationModelURL: URL? = nil) throws {
+         classifierModelURL: URL, orientationModelURL: URL? = nil,
+         outerwear: (any OuterwearLandmarkProviding)? = nil) throws {
         guard top.kind == .top, bottoms.kind == .bottoms else {
             throw AutoGarmentRecognitionError.invalidProvenance
         }
         self.top = top
         self.bottoms = bottoms
         self.classifierURL = classifierModelURL
+        self.outerwear = outerwear
         self.orientationProvider = .init(modelURL: orientationModelURL
             ?? GarmentOrientationModelProvider.siblingURL(of: classifierModelURL))
     }
@@ -102,7 +121,8 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         return try .init(top: CoreMLGarmentLandmarkProvider.bundled(kind: .top, in: bundle),
                          bottoms: CoreMLGarmentLandmarkProvider.bundled(kind: .bottoms, in: bundle),
                          classifierModelURL: classifier,
-                         orientationModelURL: GarmentOrientationModelProvider.resourceURL(in: bundle))
+                         orientationModelURL: GarmentOrientationModelProvider.resourceURL(in: bundle),
+                         outerwear: OuterwearLandmarkClient.makeDefault())
     }
 
     func prepare() async throws {
@@ -129,13 +149,18 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         }
         let provider = kind == .top ? top : bottoms
         let identifiers = Set(landmarks.points.map(\.id))
-        let calculationIDs = kind == .top ? ["top_length_start"] : ["thigh_right"]
+        let calculationIDs = kind == .top
+            ? (["top_length_start"] + (GarmentLandmarkModelContract.isViewLengthOuterwear(version: landmarks.modelVersion, kind: kind)
+                ? ["front_length_start"] : [])) : ["thigh_right"]
         let known = Set(provider.schema.keypoints + provider.schema.derivedOrder + calculationIDs)
-        guard landmarks.modelVersion == provider.modelVersion,
+        guard GarmentLandmarkModelContract.isCurrent(version: landmarks.modelVersion, kind: kind),
               !identifiers.isEmpty,
               identifiers.count == landmarks.points.count,
               identifiers.isSubset(of: known) else {
             throw AutoGarmentRecognitionError.invalidProvenance
+        }
+        if GarmentLandmarkModelContract.isViewLengthOuterwear(version: landmarks.modelVersion, kind: kind) {
+            return TopLandmarkSchema.viewLengthMeasurementDefinitions(for: landmarks.recognitionDiagnostics?.remoteView)
         }
         return provider.measurementDefinitions
     }
@@ -161,13 +186,42 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         try await recognizeForeground(image, orientation: orientation).recognition
     }
 
+    /// Verify the photo's upright correction before applying the existing
+    /// category gate once for all three arms. Preparation is entirely local.
+    func classifyOuterwearComparison(_ source: CGImage) throws -> OuterwearComparisonClassification {
+        let classification = try classifyCapturedImage(source, orientation: .up)
+        let resolution = classification.orientationResolution
+        let category = try OuterwearComparisonClassificationPolicy.category(route: classification.route, scores: classification.scores)
+        return .init(category: category, orientation: resolution.orientation,
+            prediction: resolution.attempts[0].prediction, orientationResolution: resolution,
+            scores: classification.scores, route: classification.route)
+    }
+
+    /// Shared local preparation, also callable without pose/segmentation/network
+    /// for diagnosis. The device orientation is the initial transform, not a
+    /// second rotation applied after the final garment correction.
+    func classifyCapturedImage(_ source: CGImage, orientation: ImageOrientation) throws -> AutoGarmentImageClassification {
+        try Task.checkCancellation()
+        return try classification(analysisImage(source), startingAt: orientation)
+    }
+
+    private func classification(_ image: CGImage, startingAt orientation: ImageOrientation) throws -> AutoGarmentImageClassification {
+        let resolution = try GarmentOrientationResolutionPolicy.resolve(startingAt: orientation) {
+            try orientationProvider.classify(image, deviceOrientation: $0)
+        }
+        let scores = try classify(image, orientation: resolution.orientation)
+        let route = GarmentClassifierRoutingPolicy.route(scores: scores,
+            minimumConfidence: Self.minimumClassScore, minimumCrossKindMargin: Self.minimumCrossKindMargin)
+        return .init(orientationResolution: resolution, scores: scores, route: route)
+    }
+
     func recognizeForeground(_ image: CGImage, orientation: ImageOrientation) async throws -> GarmentForegroundRecognition {
         let evaluation = try await evaluateImage(image, orientation: orientation)
         switch evaluation.decision {
         case .selected(let kind):
             guard let result = evaluation.recognition,
                   result.recognition.garmentKind == kind,
-                  result.recognition.modelVersion == kind.modelVersion else {
+                  GarmentLandmarkModelContract.isCurrent(version: result.recognition.modelVersion, kind: kind) else {
                 throw AutoGarmentRecognitionError.invalidProvenance
             }
             return result
@@ -198,17 +252,18 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         return evaluation.decision == .ambiguous ? .ambiguous : .noDetection
     }
 
-    /// Four-way correction is chosen once from this frozen RGB. Category, pose
-    /// and mask observe the same composed orientation, with no second half-turn
-    /// retry and no comparison of category scores across rotations.
+    /// Verify upright orientation before classifying the frozen RGB once. Pose,
+    /// masks and the AI crop share that final transform; category scores never
+    /// choose a rotation or override the existing top/bottom routing gates.
     func evaluateImage(_ source: CGImage, orientation: ImageOrientation) async throws -> AutoGarmentRecognitionEvaluation {
         try Task.checkCancellation()
         let image = try analysisImage(source)
         let size = PixelSize(width: image.width, height: image.height)
         guard size.isValid else { throw BottomModelError.invalidImage }
-        let orientationPrediction = try orientationProvider.classify(image, deviceOrientation: orientation)
-        let composedOrientation = GarmentOrientationTransform.composed(device: orientation,
-            correction: orientationPrediction.correction)
+        let classification = try classification(image, startingAt: orientation)
+        let orientationResolution = classification.orientationResolution
+        let orientationPrediction = orientationResolution.attempts[0].prediction
+        let composedOrientation = orientationResolution.orientation
         var attempts: [AutoGarmentClassificationAttempt] = []
         var topEvidence: GarmentKindEvidence?, bottomEvidence: GarmentKindEvidence?
         var hadUncertainty = false
@@ -216,9 +271,8 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         var poseAttempts: [GarmentPoseValidationAttempt] = []
         for direction in [composedOrientation] {
             try Task.checkCancellation()
-            let scores = try classify(image, orientation: direction)
-            let route = GarmentClassifierRoutingPolicy.route(scores: scores,
-                minimumConfidence: Self.minimumClassScore, minimumCrossKindMargin: Self.minimumCrossKindMargin)
+            let scores = classification.scores
+            let route = classification.route
             var attempt = AutoGarmentClassificationAttempt(orientation: direction, scores: scores, route: route)
             switch route {
             case .unsupported:
@@ -231,13 +285,27 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                 if reason == .ambiguousKinds || reason == .insufficientMargin { hadUncertainty = true }
                 attempts.append(attempt)
                 continue
-            case .selected(let kind, _, _):
+            case .selected(let kind, let category, _):
+                let sourceRoute = GarmentLandmarkSourceRoutingPolicy.route(classification: route, scores: scores)
+                if sourceRoute == .uncertainOuterwear {
+                    hadUncertainty = true
+                    attempt.poseError = "uncertainOuterwear"
+                    attempts.append(attempt)
+                    continue
+                }
                 let provider = kind == .top ? top : bottoms
                 var result: GarmentForegroundRecognition
                 do {
                     // The direction classifier already owns rotation selection.
                     // Exact pose and masks each invert the composed transform once.
-                    result = try await provider.recognizeForegroundExactly(image, orientation: direction)
+                    if sourceRoute == .lunaOuterwear {
+                        // Preserve seam detail for the remote encoder's 2048 px
+                        // garment crop. Returned coordinates are restored to
+                        // this complete frozen frame before depth sampling.
+                        result = try await recognizeOuterwear(source, orientation: direction, category: category)
+                    } else {
+                        result = try await provider.recognizeForegroundExactly(image, orientation: direction)
+                    }
                     try Task.checkCancellation()
                     if let count = poseRequests { poseRequests = count + result.poseRequests }
                     if let count = foregroundRequests { foregroundRequests = count + result.foregroundRequests }
@@ -280,8 +348,15 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                 // Multiple garments/foregrounds, cancellation and configuration
                 // errors propagate. A second orientation cannot hide clutter.
                 let rawPoints = result.recognition.diagnostics?.rawPoints ?? result.recognition.points
-                let evidence = GarmentKindSelectionPolicy.evaluate(kind: kind, points: rawPoints,
-                    selection: result.selection, imageSize: size)
+                let evidence: GarmentKindEvidence
+                if sourceRoute == .lunaOuterwear {
+                    guard let verified = result.recognition.diagnostics?.kindEvidence,
+                          verified.kind == .top else { throw AutoGarmentRecognitionError.invalidProvenance }
+                    evidence = verified
+                } else {
+                    evidence = GarmentKindSelectionPolicy.evaluate(kind: kind, points: rawPoints,
+                        selection: result.selection, imageSize: size)
+                }
                 attempt.evidence = evidence
                 attempts.append(attempt)
                 if kind == .top { topEvidence = evidence } else { bottomEvidence = evidence }
@@ -289,6 +364,7 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                 case .supported:
                     result.recognition.diagnostics?.requestedOrientation = orientation
                     result.recognition.diagnostics?.orientationPrediction = orientationPrediction
+                    result.recognition.diagnostics?.orientationResolution = orientationResolution
                     result.recognition.diagnostics?.orientationModelVersion = GarmentOrientationModelProvider.modelVersion
                     result.recognition.diagnostics?.poseAttempts = poseAttempts
                     result.recognition.diagnostics?.kindEvidence = evidence
@@ -298,7 +374,7 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                     return .init(decision: .selected(kind), top: topEvidence, bottoms: bottomEvidence,
                                  recognition: result, classificationAttempts: attempts, isUnsupported: false,
                                  poseRequests: poseRequests, foregroundRequests: foregroundRequests,
-                                 orientationPrediction: orientationPrediction)
+                                 orientationPrediction: orientationPrediction, orientationResolution: orientationResolution)
                 case .uncertain: hadUncertainty = true
                 case .rejected: break
                 }
@@ -309,7 +385,18 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                      top: topEvidence, bottoms: bottomEvidence, recognition: nil,
                      classificationAttempts: attempts, isUnsupported: unsupported,
                      poseRequests: poseRequests, foregroundRequests: foregroundRequests,
-                     orientationPrediction: orientationPrediction)
+                     orientationPrediction: orientationPrediction, orientationResolution: orientationResolution)
+    }
+
+    /// One request per frozen photo. No pose retries, borrowed live-preview
+    /// evidence or CoreML score substitution is used for remote observations.
+    private func recognizeOuterwear(_ image: CGImage, orientation: ImageOrientation,
+                                    category: String) async throws -> GarmentForegroundRecognition {
+        guard let outerwear else { throw OuterwearLandmarkClientError.notConfigured }
+        return try await OuterwearGarmentCropPipeline.recognize(image, orientation: orientation,
+            category: category, provider: outerwear, masks: { [foreground] upright in
+                try foreground.masks(for: upright, orientation: .up)
+            })
     }
 
     /// The fresh-photo fallback uses the same bounded, complete-field sRGB

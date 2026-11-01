@@ -261,7 +261,7 @@ final class AutomaticMeasurementWorkflow {
                 // original behavior; the chosen value travels with the result.
                 if calculationOptions.calculationMode == nil,
                    points.origin == .model, let kind = points.garmentKind,
-                   points.modelVersion == kind.modelVersion {
+                   GarmentLandmarkModelContract.isCurrent(version: points.modelVersion, kind: kind) {
                     calculationOptions.calculationMode = .garmentPlane
                 }
                 let result = await pipeline.measure(snapshot: snapshot, landmarks: points,

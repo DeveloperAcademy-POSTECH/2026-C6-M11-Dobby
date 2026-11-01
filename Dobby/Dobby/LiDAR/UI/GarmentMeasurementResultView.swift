@@ -52,10 +52,11 @@ struct GarmentMeasurementResultView: View {
     }
 
     private var isSynthetic: Bool { model.snapshot.frame.source == .synthetic }
+    private var hasPhotoEditingPoints: Bool {
+        model.photoEditingPresentation.landmarks.points.contains { $0.isVisible && $0.point.isValid }
+    }
     private var shouldOfferPointTutorial: Bool {
-        guard model.visibleEditableLandmarks.points.contains(where: { $0.isVisible && $0.point.isValid }) else {
-            return false
-        }
+        guard hasPhotoEditingPoints else { return false }
         if isSynthetic {
             #if DEBUG
             return ProcessInfo.processInfo.arguments.contains("--garment-preview-result-tutorial")
@@ -72,7 +73,7 @@ struct GarmentMeasurementResultView: View {
     private var incompleteCount: Int { failedValues.count }
     private var canCorrectSingleTotalLengthFailure: Bool {
         guard model.canCorrectTotalLength, failedValues.count == 1,
-              let value = failedValues.first, value.id == "top.totalLength",
+              let value = failedValues.first, value.id == model.lengthDefinition?.id,
               let feedback = value.failureFeedback, !feedback.isCaptureFailure else { return false }
         return feedback.suggestedAction == .editPoints || feedback.suggestedAction == .correctTotalLength
     }
@@ -227,12 +228,14 @@ struct GarmentMeasurementResultView: View {
     }
 
     private func photoEditor(showsEnlargeControl: Bool) -> some View {
-        GarmentMeasurementPhotoEditor(image: image, snapshot: model.snapshot,
-            editableLandmarks: model.visibleEditableLandmarks,
+        let presentation = model.photoEditingPresentation
+        return GarmentMeasurementPhotoEditor(image: image, snapshot: model.snapshot,
+            editableLandmarks: presentation.landmarks,
             definitions: model.visibleDefinitions,
             values: model.visibleValues, showLabels: !dynamicTypeSize.isAccessibilitySize,
             isEnabled: !isSaving && !awaitsPointTutorial, isRecalculating: model.needsRecalculation,
             showsEnlargeControl: showsEnlargeControl,
+            pendingPointIDs: presentation.pendingIDs,
             onEnlarge: { if !awaitsPointTutorial { showPhoto = true } }, onMove: { id, point in
                 guard !awaitsPointTutorial else { return }
                 _ = model.placePoint(originalPoint: point, id: id)
@@ -250,9 +253,11 @@ struct GarmentMeasurementResultView: View {
 
     @ViewBuilder
     private var reviewNotice: some View {
-        if incompleteCount > 0 {
+        // Pending handles are already visible and editable on the photo. Keep
+        // the photograph clear even when those positions cannot yet be measured.
+        if incompleteCount > 0 && !hasPhotoEditingPoints {
             Button {
-                if canCorrectSingleTotalLengthFailure { openManualReview(for: "top.totalLength") }
+                if canCorrectSingleTotalLengthFailure, let id = model.lengthDefinition?.id { openManualReview(for: id) }
                 else { openAuxiliaryDetails() }
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
@@ -336,10 +341,20 @@ struct GarmentMeasurementResultView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("점을 끌어 위치를 수정할 수 있어요.")
                 .font(.caption).foregroundStyle(.secondary)
+            if !model.photoEditingPresentation.pendingIDs.isEmpty {
+                Text("주황색 점은 확인이 필요한 위치예요. 옷의 정확한 위치로 끌어 옮겨 주세요.")
+                    .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
+            }
             if isSynthetic {
                 Label("화면 미리보기 · 합성 치수", systemImage: "cube.transparent")
                     .font(.caption).foregroundStyle(GarmentCaptureStyle.accent)
                 Text("이 결과는 화면 검증용 합성 사진과 치수예요. 실제 옷의 인식률이나 실측 정확도를 나타내지 않아요.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if (model.landmarks.recognitionDiagnostics?.centerEstimates ?? []).contains(where: {
+                !model.editedPointIDs.contains($0.landmarkID)
+            }) {
+                Text("총장 중앙점은 벌어진 양쪽 끝점 사이를 추정한 위치예요.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if model.needsRecalculation {
@@ -397,7 +412,7 @@ struct GarmentMeasurementResultView: View {
     private func openManualReview(for definitionID: String) {
         guard !awaitsPointTutorial else { return }
         let measurement = model.manualMeasurement(for: definitionID)
-        if definitionID == "top.totalLength", model.canCorrectTotalLength {
+        if definitionID == model.lengthDefinition?.id, model.canCorrectTotalLength {
             if showAuxiliaryDetails { detailTotalLengthCorrection = measurement }
             else { totalLengthCorrection = measurement }
         } else if showAuxiliaryDetails { detailManualReview = measurement }
@@ -406,18 +421,30 @@ struct GarmentMeasurementResultView: View {
 
     private func totalLengthCorrectionSheet(_ measurement: ManualMeasurement) -> some View {
         GarmentTotalLengthCorrectionView(model: measurement, initialImage: image,
-            failure: model.result.values.first { $0.id == "top.totalLength" }?.failure,
-            failureFeedback: model.result.values.first { $0.id == "top.totalLength" }?.failureFeedback) { correction in
+            failure: model.result.values.first { $0.id == measurement.definition.id }?.failure,
+            failureFeedback: model.result.values.first { $0.id == measurement.definition.id }?.failureFeedback,
+            usesFrontNeckSeam: measurement.definition.id == "top.frontLength" || usesFrontTotalLength,
+            usesBackNeckSeam: GarmentLandmarkModelContract.isLunaOuterwear(version: model.landmarks.modelVersion, kind: .top)) { correction in
                 guard !isSaving, !isEditingPoint, !model.needsRecalculation else { return false }
                 return model.applyTotalLengthCorrection(from: correction)
             }
     }
 
+    private var usesFrontTotalLength: Bool {
+        GarmentLandmarkModelContract.isFrontLengthOuterwear(version: model.landmarks.modelVersion, kind: .top)
+    }
+
     private var measurementGuide: String {
-        guard let total = model.definitions.first(where: { $0.id == "top.totalLength" }) else {
+        guard let total = model.lengthDefinition else {
             return "펼친 옷의 두 점 사이 직선거리예요. 주름이나 굽은 봉제선을 따라 잰 길이와 다를 수 있어요."
         }
-        let totalGuide = total.landmarkIDs.first == "top_length_start"
+        let totalGuide = usesFrontTotalLength
+            ? "총장은 후드·카라 높이를 제외한 앞목 몸판 연결 봉제선 중앙부터 앞면 밑단 중앙까지의 거리예요."
+            : total.id == "top.frontLength"
+            ? "앞판 총장은 후드·카라를 제외한 앞목 몸판 연결 봉제선 중앙부터 앞 밑단 중앙까지의 거리예요. 뒤판 총장과 기준이 달라요."
+            : GarmentLandmarkModelContract.isLunaOuterwear(version: model.landmarks.modelVersion, kind: .top)
+            ? "아우터 총장은 후드·카라를 제외한 뒷목 몸판 연결 봉제선 중앙부터 뒤 밑단 중앙까지의 거리예요."
+            : total.landmarkIDs.first == "top_length_start"
             ? "총장은 옷 윤곽의 상단과 밑단 중앙 사이의 거리예요. 카라가 높은 옷은 상단 위치를 확인해 주세요."
             : total.projection == nil ? "총장은 목 중앙과 밑단 중앙 사이의 직선거리예요."
                 : "이 이전 기록의 총장은 목 좌우 축에 수직인 길이예요."
@@ -452,7 +479,7 @@ struct GarmentMeasurementResultView: View {
                                        feedback: MeasurementFailureFeedback) -> some View {
         switch feedback.suggestedAction {
         case .editPoints, .correctTotalLength:
-            Button(definition.id == "top.totalLength" && model.canCorrectTotalLength
+            Button(definition.id == model.lengthDefinition?.id && model.canCorrectTotalLength
                    ? "총장 위치 지정하고 다시 측정" : "이 사진에서 측정점 직접 확인") {
                 openManualReview(for: definition.id)
             }.buttonStyle(.bordered).tint(GarmentCaptureStyle.accent)

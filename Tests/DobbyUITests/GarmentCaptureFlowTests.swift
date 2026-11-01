@@ -417,7 +417,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testMissingMeasurementCanBeReviewedWithoutExpandingMeasurementRows() throws {
+    func testMissingMeasurementKeepsEditablePointsWithoutFailureBanner() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--garment-preview-both-sides-partial"]
@@ -431,35 +431,14 @@ final class GarmentCaptureFlowTests: XCTestCase {
         recognize.tap()
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
-        openFailureDetails(in: app)
-        let unavailable = app.descendants(matching: .any)["garmentUnavailableSummary"].firstMatch
-        reveal(unavailable, in: app)
-        XCTAssertTrue(unavailable.label.contains("2개 항목"),
-                      "Missing both sides must report only the two displayed measurements")
-        let missing = app.descendants(matching: .any)["garmentMeasurementValue_bottom.hem_left_inner.hem_left_outer"].firstMatch
-        reveal(missing, in: app)
-        XCTAssertTrue(missing.label.contains("측정 불가"))
-        XCTAssertFalse(missing.label.contains("cm"))
-        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementValue_bottom.crotch.hem_right_inner"].firstMatch.exists)
-        let review = app.buttons["reviewGarmentMeasurement_bottom.hem_left_inner.hem_left_outer"]
-        reveal(review, in: app)
-        XCTAssertTrue(review.exists)
-        XCTAssertTrue(review.isEnabled, "Review must be enabled after the captured result finishes calculating")
-        XCTAssertTrue(review.isHittable, "The clipped photo or loupe must not obstruct the review button")
-        review.tap()
-        XCTAssertTrue(app.navigationBars["측정 테스트"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["A 위치 지정"].exists)
-        XCTAssertTrue(app.buttons["B 지정됨"].exists)
-        let save = app.buttons["saveMeasurement"]
-        reveal(save, in: app)
-        XCTAssertTrue(save.exists)
-        XCTAssertFalse(app.staticTexts["measurementSaved"].exists)
-        attachScreenshot(app, name: "garment-missing-measurement-direct-review")
-        app.buttons["완료"].tap()
-        closeResultDetails(in: app)
-        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["garmentUnavailableNotice"].exists)
+        let point = app.buttons["garmentMeasurementPoint_hem_left_inner"]
+        XCTAssertTrue(point.exists)
+        XCTAssertTrue(point.isHittable)
         XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_bottom.hem_left_inner.hem_left_outer"].exists,
-                       "Opening manual review must not replace an unavailable automatic value")
+                       "A pending handle must not create an unmeasured length")
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].isEnabled)
+        attachScreenshot(app, name: "garment-missing-measurement-visible-points-without-banner")
     }
 
     @MainActor
@@ -780,36 +759,6 @@ final class GarmentCaptureFlowTests: XCTestCase {
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
-    }
-
-    @MainActor
-    private func openFailureDetails(in app: XCUIApplication) {
-        let notice = app.buttons["garmentUnavailableNotice"]
-        XCTAssertTrue(notice.waitForExistence(timeout: 5))
-        XCTAssertTrue(notice.isHittable)
-        notice.tap()
-        let close = app.buttons["closeGarmentMeasurementDetails"]
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
-        expectation(for: NSPredicate { _, _ in close.isHittable }, evaluatedWith: close)
-        waitForExpectations(timeout: 5)
-        XCTAssertTrue(close.isHittable)
-    }
-
-    @MainActor
-    private func closeResultDetails(in app: XCUIApplication) {
-        let close = app.buttons["closeGarmentMeasurementDetails"]
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
-        expectation(for: NSPredicate { _, _ in close.isHittable }, evaluatedWith: close)
-        waitForExpectations(timeout: 5)
-        XCTAssertTrue(close.isHittable)
-        close.tap()
-        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: close)
-        waitForExpectations(timeout: 5)
-        let confirm = app.buttons["confirmGarmentMeasurement"]
-        expectation(for: NSPredicate { _, _ in confirm.isHittable }, evaluatedWith: confirm)
-        waitForExpectations(timeout: 5)
-        XCTAssertTrue(confirm.isHittable,
-                      "Closing details must return to the editable result and its confirmation action")
     }
 
     @MainActor

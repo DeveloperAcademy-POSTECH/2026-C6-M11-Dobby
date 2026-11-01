@@ -50,6 +50,29 @@ final class MeasurementFailureFeedbackTests: XCTestCase {
         XCTAssertEqual(value.status, .uncertain, "The display policy must not erase diagnostic status")
     }
 
+    func testRejectedVisibleRemotePointExplainsMaskOrGeometryInsteadOfOcclusion() throws {
+        for (assessment, reason) in [(LandmarkMaskAssociationStatus.outsideMask, MeasurementFailureReason.landmarkOutsideGarment),
+                                    (.notVisible, .landmarkGeometryRejected)] {
+            var scene = scene()
+            let original = scene.landmarks.points
+            scene.landmarks.points[0].isVisible = false
+            var diagnostics = GarmentRecognitionDiagnostics(requestedOrientation: .up,
+                selectedPoseOrientation: .up, associationPolicy: .subject, rawPoints: original,
+                pointAssessments: [.init(landmarkID: "A", status: assessment)], poseAttempts: [])
+            diagnostics.remoteModel = "gpt-6-luna"
+            scene.landmarks.recognitionDiagnostics = diagnostics
+            let result = try first(scene, plane: true)
+            XCTAssertFalse(result.hasUsableMeasurement)
+            XCTAssertEqual(result.pointFailures?.first?.context?.reason, reason)
+            XCTAssertEqual(result.failureFeedback?.reason, reason.explanation)
+            XCTAssertEqual(result.failureFeedback?.suggestedAction, .editPoints)
+            // An actually absent provider observation keeps the occlusion
+            // explanation; rejection evidence must not invent visibility.
+            scene.landmarks.recognitionDiagnostics?.rawPoints[0].isVisible = false
+            XCTAssertEqual(try first(scene, plane: true).pointFailures?.first?.context?.reason, .hiddenPoint)
+        }
+    }
+
     func testMalformedAndContradictoryValuesNeverInventUsableNumbers() {
         for meters in [Double?.none, 0, -1, .infinity, .nan] {
             let value = MeasurementValue(id: "m", title: "길이", meters: meters, status: .valid, failure: nil, points: [])
