@@ -60,7 +60,7 @@ private struct FruitsPhotoSaveButton: View {
 }
 
 private struct FruitsPhotoSavingIndicator: View {
-    @State private var rotation = 90.0
+    @State private var rotation = 0.0
 
     var body: some View {
         Image(systemName: "progress.indicator")
@@ -69,7 +69,7 @@ private struct FruitsPhotoSavingIndicator: View {
             .rotationEffect(.degrees(rotation))
             .onAppear {
                 withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
-                    rotation = 450
+                    rotation = 360
                 }
             }
     }
@@ -80,7 +80,6 @@ private struct FruitsPhotoSavedIndicator: View {
         Image(systemName: "square.and.arrow.down.badge.checkmark")
             .font(.system(size: 26.27272, weight: .semibold))
             .foregroundStyle(.brandMain500)
-            .rotationEffect(.degrees(90))
     }
 }
 
