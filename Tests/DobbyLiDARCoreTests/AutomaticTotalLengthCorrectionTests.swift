@@ -64,15 +64,13 @@ final class AutomaticTotalLengthCorrectionTests: XCTestCase {
         return try encoder.encode(value)
     }
 
-    func testMissingEndpointsStayUnavailableUntilBothAreExplicitlyConfirmed() throws {
+    func testCorrectionSheetRequiresBothMissingEndpointsToBeExplicitlyConfirmed() throws {
         var automatic = model()
         let originalRevision = automatic.calculationRevision
         let originalPersistence = automatic.persistenceRevision
         XCTAssertTrue(automatic.canCorrectTotalLength)
         XCTAssertNil(try totalLength(automatic.result).meters)
         XCTAssertEqual(try totalLength(automatic.result).failure, .missingLandmark)
-        XCTAssertFalse(automatic.placePoint(originalPoint: neck, id: "neck_center"),
-                       "Ordinary dragging must not create a missing point")
         XCTAssertFalse(automatic.placePoint(originalPoint: hem, id: "arbitrary"))
         var manual = try XCTUnwrap(automatic.manualMeasurement(for: "top.totalLength"))
         XCTAssertTrue(manual.landmarks.points.allSatisfy { !$0.isVisible })

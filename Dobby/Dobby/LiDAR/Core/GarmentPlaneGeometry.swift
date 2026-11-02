@@ -119,8 +119,16 @@ nonisolated enum GarmentPlaneGeometry {
             }
             guard next.count >= required else { throw failure(.insufficientGarmentPlane, .planeInsufficientInliers, evidence: ["inliers": Double(next.count), "required": Double(required)]) }
             if next == indices { break }
+            let refined = try principalPlane(samples: samples, indices: next)
+            let refinedIndices = samples.indices.filter {
+                abs(dot(refined.normal, samples[$0].position) + refined.offset) <= inlierToleranceMeters
+            }
+            // A least-squares refit can lose support near the inlier boundary.
+            // Keep the supported plane instead of replacing it with a worse fit;
+            // all final coverage, residual and viewing-angle checks still apply.
+            guard refinedIndices.count >= next.count else { break }
             indices = next
-            fitted = try principalPlane(samples: samples, indices: indices)
+            fitted = refined
         }
         // Preserve the reference order: final support statistics use final inliers,
         // but the returned plane is fitted, not a further support-only refit.

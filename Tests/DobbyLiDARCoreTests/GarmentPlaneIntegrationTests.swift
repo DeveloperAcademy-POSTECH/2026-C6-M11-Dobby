@@ -98,6 +98,29 @@ final class GarmentPlaneIntegrationTests: XCTestCase {
         XCTAssertLessThan(plane.quality.orthogonalRMSMeters, 0.002)
     }
 
+    func testRefinementPreservesSupportedPlaneNearInlierThreshold() throws {
+        // A synthetic 1.2 m plane with deterministic noise and minority outliers.
+        // Blindly accepting each refit loses the required 75% support on this
+        // fixture even though the preceding fit has 679 of 896 inliers.
+        let scene = scene(modify: { x, y, depth in
+            var hash = UInt64(x * 73856093 + y * 19349663 + 233 * 83492791)
+            hash = (hash ^ (hash >> 13)) &* 1274126177
+            if hash % 100 < 20 { return depth + 0.05 }
+            let noise = Double(hash % 10001) / 5000 - 1
+            return depth + Float(noise * 0.010)
+        })
+        let plane = try fit(scene), measured = try value(scene)
+        XCTAssertGreaterThanOrEqual(plane.quality.inlierCount,
+                                   Int(ceil(Double(plane.quality.candidateCount) * 0.75)))
+        XCTAssertLessThanOrEqual(plane.quality.orthogonalRMSMeters, 0.008)
+        XCTAssertGreaterThanOrEqual(plane.quality.horizontalCoverage, 0.6)
+        XCTAssertGreaterThanOrEqual(plane.quality.verticalCoverage, 0.6)
+        XCTAssertEqual(plane.offset, -1.2, accuracy: 0.002)
+        XCTAssertEqual(measured.status, .valid)
+        XCTAssertEqual(try XCTUnwrap(measured.meters), hypot(0.48, 0.24), accuracy: 0.002)
+        XCTAssertTrue(measured.points.allSatisfy { $0.quality.garmentPlaneQuality == plane.quality })
+    }
+
     func testRawAsymmetricMaskSelectsGarmentRatherThanRotatedBackground() throws {
         let scene = scene(maskAt: { $0 > 0.12 && $0 < 0.43 && $1 > 0.18 && $1 < 0.58 }, modify: { x, y, _ in
             let u = Double(x) / 160, v = Double(y) / 120

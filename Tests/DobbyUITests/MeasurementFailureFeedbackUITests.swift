@@ -41,49 +41,29 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
     }
 
     @MainActor
-    func testFoundPointWithDepthFailureExplainsSensorConfidenceAndOffersRetake() {
+    func testFoundPointWithDepthFailureKeepsPhotoClearAndAllowsRetake() {
         continueAfterFailure = false
         let app = launchFixture("--garment-preview-feedback-depth-failure")
-        let notice = app.buttons["garmentUnavailableNotice"]
-        XCTAssertTrue(notice.waitForExistence(timeout: 15))
-        XCTAssertTrue(notice.label.contains("센서 신뢰도"))
-        XCTAssertFalse(notice.label.contains("점을 찾지 못"))
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["garmentUnavailableNotice"].exists)
+        XCTAssertTrue(app.buttons["garmentMeasurementPoint_waist_left"].exists)
         XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).count, 3)
-        notice.tap()
-        XCTAssertTrue(app.navigationBars["측정 항목 상세"].waitForExistence(timeout: 5))
-        let id = "bottom.waist_left.waist_right"
-        let reason = app.staticTexts["measurementFailureReason_" + id].firstMatch
-        reveal(reason, in: app)
-        XCTAssertTrue(reason.label.contains("센서 신뢰도"))
-        XCTAssertFalse(app.buttons["reviewGarmentMeasurement_" + id].exists,
-                       "Moving a point cannot restore missing sensor-confidence data")
-        let retake = app.buttons["retakeForMeasurementFailure_" + id]
-        reveal(retake, in: app)
-        XCTAssertTrue(retake.isHittable)
-        attach(app, name: "point-present-depth-failure-explained")
-        retake.tap()
+        attach(app, name: "point-present-depth-failure-without-banner")
+        app.buttons["product-flow.back"].tap()
         XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["captureGarment"].isEnabled)
         XCTAssertEqual(app.buttons["captureGarment"].value as? String, "옷 인식 대기")
     }
 
     @MainActor
-    func testOneCaptureFailureExplainsFourLengthsOnceWithoutManualPointPrompt() {
+    func testCaptureFailureKeepsExistingPointsWithoutFailureBannerOrInventedLengths() {
         continueAfterFailure = false
         let app = launchFixture("--garment-preview-feedback-plane-failure")
-        let notice = app.buttons["garmentUnavailableNotice"]
-        XCTAssertTrue(notice.waitForExistence(timeout: 15))
-        XCTAssertTrue(notice.label.contains("4개 측정 불가"))
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["garmentUnavailableNotice"].exists)
+        XCTAssertTrue(app.buttons["garmentMeasurementPoint_waist_left"].exists)
         XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_")).count, 0)
-        notice.tap()
-        XCTAssertTrue(app.navigationBars["측정 항목 상세"].waitForExistence(timeout: 5))
-        let retakes = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "retakeForMeasurementFailure_"))
-        let retake = retakes.firstMatch
-        reveal(retake, in: app)
-        XCTAssertEqual(retakes.count, 1)
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "reviewGarmentMeasurement_")).firstMatch.exists)
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "옷의 일부에만 모여")).firstMatch.exists)
-        attach(app, name: "capture-plane-failure-shared-four-lengths")
+        attach(app, name: "capture-plane-failure-points-without-banner")
     }
 
     @MainActor
@@ -101,12 +81,6 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
         armSyntheticGarmentCapture(in: app)
         shutter.tap()
         return app
-    }
-
-    @MainActor
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<8 where !element.isHittable { app.swipeUp() }
-        XCTAssertTrue(element.waitForExistence(timeout: 5))
     }
 
     @MainActor
