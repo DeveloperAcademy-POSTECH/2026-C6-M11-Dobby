@@ -69,7 +69,7 @@ final class ProductPhotoModel {
               }).count == initialDetailPhotos.count,
               initialDetailPhotos.allSatisfy({ asset in
                   guard asset.id != input.measurement.id, asset.purpose == .detail,
-                        asset.sessionID == input.sessionID, asset.garmentID == input.garmentID,
+                        asset.garmentID == input.garmentID,
                         case let .localFile(url, metadata) = asset.source else { return false }
                   return url.isFileURL && metadata.pixelWidth > 0 && metadata.pixelHeight > 0
               }),
@@ -97,6 +97,26 @@ final class ProductPhotoModel {
         }
         return try ProductPhotoDraftSnapshot(input: input, detailPhotos: detailPhotos,
             selectedPhotoIDs: selectedPhotoIDs, hasAcknowledgedCaptureGuide: hasAcknowledgedCaptureGuide)
+    }
+
+    /// A retake changes the measurement session, not the ownership or capture
+    /// provenance of detail photos. Publish this candidate only after saving.
+    func replacingMeasurement(with input: ProductPhotoInput, record: SavedMeasurement) throws -> ProductPhotoModel {
+        guard !isCapturing, !isDeleting, !isDiscardingDetails,
+              input.garmentID == self.input.garmentID,
+              input.measurement.id == self.input.measurement.id else {
+            throw CameraFailure.mismatchedCapture
+        }
+        let selected = selectedPhotoIDs.compactMap { id in
+            id == self.input.measurementVisualization?.id ? input.measurementVisualization?.id : id
+        }
+        let candidate = try ProductPhotoModel(input: input, captureProvider: captureProvider,
+            initialDetailPhotos: detailPhotos, initialSelectedPhotoIDs: selected, measurementRecord: record)
+        candidate.hasAcknowledgedCaptureGuide = hasAcknowledgedCaptureGuide
+        candidate.persistedDetailPhotoIDs = persistedDetailPhotoIDs
+        candidate.deferredDetailDeletions = deferredDetailDeletions
+        candidate.committedCleanupTask = committedCleanupTask
+        return candidate
     }
 
     /// Point corrections keep the same frozen capture while replacing the

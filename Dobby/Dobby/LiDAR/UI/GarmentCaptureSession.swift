@@ -76,7 +76,7 @@ final class GarmentCaptureSession: ObservableObject {
             try Task.checkCancellation()
             guard preparationID == token else { return }
             service = RecordedMeasurementService(workflow: AutomaticMeasurementWorkflow(camera: camera,
-                landmarks: recognizer, definitions: [], expectedLandmarkOrigin: .model),
+                landmarks: recognizer, definitions: [], timeoutSeconds: 45, expectedLandmarkOrigin: .model),
                 journal: LiDARAppServices.attemptJournal)
         } catch is CancellationError {
             // Closing a screen cannot publish late setup or evict a shared model.

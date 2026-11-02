@@ -13,6 +13,7 @@ struct GarmentMeasurementPhotoEditor: View {
     let isEnabled: Bool
     let isRecalculating: Bool
     var showsEnlargeControl = true
+    var pendingPointIDs: Set<String> = []
     let onEnlarge: () -> Void
     let onMove: (String, ImagePoint) -> Void
     let onEditingChanged: (Bool) -> Void
@@ -219,6 +220,7 @@ struct GarmentMeasurementPhotoEditor: View {
     private func pointHandle(_ point: GarmentLandmark, size: CGSize) -> some View {
         let epoch = dragEpoch
         let selected = selectedPoint?.id == point.id
+        let pending = pendingPointIDs.contains(point.id)
         let center = screenPoint(previewPoint(point), size: size)
         let neighbors = handles.filter { $0.id != point.id }.map {
             let other = screenPoint(previewPoint($0), size: size)
@@ -232,7 +234,12 @@ struct GarmentMeasurementPhotoEditor: View {
                     Circle().stroke(GarmentCaptureStyle.accent.opacity(0.8), lineWidth: 1)
                         .frame(width: 18, height: 18)
                 }
-                Circle().fill(.white).frame(width: 10, height: 10)
+                if pending {
+                    Circle().fill(GarmentCaptureStyle.accent.opacity(0.25)).frame(width: 12, height: 12)
+                    Circle().stroke(GarmentCaptureStyle.accent, lineWidth: 2).frame(width: 12, height: 12)
+                } else {
+                    Circle().fill(.white).frame(width: 10, height: 10)
+                }
             }.shadow(color: .black.opacity(0.4), radius: 2, y: 1)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.18), value: selected)
                 .frame(width: 56, height: 56)
@@ -280,7 +287,7 @@ struct GarmentMeasurementPhotoEditor: View {
                 })
             .id(epoch)
             .accessibilityLabel(GarmentPointName.title(point.id))
-            .accessibilityValue(String(format: "x %.4f, y %.4f", previewPoint(point).x, previewPoint(point).y))
+            .accessibilityValue((pending ? "위치 확인 필요, " : "") + String(format: "x %.4f, y %.4f", previewPoint(point).x, previewPoint(point).y))
             .accessibilityHint("끌어 이동하는 동안 왼쪽 위에 확대됩니다. 위치 이동 동작으로도 조절할 수 있어요")
             .accessibilityAction(named: "왼쪽으로 이동") { nudge(point, dx: -2, dy: 0, size: size) }
             .accessibilityAction(named: "오른쪽으로 이동") { nudge(point, dx: 2, dy: 0, size: size) }
@@ -485,6 +492,7 @@ enum GarmentPointName {
         switch id {
         case "neck_center": "목 중앙점"
         case "top_length_start": "총장 상단점"
+        case "front_length_start": "앞판 총장 상단점"
         case "waist_front_center": "앞허리 중앙점"
         case "thigh_right": "오른쪽 허벅지점"
         case "neck_left": "왼쪽 목점"

@@ -18,6 +18,7 @@ private struct LiDARLabContent: View {
     private let modelLoadError: String?
     private let usesBundledModel: Bool
     @State private var photoDiagnostic: GarmentPhotoDiagnostic?
+    @State private var showOuterwearComparison = false
     @State private var garmentFlow: GarmentFlowDestination?
     @StateObject private var capture: ARKitCaptureProvider
     @State private var automaticService: RecordedMeasurementService?
@@ -144,6 +145,9 @@ private struct LiDARLabContent: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         Label("모델별 사진 진단", systemImage: "photo.badge.magnifyingglass").font(.headline)
+                        Button { showOuterwearComparison = true } label: {
+                            Label("아우터 AI 비교 실험", systemImage: "square.split.2x2").frame(maxWidth: .infinity)
+                        }.buttonStyle(.borderedProminent).accessibilityIdentifier("openOuterwearComparison")
                         Text("이 선택은 개별 모델의 점 인식을 확인하는 진단용입니다. 실측 촬영에서는 옷 종류를 자동으로 구분합니다. 사진 진단은 cm 치수를 계산하지 않습니다.")
                             .font(.caption).foregroundStyle(.secondary)
                         ForEach(AutomaticGarmentKind.allCases) { kind in
@@ -223,6 +227,7 @@ private struct LiDARLabContent: View {
                 .sheet(item: $photoDiagnostic) { diagnostic in
                     GarmentRecognitionView(provider: diagnostic.provider)
                 }
+                .sheet(isPresented: $showOuterwearComparison) { OuterwearLandmarkComparisonView() }
                 .fullScreenCover(item: $garmentFlow, onDismiss: { Task { await refreshRecords() } }) { destination in
                     GarmentCaptureFlowView(archive: archive, preview: destination == .preview)
                 }

@@ -1,4 +1,7 @@
 import { buildOpenAIRequest, DraftResponseError, parseOpenAIResponse } from "./garment-draft.js";
+import { buildLandmarkOpenAIRequest, buildRefinementOpenAIRequest, OUTERWEAR_CATEGORIES,
+  buildLengthRefinementOpenAIRequest, parseLengthRefinementOpenAIResponse, LENGTH_REFINEMENT_REGIONS,
+  parseLandmarkOpenAIResponse, REFINEMENT_REGIONS, REFINEMENT_VERSION, REFINEMENT_VERSION_V3, REFINEMENT_VERSION_V4 } from "./garment-landmarks.js";
 import { enforceAppUsageLimits, UsageProtectionFailure } from "./usage-protection.js";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -207,20 +210,58 @@ function validatePhotos(body) {
   });
 }
 
+function validateLandmarkRequest(body) {
+  if (!isObject(body) || !hasOnlyKeys(body, ["requestId", "image", "category"])
+      || typeof body.requestId !== "string"
+      || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(body.requestId)
+      || !OUTERWEAR_CATEGORIES.has(body.category)
+      || !isObject(body.image) || !hasOnlyKeys(body.image, ["imageDataUrl", "width", "height"])
+      || ![body.image.width, body.image.height].every(value => Number.isInteger(value) && value > 0 && value <= 16384)) {
+    throw new Failure(400, "invalid_request", "아우터 사진 한 장과 올바른 요청 정보를 전송해 주세요.");
+  }
+  imageBytes(body.image.imageDataUrl);
+  return { requestId: body.requestId, category: body.category,
+    image: { imageDataUrl: body.image.imageDataUrl, width: body.image.width, height: body.image.height } };
+}
+
 function upstreamFailure(status) {
   if (status === 429) return new Failure(503, "ai_rate_limited", "AI 요청이 많습니다. 잠시 후 다시 시도해 주세요.");
   if (status === 401 || status === 403) return new Failure(503, "ai_configuration_error", "AI 연결 서버 설정을 확인해 주세요.");
   return new Failure(502, "ai_request_failed", "AI 초안을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.");
 }
 
-async function generateDraft(photos, env, fetchImpl, timeoutMs) {
+function validateRefinementRequest(body, allowedRegions = REFINEMENT_REGIONS) {
+  if (!isObject(body) || !hasOnlyKeys(body, ["requestId", "category", "image", "regions"])
+      || !Array.isArray(body.regions) || body.regions.length !== Object.keys(allowedRegions).length) {
+    throw new Failure(400, "invalid_request", "확대 비교 요청을 확인해 주세요.");
+  }
+  const input = validateLandmarkRequest({ requestId: body.requestId, category: body.category, image: body.image });
+  let total = imageBytes(input.image.imageDataUrl);
+  const ids = new Set();
+  const regions = body.regions.map(region => {
+    if (!isObject(region) || !hasOnlyKeys(region, ["id", "image"]) || typeof region.id !== "string"
+        || !Object.hasOwn(allowedRegions, region.id) || ids.has(region.id)) {
+      throw new Failure(400, "invalid_request", "확대 부위 정보를 확인해 주세요.");
+    }
+    ids.add(region.id);
+    const validated = validateLandmarkRequest({ requestId: input.requestId, category: input.category, image: region.image });
+    total += imageBytes(validated.image.imageDataUrl);
+    return { id: region.id, image: validated.image };
+  });
+  if (total > MAX_TOTAL_PHOTO_BYTES) throw new Failure(413, "photos_too_large", "사진 전체 용량은 8MiB 이하여야 합니다.");
+  return { ...input, regions };
+}
+
+async function generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion = 0, refinement = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildOpenAIRequest(photos)),
+      body: JSON.stringify(refinement === "length" ? buildLengthRefinementOpenAIRequest(input)
+        : refinement ? buildRefinementOpenAIRequest(input, { version: landmarkVersion })
+        : landmarkVersion ? buildLandmarkOpenAIRequest(input, { version: landmarkVersion }) : buildOpenAIRequest(input)),
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -233,12 +274,20 @@ async function generateDraft(photos, env, fetchImpl, timeoutMs) {
       if (controller.signal.aborted) throw new Failure(504, "ai_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.");
       throw new Failure(502, "invalid_ai_response", "AI 응답 형식을 확인할 수 없습니다.");
     }
-    try { return parseOpenAIResponse(payload); }
+    try {
+      if (refinement === "length") return parseLengthRefinementOpenAIResponse(payload, input.requestId);
+      if (refinement) return { refinementVersion: landmarkVersion === 4 ? REFINEMENT_VERSION_V4 : landmarkVersion === 3 ? REFINEMENT_VERSION_V3 : REFINEMENT_VERSION,
+        localResponse: parseLandmarkOpenAIResponse(payload, input.requestId, { version: landmarkVersion }) };
+      return landmarkVersion
+        ? parseLandmarkOpenAIResponse(payload, input.requestId, { version: landmarkVersion }) : parseOpenAIResponse(payload);
+    }
     catch (error) {
       if (error instanceof DraftResponseError && error.code === "UNUSABLE_PHOTOS") {
         throw new Failure(422, "photo_unusable", "사진에서 의류를 확인하기 어렵습니다. 제품 전체와 라벨이 선명한 사진을 추가해 주세요.");
       }
-      throw new Failure(502, "invalid_ai_response", "AI 초안을 확인할 수 없습니다. 다시 시도해 주세요.");
+      throw new Failure(502, "invalid_ai_response", landmarkVersion
+        ? "AI 측정점을 확인할 수 없습니다. 다시 시도해 주세요."
+        : "AI 초안을 확인할 수 없습니다. 다시 시도해 주세요.");
     }
   } catch (error) {
     if (error instanceof Failure) throw error;
@@ -263,7 +312,7 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
         if (path === "/health" && request.method === "GET") {
           return json({ service: "dobby-garment-ai", status: "ok" }, 200, requestId);
         }
-        if (path !== "/v1/garments/autofill" && path !== "/health") {
+        if (!["/v1/garments/autofill", "/v1/garments/landmarks", "/v2/garments/landmarks", "/v2/garments/landmark-refinement", "/v3/garments/landmarks", "/v3/garments/landmark-refinement", "/v4/garments/landmarks", "/v4/garments/landmark-refinement", "/v4/garments/length-refinement", "/health"].includes(path)) {
           throw new Failure(404, "not_found", "요청 경로를 확인해 주세요.");
         }
         const method = path === "/health" ? "GET" : "POST";
@@ -275,8 +324,13 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
         if (authentication.kind === "app") {
           await enforceAppUsageLimits(env, authentication.installationID);
         }
-        const photos = validatePhotos(await readJSON(request));
-        return json(await generateDraft(photos, env, fetchImpl, timeoutMs), 200, requestId);
+        const body = await readJSON(request);
+        const refinement = path.endsWith("/length-refinement") ? "length" : path.endsWith("/landmark-refinement");
+        const landmarkVersion = path.startsWith("/v4/") ? 4 : path.startsWith("/v3/") ? 3 : path.startsWith("/v2/") ? 2
+          : path === "/v1/garments/landmarks" ? 1 : 0;
+        const input = refinement ? validateRefinementRequest(body, refinement === "length" ? LENGTH_REFINEMENT_REGIONS : REFINEMENT_REGIONS)
+          : landmarkVersion ? validateLandmarkRequest(body) : validatePhotos(body);
+        return json(await generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion, refinement), 200, requestId);
       } catch (error) {
         // Never log credentials, image data, model output, or raw upstream errors.
         return failureResponse(error, requestId);

@@ -127,6 +127,49 @@ extension GarmentStore {
         return callerModel
     }
 
+    /// Stages a new capture on the existing draft. The caller owns the save or
+    /// rollback, and must remove the returned file if the transaction fails.
+    @MainActor
+    static func stageRetakenMeasurement(_ record: SavedMeasurement, for garment: Garment,
+                                       in context: ModelContext, photosDirectory directory: URL,
+                                       allowsSynthetic: Bool = false,
+                                       allowsUnavailableDraft: Bool = false) throws -> URL {
+        let kind = try validateProductMeasurement(record, allowsSynthetic: allowsSynthetic,
+            allowsUnavailableDraft: allowsUnavailableDraft)
+        guard garment.modelContext === context, garment.isCreationDraft,
+              let photo = garment.measurementPhoto else { throw MeasurementImportError.invalidRecord }
+        let data = try orientedMeasurementJPEG(record.snapshot)
+        let url = directory.appending(path: "\(record.id)-\(UUID()).jpg")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try writeMeasurementPhoto(data, to: url)
+        var staged = false
+        defer { if !staged { try? FileManager.default.removeItem(at: url) } }
+        photo.fileName = url.lastPathComponent
+        photo.capturedAt = record.snapshot.frame.capturedAt
+        photo.imageWidth = record.snapshot.frame.imageSize.width
+        photo.imageHeight = record.snapshot.frame.imageSize.height
+        photo.measurementSessionID = record.snapshot.frame.sessionID
+        photo.measurementFrameID = record.snapshot.frame.frameID
+        photo.measurementOrientationRaw = record.snapshot.frame.orientation.rawValue
+        let group: GarmentGroup = kind == .top ? .top : .pants
+        if garment.group != group {
+            garment.group = group
+            garment.category = kind == .top ? "상의" : "바지"
+        }
+        // Old typed values and landmarks belong to the old capture, including
+        // keys absent from the new garment kind. Reuse only the product/photo ID.
+        let measurements = garment.measurements
+        garment.measurements = []
+        for value in measurements { context.delete(value) }
+        let landmarks = photo.landmarks
+        photo.landmarks = []
+        for point in landmarks { context.delete(point) }
+        try refreshMeasurement(record, for: garment, in: context, allowsSynthetic: allowsSynthetic,
+            allowsUnavailableDraft: allowsUnavailableDraft, save: { _ in })
+        staged = true
+        return url
+    }
+
     /// A result correction belongs to the same frozen capture and product.
     /// Keep product/photo/measurement IDs so text drafts and selected photos
     /// still reference the same objects after the corrected archive is saved.
@@ -214,6 +257,8 @@ extension GarmentStore {
         point.isVisible = current.isVisible
         point.derivedFrom = record.landmarks.effectiveDerivedSourceIDs(for: current.id)
         if let rawOriginal = originalLandmarks.points.first(where: { $0.id == current.id }),
+           (!GarmentLandmarkModelContract.isLunaOuterwear(version: originalLandmarks.modelVersion, kind: .top)
+                || rawOriginal.isVisible),
            rawOriginal.contourRule == nil || productPoint(rawOriginal, displayed: displayedAutomatic).isVisible {
             let original = productPoint(rawOriginal, displayed: displayedAutomatic)
             point.hasAutomaticObservation = true
@@ -271,6 +316,7 @@ extension GarmentStore {
         "top.sleeveLengthLeft": "sleeveLengthLeft",
         "top.sleeveLengthRight": "sleeveLengthRight",
         "top.totalLength": "totalLength",
+        "top.frontLength": "frontLength",
         "bottom.waist_left.waist_right": "waistWidth",
         "bottom.crotch.waist_center": "frontRise",
         "bottom.crotch.waist_front_center": "frontRise",
@@ -301,11 +347,25 @@ extension GarmentStore {
         let isSyntheticPreview = allowsSynthetic && frame.source == .synthetic
             && record.landmarks.origin == .synthetic && record.landmarks.modelVersion == expectedPreviewVersion
         let isCurrentModel = record.landmarks.modelVersion == kind.modelVersion
+        let isRemoteOuterwear = GarmentLandmarkModelContract.isLunaOuterwear(version: record.landmarks.modelVersion, kind: kind)
+        let isViewLengthOuterwear = GarmentLandmarkModelContract.isViewLengthOuterwear(version: record.landmarks.modelVersion, kind: kind)
+        let isFrontLengthOuterwear = GarmentLandmarkModelContract.isFrontLengthOuterwear(version: record.landmarks.modelVersion, kind: kind)
+        let remoteView = record.landmarks.recognitionDiagnostics?.remoteView
+        if isViewLengthOuterwear || isFrontLengthOuterwear {
+            let convention = record.landmarks.modelVersion == GarmentLandmarkModelContract.lunaGapLengthVersion
+                ? GarmentLandmarkModelContract.frontGapConvention
+                : isFrontLengthOuterwear || remoteView == "front" ? GarmentLandmarkModelContract.frontNeckSeamConvention
+                : GarmentLandmarkModelContract.backNeckSeamConvention
+            guard ["front", "back", "unknown"].contains(remoteView ?? ""),
+                  record.landmarks.recognitionDiagnostics?.totalLengthConvention == convention else {
+                throw MeasurementImportError.invalidRecord
+            }
+        }
         let isLegacyModel = record.landmarks.modelVersion == kind.legacyModelVersion
         let isLegacyBottom8 = kind == .bottoms
             && record.landmarks.modelVersion == AutomaticGarmentKind.legacyBottom8ModelVersion
         guard isSyntheticPreview || (record.landmarks.origin == .model
-            && (isCurrentModel || isLegacyModel || isLegacyBottom8)) else {
+            && (isCurrentModel || isRemoteOuterwear || isLegacyModel || isLegacyBottom8)) else {
             throw MeasurementImportError.invalidRecord
         }
         let expected: [MeasurementDefinition]
@@ -319,14 +379,17 @@ extension GarmentStore {
             // Preview records predate the contour contract. They do not grant
             // arbitrary production model/definition combinations.
             usesContourLength = isCurrentModel && !isSyntheticPreview
-            if usesContourLength {
+            if isViewLengthOuterwear {
+                expected = TopLandmarkSchema.viewLengthMeasurementDefinitions(for: remoteView)
+            } else if usesContourLength || isRemoteOuterwear {
                 expected = TopLandmarkSchema.canonicalMeasurementDefinitions
             } else if record.definitions.first(where: { $0.id == "top.totalLength" })?.projection != nil {
                 expected = TopLandmarkSchema.legacyProjectedMeasurementDefinitions
             } else {
                 expected = TopLandmarkSchema.legacyMeasurementDefinitions
             }
-            physicalPointNames = TopLandmarkSchema.expectedKeypoints + (usesContourLength ? ["top_length_start"] : [])
+            physicalPointNames = TopLandmarkSchema.expectedKeypoints + ((usesContourLength || isRemoteOuterwear) ? ["top_length_start"] : [])
+                + (isViewLengthOuterwear ? ["front_length_start"] : [])
             derived = ["neck_center": ["neck_left", "neck_right"]]
         case .bottoms:
             usesContourLength = false
@@ -376,6 +439,8 @@ extension GarmentStore {
             return set.sessionID == frame.sessionID && set.frameID == frame.frameID
                 && set.origin == record.landmarks.origin && set.garmentKind == kind
                 && set.modelVersion == record.landmarks.modelVersion
+                && (!(isViewLengthOuterwear || isFrontLengthOuterwear) || (set.recognitionDiagnostics?.remoteView == remoteView
+                    && set.recognitionDiagnostics?.totalLengthConvention == record.landmarks.recognitionDiagnostics?.totalLengthConvention))
                 && !ids.isEmpty && ids.count <= 200 && Set(ids).count == ids.count
                 && Set(ids).isSubset(of: known)
                 && set.points.allSatisfy { point in
@@ -396,8 +461,10 @@ extension GarmentStore {
             let endpoints: [String]
             let definitionID: String
             if kind == .top {
-                endpoints = usesContourLength ? ["top_length_start", "hem_center"] : ["neck_center", "hem_center"]
-                definitionID = "top.totalLength"
+                let usesFrontLength = isViewLengthOuterwear && remoteView == "front"
+                endpoints = usesFrontLength ? ["front_length_start", "hem_center"]
+                    : (usesContourLength || isRemoteOuterwear) ? ["top_length_start", "hem_center"] : ["neck_center", "hem_center"]
+                definitionID = usesFrontLength ? "top.frontLength" : "top.totalLength"
             } else if usesContourThigh {
                 endpoints = BottomLandmarkSchema.thighWidthRightDefinition.landmarkIDs
                 definitionID = BottomLandmarkSchema.thighWidthRightDefinition.id
@@ -407,8 +474,11 @@ extension GarmentStore {
             guard addedIDs.isSubset(of: Set(endpoints)),
                   let definition = record.definitions.first(where: { $0.id == definitionID }),
                   definition.landmarkIDs == endpoints, definition.projection == nil else { return false }
-            // Restoring even one missing endpoint requires confirming both.
-            return endpoints.allSatisfy { id in
+            // A top endpoint can be restored by directly dragging its pending
+            // handle. Require explicit manual placement for every added point,
+            // while preserving the other endpoint's existing observation.
+            let requiredManualIDs = kind == .top ? addedIDs : Set(endpoints)
+            return requiredManualIDs.allSatisfy { id in
                 record.landmarks.points.contains { point in
                     point.id == id && point.origin == .manual && point.isVisible
                         && point.point.isValid && point.confidence == nil && point.derivedFrom == nil

@@ -115,7 +115,7 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
-            ExportView(product: product, controller: controller, showFruits: $showFruits) {
+            ExportView(product: product, showFruits: $showFruits) {
                 routeTask?.cancel()
                 routeTask = nil
                 returnsHomeAfterExport = true
@@ -298,7 +298,7 @@ struct ProductSavedDetailView: View {
             Text(editError ?? "")
         }
         .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
-            ExportView(product: product, controller: controller, showFruits: $showFruits) {
+            ExportView(product: product, showFruits: $showFruits) {
                 returnsHomeAfterExport = true
                 showFruits = false
                 exportProduct = nil

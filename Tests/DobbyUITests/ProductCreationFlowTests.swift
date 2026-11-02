@@ -188,32 +188,16 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))
         attachScreenshot(app, name: "flow-top-export-current-product")
 
-        let fruitsDetails = app.buttons["후루츠패밀리로 내보내기 (A)"]
-        reveal(fruitsDetails, in: app)
-        fruitsDetails.tap()
-        XCTAssertTrue(app.navigationBars["후루츠패밀리로 내보내기"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["화면 상단부에 있는 다이나믹 아일랜드를 길게 눌러 펼쳐 주세요"].exists)
-        XCTAssertTrue(app.images["export.fruits.guide"].exists)
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "어깨", "복사")).firstMatch.exists)
-        attachScreenshot(app, name: "flow-top-export-dynamic-island-guide-a")
-        tapBack(in: app)
-        let fruitsOverlay = app.buttons["후루츠패밀리로 내보내기 (B)"]
-        reveal(fruitsOverlay, in: app)
-        fruitsOverlay.tap()
-        XCTAssertTrue(app.otherElements["export.fruits.overlay"].waitForExistence(timeout: 5))
-        // SwiftUI exposes the overlay container identifier on both the glass
-        // card and prompt. Verify its actionable controls for this lifecycle
-        // test rather than relying on non-exposed layout wrapper identifiers.
-        let guideOpen = app.buttons["export.fruits.overlay.open"]
-        let guideClose = app.buttons["export.fruits.overlay.close"]
-        XCTAssertTrue(guideOpen.waitForExistence(timeout: 5))
-        XCTAssertTrue(guideOpen.isHittable)
-        XCTAssertTrue(guideClose.isHittable)
-        XCTAssertTrue(app.navigationBars["내보내기"].exists)
-        XCTAssertTrue(app.staticTexts["다이나믹 아일랜드를\n꾹 눌러보세요"].exists)
-        attachScreenshot(app, name: "flow-top-export-dynamic-island-guide-b-overlay")
-        guideClose.tap()
-        XCTAssertFalse(app.otherElements["export.fruits.overlay"].waitForExistence(timeout: 1))
+        let fruits = app.buttons["후르츠패밀리에 업로드하기"]
+        reveal(fruits, in: app)
+        fruits.tap()
+        // Verify the in-app entry and return without saving photos, starting
+        // PiP or opening the external platform.
+        let closeFruits = app.buttons["채널 선택으로 돌아가기"]
+        XCTAssertTrue(closeFruits.waitForExistence(timeout: 10))
+        XCTAssertTrue(closeFruits.isHittable)
+        attachScreenshot(app, name: "flow-top-export-fruits-photo-save")
+        closeFruits.tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 5))
         app.buttons["export.close"].tap()
         XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))

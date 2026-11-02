@@ -36,6 +36,7 @@ struct ProductCreationFlowView: View {
     @State private var preservesDraftPhotos = false
     @State private var pendingExitAction: (() -> Void)?
     @State private var usesProductAutofill = true
+    @State private var autofillFlow: ProductAutofillFlow
     @State private var autofill = ProductAutofillSession()
     @State private var autofillReviewNotes: [String] = []
     @State private var autofillLoadingPresentation: ProductAutofillLoadingPresentation?
@@ -57,6 +58,7 @@ struct ProductCreationFlowView: View {
         self.onDraftSaved = onDraftSaved ?? onCancel
         self.onDraftDiscarded = onDraftDiscarded ?? onDraftSaved ?? onCancel
         self.resumeProductID = resumeProductID
+        _autofillFlow = State(initialValue: ProductAutofillFlowPreference.current)
         _isRestoring = State(initialValue: resumeProductID != nil)
         isFixture = ProductAppStorage.fixtureDirectory != nil
         archive = MeasurementArchive(folder: ProductAppStorage.fixtureDirectory?.appending(path: "measurements"))
@@ -79,47 +81,17 @@ struct ProductCreationFlowView: View {
                 } else {
                     GarmentCaptureFlowView(archive: archive, preview: isFixture,
                         onConfirmedRecord: receiveMeasurement, onCancel: onCancel, embedsNavigation: false,
-                        restoredRecord: restoredRecord, onExitRecord: saveResultAndExit,
-                        allowsRetake: garment == nil,
-                        onExitRequested: presentExitConfirmation)
+                        restoredRecord: restoredRecord)
                 }
             }
                 .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
                 .navigationDestination(for: Step.self) { step in
-                    if let garment, let photoModel, let permission {
-                        Group {
-                            switch step {
-                            case .details:
-                                CameraFlowView(model: photoModel, permission: permission, camera: camera,
-                                    previewSource: isFixture ? photoModel.input.measurement.source : nil,
-                                    onSelectPhotos: { path.append(.photoSelection) },
-                                    onExit: requestDraftExit,
-                                    onComplete: receivePhotos)
-                            case .photoSelection:
-                                ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
-                                    usesAI: $usesProductAutofill,
-                                    hasProductInformation: ProductAutofillInputSnapshot(garment: garment).hasInformation,
-                                    onCancelGeneration: { autofill.cancel() },
-                                    onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 },
-                                    onCompleteWithAI: receiveSelectedPhotos,
-                                    onComplete: receivePhotos)
-                            case .information:
-                                // Restored creation drafts continue input; they are not saved-product edits.
-                                InfoInputView(garment: garment, measurementInput: $measurementInput,
-                                    onExit: handleInformationBack) {
-                                    _ in path.append(.completed)
-                                }
-                            case .completed:
-                                ProductInputCompletionView(garment: garment,
-                                    onExport: { showFruits = false; exportProduct = ExportProduct(garment: garment) },
-                                    onLibrary: { Task { await finishFlow() } })
-                            }
-                        }.safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
-                            .preferredColorScheme(path.last == .photoSelection || path.last == .information || path.last == .completed ? .light : .dark)
-                    }
+                    destination(for: step)
                 }
         }
-        .disabled(isFinishing || pendingExitAction != nil || autofillLoadingPresentation != nil)
+        // Each generation screen locks its own controls. Disabling this ancestor
+        // would also disable native error-alert actions created as loading ends.
+        .disabled(isFinishing || pendingExitAction != nil)
         .accessibilityHidden(autofillLoadingPresentation != nil)
         .overlay {
             if let presentation = autofillLoadingPresentation {
@@ -142,7 +114,7 @@ struct ProductCreationFlowView: View {
         .tint(path.last == .photoSelection || path.last == .information ? .black
             : path.last == .completed ? .orange : .white)
         .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
-            ExportView(product: product, controller: controller, showFruits: $showFruits,
+            ExportView(product: product, showFruits: $showFruits,
                 onClose: closeExport)
                 .environment(\.modelContext, context)
                 .preferredColorScheme(.light)
@@ -185,12 +157,65 @@ struct ProductCreationFlowView: View {
     }
 
     @ViewBuilder
+    private func destination(for step: Step) -> some View {
+        if let garment, let photoModel, let permission {
+            Group {
+                switch step {
+                case .details:
+                    CameraFlowView(model: photoModel, permission: permission, camera: camera,
+                        previewSource: isFixture ? photoModel.input.measurement.source : nil,
+                        onSelectPhotos: { path.append(.photoSelection) },
+                        onExit: returnToMeasurementResult, onComplete: receivePhotos)
+                case .photoSelection:
+                    ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
+                        usesAI: $usesProductAutofill,
+                        hasProductInformation: ProductAutofillInputSnapshot(garment: garment).hasInformation,
+                        onCancelGeneration: { autofill.cancel() },
+                        onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 },
+                        onCompleteWithAI: photoAICompletion, onComplete: receivePhotos)
+                case .information:
+                    // Restored creation drafts continue input; they are not saved-product edits.
+                    InfoInputView(garment: garment, measurementInput: $measurementInput,
+                        onExit: handleInformationBack, onGenerateAI: informationAICompletion,
+                        onCancelGeneration: { autofill.cancel() },
+                        onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 }) {
+                        _ in path.append(.completed)
+                    }
+                case .completed:
+                    ProductInputCompletionView(garment: garment,
+                        onExport: { showFruits = false; exportProduct = ExportProduct(garment: garment) },
+                        onLibrary: { Task { await finishFlow() } })
+                }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
+            .preferredColorScheme(step == .details ? .dark : .light)
+        }
+    }
+
+    private var photoAICompletion: ((ProductPhotoOutput, Bool) async throws -> Void)? {
+        guard autofillFlow == .photoSelection else { return nil }
+        return receiveSelectedPhotos
+    }
+
+    private var informationAICompletion: (() async throws -> Void)? {
+        guard autofillFlow == .information else { return nil }
+        return generateInformationFromButton
+    }
+
+    @ViewBuilder
     private var fixtureBanner: some View {
         if isFixture {
             Text("연결 흐름 미리보기 · 합성 측정값")
                 .font(.caption).frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
                 .accessibilityIdentifier("product-flow.fixture")
         }
+    }
+
+    private func returnToMeasurementResult() {
+        guard path.last == .details, !isFinishing, pendingExitAction == nil,
+              let photoModel, !photoModel.isCapturing, !photoModel.isDeleting else { return }
+        // Pop only the detail screen; retain the measurement result and photo session.
+        path.removeLast()
     }
 
     private func returnToDetailCapture() {
@@ -214,9 +239,31 @@ struct ProductCreationFlowView: View {
         guard record.result.values.contains(where: { value in
             value.status != .unavailable && (value.meters.map { $0.isFinite && $0 > 0 && ($0 * 100).isFinite } ?? false)
         }) else { throw GarmentStore.MeasurementImportError.noAvailableMeasurements }
-        let garment = try await prepareProduct(for: record)
-        try persistDraft(garment, step: .details)
+        try await prepareAndSaveProduct(for: record, step: .details)
         path.append(.details)
+    }
+
+    private func prepareAndSaveProduct(for record: SavedMeasurement, step: ProductDraftStep,
+                                       allowsUnavailableDraft: Bool = false) async throws {
+        if let garment, let photoModel,
+           garment.measurementPhoto?.measurementFrameID != record.snapshot.frame.frameID
+            || garment.measurementPhoto?.measurementSessionID != record.snapshot.frame.sessionID {
+            let replacementInput = GarmentMeasurementInputState()
+            let replacement = try await ProductMeasurementRetake.replace(record, garment: garment,
+                photoModel: photoModel, previousInputData: JSONEncoder().encode(measurementInput),
+                replacementInputData: JSONEncoder().encode(replacementInput), step: step, in: context,
+                allowsSynthetic: isFixture, allowsUnavailableDraft: allowsUnavailableDraft)
+            context = replacement.context
+            self.garment = replacement.garment
+            self.photoModel = replacement.photoModel
+            measurementRecordID = record.id
+            measurementInput = replacementInput
+            preservesDraftPhotos = true
+            permission?.refresh()
+        } else {
+            let garment = try await prepareProduct(for: record, allowsUnavailableDraft: allowsUnavailableDraft)
+            try persistDraft(garment, step: step)
+        }
     }
 
     private func prepareProduct(for record: SavedMeasurement, allowsUnavailableDraft: Bool = false) async throws -> Garment {
@@ -315,11 +362,30 @@ struct ProductCreationFlowView: View {
             return
         }
 
+        try await generateAndApplyInformation(output, expectedStep: .photoSelection)
+        path.append(.information)
+    }
+
+    private func generateInformationFromButton() async throws {
+        guard let garment, let output = photoModel?.output,
+              autofillFlow == .information, path.last == .information else {
+            throw ProductAutofillError.invalidPhotos
+        }
+        // Retain the seller's latest input even if they cancel or close the app.
+        try persistDraft(garment, step: .information)
+        try await generateAndApplyInformation(output, expectedStep: .information)
+    }
+
+    private func generateAndApplyInformation(_ output: ProductPhotoOutput, expectedStep: Step) async throws {
+        guard let garment, let photoModel, isPresented, path.last == expectedStep else {
+            throw CancellationError()
+        }
+
         let before = ProductAutofillInputSnapshot(garment: garment)
         do {
             let draft = try await autofill.generate(photos: output.selectedPhotos)
             try Task.checkCancellation()
-            guard isPresented, path.last == .photoSelection,
+            guard isPresented, path.last == expectedStep,
                   self.garment?.id == output.garmentID,
                   photoModel.output?.selectedPhotos == output.selectedPhotos else {
                 throw CancellationError()
@@ -334,7 +400,6 @@ struct ProductCreationFlowView: View {
                 autofillReviewNotes = previousReviewNotes
                 throw error
             }
-            path.append(.information)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -394,16 +459,6 @@ struct ProductCreationFlowView: View {
     private func completeHomeNavigation() {
         if let returnHomeFromExport { returnHomeFromExport() }
         else { onCancel() }
-    }
-
-    private func saveResultAndExit(_ record: SavedMeasurement) async throws {
-        guard !isFinishing else { return }
-        cleanupAction = .save
-        isFinishing = true
-        defer { isFinishing = false }
-        let garment = try await prepareProduct(for: record, allowsUnavailableDraft: true)
-        try persistDraft(garment, step: .measurementResult)
-        onDraftSaved()
     }
 
     private func requestSaveAndExit() {

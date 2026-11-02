@@ -29,7 +29,17 @@ final class AutoGarmentProviderTests: XCTestCase {
         let image = try neutralImage()
         // Probe the classifier before prepare(), which separately warms pose
         // and Vision foreground models. Blank rejection must need neither.
-        let evaluation = try await provider.evaluateImage(image, orientation: .up)
+        let evaluation: AutoGarmentRecognitionEvaluation
+        do {
+            evaluation = try await provider.evaluateImage(image, orientation: .up)
+        } catch let error as GarmentOrientationResolutionError {
+            // A blank raster may produce contradictory rotations. It must stop
+            // before category/pose rather than pretend that correction worked.
+            XCTAssertTrue((1...3).contains(error.attempts.count))
+            XCTAssertTrue(error.attempts.allSatisfy { $0.prediction.correction != .upright })
+            XCTAssertEqual(error.automaticMeasurementFailureCause, .garmentOrientationUnverified)
+            return
+        }
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -40,9 +50,13 @@ final class AutoGarmentProviderTests: XCTestCase {
         add(attachment)
 
         let orientation = try XCTUnwrap(evaluation.orientationPrediction)
-        XCTAssertEqual(evaluation.classificationAttempts.map(\.orientation), [
-            GarmentOrientationTransform.composed(device: .up, correction: orientation.correction)
-        ], "The four-way top-1 correction owns the only classifier/pose orientation")
+        let resolution = try XCTUnwrap(evaluation.orientationResolution)
+        XCTAssertEqual(evaluation.classificationAttempts.map(\.orientation), [resolution.orientation],
+            "Classification runs only at the verified final orientation")
+        XCTAssertEqual(resolution.attempts.first?.prediction, orientation)
+        XCTAssertEqual(resolution.attempts.first?.orientation, .up)
+        XCTAssertEqual(resolution.attempts.last?.prediction.correction, .upright)
+        XCTAssertTrue((1...3).contains(resolution.attempts.count))
         XCTAssertEqual(Set(orientation.probabilities.keys), Set([0, 90, 180, 270]))
         let expectedLabels = Set(GarmentClassificationCategory.allCases.map(\.rawValue))
         XCTAssertEqual(expectedLabels.count, 15)

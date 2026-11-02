@@ -14,30 +14,41 @@ struct InfoInputView: View {
     let onExit: (() -> Void)?
     let allowsPhotoEditing: Bool
     var onComplete: ((Garment) -> Void)? = nil
+    private let onGenerateAI: (() async throws -> Void)?
+    private let onCancelGeneration: () -> Void
+    private let onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.returnHomeFromExport) private var returnHomeFromExport
 
     @State private var exportProduct: ExportProduct?
-    @State private var copyController = CopyActivityController()
     @State private var showFruits = false
     @State private var localMeasurementInput = GarmentMeasurementInputState()
     private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
     @State private var saveError: String?
     @State private var hasAttemptedCompletion = false
     @State private var returnsHomeAfterExport = false
+    @State private var generationRequestID: UUID?
+    @State private var generationError: String?
+    @State private var showsReplacementConfirmation = false
     @FocusState private var focusedMeasurementID: UUID?
     static let measurementTableID = "product-info.measurement-table"
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
          allowsPhotoEditing: Bool = false,
          onExit: (() -> Void)? = nil,
+         onGenerateAI: (() async throws -> Void)? = nil,
+         onCancelGeneration: @escaping () -> Void = {},
+         onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)? = nil,
          onComplete: ((Garment) -> Void)? = nil) {
         self.garment = garment
         self.retainedMeasurementInput = measurementInput
         self.allowsPhotoEditing = allowsPhotoEditing
         self.onExit = onExit
         self.onComplete = onComplete
+        self.onGenerateAI = onGenerateAI
+        self.onCancelGeneration = onCancelGeneration
+        self.onAIGenerationPresentationChange = onAIGenerationPresentationChange
     }
 
     private var measurementInput: Binding<GarmentMeasurementInputState> {
@@ -47,9 +58,13 @@ struct InfoInputView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                ProductInformationFields(garment: garment, measurementInput: measurementInput,
-                    focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
-                    allowsPhotoEditing: allowsPhotoEditing)
+                VStack(alignment: .leading, spacing: 24) {
+                    if onGenerateAI != nil { generateInformationButton }
+                    ProductInformationFields(garment: garment, measurementInput: measurementInput,
+                        focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
+                        allowsPhotoEditing: allowsPhotoEditing)
+                }
+                    .disabled(generationRequestID != nil)
                     .padding(.horizontal, 20)
                     .padding(.top, allowsPhotoEditing ? 12 : 16)
                     .padding(.bottom, 16)
@@ -81,7 +96,10 @@ struct InfoInputView: View {
         .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .tint(.primary)
-        .onDisappear { focusedMeasurementID = nil }
+        .onDisappear {
+            focusedMeasurementID = nil
+            if generationRequestID != nil { cancelGeneration() }
+        }
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
@@ -93,6 +111,7 @@ struct InfoInputView: View {
                             .foregroundStyle(.black)
                     }
                     .tint(.black)
+                    .disabled(generationRequestID != nil)
                     .accessibilityLabel("뒤로가기")
                     .accessibilityIdentifier("product-flow.back")
                 }
@@ -107,7 +126,7 @@ struct InfoInputView: View {
                             ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
                             in: Capsule())
                 }
-                .disabled(!GarmentInformationValidation.hasAnyInformation(garment))
+                .disabled(generationRequestID != nil || !GarmentInformationValidation.hasAnyInformation(garment))
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }
@@ -115,7 +134,7 @@ struct InfoInputView: View {
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
         .sheet(item: $exportProduct, onDismiss: finishExportDismissal) { product in
-            ExportView(product: product, controller: copyController, showFruits: $showFruits) {
+            ExportView(product: product, showFruits: $showFruits) {
                 try modelContext.save()
                 returnsHomeAfterExport = true
                 showFruits = false
@@ -130,9 +149,91 @@ struct InfoInputView: View {
             Text(saveError ?? "입력한 정보는 화면에 남아 있어요. 다시 시도해 주세요.")
                 .accessibilityIdentifier("product-info.save-error")
         }
+        .task(id: generationRequestID) {
+            guard let identifier = generationRequestID, let onGenerateAI else { return }
+            var failure: String?
+            do {
+                try await onGenerateAI()
+            } catch {
+                if generationRequestID == identifier, !(error is CancellationError), !Task.isCancelled {
+                    failure = error.localizedDescription
+                }
+            }
+            if generationRequestID == identifier {
+                generationRequestID = nil
+                onAIGenerationPresentationChange?(nil)
+                generationError = failure
+            }
+        }
+        .alert("AI 정보를 생성하지 못했어요", isPresented: Binding(
+            get: { generationError != nil }, set: { if !$0 { generationError = nil } }
+        )) {
+            Button("다시 시도", action: requestGeneration)
+                .accessibilityIdentifier("product-ai.retry")
+            Button("직접 입력", role: .cancel) { generationError = nil }
+                .accessibilityIdentifier("product-ai.manual")
+        } message: {
+            Text(generationError ?? "잠시 후 다시 시도하거나 직접 입력해 주세요.")
+        }
+        .confirmationDialog("작성한 정보를 AI 내용으로 바꿀까요?", isPresented: $showsReplacementConfirmation,
+                            titleVisibility: .visible) {
+            Button("AI로 바꾸기", action: requestGeneration)
+                .accessibilityIdentifier("product-ai.replace")
+            Button("취소", role: .cancel) { }
+                .accessibilityIdentifier("product-ai.replace-cancel")
+        } message: {
+            Text("제품명, 설명, 브랜드가 새로 생성됩니다. 가격과 실측 사이즈는 유지돼요.")
+        }
+        .overlay {
+            if generationRequestID != nil, onAIGenerationPresentationChange == nil {
+                ProductAutofillLoadingView(onCancel: cancelGeneration)
+            }
+        }
+    }
+
+    private var generateInformationButton: some View {
+        Button {
+            dismissKeyboard()
+            if ProductAutofillInputSnapshot(garment: garment).hasInformation {
+                showsReplacementConfirmation = true
+            } else {
+                requestGeneration()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                Text("AI로 제품 정보 생성하기")
+                    .tracking(-0.14)
+            }
+            .font(.custom("Pretendard-Medium", size: 14, relativeTo: .subheadline))
+            .foregroundStyle(Color("BrandNeutralWhite"))
+            .frame(maxWidth: .infinity, minHeight: 16)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 15)
+            .background(ProductInformationStyle.accent, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .disabled(generationRequestID != nil)
+        .accessibilityHint("선택한 제품 사진으로 제품명, 설명, 브랜드를 생성합니다")
+        .accessibilityIdentifier("product-ai.generate")
+    }
+
+    private func requestGeneration() {
+        guard generationRequestID == nil, onGenerateAI != nil else { return }
+        dismissKeyboard()
+        generationError = nil
+        generationRequestID = UUID()
+        onAIGenerationPresentationChange?(ProductAutofillLoadingPresentation(onCancel: cancelGeneration))
+    }
+
+    private func cancelGeneration() {
+        onCancelGeneration()
+        generationRequestID = nil
+        onAIGenerationPresentationChange?(nil)
     }
 
     private func complete() {
+        guard generationRequestID == nil else { return }
         hasAttemptedCompletion = true
         guard GarmentInformationValidation.isValid(garment) else { return }
         do {

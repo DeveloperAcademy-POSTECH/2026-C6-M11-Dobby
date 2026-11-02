@@ -83,6 +83,11 @@ npm run dry-run
 
 - `GET /health`: 실행 상태만 확인합니다. 실제 OpenAI 연결이나 키 유효성을 검사하지 않습니다.
 - `POST /v1/garments/autofill`: 같은 옷 사진 1~5장을 받아 초안 JSON을 반환합니다.
+- `POST /v1/garments/landmarks`: 아우터 한 벌의 고정 촬영 사진에서 11점과 뒷목 봉제선 중앙 관측을 반환합니다. 아래의 새 측정점 계약을 따릅니다.
+- `POST /v3/garments/landmarks`: 앞면 총장 전용 계약입니다. 11점과 앞목 시작점 하나를 반환합니다.
+- `POST /v3/garments/landmark-refinement`: 같은 앞면 전용 계약을 사용하는 부위 확대 경로입니다.
+- `POST /v2/garments/landmarks`: 이전 앞목·뒷목 보조 관측을 분리한 계약입니다. 2026-11-02 01:43(KST) 원격 배포를 완료했습니다. 아래 v2 절을 참고하세요.
+- `POST /v2/garments/landmark-refinement`: 아우터 A/B/C 사진 비교의 C 전용 확대 관측 경로입니다. 기존 v1/v2 촬영 경로와 별개입니다.
 - 요청 헤더: `Content-Type: application/json`, `Authorization: Bearer <토큰>`. 공통 앱 인증은 `X-Dobby-App-Key`도 필요합니다.
 - 모의 서버 토큰: `local-dobby-demo-token` — 공개된 연결 확인용 값이며 실제 서비스에 사용하지 않습니다.
 
@@ -130,6 +135,115 @@ npm run dry-run
 | 504 | AI 응답 30초 초과 |
 
 잘못된 요청은 AI 호출 전에 차단합니다. 자동 재시도는 없고, 키·사진·모델 원문·원본 AI 오류를 로그에 남기지 않습니다. 응답은 `no-store`입니다.
+
+## 현재 앱: 앞면 전용 총장 v3
+
+2026-11-02(KST) `6f03b6f9-db31-40e4-947d-0bbc9193a85d`로 배포했습니다. Swift 코어 714개, Worker 236개, iOS 저장·클라이언트 49개와 비교 화면 1개 테스트가 통과했습니다. 배포 후 health 200과 두 v3 경로의 무인증 POST 401을 확인했습니다. 실제 Luna 사진 요청은 이 배포 검증에 포함하지 않았습니다.
+
+새 앱은 `/v3/garments/landmarks`와 `/v3/garments/landmark-refinement`를 사용합니다. 요청 본문·인증·제한·11개 점 정의는 유지합니다. 응답은 `outerwear-landmarks-v3` / `luna-outerwear11-front-length-v3`이며, `frontNeckSeamCenter`만 총장 보조점으로 요구하고 `backNeckSeamCenter`는 스키마에서 제외합니다. 앞목 몸판 연결/마감 봉제선 중앙부터 앞면 밑단 중앙까지가 기본 총장입니다. 후드·칼라 높이, 안쪽에 보이는 뒷목, 목옆 평균으로 대체하지 않습니다. 실제 앞목이 가려지거나 빈 공간이면 null을 유지합니다.
+
+확대 경로의 `refinementVersion`은 `outerwear-front-refinement-v3`이며 `localResponse`는 v3입니다. `upper` 사진에서 목옆·어깨와 앞목 보조점만 요청합니다. 앱은 앞목 좌표를 `top_length_start`에 연결해 `top.totalLength` / `totalLength`로 표시·저장합니다. 앞뒤를 판별할 수 없거나 실제 뒷면이면 앞목을 만들지 않으며 뒷목으로 총장을 대체하지 않습니다. 기존 v1/v2 경로·응답과 저장 기록의 의미는 유지합니다.
+
+## 아우터 측정점 v1 API — 원격 배포 완료
+
+### 사진 비교용 확대 관측
+
+2026-11-02(KST) Sweater를 일반 측정점·확대 관측 API의 허용 대상에 추가하고 `76b46775-8690-4b68-b544-136a2774c8c9`로 배포했습니다. 앱의 실측·사진 비교도 같은 7종을 대상으로 사용합니다. 분류 테스트 23개·Worker 테스트 233개·iOS 비교 화면 테스트 1개가 통과했고, 배포 후 health 200 및 두 v2 경로의 무인증 요청 401을 확인했습니다. 이 검증에서는 실제 Luna 사진 요청을 보내지 않았습니다.
+
+2026-11-02 02:23(KST) `dobby-openai` 버전 `3c1f1882-777b-46f9-83c0-b4edfc1f70a5`로 배포했습니다. health 200, 확대 경로 OPTIONS 405/Allow POST, 무인증 POST 401을 확인했습니다. 이 배포 검사는 실제 사진을 Luna에 전송하지 않았습니다.
+
+`/v2/garments/landmark-refinement` 요청은 `{requestId, category, image, regions}`입니다. `image`는 옷 전체 참고 이미지이며 기존 `{imageDataUrl,width,height}` 형식입니다. `regions`는 `{id,image}` 5개를 정확히 포함합니다: `upper`(목옆/어깨/앞뒤 총장 시작), `armpits`(겨드랑이), `leftCuff`, `rightCuff`, `hem`(밑단 3점). 중복·누락·알 수 없는 부위·추가 필드는 거절합니다. 각 사진 2MiB, 6장 합계 8MiB, 본문 12MiB 한도입니다.
+
+한 번의 Luna 요청에서 부위별 **크롭 기준 정규화 좌표**를 반환합니다. 응답은 `{refinementVersion:"outerwear-local-refinement-v1", localResponse:<v2 관측>}`로 감싸 일반 전체 이미지 응답과 구분합니다. 클라이언트가 저장한 각 실제 크롭 범위로 역변환하며 서버는 전체 사진 좌표를 추정하지 않습니다. 같은 모델·추론/출력 한도·물리적 측정점·null 규칙을 유지합니다. 실제 위치 정확도와 총장 성공률은 실제 사진 비교로 따로 검증해야 합니다.
+
+기존 인증·사용량 제한·30초 upstream 제한·로그 비저장·무재시도 정책을 재사용합니다. v1/v2의 기존 측정점·총장 정의와 응답 스키마를 유지합니다. 모의 판매글 서버에는 이 경로가 없고 `npm test`의 HTTP 대역으로 계약을 검증합니다.
+
+`POST /v1/garments/landmarks`는 기존 실제 AI 진입점 `src/index.js`에 추가했습니다. 기존 `/autofill`의 입출력은 유지합니다. **2026-11-02(KST) 사용자가 `dobby-openai`에 배포를 완료했고, 배포 성공 로그의 버전은 `f2c7131b-e490-497b-88bd-a0483fcd7464`입니다.** 대상 주소는 [dobby-openai Worker](https://dobby-openai.dobbyisvintage.workers.dev)입니다. 기본 `npm run dev`의 판매글 모의 진입점에는 이 새 경로가 없으며, 자동 테스트는 `createWorker`에 주입한 HTTP 대역으로 새 경로를 실행합니다.
+
+배포 직후 원격 확인 범위는 다음과 같습니다. 이 초기 검사에서는 실제 사진이나 유효한 인증을 포함한 AI 생성 요청은 보내지 않았습니다.
+
+| 확인 요청 | 결과 | 확인 범위 |
+|---|---|---|
+| `GET /health` | 200 | Worker 실행 상태 |
+| `OPTIONS /v1/garments/landmarks` | 405, `Allow: POST` | 새 경로가 인식됨. 이전 404 해소 |
+| 무인증 빈 JSON `POST /v1/garments/landmarks` | 401, `unauthorized` | 인증 없는 요청 거절 |
+
+읽기 전용 Secret 목록 조회로 `DOBBY_APP_API_KEY`, `DRAFT_API_TOKEN`, `OPENAI_API_KEY` 이름이 유지됨을 확인했습니다. Secret 값은 읽지 않았습니다.
+
+위 초기 확인은 Luna 호출 성공이나 위치·cm 정확도 검증이 아닙니다. 이후 사용자가 실행한 2026-11-02(KST) 실제 Hoodie 측정의 저장 기록에서 `gpt-6-luna`·v1 모델 버전과 8개 visible 원시 관측을 확인했습니다. 양 어깨·양 소매끝 네 점은 실제 원단보다 배경 쪽에 있었고, 앱의 엄격한 마스크 검증에서 제외됐습니다. 해당 512×384 마스크와 후보의 차이는 약 1.4~2.6px였으며, 이 거리는 수동 정답 봉제점에 대한 오차나 cm 정확도를 뜻하지 않습니다. 결과를 통과시키기 위한 경계 허용오차는 적용하지 않았습니다. 아래의 판매글 사진 테스트와 이전 배포 기록은 별도 이력으로 보존합니다.
+
+기존 공통 앱 인증과 서버의 OpenAI Secret을 그대로 사용하며 새 Secret은 필요하지 않습니다. 설치별·전체 호출 제한도 판매글 요청과 합산합니다. 내부 제한 키의 기존 `garment-autofill` 이름은 합산 한도를 유지하기 위해 변경하지 않았습니다. 기존 신뢰된 개발 토큰 호환 경로도 유지합니다.
+
+요청에는 다음 세 필드만 허용합니다. `requestId`는 앱이 생성한 UUID 문자열이며, 모델에는 전달하지 않고 성공 응답에 서버가 그대로 복사합니다.
+
+```json
+{
+  "requestId": "12345678-1234-4234-9234-123456789abc",
+  "image": {
+    "imageDataUrl": "data:image/jpeg;base64,<JPEG 사본>",
+    "width": 1536,
+    "height": 2048
+  },
+  "category": "Jacket"
+}
+```
+
+- `category`: `Blazer`, `Jacket`, `Coat`, `Denim Jacket`, `Sports Jacket`, `Hoodie`(후드티), `Sweater`(스웨터·니트)만 허용합니다.
+- 사진은 이미 올바른 방향으로 편 **전체 사진**이어야 합니다. 화면 표시용 크롭·패딩·가로세로 늘리기를 적용하지 않습니다. `width`와 `height`는 업로드 사본의 실제 픽셀 크기이며 1~16,384 정수입니다. Worker는 이 숫자의 형식·범위를 검증하며 전체 이미지 디코딩으로 크기를 재측정하지는 않습니다.
+- 기존 JPEG/PNG/WebP 데이터 URL 검사와 한 장 2MiB, 요청 12MiB 제한을 적용합니다. 원본 사진·EXIF·GPS·깊이는 서버가 필요로 하지 않습니다.
+- 좌표는 업로드 사진 전체 왼쪽 위 원점, x 오른쪽·y 아래 방향의 정규화 좌표이며 `0 <= x,y < 1`입니다. 앱은 업로드 방향을 원래 센서 방향으로 한 번 역변환한 뒤 기존 같은 프레임의 LiDAR 깊이와 연결해야 합니다.
+
+성공 응답은 정확히 `requestId`, `schemaVersion`, `modelVersion`, `model`, `view`, `neckStyle`, `points`, `backNeckSeamCenter`를 갖습니다. 버전은 각각 `outerwear-landmarks-v1`, `luna-outerwear11-backseam-v1`, 모델은 `gpt-6-luna`로 서버에서 고정합니다. HTTP의 `X-Request-Id`는 별도의 서버 추적 ID입니다. 오류 응답의 `requestId` 역시 서버 추적 ID이며 성공 본문의 앱 요청 ID와 혼동하지 않습니다.
+
+`points`에는 다음 11개 이름이 모두 있어야 하고 추가 이름은 허용하지 않습니다.
+
+```text
+neck_left, neck_right, shoulder_left, shoulder_right,
+armpit_left, armpit_right, sleeve_end_left, sleeve_end_right,
+hem_left, hem_center, hem_right
+```
+
+각 점과 별도 `backNeckSeamCenter`는 아래 둘 중 하나입니다. `visible`에는 유한한 범위 내 좌표가 필수이고, `occluded` 또는 `uncertain`에는 `point: null`이 필수입니다. 모델 출력이 이 관계를 어기거나 점 이름·enum·필드를 바꾸면 502 `invalid_ai_response`로 거부하며 좌표를 보정하거나 자동 재요청하지 않습니다.
+
+```json
+{"point":{"x":0.502,"y":0.897},"visibility":"visible"}
+```
+
+```json
+{"point":null,"visibility":"occluded"}
+```
+
+`view`는 `front/back/unknown`, `neckStyle`은 `hood/collar/stand_collar/hood_and_collar/collarless/unknown` 중 하나입니다. 보이지 않는 점을 추측하지 않도록 일부 또는 전체 점이 null인 성공 응답도 허용합니다. 총장 규약은 뒷목 몸판 봉제선 중앙→뒤판 밑단이므로 `front/unknown`의 `backNeckSeamCenter`는 반드시 null·`uncertain`으로 반환하도록 지시합니다. 뒷면에서도 후드·칼라에 가린 뒷목 봉제선 중앙은 null이며, 칼라/후드 상단·실루엣 상단·양 목점 평균으로 채우지 않습니다. 앱 역시 정면·불명 뷰의 총장 시작점은 사용하지 않고 원시 관측만 보존합니다. `hem_center`는 보이는 몸판 중앙의 실제 밑단 경계이며, 옷 전체 최저점이나 양 밑단 점의 평균을 사용하지 않도록 지시합니다. 소매끝은 소맷단의 바깥 모서리입니다.
+
+프롬프트와 JSON 스키마는 `src/garment-landmarks.js`에 있습니다. 사진 속 명령은 신뢰하지 않는 관찰 자료로 취급하며 촬영 안내, cm, 치수, 모델의 자기 신뢰도 숫자는 생성하지 않습니다. `store: false`, 엄격한 Structured Outputs, 도구 미사용, 30초 서버 타임아웃과 기존 오류 정제를 유지합니다. 형식 검증 통과는 봉제점 위치나 실측 정확도를 증명하지 않습니다.
+
+검증은 `npm test`로 기존 판매글 회귀와 새 `test/landmarks.test.js`를 함께 실행합니다. 새 테스트는 후드티를 포함한 6개 허용 분류, 원본 요청 ID 보존, 공통 인증·합산 제한, 크기·좌표계 계약, 가려진 점, 뒷목 봉제선, 범위·enum·추가 필드 거부, 거절·불완전 응답·타임아웃을 검사하며 실제 OpenAI에 접근하지 않습니다.
+
+## 아우터 측정점 v2 — 앞판 총장·개정 프롬프트, 원격 배포 완료
+
+이전 v2 앱은 `POST /v2/garments/landmarks`를 요청합니다. 요청 본문과 인증·공유 호출 제한은 v1과 같고, 기존 `/v1/garments/landmarks`는 유지합니다. v2 성공 응답의 `schemaVersion`은 `outerwear-landmarks-v2`, `modelVersion`은 `luna-outerwear11-view-length-v2`이며, 기존 11개 점·`backNeckSeamCenter`에 **`frontNeckSeamCenter` 관측을 필수로 추가**합니다. 가려진 보조점은 필드를 생략하지 않고 기존과 같은 `{point:null,visibility:"occluded" 또는 "uncertain"}` 형식으로 보냅니다.
+
+**2026-11-02 01:43(KST) `npm run deploy`의 Uploaded·Deployed 성공을 확인했으며, `dobby-openai`의 당시 배포 버전은 `6045afbc-f1e2-4b50-899d-2a6864578cc2`입니다.** 대상은 위와 같은 [dobby-openai Worker](https://dobby-openai.dobbyisvintage.workers.dev)입니다. 배포 후 원격 확인 범위는 다음과 같으며 실제 사진이나 유효한 인증을 포함한 Luna 요청은 보내지 않았습니다.
+
+| 확인 요청 | 결과 | 확인 범위 |
+|---|---|---|
+| `GET /health` | 200 | Worker 실행 상태 |
+| `OPTIONS /v2/garments/landmarks` | 405, `Allow: POST` | v2 경로가 인식됨. 앱에서 발생한 이전 404 해소 |
+| 무인증 빈 JSON `POST /v2/garments/landmarks` | 401, `unauthorized` | 인증 없는 요청 거절 |
+
+이 확인은 Luna 호출 성공이나 위치·cm 정확도 검증이 아닙니다. 현재 v2 앱에서 재촬영해 연결을 시험할 수 있으며, 기존 v1 배포와 사용자 측정 기록은 위에 별도 이력으로 보존합니다.
+
+| 사진 면 | 총장 시작 관측 | 종점 | 앱 측정·제품 저장 |
+|---|---|---|---|
+| 정면 | `frontNeckSeamCenter`: 앞목 중앙 몸판 목둘레 부착/마감 봉제선 | 현재 앞판의 실제 `hem_center` | 앞판 총장 · `top.frontLength` · `frontLength` |
+| 뒷면 | `backNeckSeamCenter`: 뒷목 중앙 몸판 목둘레 부착/마감 봉제선 | 현재 뒤판의 실제 `hem_center` | 기존 총장 · `top.totalLength` · `totalLength` |
+| 불명 | 두 보조 관측 모두 null | 현재 보이는 중앙 밑단이 식별될 때만 관측 | 자동 총장 미확정 |
+
+정면의 뒷목점, 뒷면의 앞목점은 null로 반환해야 합니다. 파서는 반대 면의 보조점에 좌표가 있으면 잘못된 응답으로 거절하고, 앱도 앞뒤 시작점을 서로 대체하지 않습니다. v1은 뒷목 보조점만 갖는 이전 의미 그대로 재열 수 있으며, v2 정면 길이는 기존 뒤판 총장 필드에 저장하지 않습니다. 상품 목록의 기존 총장 범위 필터와 기존 채널의 일반 총장 전용 필드에도 앞판 길이를 대입하지 않습니다. 앞판 총장은 별도 이름으로 제품 측정 목록에 표시합니다.
+
+프롬프트는 어깨 봉제선과 소매 부착선이 외곽에서 만나는 실제 교차점, 커프의 실제 바깥 모서리, 현재 보이는 면의 중앙 밑단을 구체적으로 정의합니다. 목쪽은 후드 기부·칼라 밑부착선·스탠드 밑부착선·칼라리스 마감선을 구분하며 후드/카라 높이를 제외합니다. 열린 지퍼·중앙 트임·앞판 겹침의 빈 공간을 평균·대칭·가상 연결로 채우지 않습니다. 반환 전 좌표를 원본 사진에 다시 대응해 물리점을 확인하도록 지시하며, 임의의 안쪽 offset·스냅으로 통과시키지 않습니다. 이 지시는 정확도 개선을 위한 가설이며 위치 정확도를 보장하지 않습니다.
+
+모델 `gpt-6-luna`, `detail: high`, reasoning `low`, 한 번의 요청과 기존 30초 서버 제한은 유지합니다. 앱은 원본 전체 사진에서 최대 2048px 사본을 만들어 보내며, 기존 960px 분석 이미지를 재사용하던 경로를 수정했습니다. **v2와 개정 프롬프트는 배포 완료됐지만 실제 Luna 사진 요청과 실사진 위치·LiDAR cm 정확도 평가는 아직 수행하지 않았습니다.** 개정 프롬프트와 고해상도 입력의 효과는 같은 사진·수동 정답 좌표로 별도 비교해야 합니다.
 
 ## 배포된 AI Worker에 OpenAI 키 입력하기
 
@@ -196,3 +310,19 @@ npm run check:cloud -- https://dobby-garment-ai-dev.dobbyisvintage.workers.dev
 실제 사진 요청의 Cloudflare CPU 한도 충족 여부는 후속 측정이 필요합니다. OpenAI에는 `store: false`로 요청하지만 이는 모든 데이터 보관 정책을 해제한다는 뜻은 아닙니다.
 
 공식 문서: [Cloudflare 로컬 실행](https://developers.cloudflare.com/workers/local-development/), [비밀값 설정](https://developers.cloudflare.com/workers/configuration/secrets/), [OpenAI Docs — Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [사진 입력](https://developers.openai.com/api/docs/guides/images-vision).
+
+## 앞판 중앙의 작은 벌어짐 추정 (v4)
+
+앱의 새 촬영은 `/v4/garments/landmarks`를 사용하며 비교 실험의 부위 확대는 `/v4/garments/landmark-refinement`를 사용합니다. 모델은 기존 `gpt-6-luna`입니다. v1~v3 요청/저장 기록의 정의는 유지합니다.
+
+`outerwear-landmarks-v4` / `luna-outerwear11-front-gap-v4`는 앞목 연결 봉제선 중앙과 `hem_center`에 한해 `visibility: estimated`를 허용합니다. AI는 중앙 벌어짐 양옆의 실제 앞여밈 끝점을 `centerSupport.frontNeckSeamCenter` / `centerSupport.hem_center`의 `left`, `right`로 반환하고 Worker가 산술 중점을 계산합니다. 직접 보이는 점이나 확인할 수 없는 점의 support는 명시적 `null`입니다. 윗점·아랫점은 독립적으로 처리합니다.
+
+앱은 지지점의 원단 근접 여부(마스크 2픽셀), 작은 벌어짐(몸판 폭 20% 이하), 양끝 높이 차(몸판 높이 6% 이하), 중앙/목/밑단 위치를 검증합니다. 이는 보정 허용 조건이며 실측 오차 보증값이 아닙니다. 통과한 추정점은 마스크 밖이어도 중앙에 유지하고 같은 의류 평면에 투영합니다. 배경 깊이를 직접 사용하거나 마스크를 확대하지 않습니다. 기존 관측 밑단의 경계 보정은 estimated 점에 적용하지 않습니다.
+
+저장 기록은 `centerEstimates`에 실제 지지점과 추정점을 보존하며 결과는 확인이 필요한 값으로 유지합니다. 앱의 총장 기준 식별자는 `center-front-neck-to-hem-small-gap-midpoint-v1`입니다. 이 변경은 Worker 배포와 앱 재빌드가 모두 필요합니다.
+
+총장 윗점·밑점 중 하나라도 검증 후 빠져 있으면 앱은 `/v4/garments/length-refinement`를 한 번 요청합니다. 틈 감지 여부나 첫 분석 20초 조건으로 건너뛰지 않습니다. 이미 두 점이 유효하면 추가 요청하지 않습니다. 확대 처리는 인코딩을 포함해 최대 12초로 제한하며 촬영 전체 취소·제한 시간은 그대로 적용됩니다.
+
+본문은 `{requestId, category, image, regions}`이며 전체 옷 참고 사진과 정확히 두 확대 영역 `upper`, `hem`을 보냅니다. 모델 응답은 `frontNeckSeamCenter`, `hem_center`, 두 점의 `centerSupport`, `view`, `neckStyle`만 요청합니다. 각 중앙점과 support는 해당 확대 사진의 정규화 좌표입니다. 서버 응답은 `refinementVersion: "outerwear-two-center-refinement-v4"`, `requestId`, `model`, `modelVersion`과 위 관측 필드이며 공용 11점 응답과 구분합니다. 이전 앱·비교 실험의 5부위 `/landmark-refinement` 계약은 유지합니다.
+
+확대 응답에서는 빠졌던 총장점만 검증 후 채택하고, 최초 응답의 정상 총장점과 어깨·가슴·소매 점은 보존합니다. 확대 실패 시 최초 측정 결과를 유지하고 취소는 전파합니다. `remoteCenterRefinement`에 두 확대 영역·원본 관측·채택한 점을 저장합니다. 기존 기록과 함께 읽도록 저장용 `localResponse`의 다른 점은 null이며 새 AI 관측으로 취급하지 않습니다. Worker 배포 후 새 앱을 빌드해야 전용 경로가 사용됩니다.

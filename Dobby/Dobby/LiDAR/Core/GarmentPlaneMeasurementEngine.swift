@@ -122,7 +122,10 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                     }
                 }
             } else if let failure = validator.validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
-                resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
+                let reason = failure == .occludedLandmark
+                    ? landmarks.recognitionDiagnostics?.remoteUnavailableReason(for: id) ?? failure.landmarkFailureReason
+                    : failure.landmarkFailureReason
+                resolution = .failure(.init(reason: failure, context: .landmark(reason, ids: [id])))
             } else {
                 do {
                     let position = try GarmentPlaneGeometry.intersectionDetailed(point: landmark.point, frame: frame, plane: plane!)
