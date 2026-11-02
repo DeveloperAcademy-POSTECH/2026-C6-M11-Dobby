@@ -15,13 +15,22 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
     private let queue = DispatchQueue(label: "com.dobby.camera.detail-preview", qos: .userInitiated)
     private var pending: [UUID: CameraPhotoRequest] = [:]
     private let exposureCompletion = DetailExposureCompletion()
+    let diagnostics = DetailCameraDiagnostics()
+    private var diagnosticTimer: DispatchSourceTimer?
+    private var whiteBalanceHold: DetailWhiteBalanceHold?
 
     func setRunning(_ active: Bool, completion: @escaping @Sendable (CameraPreviewSession.State) -> Void) {
         queue.async { [self] in
             exposureCompletion.cancel()
             if active {
                 completion(start())
+                startDiagnosticSampling()
             } else {
+                diagnosticTimer?.cancel()
+                diagnosticTimer = nil
+                whiteBalanceHold?.stop()
+                whiteBalanceHold = nil
+                diagnostics.record("session_stopping")
                 pending.values.forEach { $0.resolve(.failure(CancellationError())) }
                 // 일시 중단 상태에서도 자동 재개 요청이 남지 않도록 중지한다.
                 session.stopRunning()
@@ -33,14 +42,18 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
     func cancelCapture() {
         queue.async { [self] in
             exposureCompletion.cancel()
+            whiteBalanceHold?.stop()
+            whiteBalanceHold = nil
             pending.values.forEach { $0.resolve(.failure(CancellationError())) }
         }
     }
 
-    func capture(rotationAngle: CGFloat) async throws -> Data {
+    func capture(rotationAngle: CGFloat, diagnosticID: UUID? = nil) async throws -> Data {
+        try await prepareWhiteBalanceHold()
+        try Task.checkCancellation()
         let id = UUID()
         // 화면이 닫혀도 최종 콜백까지 driver/delegate를 유지하고 pending 제거로 순환 참조를 끊는다.
-        let request = CameraPhotoRequest { [self] in
+        let request = CameraPhotoRequest(diagnostics: diagnostics, diagnosticID: diagnosticID) { [self] in
             queue.async { self.pending[id] = nil }
         }
         return try await withTaskCancellationHandler {
@@ -62,6 +75,12 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
                     settings.flashMode = .off
                     settings.photoQualityPrioritization = .balanced
                     pending[id] = request
+                    if diagnostics.holdsWhiteBalanceOnInteraction {
+                        diagnostics.record("wb_capture_state", captureID: diagnosticID,
+                            fields: ["state": whiteBalanceHold?.state ?? "automatic"])
+                    }
+                    diagnostics.recordDevice("shutter_submitted", device: (session.inputs.first as? AVCaptureDeviceInput)?.device,
+                                             captureID: diagnosticID)
                     output.capturePhoto(with: settings, delegate: request)
                 }
             }
@@ -73,7 +92,10 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
             return .unavailable("카메라 권한을 확인해 주세요.")
         }
         if session.inputs.isEmpty {
-            let types: [AVCaptureDevice.DeviceType] = [.builtInTripleCamera, .builtInDualWideCamera, .builtInWideAngleCamera]
+            // 진단 실험에서만 물리 광각을 선택한다. 가상 카메라로 대체하면 A/B 조건이 깨진다.
+            let types: [AVCaptureDevice.DeviceType] = diagnostics.usesWideCamera
+                ? [.builtInWideAngleCamera]
+                : [.builtInTripleCamera, .builtInDualWideCamera, .builtInWideAngleCamera]
             guard let device = types.compactMap({ AVCaptureDevice.default($0, for: .video, position: .back) }).first else {
                 return .unavailable("후면 카메라를 사용할 수 없어요. 실기기에서 확인해 주세요.")
             }
@@ -98,6 +120,9 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
                     throw DetailCameraControlFailure.unsupported
                 }
                 device.videoZoomFactor = CGFloat(initialZoom) / device.displayVideoZoomFactorMultiplier
+                diagnostics.record("camera_configured", fields: [
+                    "deviceType": device.deviceType.rawValue, "isVirtualDevice": device.isVirtualDevice,
+                    "displayZoomMultiplier": Double(device.displayVideoZoomFactorMultiplier)])
             } catch {
                 return .unavailable("카메라를 준비하지 못했어요. 다시 시도해 주세요.")
             }
@@ -124,6 +149,11 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
 
     func apply(_ request: DetailCameraControlRequest) async throws -> Double {
         try Task.checkCancellation()
+        if case .zoom(let factor) = request {
+            guard factor.isFinite, factor > 0 else { throw DetailCameraControlFailure.invalidValue }
+            try await prepareWhiteBalanceHold()
+            try Task.checkCancellation()
+        }
         let applied: Double = try await withCheckedThrowingContinuation { continuation in
             queue.async { [self] in
                 do {
@@ -138,7 +168,9 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
                         guard let value = zoomRange(device)?.clamped(factor) else {
                             throw DetailCameraControlFailure.unsupported
                         }
+                        diagnostics.recordDevice("zoom_requested", device: device, requestedZoom: value)
                         device.videoZoomFactor = CGFloat(value) / device.displayVideoZoomFactorMultiplier
+                        diagnostics.recordDevice("zoom_setter_returned", device: device, requestedZoom: value)
                         continuation.resume(returning: Double(device.videoZoomFactor * device.displayVideoZoomFactorMultiplier))
                         return
                     }
@@ -179,6 +211,56 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
             throw DetailCameraControlFailure.unavailable
         }
         return device
+    }
+
+    private func startDiagnosticSampling() {
+        diagnosticTimer?.cancel()
+        diagnosticTimer = nil
+        guard diagnostics.enabled, session.isRunning else { return }
+        diagnostics.record("session_running")
+        ensureWhiteBalanceHold()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(250), leeway: .milliseconds(25))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            if !self.session.isRunning || self.session.isInterrupted {
+                self.whiteBalanceHold?.stop()
+                self.whiteBalanceHold = nil
+            } else {
+                self.ensureWhiteBalanceHold()
+                self.whiteBalanceHold?.observe()
+            }
+            self.diagnostics.recordDevice("device_sample",
+                device: (self.session.inputs.first as? AVCaptureDeviceInput)?.device)
+        }
+        diagnosticTimer = timer
+        timer.resume()
+    }
+
+    deinit { diagnosticTimer?.cancel() }
+
+    private func ensureWhiteBalanceHold() {
+        guard diagnostics.holdsWhiteBalanceOnInteraction, whiteBalanceHold == nil,
+              session.isRunning, !session.isInterrupted,
+              let device = (session.inputs.first as? AVCaptureDeviceInput)?.device else { return }
+        whiteBalanceHold = DetailWhiteBalanceHold(device: device, queue: queue, diagnostics: diagnostics)
+    }
+
+    private func prepareWhiteBalanceHold() async throws {
+        guard diagnostics.holdsWhiteBalanceOnInteraction else { return }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async { [self] in
+                guard session.isRunning, !session.isInterrupted else {
+                    continuation.resume(throwing: DetailCameraControlFailure.unavailable); return
+                }
+                guard pending.isEmpty, !exposureCompletion.isPending else {
+                    continuation.resume(throwing: DetailCameraControlFailure.operationInProgress); return
+                }
+                ensureWhiteBalanceHold()
+                guard let whiteBalanceHold else { continuation.resume(); return }
+                whiteBalanceHold.prepare { continuation.resume(with: $0) }
+            }
+        }
     }
     private func exposureRange(_ device: AVCaptureDevice) -> DetailCameraControlRange? {
         guard device.isExposureModeSupported(.continuousAutoExposure) else { return nil }

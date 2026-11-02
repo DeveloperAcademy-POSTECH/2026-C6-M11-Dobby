@@ -17,8 +17,15 @@ nonisolated final class CameraPhotoRequest: NSObject, AVCapturePhotoCaptureDeleg
     private var photoData: Data?
     private var processingFailed = false
     private let onFinished: @Sendable () -> Void
+    private let diagnostics: DetailCameraDiagnostics?
+    private let diagnosticID: UUID?
 
-    init(onFinished: @escaping @Sendable () -> Void) { self.onFinished = onFinished }
+    init(diagnostics: DetailCameraDiagnostics? = nil, diagnosticID: UUID? = nil,
+         onFinished: @escaping @Sendable () -> Void) {
+        self.diagnostics = diagnostics
+        self.diagnosticID = diagnosticID
+        self.onFinished = onFinished
+    }
 
     var isResolved: Bool { lock.withLock { result != nil } }
 
@@ -44,6 +51,7 @@ nonisolated final class CameraPhotoRequest: NSObject, AVCapturePhotoCaptureDeleg
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: (any Error)?) {
         let data = error == nil && !isResolved ? photo.fileDataRepresentation() : nil
+        diagnostics?.recordPhoto(photo, captureID: diagnosticID, original: data)
         lock.withLock {
             guard result == nil else { return }
             photoData = data

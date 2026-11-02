@@ -46,16 +46,34 @@ final class CameraPreviewSession: CaptureProviding {
         let request = revision
         let capturedAt = Date()
         let aspectRatio = options.photoAspectRatio
-        let data = try await driver.capture(rotationAngle: rotationAngle)
+        let diagnosticID = driver.diagnostics.beginCapture()
+        var diagnosticOutcome = "failed_or_cancelled"
+        defer { if let diagnosticID {
+            driver.diagnostics.record("capture_finished", captureID: diagnosticID, fields: ["outcome": diagnosticOutcome])
+        } }
+        let data = try await driver.capture(rotationAngle: rotationAngle, diagnosticID: diagnosticID)
         try Task.checkCancellation()
         guard wantsRunning, revision == request else { throw CancellationError() }
+        if let diagnosticID {
+            driver.diagnostics.record("processing_begin", captureID: diagnosticID, fields: [
+                "aspectRatio": aspectRatio.rawValue,
+                "crop": [crop.minX, crop.minY, crop.width, crop.height], "rotationAngle": rotationAngle])
+        }
         let processed = try await processor.process(data, aspectRatio: aspectRatio, normalizedPreviewCrop: crop)
+        if let diagnosticID {
+            driver.diagnostics.save(processed, as: .processed, captureID: diagnosticID)
+            driver.diagnostics.record("processing_finished", captureID: diagnosticID)
+        }
         try Task.checkCancellation()
         guard wantsRunning, revision == request else { throw CancellationError() }
         let asset = try await store.save(processed, sessionID: sessionID, garmentID: garmentID, capturedAt: capturedAt)
         do {
             try Task.checkCancellation()
             guard wantsRunning, revision == request else { throw CancellationError() }
+            diagnosticOutcome = "saved"
+            if let diagnosticID {
+                driver.diagnostics.record("photo_saved", captureID: diagnosticID, fields: ["assetID": asset.id.uuidString])
+            }
             return asset
         } catch {
             try await store.discardUncommitted(asset)
