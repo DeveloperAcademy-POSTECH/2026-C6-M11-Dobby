@@ -41,7 +41,11 @@ private struct FruitsExportBody: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            FruitsPhotoSaveSection(isSaving: isSavingPhotos, onSave: onSave)
+            FruitsPhotoSaveSection(
+                isSaving: isSavingPhotos,
+                hasSaved: hasSavedPhotos,
+                onSave: onSave
+            )
 
             if hasSavedPhotos {
                 FruitsExportContent(product: product, onCopy: onCopy)
