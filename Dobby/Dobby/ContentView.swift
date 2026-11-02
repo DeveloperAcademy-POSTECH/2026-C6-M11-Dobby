@@ -22,6 +22,8 @@ struct ContentView: View {
     @State private var controller = CopyActivityController()
     @State private var linkError: String?
     @State private var routeTask: Task<Void, Never>?
+    @State private var returnsHomeAfterExport = false
+    @State private var exportHomeNavigationID = UUID()
 
 #if DEBUG
     init(previewLibrary: Bool = false, previewEditing: Bool = false) {
@@ -112,8 +114,14 @@ struct ContentView: View {
                 }.padding(.horizontal, 20).padding(.vertical, 8).background(.bar)
             }
         }
-        .fullScreenCover(item: $exportProduct) { product in
-            ExportView(product: product, showFruits: $showFruits)
+        .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
+            ExportView(product: product, showFruits: $showFruits) {
+                routeTask?.cancel()
+                routeTask = nil
+                returnsHomeAfterExport = true
+                showFruits = false
+                exportProduct = nil
+            }
                 .tint(Color("HomeAccent"))
         }
         .alert("내보내기를 열 수 없어요", isPresented: Binding(
@@ -122,6 +130,30 @@ struct ContentView: View {
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
         .tint(Color("HomeAccent"))
+        .environment(\.returnHomeFromExport,
+            ExportHomeNavigationAction(id: exportHomeNavigationID, action: { @MainActor in
+                returnHomeFromExport()
+            }))
+    }
+
+    private func finishExportDismissal() {
+        guard returnsHomeAfterExport else { return }
+        returnsHomeAfterExport = false
+        returnHomeFromExport()
+    }
+
+    private func returnHomeFromExport() {
+        routeTask?.cancel()
+        routeTask = nil
+        creationCopyHomeProduct = nil
+        linkError = nil
+        exportProduct = nil
+        showFruits = false
+        showLiDAR = false
+        creationRequest = nil
+        libraryPath.removeAll()
+        libraryIsEditing = false
+        tab = .capture
     }
 
     private func returnHomeFromCreation() {
@@ -199,6 +231,7 @@ struct ContentView: View {
 
 struct ProductSavedDetailView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.returnHomeFromExport) private var returnHomeFromExport
     @Bindable var garment: Garment
     let controller: CopyActivityController
     let onExitToLibrary: () -> Void
@@ -207,6 +240,7 @@ struct ProductSavedDetailView: View {
     @State private var editError: String?
     @State private var exportProduct: ExportProduct?
     @State private var showFruits = false
+    @State private var returnsHomeAfterExport = false
 
     var body: some View {
         ScrollView {
@@ -263,8 +297,12 @@ struct ProductSavedDetailView: View {
         } message: {
             Text(editError ?? "")
         }
-        .fullScreenCover(item: $exportProduct) { product in
-            ExportView(product: product, showFruits: $showFruits)
+        .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
+            ExportView(product: product, showFruits: $showFruits) {
+                returnsHomeAfterExport = true
+                showFruits = false
+                exportProduct = nil
+            }
         }
 #if DEBUG
         .task {
@@ -274,6 +312,7 @@ struct ProductSavedDetailView: View {
     }
 
     private func openExport() {
+        returnsHomeAfterExport = false
         showFruits = false
         exportProduct = ExportProduct(garment: garment)
     }
@@ -286,6 +325,12 @@ struct ProductSavedDetailView: View {
         } catch {
             editError = "저장된 상품을 불러오지 못했어요. 다시 시도해 주세요."
         }
+    }
+
+    private func finishExportDismissal() {
+        guard returnsHomeAfterExport else { return }
+        returnsHomeAfterExport = false
+        returnHomeFromExport?()
     }
 }
 

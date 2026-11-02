@@ -4,6 +4,7 @@ import UIKit
 
 /// Holds the same product and photo session through the complete creation flow.
 struct ProductCreationFlowView: View {
+    @Environment(\.returnHomeFromExport) private var returnHomeFromExport
     private enum Step: Hashable { case details, photoSelection, information, completed }
     private enum ExitAction { case save, discard }
     let controller: CopyActivityController
@@ -39,6 +40,7 @@ struct ProductCreationFlowView: View {
     @State private var autofill = ProductAutofillSession()
     @State private var autofillReviewNotes: [String] = []
     @State private var autofillLoadingPresentation: ProductAutofillLoadingPresentation?
+    @State private var returnsHomeAfterExport = false
 
     init(container: ModelContainer, controller: CopyActivityController, isPresented: Binding<Bool>,
          copyHomeProduct: Binding<ExportProduct?>,
@@ -111,10 +113,15 @@ struct ProductCreationFlowView: View {
         .environment(\.modelContext, context)
         .tint(path.last == .photoSelection || path.last == .information ? .black
             : path.last == .completed ? .orange : .white)
-        .fullScreenCover(item: $exportProduct) { product in
-            ExportView(product: product, showFruits: $showFruits)
+        .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
+            ExportView(product: product, showFruits: $showFruits,
+                onClose: closeExport)
                 .environment(\.modelContext, context)
                 .preferredColorScheme(.light)
+                .disabled(isFinishing)
+        }
+        .onChange(of: exportProduct?.id) { _, productID in
+            if productID != nil { returnsHomeAfterExport = false }
         }
         .onChange(of: copyHomeProduct?.id) { _, _ in
             guard let product = copyHomeProduct else { return }
@@ -401,14 +408,57 @@ struct ProductCreationFlowView: View {
         }
     }
 
-    private func finishFlow() async {
+    private func finishFlow(returningHome: Bool = false) async {
         guard !isFinishing else { return }
         cleanupAction = .save
         isFinishing = true
         defer { isFinishing = false }
         try? await photoModel?.discardUncommittedDetails()
         preservesDraftPhotos = false
-        onFinish()
+        if returningHome { completeHomeNavigation() }
+        else { onFinish() }
+    }
+
+    /// An older product's copy helper can cover an unfinished creation flow.
+    /// Preserve that draft before dismissing either screen; a save failure is
+    /// displayed by ExportView and leaves both the cover and draft in place.
+    private func closeExport() throws {
+        guard !isFinishing else { return }
+        if let garment {
+            if garment.informationCompletedAt != nil {
+                try context.save()
+                preservesDraftPhotos = false
+            } else {
+                let step: ProductDraftStep
+                switch path.last {
+                case .details: step = .details
+                case .photoSelection: step = .photoSelection
+                case .information, .completed: step = .information
+                case nil: step = .measurementResult
+                }
+                try persistDraft(garment, step: step)
+            }
+        }
+        returnsHomeAfterExport = true
+        showFruits = false
+        exportProduct = nil
+    }
+
+    private func finishExportDismissal() {
+        guard returnsHomeAfterExport else { return }
+        returnsHomeAfterExport = false
+        if preservesDraftPhotos {
+            // Retained originals belong to the saved draft, not temporary
+            // cleanup. The root only changes navigation state.
+            completeHomeNavigation()
+        } else {
+            Task { await finishFlow(returningHome: true) }
+        }
+    }
+
+    private func completeHomeNavigation() {
+        if let returnHomeFromExport { returnHomeFromExport() }
+        else { onCancel() }
     }
 
     private func requestSaveAndExit() {

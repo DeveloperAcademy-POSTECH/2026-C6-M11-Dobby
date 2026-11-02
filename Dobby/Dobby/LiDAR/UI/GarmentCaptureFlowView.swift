@@ -365,7 +365,7 @@ struct GarmentCaptureFlowView: View {
         Button { selectZoom(nextZoom) } label: {
             Text(selectedZoom == .standard ? "1x" : "2x")
                 .font(.system(size: guidanceFontSize, weight: .semibold))
-                .foregroundStyle(.white).frame(width: 48, height: 48)
+                .foregroundStyle(CameraZoomStyle.selectedText).frame(width: 48, height: 48)
                 .glassEffect(.regular.tint(.black.opacity(0.18)).interactive(), in: Circle())
                 .contentShape(Circle())
         }
