@@ -20,6 +20,20 @@ nonisolated struct DetailCameraCapabilities: Equatable, Sendable {
     var zoom: DetailCameraControlRange?
     var exposureBias: Double?
     var zoomFactor: Double?
+    var focusSupported = false
+    var meteringSupported = false
+}
+
+/// AVCaptureVideoPreviewLayer가 반환한 센서 기준 지점. 표시용 좌표와 혼용하지 않는다.
+nonisolated struct DetailCameraFocusPoint: Equatable, Sendable {
+    let x: Double
+    let y: Double
+
+    init?(x: Double, y: Double) {
+        guard x.isFinite, y.isFinite, (0...1).contains(x), (0...1).contains(y) else { return nil }
+        self.x = x
+        self.y = y
+    }
 }
 
 /// 버튼만 0.5x·1x·2x를 왕복한다. 핀치가 사용하는 기기 최대 배율과 분리한다.
@@ -58,12 +72,19 @@ nonisolated enum DetailCameraControlFailure: Error, Equatable, Sendable {
 }
 nonisolated protocol DetailCameraControlling: Sendable {
     func capabilities() async throws -> DetailCameraCapabilities
-    /// 반환값은 요청값이 아닌 제어기가 확인한 실제 적용값이다.
+    /// 제어기가 수락한 실제 설정값이다. AF/AE 수렴이나 첫 영상 프레임 반영을 보장하지 않는다.
     func apply(_ request: DetailCameraControlRequest) async throws -> Double
 }
-nonisolated struct UnavailableDetailCameraControls: DetailCameraControlling {
+nonisolated protocol DetailCameraFocusing: Sendable {
+    /// AF/AE 지점을 설정하고 EV를 0으로 초기화한다. 반환은 설정 접수이며 선명도 보증이 아니다.
+    func focus(at point: DetailCameraFocusPoint) async throws -> DetailCameraCapabilities
+}
+nonisolated struct UnavailableDetailCameraControls: DetailCameraControlling, DetailCameraFocusing {
     func capabilities() async throws -> DetailCameraCapabilities { .init() }
     func apply(_ request: DetailCameraControlRequest) async throws -> Double {
+        throw DetailCameraControlFailure.unsupported
+    }
+    func focus(at point: DetailCameraFocusPoint) async throws -> DetailCameraCapabilities {
         throw DetailCameraControlFailure.unsupported
     }
 }

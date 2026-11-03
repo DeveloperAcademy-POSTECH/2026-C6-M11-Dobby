@@ -198,7 +198,9 @@ struct CameraFlowView: View {
                     CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
                 }
             } else if let camera {
-                CameraLivePreviewView(camera: camera, aspectRatio: ratio)
+                CameraLivePreviewView(camera: camera, aspectRatio: ratio,
+                    interactionEnabled: !isMoreOptionsPresented && !isPhotoOperationInProgress
+                        && !isCaptureGuidePresented && !isGalleryPresented && scenePhase == .active)
             } else {
                 ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
             }

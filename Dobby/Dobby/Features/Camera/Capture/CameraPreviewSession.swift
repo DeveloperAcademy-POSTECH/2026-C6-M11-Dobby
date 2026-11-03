@@ -38,9 +38,27 @@ final class CameraPreviewSession: CaptureProviding {
     // 최초 진입에도 관찰 가능한 state를 읽어 셔터가 세션 준비 완료를 감지하게 한다.
     var canCapture: Bool { state == .running && wantsRunning && !isCapturing && !options.isApplying && !isPreviewTransitioning }
 
+    /// A tap or EV command must not disable its own continuing gesture. Only
+    /// capture, a zoom change or a changing photo window blocks preview input.
+    var canAdjustPreview: Bool {
+        state == .running && wantsRunning && !isCapturing
+            && !options.isApplyingZoom && !isPreviewTransitioning
+    }
+
+    func requestFocus(at point: ImagePoint, requestID: UUID) {
+        guard canAdjustPreview else { return }
+        options.requestFocus(at: point, requestID: requestID)
+    }
+
+    func requestExposure(_ bias: Double) {
+        guard canAdjustPreview else { return }
+        options.requestExposure(bias)
+    }
+
     func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset {
         try Task.checkCancellation()
         guard canCapture, let crop = previewCrop?() else { throw CameraFailure.cameraUnavailable }
+        options.clearPreviewFocus()
         isCapturing = true
         defer { isCapturing = false }
         let request = revision
