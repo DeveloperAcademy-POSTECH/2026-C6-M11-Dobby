@@ -17,6 +17,7 @@ final class MeasurementPiPController: NSObject {
     private let imageContext = CIContext()
     private var isPlaybackPaused = false
     private var pictureInPictureController: AVPictureInPictureController?
+    private var shouldStopWhenStarted = false
     private var startError: Error?
     private weak var sourceView: UIView?
 
@@ -63,39 +64,51 @@ final class MeasurementPiPController: NSObject {
             throw MeasurementPiPError.sourceNotReady
         }
 
-        try configureAudioSession()
-        let sampleBuffer = try makeSampleBuffer(measurements: measurements)
-        let renderer = displayLayer.sampleBufferRenderer
-        if renderer.status == .failed {
-            renderer.flush(removingDisplayedImage: false, completionHandler: nil)
-        }
-        renderer.enqueue(sampleBuffer)
+        shouldStopWhenStarted = false
+        do {
+            try configureAudioSession()
+            let sampleBuffer = try makeSampleBuffer(measurements: measurements)
+            let renderer = displayLayer.sampleBufferRenderer
+            if renderer.status == .failed {
+                renderer.flush(removingDisplayedImage: false, completionHandler: nil)
+            }
+            renderer.enqueue(sampleBuffer)
 
-        guard await waitUntilPossible(controller) else {
-            Self.logger.error(
-                "PiP remained unavailable. width=\(self.displayLayer.bounds.width) height=\(self.displayLayer.bounds.height) rendererStatus=\(self.displayLayer.sampleBufferRenderer.status.rawValue)"
-            )
-            throw MeasurementPiPError.sourceNotReady
-        }
+            guard try await waitUntilPossible(controller) else {
+                Self.logger.error(
+                    "PiP remained unavailable. width=\(self.displayLayer.bounds.width) height=\(self.displayLayer.bounds.height) rendererStatus=\(self.displayLayer.sampleBufferRenderer.status.rawValue)"
+                )
+                throw MeasurementPiPError.sourceNotReady
+            }
 
-        startError = nil
-        controller.startPictureInPicture()
-        for _ in 0..<20 {
-            if controller.isPictureInPictureActive { return }
-            if let startError { throw startError }
-            try await Task.sleep(for: .milliseconds(50))
+            startError = nil
+            controller.startPictureInPicture()
+            for _ in 0..<20 {
+                if controller.isPictureInPictureActive { return }
+                if let startError { throw startError }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            throw MeasurementPiPError.startTimedOut
+        } catch {
+            shouldStopWhenStarted = true
+            controller.stopPictureInPicture()
+            resetPlaybackResources()
+            throw error
         }
-        throw MeasurementPiPError.startTimedOut
     }
 
     func stop() {
+        shouldStopWhenStarted = true
         pictureInPictureController?.stopPictureInPicture()
+        if pictureInPictureController?.isPictureInPictureActive != true {
+            resetPlaybackResources()
+        }
     }
 
-    private func waitUntilPossible(_ controller: AVPictureInPictureController) async -> Bool {
+    private func waitUntilPossible(_ controller: AVPictureInPictureController) async throws -> Bool {
         for _ in 0..<20 {
             if controller.isPictureInPicturePossible { return true }
-            try? await Task.sleep(for: .milliseconds(50))
+            try await Task.sleep(for: .milliseconds(50))
         }
         return false
     }
@@ -194,26 +207,40 @@ final class MeasurementPiPController: NSObject {
     private func deactivateAudioSession() {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
+
+    private func resetPlaybackResources() {
+        displayLayer.sampleBufferRenderer.flush(
+            removingDisplayedImage: true,
+            completionHandler: nil
+        )
+        isPlaybackPaused = false
+        deactivateAudioSession()
+    }
 }
 
 extension MeasurementPiPController: AVPictureInPictureControllerDelegate {
+    func pictureInPictureControllerDidStartPictureInPicture(
+        _ pictureInPictureController: AVPictureInPictureController
+    ) {
+        if shouldStopWhenStarted {
+            pictureInPictureController.stopPictureInPicture()
+        }
+    }
+
     func pictureInPictureController(
         _ pictureInPictureController: AVPictureInPictureController,
         failedToStartPictureInPictureWithError error: Error
     ) {
         startError = error
         Self.logger.error("PiP failed to start: \(error.localizedDescription, privacy: .public)")
-        deactivateAudioSession()
+        resetPlaybackResources()
     }
 
     func pictureInPictureControllerDidStopPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
-        displayLayer.sampleBufferRenderer.flush(
-            removingDisplayedImage: true,
-            completionHandler: nil
-        )
-        deactivateAudioSession()
+        shouldStopWhenStarted = false
+        resetPlaybackResources()
     }
 
     func pictureInPictureController(
