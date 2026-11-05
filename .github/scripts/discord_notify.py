@@ -114,7 +114,7 @@ def reviewers_for(author, users):
                               if users[login] != users.get(author.lower())))
 
 
-def payload(content, title, url, description, user_ids=()):
+def build_discord_message(content, title, url, description, user_ids=()):
     message = f"{content}\n**[{escape_discord_text(title)}]({url})**\n{description}"
     if len(message) > 2000:
         raise SafeError("Discord 알림이 메시지 길이 제한을 초과했습니다.")
@@ -123,6 +123,45 @@ def payload(content, title, url, description, user_ids=()):
         "allowed_mentions": {"parse": [], "users": list(dict.fromkeys(user_ids))},
         "flags": SUPPRESS_LINK_EMBEDS,
     }
+
+
+def build_issue_opened_message(issue):
+    author = escape_discord_text(issue["user"]["login"])
+    title = f'#{issue["number"]} {issue["title"]}'
+    return build_discord_message("📝 새 이슈가 등록됐어요.", title,
+                                 issue["html_url"], f"작성자: {author}")
+
+
+def build_merge_completed_message(pull_request):
+    author = escape_discord_text(pull_request["user"]["login"])
+    branch = escape_discord_text(pull_request["base"]["ref"])
+    title = f'#{pull_request["number"]} {pull_request["title"]}'
+    description = f"작성자: {author}\n대상: {branch}"
+    return build_discord_message("🎉 PR이 머지됐어요.", title,
+                                 pull_request["html_url"], description)
+
+
+def build_review_request_message(pull_request, reviewer_ids):
+    author = escape_discord_text(pull_request["user"]["login"])
+    source = escape_discord_text(pull_request["head"]["ref"], 120)
+    target = escape_discord_text(pull_request["base"]["ref"], 120)
+    reviewers = " ".join(f"<@{user_id}>" for user_id in reviewer_ids) or "없음"
+    description = f"작성자: {author}\n{source} → {target}\n리뷰어: {reviewers}"
+    title = f'#{pull_request["number"]} {pull_request["title"]}'
+    return build_discord_message("🚨 리뷰할 PR이 올라왔어요.", title,
+                                 pull_request["html_url"], description, reviewer_ids)
+
+
+def is_delivery_record(comment, marker):
+    author = comment.get("user") or {}
+    return (author.get("login") == "github-actions[bot]"
+            and author.get("type") == "Bot"
+            and marker in (comment.get("body") or ""))
+
+
+def review_request_is_current(pull_request):
+    return (pull_request["state"] == "open" and not pull_request["draft"]
+            and pull_request["base"]["ref"] in MERGE_TARGETS)
 
 
 def is_ready(pr):
@@ -173,7 +212,7 @@ class Notifier:
     def allowed(self, branch):
         return branch in MERGE_TARGETS
 
-    def send(self, route, message):
+    def send_discord_message(self, route, message):
         variable = "DISCORD_ISSUE_WEBHOOK_URL" if route == "issue" else "DISCORD_PR_WEBHOOK_URL"
         response = request_json(build_confirmed_webhook_url(os.environ.get(variable, "")),
                                 {"Content-Type": "application/json", "User-Agent": "dobby-discord-notifier"},
@@ -181,53 +220,56 @@ class Notifier:
         if not isinstance(response, dict) or not response.get("id"):
             raise SafeError("Discord에서 발송 확인을 받지 못했습니다.")
 
-    def send_once(self, number, key, route, message):
+    def has_delivery_record(self, number, marker):
+        comments = self.pages(f"/issues/{number}/comments")
+        return any(is_delivery_record(comment, marker) for comment in comments)
+
+    def record_delivery(self, number, marker):
+        body = marker + "\nDiscord 알림 발송 기록입니다. 중복 방지를 위해 유지해 주세요."
+        self.request_repository_json(f"/issues/{number}/comments", "POST", {"body": body})
+
+    def send_notification_once(self, number, key, route, message):
         marker = f"<!-- discord-notify:v1:{key} -->"
-        for comment in self.pages(f"/issues/{number}/comments"):
-            author = comment.get("user") or {}
-            if (author.get("login") == "github-actions[bot]" and author.get("type") == "Bot"
-                    and marker in (comment.get("body") or "")):
-                return False
-        self.send(route, message)
-        self.request_repository_json(f"/issues/{number}/comments", "POST", {
-            "body": marker + "\nDiscord 알림 발송 기록입니다. 중복 방지를 위해 유지해 주세요."})
+        if self.has_delivery_record(number, marker):
+            return False
+        self.send_discord_message(route, message)
+        self.record_delivery(number, marker)
         print(f"Notification sent: #{number}, {key.split(':')[0]}.")
         return True
 
-    def event(self, event, event_name):
-        if event_name == "issues" and event.get("action") == "opened":
-            item = event["issue"]
-            if item.get("pull_request"):
-                return
-            self.send("issue", payload(
-                "📝 새 이슈가 등록됐어요.", f'#{item["number"]} {item["title"]}',
-                item["html_url"], f'작성자: {escape_discord_text(item["user"]["login"])}'))
+    def handle_event(self, event, event_name):
+        if event_name == "issues":
+            self.handle_issue_event(event)
+        elif event_name == "pull_request_target":
+            self.handle_pull_request_event(event)
+
+    def handle_issue_event(self, event):
+        if event.get("action") != "opened" or event["issue"].get("pull_request"):
             return
-        if event_name != "pull_request_target":
+        self.send_discord_message("issue", build_issue_opened_message(event["issue"]))
+
+    def handle_pull_request_event(self, event):
+        pull_request = event["pull_request"]
+        if not self.allowed(pull_request["base"]["ref"]):
             return
-        item = event["pull_request"]
         action = event.get("action")
-        if not self.allowed(item["base"]["ref"]):
+        if action == "closed" and pull_request.get("merged"):
+            self.notify_merge_completed(pull_request)
+        elif action in ("opened", "ready_for_review") and not pull_request.get("draft"):
+            self.notify_review_requested(pull_request["number"])
+
+    def notify_merge_completed(self, pull_request):
+        message = build_merge_completed_message(pull_request)
+        self.send_notification_once(pull_request["number"], "pr-merged", "pr", message)
+
+    def notify_review_requested(self, number):
+        pull_request = self.request_repository_json(f"/pulls/{number}")
+        if not review_request_is_current(pull_request):
             return
-        if action == "closed" and item.get("merged"):
-            branch = item["base"]["ref"]
-            author = escape_discord_text(item["user"]["login"])
-            self.send_once(item["number"], "pr-merged", "pr", payload(
-                "🎉 PR이 머지됐어요.", f'#{item["number"]} {item["title"]}', item["html_url"],
-                f'작성자: {author}\n대상: {escape_discord_text(branch)}'))
-        elif action in ("opened", "ready_for_review") and not item.get("draft"):
-            current = self.request_repository_json(f'/pulls/{item["number"]}')
-            if current["draft"] or current["state"] != "open" or not self.allowed(current["base"]["ref"]):
-                return
-            users = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
-            reviewer_ids = reviewers_for(current["user"]["login"], users)
-            reviewer_line = " ".join(f"<@{user_id}>" for user_id in reviewer_ids) or "없음"
-            self.send_once(item["number"], "pr-announced", "pr", payload(
-                "🚨 리뷰할 PR이 올라왔어요.", f'#{current["number"]} {current["title"]}',
-                current["html_url"], f'작성자: {escape_discord_text(current["user"]["login"])}\n'
-                f'{escape_discord_text(current["head"]["ref"], 120)} → '
-                f'{escape_discord_text(current["base"]["ref"], 120)}\n'
-                f'리뷰어: {reviewer_line}', reviewer_ids))
+        user_ids = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
+        reviewer_ids = reviewers_for(pull_request["user"]["login"], user_ids)
+        message = build_review_request_message(pull_request, reviewer_ids)
+        self.send_notification_once(number, "pr-announced", "pr", message)
 
     def snapshot(self, number):
         query = """query($owner:String!, $name:String!, $number:Int!) {
@@ -278,7 +320,7 @@ class Notifier:
                     print(f"::warning::PR #{number}: 작성자 대응표가 없어 머지 준비 알림을 보류합니다.")
                     continue
                 key = f'pr-ready:{pr["headRefOid"]}'
-                self.send_once(number, key, "pr", payload(
+                self.send_notification_once(number, key, "pr", build_discord_message(
                     f"✅ <@{user_id}> GitHub에서 머지 준비 상태가 확인됐어요. PR을 확인하고 직접 머지해 주세요.",
                     f'#{number} {pr["title"]}', pr["url"],
                     f'작성자: <@{user_id}>\n대상: {escape_discord_text(branch)}', [user_id]))
@@ -293,7 +335,7 @@ def main():
     notifier = Notifier()
     if sys.argv[1:] == ["event"]:
         with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as source:
-            notifier.event(json.load(source), os.environ["GITHUB_EVENT_NAME"])
+            notifier.handle_event(json.load(source), os.environ["GITHUB_EVENT_NAME"])
     elif sys.argv[1:] == ["ready"]:
         notifier.ready()
     else:

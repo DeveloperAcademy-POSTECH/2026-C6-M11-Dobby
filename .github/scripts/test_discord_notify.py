@@ -33,7 +33,7 @@ class NotificationTests(unittest.TestCase):
         with patch.object(self.n, "pages", return_value=iter([self.item])), \
              patch.object(self.n, "snapshot", side_effect=snapshots or [self.pr, self.pr]), \
              patch.object(self.n, "queue_enabled", return_value=queued), \
-             patch.object(self.n, "send_once") as send, patch.object(d.time, "sleep"):
+             patch.object(self.n, "send_notification_once") as send, patch.object(d.time, "sleep"):
             self.n.ready()
             return send
 
@@ -79,46 +79,49 @@ class NotificationTests(unittest.TestCase):
             self.run_ready().assert_not_called()
 
     def test_draft_opening_silent(self):
-        with patch.object(self.n, "send_once") as send, \
+        with patch.object(self.n, "send_notification_once") as send, \
              patch.object(self.n, "request_repository_json") as request:
-            self.n.event({"action": "opened", "pull_request": dict(self.item, draft=True)}, "pull_request_target")
+            self.n.handle_event({"action": "opened", "pull_request": dict(self.item, draft=True)},
+                                "pull_request_target")
             send.assert_not_called()
             request.assert_not_called()
 
     def test_ready_for_review_uses_pr_room(self):
-        with patch.object(self.n, "send_once") as send, \
+        with patch.object(self.n, "send_notification_once") as send, \
              patch.object(self.n, "request_repository_json", return_value=self.item):
-            self.n.event({"action": "ready_for_review", "pull_request": self.item}, "pull_request_target")
+            self.n.handle_event({"action": "ready_for_review", "pull_request": self.item},
+                                "pull_request_target")
             self.assertEqual(send.call_args.args[1:3], ("pr-announced", "pr"))
 
     def test_issue_goes_to_issue_room(self):
-        with patch.object(self.n, "send") as send:
-            self.n.event({"action": "opened", "issue": self.item}, "issues")
+        with patch.object(self.n, "send_discord_message") as send:
+            self.n.handle_event({"action": "opened", "issue": self.item}, "issues")
             self.assertEqual(send.call_args.args[0], "issue")
 
     def test_close_without_merge_silent(self):
-        with patch.object(self.n, "send_once") as send:
-            self.n.event({"action": "closed", "pull_request": self.item}, "pull_request_target")
+        with patch.object(self.n, "send_notification_once") as send:
+            self.n.handle_event({"action": "closed", "pull_request": self.item},
+                                "pull_request_target")
             send.assert_not_called()
 
     def test_merge_goes_to_pr_room_without_ping(self):
         item = dict(self.item, merged=True, merged_by={"login": "alice"})
-        with patch.object(self.n, "send_once") as send:
-            self.n.event({"action": "closed", "pull_request": item}, "pull_request_target")
+        with patch.object(self.n, "send_notification_once") as send:
+            self.n.handle_event({"action": "closed", "pull_request": item}, "pull_request_target")
             self.assertEqual(send.call_args.args[1:3], ("pr-merged", "pr"))
             self.assertEqual(send.call_args.args[3]["allowed_mentions"]["users"], [])
 
     def test_target_branch_filter(self):
         item = dict(self.item, base={"ref": "other"})
-        with patch.object(self.n, "send_once") as send:
-            self.n.event({"action": "opened", "pull_request": item}, "pull_request_target")
+        with patch.object(self.n, "send_notification_once") as send:
+            self.n.handle_event({"action": "opened", "pull_request": item}, "pull_request_target")
             send.assert_not_called()
 
     def test_routing_uses_distinct_webhook_secrets(self):
         for route, expected in [("issue", "/111/issue_test"), ("pr", "/222/pr_test")]:
             with patch.object(d, "request_json", return_value={"id": "message"}) as request, \
                  contextlib.redirect_stdout(io.StringIO()):
-                self.n.send(route, {})
+                self.n.send_discord_message(route, {})
                 self.assertIn(expected, request.call_args.args[0])
                 self.assertIn("wait=true", request.call_args.args[0])
 
@@ -129,7 +132,7 @@ class NotificationTests(unittest.TestCase):
                  patch.object(self.n, "request_repository_json"), \
                  patch.object(d, "request_json", return_value={"id": "message"}) as request, \
                  contextlib.redirect_stdout(io.StringIO()):
-                self.n.send_once(12, "test", "pr", {})
+                self.n.send_notification_once(12, "test", "pr", {})
                 self.assertEqual(request.called, expected)
 
     def test_failed_delivery_does_not_save_marker(self):
@@ -137,7 +140,7 @@ class NotificationTests(unittest.TestCase):
              patch.object(self.n, "request_repository_json") as request, \
              patch.object(d, "request_json", side_effect=d.SafeError("Discord HTTP 500")):
             with self.assertRaises(d.SafeError):
-                self.n.send_once(12, "test", "pr", {})
+                self.n.send_notification_once(12, "test", "pr", {})
             request.assert_not_called()
 
     def test_user_map_validation_never_echoes_values(self):
@@ -170,7 +173,7 @@ class NotificationTests(unittest.TestCase):
                   "body": "<!-- discord-notify:v1:pr-merged -->"}
         with patch.object(self.n, "request_repository_json", side_effect=[first_page, [marker]]), \
              patch.object(d, "request_json") as request:
-            self.assertFalse(self.n.send_once(12, "pr-merged", "pr", {}))
+            self.assertFalse(self.n.send_notification_once(12, "pr-merged", "pr", {}))
             request.assert_not_called()
 
     def test_still_unknown_never_notifies(self):
@@ -183,33 +186,35 @@ class NotificationTests(unittest.TestCase):
     def test_api_failure_does_not_announce_ready(self):
         with patch.object(self.n, "pages", return_value=iter([self.item])), \
              patch.object(self.n, "snapshot", side_effect=d.SafeError("GitHub HTTP 403")), \
-             patch.object(self.n, "send_once") as send, contextlib.redirect_stdout(io.StringIO()):
+             patch.object(self.n, "send_notification_once") as send, contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaises(d.SafeError):
                 self.n.ready()
             send.assert_not_called()
 
     def test_no_available_mapping_does_not_disable_issue_notifications(self):
-        with patch.dict(os.environ, {"DISCORD_USER_MAP": "invalid"}), patch.object(self.n, "send") as send:
-            self.n.event({"action": "opened", "issue": self.item}, "issues")
+        with patch.dict(os.environ, {"DISCORD_USER_MAP": "invalid"}), \
+             patch.object(self.n, "send_discord_message") as send:
+            self.n.handle_event({"action": "opened", "issue": self.item}, "issues")
             send.assert_called_once()
 
     def test_issue_webhook_does_not_fall_back_to_pr_room(self):
         with patch.dict(os.environ, {"DISCORD_ISSUE_WEBHOOK_URL": ""}), \
              patch.object(d, "request_json") as request:
             with self.assertRaises(d.SafeError):
-                self.n.send("issue", {})
+                self.n.send_discord_message("issue", {})
             request.assert_not_called()
 
     def test_title_mentions_are_not_in_allowed_mentions(self):
-        message = d.payload("New PR", "@everyone <@123456789012345678>", self.pr["url"], "description")
+        message = d.build_discord_message(
+            "New PR", "@everyone <@123456789012345678>", self.pr["url"], "description")
         self.assertEqual(message["allowed_mentions"], {"parse": [], "users": []})
         self.assertNotIn("@", message["content"])
 
     def review_message(self, author, action="opened", branch="main"):
         item = dict(self.item, user={"login": author}, base={"ref": branch})
-        with patch.object(self.n, "send_once") as send, \
+        with patch.object(self.n, "send_notification_once") as send, \
              patch.object(self.n, "request_repository_json", return_value=item):
-            self.n.event({"action": action, "pull_request": item}, "pull_request_target")
+            self.n.handle_event({"action": action, "pull_request": item}, "pull_request_target")
             return send.call_args.args[3]
 
     def test_each_team_author_pings_only_the_other_three_reviewers(self):
@@ -245,16 +250,17 @@ class NotificationTests(unittest.TestCase):
         users = dict(self.users)
         del users["decl5th"]
         with patch.dict(os.environ, {"DISCORD_USER_MAP": json.dumps(users)}), \
-             patch.object(self.n, "send_once") as send, \
+             patch.object(self.n, "send_notification_once") as send, \
              patch.object(self.n, "request_repository_json", return_value=self.item):
             with self.assertRaises(d.SafeError):
-                self.n.event({"action": "opened", "pull_request": self.item}, "pull_request_target")
+                self.n.handle_event({"action": "opened", "pull_request": self.item},
+                                    "pull_request_target")
             send.assert_not_called()
 
     def test_issue_author_is_github_login_and_title_is_linked(self):
         item = dict(self.item, html_url="https://github.com/example/project/issues/12")
-        with patch.object(self.n, "send") as send:
-            self.n.event({"action": "opened", "issue": item}, "issues")
+        with patch.object(self.n, "send_discord_message") as send:
+            self.n.handle_event({"action": "opened", "issue": item}, "issues")
             message = send.call_args.args[1]
             self.assertEqual(message["content"],
                              "📝 새 이슈가 등록됐어요.\n**[#12 Feature](https://github.com/example/project/issues/12)**\n작성자: alice")
@@ -278,7 +284,7 @@ class NotificationTests(unittest.TestCase):
     def test_merge_ready_to_other_branches_is_silent(self):
         self.item = dict(self.item, base={"ref": "feature"})
         with patch.object(self.n, "pages", return_value=iter([self.item])), patch.object(self.n, "snapshot") as snapshot, \
-             patch.object(self.n, "send_once") as send:
+             patch.object(self.n, "send_notification_once") as send:
             self.n.ready()
             snapshot.assert_not_called()
             send.assert_not_called()
@@ -286,9 +292,9 @@ class NotificationTests(unittest.TestCase):
 
     def test_merge_completed_to_other_branches_is_silent(self):
         for branch in ("feature", "Main"):
-            with self.subTest(branch=branch), patch.object(self.n, "send_once") as send:
+            with self.subTest(branch=branch), patch.object(self.n, "send_notification_once") as send:
                 item = dict(self.item, base={"ref": branch}, merged=True)
-                self.n.event({"action": "closed", "pull_request": item}, "pull_request_target")
+                self.n.handle_event({"action": "closed", "pull_request": item}, "pull_request_target")
                 send.assert_not_called()
 
     def test_review_request_to_develop_notifies(self):
@@ -298,14 +304,14 @@ class NotificationTests(unittest.TestCase):
 
     def test_merge_completed_to_develop_notifies(self):
         item = dict(self.item, base={"ref": "develop"}, merged=True)
-        with patch.object(self.n, "send_once") as send:
-            self.n.event({"action": "closed", "pull_request": item}, "pull_request_target")
+        with patch.object(self.n, "send_notification_once") as send:
+            self.n.handle_event({"action": "closed", "pull_request": item}, "pull_request_target")
             self.assertIn("대상: develop", send.call_args.args[3]["content"])
 
     def test_merge_completed_message_omits_merger_and_mentions(self):
         item = dict(self.item, merged=True, merged_by={"login": "bob"})
-        with patch.object(self.n, "send_once") as send:
-            self.n.event({"action": "closed", "pull_request": item}, "pull_request_target")
+        with patch.object(self.n, "send_notification_once") as send:
+            self.n.handle_event({"action": "closed", "pull_request": item}, "pull_request_target")
             message = send.call_args.args[3]
             self.assertEqual(message["content"],
                              "🎉 PR이 머지됐어요.\n**[#12 Feature](https://github.com/example/project/pull/12)**\n작성자: alice\n대상: main")
