@@ -15,8 +15,7 @@ on:
   branch_protection_rule:
     types: [created, edited, deleted]
   push:
-    # 기본 브랜치가 다르면 변경하세요.
-    branches: [main]
+    branches: [develop, main]
   workflow_dispatch:
 
 permissions:
@@ -54,7 +53,6 @@ jobs:
           DISCORD_USER_MAP: ${{ secrets.DISCORD_USER_MAP }}
           # 비워 두면 moogoochung, tobae-time, hana5111, decl5th를 사용합니다.
           REVIEWER_LOGINS: ${{ vars.DISCORD_REVIEWER_LOGINS }}
-          TARGET_BRANCHES: ${{ vars.DISCORD_TARGET_BRANCHES }}
 
   merge-readiness:
     if: github.event_name != 'issues'
@@ -79,4 +77,3 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           DISCORD_PR_WEBHOOK_URL: ${{ secrets.DISCORD_PR_WEBHOOK_URL }}
           DISCORD_USER_MAP: ${{ secrets.DISCORD_USER_MAP }}
-          TARGET_BRANCHES: ${{ vars.DISCORD_TARGET_BRANCHES }}
