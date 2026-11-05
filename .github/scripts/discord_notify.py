@@ -64,8 +64,7 @@ def retry_after_rate_limit(error, attempt):
 def request_json(url, headers, method="GET", body=None, service="GitHub"):
     for attempt in range(REQUEST_ATTEMPTS):
         try:
-            request = build_json_request(url, headers, method, body)
-            return read_json_response(request)
+            return read_json_response(build_json_request(url, headers, method, body))
         except HTTPError as error:
             if retry_after_rate_limit(error, attempt):
                 continue
@@ -112,15 +111,15 @@ def valid_webhook(webhook):
             and re.fullmatch(path_pattern, webhook.path))
 
 
-def reviewers_for(author, users):
-    configured = os.environ.get("REVIEWER_LOGINS", "").strip()
-    logins = configured.split(",") if configured else DEFAULT_REVIEWERS
-    logins = dict.fromkeys(login.strip().lower() for login in logins if login.strip())
-    selected = [login for login in logins if login != author.lower()]
-    if any(login not in users for login in selected):
+def select_reviewer_user_ids(author_login, discord_user_ids):
+    configured_logins = os.environ.get("REVIEWER_LOGINS", "").strip()
+    reviewer_logins = configured_logins.split(",") if configured_logins else DEFAULT_REVIEWERS
+    reviewer_logins = dict.fromkeys(login.strip().lower() for login in reviewer_logins if login.strip())
+    selected_logins = [login for login in reviewer_logins if login != author_login.lower()]
+    if any(login not in discord_user_ids for login in selected_logins):
         raise SafeError("리뷰어의 DISCORD_USER_MAP 항목이 누락되어 리뷰 요청 알림을 보류합니다.")
-    return list(dict.fromkeys(users[login] for login in selected
-                              if users[login] != users.get(author.lower())))
+    return list(dict.fromkeys(discord_user_ids[login] for login in selected_logins
+                              if discord_user_ids[login] != discord_user_ids.get(author_login.lower())))
 
 
 def build_discord_message(content, title, url, description, user_ids=()):
@@ -179,7 +178,7 @@ def merge_state_is_known(pull_request):
 
 
 def same_ready_revision(previous, latest):
-    return (is_ready(latest)
+    return (pull_request_is_ready(latest)
             and latest["headRefOid"] == previous["headRefOid"]
             and latest["baseRefName"] == previous["baseRefName"])
 
@@ -192,13 +191,13 @@ def build_merge_ready_message(pull_request, user_id):
     return build_discord_message(content, title, pull_request["url"], description, [user_id])
 
 
-def is_ready(pr):
-    return (pr["state"] == "OPEN" and not pr["isDraft"]
-            and pr["baseRefName"] in MERGE_TARGETS
-            and pr["mergeable"] == "MERGEABLE"
-            and pr["mergeStateStatus"] == "CLEAN"
-            and pr.get("reviewDecision") in (None, "APPROVED")
-            and pr.get("mergeQueueEntry") is None)
+def pull_request_is_ready(pull_request):
+    return (pull_request["state"] == "OPEN" and not pull_request["isDraft"]
+            and pull_request["baseRefName"] in MERGE_TARGETS
+            and pull_request["mergeable"] == "MERGEABLE"
+            and pull_request["mergeStateStatus"] == "CLEAN"
+            and pull_request.get("reviewDecision") in (None, "APPROVED")
+            and pull_request.get("mergeQueueEntry") is None)
 
 
 def build_github_headers(token):
@@ -211,23 +210,23 @@ def build_github_headers(token):
 
 class Notifier:
     def __init__(self):
-        self.repo = os.environ["GITHUB_REPOSITORY"]
-        self.owner, self.name = self.repo.split("/")
-        self.api = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-        self.graphql_url = os.environ.get("GITHUB_GRAPHQL_URL", "https://api.github.com/graphql")
-        self.headers = build_github_headers(os.environ["GITHUB_TOKEN"])
+        self.repository_name = os.environ["GITHUB_REPOSITORY"]
+        self.owner, self.name = self.repository_name.split("/")
+        self.rest_api_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+        self.graphql_url = os.environ.get("GITHUB_GRAPHQL_URL", "https://api.github.com/request_repository_graphql")
+        self.github_headers = build_github_headers(os.environ["GITHUB_TOKEN"])
 
     def request_repository_json(self, path, method="GET", body=None):
-        return request_json(self.api + "/repos/" + self.repo + path, self.headers, method, body)
+        return request_json(self.rest_api_url + "/repos/" + self.repository_name + path, self.github_headers, method, body)
 
-    def graphql(self, query, variables):
-        result = request_json(self.graphql_url, self.headers, "POST", {
+    def request_repository_graphql(self, query, variables):
+        result = request_json(self.graphql_url, self.github_headers, "POST", {
             "query": query, "variables": dict(owner=self.owner, name=self.name, **variables)})
         if not result or result.get("errors"):
             raise SafeError("GitHub GraphQL 조회 실패. 민감한 응답 내용은 출력하지 않습니다.")
         return result["data"]["repository"]
 
-    def pages(self, path):
+    def iterate_repository_items(self, path):
         separator = "&" if "?" in path else "?"
         page = 1
         while True:
@@ -237,7 +236,7 @@ class Notifier:
                 return
             page += 1
 
-    def allowed(self, branch):
+    def branch_receives_notifications(self, branch):
         return branch in MERGE_TARGETS
 
     def send_discord_message(self, route, message):
@@ -249,7 +248,7 @@ class Notifier:
             raise SafeError("Discord에서 발송 확인을 받지 못했습니다.")
 
     def has_delivery_record(self, number, marker):
-        comments = self.pages(f"/issues/{number}/comments")
+        comments = self.iterate_repository_items(f"/issues/{number}/comments")
         return any(is_delivery_record(comment, marker) for comment in comments)
 
     def record_delivery(self, number, marker):
@@ -278,7 +277,7 @@ class Notifier:
 
     def handle_pull_request_event(self, event):
         pull_request = event["pull_request"]
-        if not self.allowed(pull_request["base"]["ref"]):
+        if not self.branch_receives_notifications(pull_request["base"]["ref"]):
             return
         action = event.get("action")
         if action == "closed" and pull_request.get("merged"):
@@ -295,15 +294,15 @@ class Notifier:
         if not review_request_is_current(pull_request):
             return
         user_ids = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
-        reviewer_ids = reviewers_for(pull_request["user"]["login"], user_ids)
+        reviewer_ids = select_reviewer_user_ids(pull_request["user"]["login"], user_ids)
         message = build_review_request_message(pull_request, reviewer_ids)
         self.send_notification_once(number, "pr-announced", "pr", message)
 
     def request_pull_request(self, number):
-        return self.graphql(PULL_REQUEST_QUERY, {"number": number})["pullRequest"]
+        return self.request_repository_graphql(PULL_REQUEST_QUERY, {"number": number})["pullRequest"]
 
     def branch_uses_merge_queue(self, branch):
-        repository = self.graphql(MERGE_QUEUE_QUERY, {"branch": branch})
+        repository = self.request_repository_graphql(MERGE_QUEUE_QUERY, {"branch": branch})
         return repository["mergeQueue"] is not None
 
     def request_resolved_pull_request(self, number):
@@ -326,7 +325,7 @@ class Notifier:
 
     def request_notifiable_pull_request(self, number, queue_states):
         pull_request = self.request_resolved_pull_request(number)
-        if not is_ready(pull_request):
+        if not pull_request_is_ready(pull_request):
             return None
         branch = pull_request["baseRefName"]
         if self.branch_requires_merge_queue(branch, queue_states):
@@ -360,14 +359,17 @@ class Notifier:
     def notify_merge_ready_pull_requests(self):
         user_ids = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
         queue_states = {}
-        results = [self.process_merge_ready_pull_request(item["number"], user_ids, queue_states)
-                   for item in self.pages("/pulls?state=open") if self.merge_ready_candidate(item)]
+        pull_requests = self.iterate_repository_items("/pulls?state=open")
+        candidates = (pull_request for pull_request in pull_requests
+                      if self.merge_ready_candidate(pull_request))
+        results = [self.process_merge_ready_pull_request(pull_request["number"], user_ids, queue_states)
+                   for pull_request in candidates]
         if not all(results):
             raise SafeError("일부 PR 알림 처리가 실패했습니다. 위의 비밀 값 없는 오류를 확인하세요.")
 
     def merge_ready_candidate(self, pull_request):
         return (not pull_request["draft"]
-                and self.allowed(pull_request["base"]["ref"]))
+                and self.branch_receives_notifications(pull_request["base"]["ref"]))
 
 
 def main():
