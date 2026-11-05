@@ -11,7 +11,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 
 DEFAULT_REVIEWERS = ("moogoochung", "tobae-time", "hana5111", "decl5th")
-MERGE_TARGET = "main"
+MERGE_TARGETS = frozenset(("develop", "main"))
 
 
 class SafeError(Exception):
@@ -102,7 +102,7 @@ def payload(content, title, url, description, user_ids=()):
 
 def is_ready(pr):
     return (pr["state"] == "OPEN" and not pr["isDraft"]
-            and pr["baseRefName"] == MERGE_TARGET
+            and pr["baseRefName"] in MERGE_TARGETS
             and pr["mergeable"] == "MERGEABLE"
             and pr["mergeStateStatus"] == "CLEAN"
             and pr.get("reviewDecision") in (None, "APPROVED")
@@ -118,7 +118,6 @@ class Notifier:
         self.headers = {"Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
                         "Accept": "application/vnd.github+json", "Content-Type": "application/json",
                         "User-Agent": "dobby-discord-notifier", "X-GitHub-Api-Version": "2022-11-28"}
-        self.branches = {x.strip() for x in os.environ.get("TARGET_BRANCHES", "").split(",") if x.strip()}
 
     def github(self, path, method="GET", body=None):
         return request_json(self.api + "/repos/" + self.repo + path, self.headers, method, body)
@@ -141,7 +140,7 @@ class Notifier:
             page += 1
 
     def allowed(self, branch):
-        return not self.branches or branch in self.branches
+        return branch in MERGE_TARGETS
 
     def send(self, route, message):
         variable = "DISCORD_ISSUE_WEBHOOK_URL" if route == "issue" else "DISCORD_PR_WEBHOOK_URL"
@@ -181,12 +180,11 @@ class Notifier:
         if not self.allowed(item["base"]["ref"]):
             return
         if action == "closed" and item.get("merged"):
-            if item["base"]["ref"] != MERGE_TARGET:
-                return
+            branch = item["base"]["ref"]
             author = clean(item["user"]["login"])
             self.send_once(item["number"], "pr-merged", "pr", payload(
                 "🎉 PR이 머지됐어요.", f'#{item["number"]} {item["title"]}', item["html_url"],
-                f'작성자: {author}\n대상: {MERGE_TARGET}'))
+                f'작성자: {author}\n대상: {clean(branch)}'))
         elif action in ("opened", "ready_for_review") and not item.get("draft"):
             current = self.github(f'/pulls/{item["number"]}')
             if current["draft"] or current["state"] != "open" or not self.allowed(current["base"]["ref"]):
@@ -221,8 +219,7 @@ class Notifier:
         failed = False
         queues = {}
         for listed in self.pages("/pulls?state=open"):
-            if (listed["draft"] or listed["base"]["ref"] != MERGE_TARGET
-                    or not self.allowed(listed["base"]["ref"])):
+            if listed["draft"] or not self.allowed(listed["base"]["ref"]):
                 continue
             number = listed["number"]
             try:

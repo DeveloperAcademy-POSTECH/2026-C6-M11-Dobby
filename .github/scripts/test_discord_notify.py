@@ -16,7 +16,7 @@ class NotificationTests(unittest.TestCase):
                       "decl5th": "444444444444444444"}
         self.env = patch.dict(os.environ, {
             "GITHUB_REPOSITORY": "example/project", "GITHUB_TOKEN": "test-token",
-            "TARGET_BRANCHES": "main", "DISCORD_USER_MAP": json.dumps(self.users), "REVIEWER_LOGINS": "",
+            "DISCORD_USER_MAP": json.dumps(self.users), "REVIEWER_LOGINS": "",
             "DISCORD_ISSUE_WEBHOOK_URL": "https://discord.com/api/webhooks/111/issue_test",
             "DISCORD_PR_WEBHOOK_URL": "https://discord.com/api/webhooks/222/pr_test"})
         self.env.start()
@@ -47,6 +47,9 @@ class NotificationTests(unittest.TestCase):
                            ("mergeQueueEntry", {"id": "queue"})]:
             with self.subTest(key=key, value=value):
                 self.assertFalse(d.is_ready(dict(self.pr, **{key: value})))
+
+    def test_develop_target_is_ready(self):
+        self.assertTrue(d.is_ready(dict(self.pr, baseRefName="develop")))
 
     def test_no_review_requirement_allowed(self):
         self.assertTrue(d.is_ready(dict(self.pr, reviewDecision=None)))
@@ -261,29 +264,37 @@ class NotificationTests(unittest.TestCase):
                          "**[#12 Feature](https://github.com/example/project/pull/12)**\n작성자: <@123456789012345678>\n대상: main")
         self.assertEqual(message["allowed_mentions"]["users"], [self.users["alice"]])
 
-    def test_merge_ready_to_other_branches_is_silent_without_optional_filter(self):
-        self.n.branches = set()
+    def test_merge_ready_supports_develop(self):
         self.item = dict(self.item, base={"ref": "develop"})
+        self.pr = dict(self.pr, baseRefName="develop")
+        self.run_ready().assert_called_once()
+
+    def test_merge_ready_to_other_branches_is_silent(self):
+        self.item = dict(self.item, base={"ref": "feature"})
         with patch.object(self.n, "pages", return_value=iter([self.item])), patch.object(self.n, "snapshot") as snapshot, \
              patch.object(self.n, "send_once") as send:
             self.n.ready()
             snapshot.assert_not_called()
             send.assert_not_called()
-        self.assertFalse(d.is_ready(dict(self.pr, baseRefName="develop")))
+        self.assertFalse(d.is_ready(dict(self.pr, baseRefName="feature")))
 
-    def test_merge_completed_to_other_branches_is_silent_without_optional_filter(self):
-        self.n.branches = set()
-        for branch in ("develop", "feature", "Main"):
+    def test_merge_completed_to_other_branches_is_silent(self):
+        for branch in ("feature", "Main"):
             with self.subTest(branch=branch), patch.object(self.n, "send_once") as send:
                 item = dict(self.item, base={"ref": branch}, merged=True)
                 self.n.event({"action": "closed", "pull_request": item}, "pull_request_target")
                 send.assert_not_called()
 
-    def test_review_request_to_other_branches_still_notifies(self):
-        self.n.branches = set()
+    def test_review_request_to_develop_notifies(self):
         message = self.review_message("tobae-time", branch="develop")
         self.assertIn("feature → develop", message["content"])
         self.assertEqual(len(message["allowed_mentions"]["users"]), 3)
+
+    def test_merge_completed_to_develop_notifies(self):
+        item = dict(self.item, base={"ref": "develop"}, merged=True)
+        with patch.object(self.n, "send_once") as send:
+            self.n.event({"action": "closed", "pull_request": item}, "pull_request_target")
+            self.assertIn("대상: develop", send.call_args.args[3]["content"])
 
     def test_merge_completed_message_omits_merger_and_mentions(self):
         item = dict(self.item, merged=True, merged_by={"login": "bob"})
