@@ -36,6 +36,11 @@ def create_rest_pull_request(url):
             "user": {"login": "alice"}, "merged": False}
 
 
+def create_review_event(pull_request, state="approved"):
+    return {"action": "submitted", "pull_request": pull_request,
+            "review": {"state": state, "user": {"login": "reviewer"}}}
+
+
 class NotificationTests(unittest.TestCase):
     def setUp(self):
         self.discord_user_ids = create_discord_user_ids()
@@ -114,6 +119,27 @@ class NotificationTests(unittest.TestCase):
         with patch.object(self.notifier, "send_discord_message") as send:
             self.notifier.handle_event({"action": "opened", "issue": self.rest_pull_request}, "issues")
             self.assertEqual(send.call_args.args[0], "issue")
+
+    def test_approval_mentions_pull_request_author(self):
+        event = create_review_event(self.rest_pull_request)
+        with patch.object(self.notifier, "send_discord_message") as send:
+            self.notifier.handle_event(event, "pull_request_review")
+            message = send.call_args.args[1]
+            self.assertEqual(send.call_args.args[0], "pr")
+            self.assertEqual(message["allowed_mentions"]["users"], [self.discord_user_ids["alice"]])
+            self.assertIn("승인자: reviewer", message["content"])
+
+    def test_non_approval_review_is_silent(self):
+        event = create_review_event(self.rest_pull_request, "commented")
+        with patch.object(self.notifier, "send_discord_message") as send:
+            self.notifier.handle_event(event, "pull_request_review")
+            send.assert_not_called()
+
+    def test_approval_to_other_branch_is_silent(self):
+        pull_request = dict(self.rest_pull_request, base={"ref": "feature"})
+        with patch.object(self.notifier, "send_discord_message") as send:
+            self.notifier.handle_event(create_review_event(pull_request), "pull_request_review")
+            send.assert_not_called()
 
     def test_close_without_merge_silent(self):
         with patch.object(self.notifier, "send_notification_once") as send:

@@ -5,6 +5,8 @@ on:
     types: [opened]
   pull_request_target:
     types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, edited, closed]
+  pull_request_review:
+    types: [submitted]
   workflow_run:
     # 앱 CI를 추가하면 해당 워크플로의 최상단 name 값도 여기에 추가하세요.
     workflows: [PR Review Signal, Discord Notification Tests]
@@ -27,7 +29,8 @@ jobs:
       github.event_name == 'issues' ||
       (github.event_name == 'pull_request_target' &&
       (github.event.action == 'opened' || github.event.action == 'ready_for_review' ||
-      (github.event.action == 'closed' && github.event.pull_request.merged == true)))
+      (github.event.action == 'closed' && github.event.pull_request.merged == true))) ||
+      (github.event_name == 'pull_request_review' && github.event.review.state == 'approved')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -55,7 +58,7 @@ jobs:
           REVIEWER_LOGINS: ${{ vars.DISCORD_REVIEWER_LOGINS }}
 
   merge-readiness:
-    if: github.event_name != 'issues'
+    if: github.event_name != 'issues' && github.event_name != 'pull_request_review'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

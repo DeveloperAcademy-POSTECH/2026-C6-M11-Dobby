@@ -149,6 +149,16 @@ def build_merge_completed_message(pull_request):
                                  pull_request["html_url"], description)
 
 
+def build_approval_message(pull_request, reviewer_login, author_user_id):
+    title = f'#{pull_request["number"]} {pull_request["title"]}'
+    branch = escape_discord_text(pull_request["base"]["ref"])
+    reviewer = escape_discord_text(reviewer_login)
+    content = f"✅ <@{author_user_id}> PR이 승인됐어요. CI 상태를 확인하고 머지해 주세요."
+    description = f"대상: {branch}\n승인자: {reviewer}"
+    return build_discord_message(content, title, pull_request["html_url"],
+                                 description, [author_user_id])
+
+
 def build_review_request_message(pull_request, reviewer_ids):
     author = escape_discord_text(pull_request["user"]["login"])
     source = escape_discord_text(pull_request["head"]["ref"], 120)
@@ -170,6 +180,12 @@ def is_delivery_record(comment, marker):
 def review_request_is_current(pull_request):
     return (pull_request["state"] == "open" and not pull_request["draft"]
             and pull_request["base"]["ref"] in MERGE_TARGETS)
+
+
+def review_approves_supported_branch(event):
+    return (event.get("action") == "submitted"
+            and (event.get("review") or {}).get("state", "").lower() == "approved"
+            and event["pull_request"]["base"]["ref"] in MERGE_TARGETS)
 
 
 def merge_state_is_known(pull_request):
@@ -269,6 +285,8 @@ class Notifier:
             self.handle_issue_event(event)
         elif event_name == "pull_request_target":
             self.handle_pull_request_event(event)
+        elif event_name == "pull_request_review":
+            self.handle_review_event(event)
 
     def handle_issue_event(self, event):
         if event.get("action") != "opened" or event["issue"].get("pull_request"):
@@ -284,6 +302,22 @@ class Notifier:
             self.notify_merge_completed(pull_request)
         elif action in ("opened", "ready_for_review") and not pull_request.get("draft"):
             self.notify_review_requested(pull_request["number"])
+
+    def discord_user_id_for_author(self, pull_request):
+        user_ids = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
+        author_login = pull_request["user"]["login"].lower()
+        return user_ids.get(author_login)
+
+    def handle_review_event(self, event):
+        if not review_approves_supported_branch(event):
+            return
+        pull_request = event["pull_request"]
+        author_user_id = self.discord_user_id_for_author(pull_request)
+        if not author_user_id:
+            print(f'::warning::PR #{pull_request["number"]}: 작성자 대응표가 없어 승인 알림을 보류합니다.')
+            return
+        message = build_approval_message(pull_request, event["review"]["user"]["login"], author_user_id)
+        self.send_discord_message("pr", message)
 
     def notify_merge_completed(self, pull_request):
         message = build_merge_completed_message(pull_request)
