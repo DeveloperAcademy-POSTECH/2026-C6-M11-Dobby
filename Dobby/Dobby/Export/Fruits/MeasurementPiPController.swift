@@ -15,6 +15,7 @@ final class MeasurementPiPController: NSObject {
 
     private let displayLayer = AVSampleBufferDisplayLayer()
     private let imageContext = CIContext()
+    private var isPlaybackPaused = false
     private var pictureInPictureController: AVPictureInPictureController?
     private var startError: Error?
     private weak var sourceView: UIView?
@@ -227,7 +228,10 @@ extension MeasurementPiPController: AVPictureInPictureSampleBufferPlaybackDelega
     func pictureInPictureController(
         _ pictureInPictureController: AVPictureInPictureController,
         setPlaying playing: Bool
-    ) { }
+    ) {
+        isPlaybackPaused = !playing
+        pictureInPictureController.invalidatePlaybackState()
+    }
 
     func pictureInPictureControllerTimeRangeForPlayback(
         _ pictureInPictureController: AVPictureInPictureController
@@ -238,7 +242,7 @@ extension MeasurementPiPController: AVPictureInPictureSampleBufferPlaybackDelega
     func pictureInPictureControllerIsPlaybackPaused(
         _ pictureInPictureController: AVPictureInPictureController
     ) -> Bool {
-        false
+        isPlaybackPaused
     }
 
     func pictureInPictureController(
@@ -257,7 +261,7 @@ extension MeasurementPiPController: AVPictureInPictureSampleBufferPlaybackDelega
     func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(
         _ pictureInPictureController: AVPictureInPictureController
     ) -> Bool {
-        true
+        false
     }
 }
 
