@@ -13,6 +13,15 @@ MERGE_TARGETS = frozenset(("develop", "main"))
 NETWORK_ERRORS = (URLError, TimeoutError, OSError, ValueError)
 REQUEST_ATTEMPTS = 3
 SUPPRESS_LINK_EMBEDS = 4
+PULL_REQUEST_QUERY = """query($owner:String!, $name:String!, $number:Int!) {
+  repository(owner:$owner, name:$name) { pullRequest(number:$number) {
+    number title url state isDraft headRefOid baseRefName
+    author { login } mergeable mergeStateStatus reviewDecision mergeQueueEntry { id }
+  } }
+}"""
+MERGE_QUEUE_QUERY = """query($owner:String!, $name:String!, $branch:String!) {
+  repository(owner:$owner, name:$name) { mergeQueue(branch:$branch) { id } }
+}"""
 
 
 class SafeError(Exception):
@@ -164,6 +173,25 @@ def review_request_is_current(pull_request):
             and pull_request["base"]["ref"] in MERGE_TARGETS)
 
 
+def merge_state_is_known(pull_request):
+    return (pull_request["mergeable"] != "UNKNOWN"
+            and pull_request["mergeStateStatus"] != "UNKNOWN")
+
+
+def same_ready_revision(previous, latest):
+    return (is_ready(latest)
+            and latest["headRefOid"] == previous["headRefOid"]
+            and latest["baseRefName"] == previous["baseRefName"])
+
+
+def build_merge_ready_message(pull_request, user_id):
+    title = f'#{pull_request["number"]} {pull_request["title"]}'
+    branch = escape_discord_text(pull_request["baseRefName"])
+    content = f"✅ <@{user_id}> GitHub에서 머지 준비 상태가 확인됐어요. PR을 확인하고 직접 머지해 주세요."
+    description = f"작성자: <@{user_id}>\n대상: {branch}"
+    return build_discord_message(content, title, pull_request["url"], description, [user_id])
+
+
 def is_ready(pr):
     return (pr["state"] == "OPEN" and not pr["isDraft"]
             and pr["baseRefName"] in MERGE_TARGETS
@@ -271,64 +299,75 @@ class Notifier:
         message = build_review_request_message(pull_request, reviewer_ids)
         self.send_notification_once(number, "pr-announced", "pr", message)
 
-    def snapshot(self, number):
-        query = """query($owner:String!, $name:String!, $number:Int!) {
-          repository(owner:$owner, name:$name) { pullRequest(number:$number) {
-            number title url state isDraft headRefOid baseRefName
-            author { login } mergeable mergeStateStatus reviewDecision mergeQueueEntry { id }
-          } }
-        }"""
-        return self.graphql(query, {"number": number})["pullRequest"]
+    def request_pull_request(self, number):
+        return self.graphql(PULL_REQUEST_QUERY, {"number": number})["pullRequest"]
 
-    def queue_enabled(self, branch):
-        query = """query($owner:String!, $name:String!, $branch:String!) {
-          repository(owner:$owner, name:$name) { mergeQueue(branch:$branch) { id } }
-        }"""
-        return self.graphql(query, {"branch": branch})["mergeQueue"] is not None
+    def branch_uses_merge_queue(self, branch):
+        repository = self.graphql(MERGE_QUEUE_QUERY, {"branch": branch})
+        return repository["mergeQueue"] is not None
 
-    def ready(self):
-        users = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
-        failed = False
-        queues = {}
-        for listed in self.pages("/pulls?state=open"):
-            if listed["draft"] or not self.allowed(listed["base"]["ref"]):
-                continue
-            number = listed["number"]
-            try:
-                pr = self.snapshot(number)
-                for _ in range(2):
-                    if pr["mergeable"] != "UNKNOWN" and pr["mergeStateStatus"] != "UNKNOWN":
-                        break
-                    time.sleep(5)
-                    pr = self.snapshot(number)
-                if not is_ready(pr) or not self.allowed(pr["baseRefName"]):
-                    continue
-                branch = pr["baseRefName"]
-                if branch not in queues:
-                    queues[branch] = self.queue_enabled(branch)
-                if queues[branch]:
-                    print(f"Skipped #{number}: merge queue requires a separate notification policy.")
-                    continue
-                latest = self.snapshot(number)
-                if (not is_ready(latest) or latest["headRefOid"] != pr["headRefOid"]
-                        or latest["baseRefName"] != branch):
-                    continue
-                pr = latest
-                login = (pr.get("author") or {}).get("login", "")
-                user_id = users.get(login.lower())
-                if not user_id:
-                    print(f"::warning::PR #{number}: 작성자 대응표가 없어 머지 준비 알림을 보류합니다.")
-                    continue
-                key = f'pr-ready:{pr["headRefOid"]}'
-                self.send_notification_once(number, key, "pr", build_discord_message(
-                    f"✅ <@{user_id}> GitHub에서 머지 준비 상태가 확인됐어요. PR을 확인하고 직접 머지해 주세요.",
-                    f'#{number} {pr["title"]}', pr["url"],
-                    f'작성자: <@{user_id}>\n대상: {escape_discord_text(branch)}', [user_id]))
-            except SafeError as error:
-                print(f"::error::PR #{number}: {error}")
-                failed = True
-        if failed:
+    def request_resolved_pull_request(self, number):
+        pull_request = self.request_pull_request(number)
+        for _ in range(2):
+            if merge_state_is_known(pull_request):
+                return pull_request
+            time.sleep(5)
+            pull_request = self.request_pull_request(number)
+        return pull_request
+
+    def branch_requires_merge_queue(self, branch, queue_states):
+        if branch not in queue_states:
+            queue_states[branch] = self.branch_uses_merge_queue(branch)
+        return queue_states[branch]
+
+    def request_unchanged_ready_pull_request(self, pull_request):
+        latest = self.request_pull_request(pull_request["number"])
+        return latest if same_ready_revision(pull_request, latest) else None
+
+    def request_notifiable_pull_request(self, number, queue_states):
+        pull_request = self.request_resolved_pull_request(number)
+        if not is_ready(pull_request):
+            return None
+        branch = pull_request["baseRefName"]
+        if self.branch_requires_merge_queue(branch, queue_states):
+            print(f"Skipped #{number}: merge queue requires a separate notification policy.")
+            return None
+        return self.request_unchanged_ready_pull_request(pull_request)
+
+    def notify_merge_ready_author(self, pull_request, user_ids):
+        login = (pull_request.get("author") or {}).get("login", "").lower()
+        user_id = user_ids.get(login)
+        if not user_id:
+            print(f'::warning::PR #{pull_request["number"]}: 작성자 대응표가 없어 머지 준비 알림을 보류합니다.')
+            return
+        key = f'pr-ready:{pull_request["headRefOid"]}'
+        message = build_merge_ready_message(pull_request, user_id)
+        self.send_notification_once(pull_request["number"], key, "pr", message)
+
+    def notify_merge_ready_pull_request(self, number, user_ids, queue_states):
+        pull_request = self.request_notifiable_pull_request(number, queue_states)
+        if pull_request:
+            self.notify_merge_ready_author(pull_request, user_ids)
+
+    def process_merge_ready_pull_request(self, number, user_ids, queue_states):
+        try:
+            self.notify_merge_ready_pull_request(number, user_ids, queue_states)
+            return True
+        except SafeError as error:
+            print(f"::error::PR #{number}: {error}")
+            return False
+
+    def notify_merge_ready_pull_requests(self):
+        user_ids = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
+        queue_states = {}
+        results = [self.process_merge_ready_pull_request(item["number"], user_ids, queue_states)
+                   for item in self.pages("/pulls?state=open") if self.merge_ready_candidate(item)]
+        if not all(results):
             raise SafeError("일부 PR 알림 처리가 실패했습니다. 위의 비밀 값 없는 오류를 확인하세요.")
+
+    def merge_ready_candidate(self, pull_request):
+        return (not pull_request["draft"]
+                and self.allowed(pull_request["base"]["ref"]))
 
 
 def main():
@@ -337,7 +376,7 @@ def main():
         with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as source:
             notifier.handle_event(json.load(source), os.environ["GITHUB_EVENT_NAME"])
     elif sys.argv[1:] == ["ready"]:
-        notifier.ready()
+        notifier.notify_merge_ready_pull_requests()
     else:
         raise SafeError("사용법: discord_notify.py event|ready")
 

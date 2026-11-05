@@ -31,10 +31,10 @@ class NotificationTests(unittest.TestCase):
 
     def run_ready(self, snapshots=None, queued=False):
         with patch.object(self.n, "pages", return_value=iter([self.item])), \
-             patch.object(self.n, "snapshot", side_effect=snapshots or [self.pr, self.pr]), \
-             patch.object(self.n, "queue_enabled", return_value=queued), \
+             patch.object(self.n, "request_pull_request", side_effect=snapshots or [self.pr, self.pr]), \
+             patch.object(self.n, "branch_uses_merge_queue", return_value=queued), \
              patch.object(self.n, "send_notification_once") as send, patch.object(d.time, "sleep"):
-            self.n.ready()
+            self.n.notify_merge_ready_pull_requests()
             return send
 
     def test_only_clean_open_non_draft_is_ready(self):
@@ -185,10 +185,10 @@ class NotificationTests(unittest.TestCase):
 
     def test_api_failure_does_not_announce_ready(self):
         with patch.object(self.n, "pages", return_value=iter([self.item])), \
-             patch.object(self.n, "snapshot", side_effect=d.SafeError("GitHub HTTP 403")), \
+             patch.object(self.n, "request_pull_request", side_effect=d.SafeError("GitHub HTTP 403")), \
              patch.object(self.n, "send_notification_once") as send, contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaises(d.SafeError):
-                self.n.ready()
+                self.n.notify_merge_ready_pull_requests()
             send.assert_not_called()
 
     def test_no_available_mapping_does_not_disable_issue_notifications(self):
@@ -283,10 +283,11 @@ class NotificationTests(unittest.TestCase):
 
     def test_merge_ready_to_other_branches_is_silent(self):
         self.item = dict(self.item, base={"ref": "feature"})
-        with patch.object(self.n, "pages", return_value=iter([self.item])), patch.object(self.n, "snapshot") as snapshot, \
+        with patch.object(self.n, "pages", return_value=iter([self.item])), \
+             patch.object(self.n, "request_pull_request") as request, \
              patch.object(self.n, "send_notification_once") as send:
-            self.n.ready()
-            snapshot.assert_not_called()
+            self.n.notify_merge_ready_pull_requests()
+            request.assert_not_called()
             send.assert_not_called()
         self.assertFalse(d.is_ready(dict(self.pr, baseRefName="feature")))
 
