@@ -143,6 +143,14 @@ class Notifier:
     def allowed(self, branch):
         return not self.branches or branch in self.branches
 
+    def send(self, route, message):
+        variable = "DISCORD_ISSUE_WEBHOOK_URL" if route == "issue" else "DISCORD_PR_WEBHOOK_URL"
+        response = request_json(webhook_url(os.environ.get(variable, "")),
+                                {"Content-Type": "application/json", "User-Agent": "dobby-discord-notifier"},
+                                "POST", message, "Discord")
+        if not isinstance(response, dict) or not response.get("id"):
+            raise SafeError("Discord에서 발송 확인을 받지 못했습니다.")
+
     def send_once(self, number, key, route, message):
         marker = f"<!-- discord-notify:v1:{key} -->"
         for comment in self.pages(f"/issues/{number}/comments"):
@@ -150,12 +158,7 @@ class Notifier:
             if (author.get("login") == "github-actions[bot]" and author.get("type") == "Bot"
                     and marker in (comment.get("body") or "")):
                 return False
-        variable = "DISCORD_ISSUE_WEBHOOK_URL" if route == "issue" else "DISCORD_PR_WEBHOOK_URL"
-        response = request_json(webhook_url(os.environ.get(variable, "")),
-                                {"Content-Type": "application/json", "User-Agent": "dobby-discord-notifier"},
-                                "POST", message, "Discord")
-        if not isinstance(response, dict) or not response.get("id"):
-            raise SafeError("Discord에서 발송 확인을 받지 못했습니다.")
+        self.send(route, message)
         # Only GitHub state appears in this public comment. No Discord IDs/URLs.
         self.github(f"/issues/{number}/comments", "POST", {
             "body": marker + "\nDiscord 알림 발송 기록입니다. 중복 방지를 위해 유지해 주세요."})
@@ -167,7 +170,7 @@ class Notifier:
             item = event["issue"]
             if item.get("pull_request"):
                 return
-            self.send_once(item["number"], "issue-opened", "issue", payload(
+            self.send("issue", payload(
                 "📝 새 이슈가 등록됐어요.", f'#{item["number"]} {item["title"]}',
                 item["html_url"], f'작성자: {clean(item["user"]["login"])}'))
             return

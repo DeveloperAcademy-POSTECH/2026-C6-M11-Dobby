@@ -88,9 +88,9 @@ class NotificationTests(unittest.TestCase):
             self.assertEqual(send.call_args.args[1:3], ("pr-announced", "pr"))
 
     def test_issue_goes_to_issue_room(self):
-        with patch.object(self.n, "send_once") as send:
+        with patch.object(self.n, "send") as send:
             self.n.event({"action": "opened", "issue": self.item}, "issues")
-            self.assertEqual(send.call_args.args[2], "issue")
+            self.assertEqual(send.call_args.args[0], "issue")
 
     def test_close_without_merge_silent(self):
         with patch.object(self.n, "send_once") as send:
@@ -112,15 +112,11 @@ class NotificationTests(unittest.TestCase):
 
     def test_routing_uses_distinct_webhook_secrets(self):
         for route, expected in [("issue", "/111/issue_test"), ("pr", "/222/pr_test")]:
-            with patch.object(self.n, "pages", return_value=iter([])), \
-                 patch.object(self.n, "github") as github, \
-                 patch.object(d, "request_json", return_value={"id": "message"}) as request, \
+            with patch.object(d, "request_json", return_value={"id": "message"}) as request, \
                  contextlib.redirect_stdout(io.StringIO()):
-                self.n.send_once(12, "test", route, {})
+                self.n.send(route, {})
                 self.assertIn(expected, request.call_args.args[0])
                 self.assertIn("wait=true", request.call_args.args[0])
-                self.assertNotIn("123456789012345678", json.dumps(github.call_args.args))
-                self.assertNotIn("webhooks", json.dumps(github.call_args.args))
 
     def test_bot_marker_prevents_duplicate_but_user_marker_does_not(self):
         for login, kind, expected in [("github-actions[bot]", "Bot", False), ("alice", "User", True)]:
@@ -186,16 +182,15 @@ class NotificationTests(unittest.TestCase):
             send.assert_not_called()
 
     def test_no_available_mapping_does_not_disable_issue_notifications(self):
-        with patch.dict(os.environ, {"DISCORD_USER_MAP": "invalid"}), patch.object(self.n, "send_once") as send:
+        with patch.dict(os.environ, {"DISCORD_USER_MAP": "invalid"}), patch.object(self.n, "send") as send:
             self.n.event({"action": "opened", "issue": self.item}, "issues")
             send.assert_called_once()
 
     def test_issue_webhook_does_not_fall_back_to_pr_room(self):
         with patch.dict(os.environ, {"DISCORD_ISSUE_WEBHOOK_URL": ""}), \
-             patch.object(self.n, "pages", return_value=iter([])), \
              patch.object(d, "request_json") as request:
             with self.assertRaises(d.SafeError):
-                self.n.send_once(12, "issue-opened", "issue", {})
+                self.n.send("issue", {})
             request.assert_not_called()
 
     def test_title_mentions_are_not_in_allowed_mentions(self):
@@ -249,9 +244,9 @@ class NotificationTests(unittest.TestCase):
 
     def test_issue_author_is_github_login_and_title_is_linked(self):
         item = dict(self.item, html_url="https://github.com/example/project/issues/12")
-        with patch.object(self.n, "send_once") as send:
+        with patch.object(self.n, "send") as send:
             self.n.event({"action": "opened", "issue": item}, "issues")
-            message = send.call_args.args[3]
+            message = send.call_args.args[1]
             self.assertEqual(message["content"],
                              "📝 새 이슈가 등록됐어요.\n**[#12 Feature](https://github.com/example/project/issues/12)**\n작성자: alice")
             self.assertEqual(message["allowed_mentions"]["users"], [])
