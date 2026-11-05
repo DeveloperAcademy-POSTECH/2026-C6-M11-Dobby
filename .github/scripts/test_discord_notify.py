@@ -10,7 +10,6 @@ import discord_notify as d
 
 class NotificationTests(unittest.TestCase):
     def setUp(self):
-        # Synthetic Discord IDs; no real member IDs belong in the repository.
         self.users = {"alice": "123456789012345678", "moogoochung": "111111111111111111",
                       "tobae-time": "222222222222222222", "hana5111": "333333333333333333",
                       "decl5th": "444444444444444444"}
@@ -80,13 +79,15 @@ class NotificationTests(unittest.TestCase):
             self.run_ready().assert_not_called()
 
     def test_draft_opening_silent(self):
-        with patch.object(self.n, "send_once") as send, patch.object(self.n, "github") as github:
+        with patch.object(self.n, "send_once") as send, \
+             patch.object(self.n, "request_repository_json") as request:
             self.n.event({"action": "opened", "pull_request": dict(self.item, draft=True)}, "pull_request_target")
             send.assert_not_called()
-            github.assert_not_called()
+            request.assert_not_called()
 
     def test_ready_for_review_uses_pr_room(self):
-        with patch.object(self.n, "send_once") as send, patch.object(self.n, "github", return_value=self.item):
+        with patch.object(self.n, "send_once") as send, \
+             patch.object(self.n, "request_repository_json", return_value=self.item):
             self.n.event({"action": "ready_for_review", "pull_request": self.item}, "pull_request_target")
             self.assertEqual(send.call_args.args[1:3], ("pr-announced", "pr"))
 
@@ -124,47 +125,50 @@ class NotificationTests(unittest.TestCase):
     def test_bot_marker_prevents_duplicate_but_user_marker_does_not(self):
         for login, kind, expected in [("github-actions[bot]", "Bot", False), ("alice", "User", True)]:
             comments = [{"user": {"login": login, "type": kind}, "body": "<!-- discord-notify:v1:test -->"}]
-            with patch.object(self.n, "pages", return_value=iter(comments)), patch.object(self.n, "github"), \
+            with patch.object(self.n, "pages", return_value=iter(comments)), \
+                 patch.object(self.n, "request_repository_json"), \
                  patch.object(d, "request_json", return_value={"id": "message"}) as request, \
                  contextlib.redirect_stdout(io.StringIO()):
                 self.n.send_once(12, "test", "pr", {})
                 self.assertEqual(request.called, expected)
 
     def test_failed_delivery_does_not_save_marker(self):
-        with patch.object(self.n, "pages", return_value=iter([])), patch.object(self.n, "github") as github, \
+        with patch.object(self.n, "pages", return_value=iter([])), \
+             patch.object(self.n, "request_repository_json") as request, \
              patch.object(d, "request_json", side_effect=d.SafeError("Discord HTTP 500")):
             with self.assertRaises(d.SafeError):
                 self.n.send_once(12, "test", "pr", {})
-            github.assert_not_called()
+            request.assert_not_called()
 
     def test_user_map_validation_never_echoes_values(self):
         for raw in ['{"alice":123456789012345678}', '[]', '{"alice":"private-value"}']:
             with self.assertRaises(d.SafeError) as error:
-                d.member_map(raw)
+                d.parse_discord_user_ids(raw)
             self.assertNotIn("private-value", str(error.exception))
 
     def test_untrusted_titles_cannot_mention_anyone(self):
-        title = d.clean("@everyone <@123456789012345678>\n[click](url)")
+        title = d.escape_discord_text("@everyone <@123456789012345678>\n[click](url)")
         self.assertNotIn("@", title)
         self.assertNotIn("\n", title)
 
     def test_invalid_webhook_never_echoes_url(self):
         with self.assertRaises(d.SafeError) as error:
-            d.webhook_url("https://example.com/secret-token")
+            d.build_confirmed_webhook_url("https://example.com/secret-token")
         self.assertNotIn("secret-token", str(error.exception))
 
     def test_github_pagination_includes_later_results(self):
         first_page = [{"number": number} for number in range(100)]
-        with patch.object(self.n, "github", side_effect=[first_page, [{"number": 101}]]) as github:
+        with patch.object(self.n, "request_repository_json",
+                          side_effect=[first_page, [{"number": 101}]]) as request:
             results = list(self.n.pages("/pulls?state=open"))
             self.assertEqual(len(results), 101)
-            self.assertEqual(github.call_args.args[0], "/pulls?state=open&per_page=100&page=2")
+            self.assertEqual(request.call_args.args[0], "/pulls?state=open&per_page=100&page=2")
 
     def test_marker_lookup_includes_later_pages(self):
         first_page = [{"user": {"login": "alice", "type": "User"}, "body": "comment"}] * 100
         marker = {"user": {"login": "github-actions[bot]", "type": "Bot"},
                   "body": "<!-- discord-notify:v1:pr-merged -->"}
-        with patch.object(self.n, "github", side_effect=[first_page, [marker]]), \
+        with patch.object(self.n, "request_repository_json", side_effect=[first_page, [marker]]), \
              patch.object(d, "request_json") as request:
             self.assertFalse(self.n.send_once(12, "pr-merged", "pr", {}))
             request.assert_not_called()
@@ -203,7 +207,8 @@ class NotificationTests(unittest.TestCase):
 
     def review_message(self, author, action="opened", branch="main"):
         item = dict(self.item, user={"login": author}, base={"ref": branch})
-        with patch.object(self.n, "send_once") as send, patch.object(self.n, "github", return_value=item):
+        with patch.object(self.n, "send_once") as send, \
+             patch.object(self.n, "request_repository_json", return_value=item):
             self.n.event({"action": action, "pull_request": item}, "pull_request_target")
             return send.call_args.args[3]
 
@@ -240,7 +245,8 @@ class NotificationTests(unittest.TestCase):
         users = dict(self.users)
         del users["decl5th"]
         with patch.dict(os.environ, {"DISCORD_USER_MAP": json.dumps(users)}), \
-             patch.object(self.n, "send_once") as send, patch.object(self.n, "github", return_value=self.item):
+             patch.object(self.n, "send_once") as send, \
+             patch.object(self.n, "request_repository_json", return_value=self.item):
             with self.assertRaises(d.SafeError):
                 self.n.event({"action": "opened", "pull_request": self.item}, "pull_request_target")
             send.assert_not_called()

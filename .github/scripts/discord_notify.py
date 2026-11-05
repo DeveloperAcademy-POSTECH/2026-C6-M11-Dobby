@@ -1,5 +1,3 @@
-"""Discord notifications. Python standard library only; never log secrets/payloads."""
-
 import json
 import os
 import re
@@ -12,74 +10,102 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 DEFAULT_REVIEWERS = ("moogoochung", "tobae-time", "hana5111", "decl5th")
 MERGE_TARGETS = frozenset(("develop", "main"))
+NETWORK_ERRORS = (URLError, TimeoutError, OSError, ValueError)
+REQUEST_ATTEMPTS = 3
+SUPPRESS_LINK_EMBEDS = 4
 
 
 class SafeError(Exception):
     pass
 
 
-class NoRedirect(HTTPRedirectHandler):
+class RejectRedirects(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None  # Never forward credentials to another host.
+        return None
+
+
+def build_json_request(url, headers, method, body):
+    encoded_body = None if body is None else json.dumps(body).encode()
+    return Request(url, data=encoded_body, headers=headers, method=method)
+
+
+def read_json_response(request):
+    with build_opener(RejectRedirects()).open(request, timeout=25) as response:
+        response_body = response.read()
+        return json.loads(response_body) if response_body else None
+
+
+def parse_retry_delay(raw_delay):
+    try:
+        return float(raw_delay)
+    except ValueError:
+        return 2
+
+
+def retry_after_rate_limit(error, attempt):
+    if error.code != 429 or attempt == REQUEST_ATTEMPTS - 1:
+        return False
+    delay = parse_retry_delay(error.headers.get("Retry-After", "2"))
+    if 0 <= delay <= 30:
+        time.sleep(delay + 1)
+        return True
+    return False
 
 
 def request_json(url, headers, method="GET", body=None, service="GitHub"):
-    data = None if body is None else json.dumps(body).encode()
-    for attempt in range(3):
+    for attempt in range(REQUEST_ATTEMPTS):
         try:
-            req = Request(url, data=data, headers=headers, method=method)
-            with build_opener(NoRedirect()).open(req, timeout=25) as response:
-                raw = response.read()
-                return json.loads(raw) if raw else None
+            request = build_json_request(url, headers, method, body)
+            return read_json_response(request)
         except HTTPError as error:
-            if error.code == 429 and attempt < 2:
-                try:
-                    delay = float(error.headers.get("Retry-After", "2"))
-                except ValueError:
-                    delay = 2
-                if 0 <= delay <= 30:
-                    time.sleep(delay + 1)
-                    continue
+            if retry_after_rate_limit(error, attempt):
+                continue
             raise SafeError(f"{service} HTTP {error.code}; 응답/URL은 비밀 보호를 위해 생략합니다.") from None
-        except (URLError, TimeoutError, OSError, ValueError):
-            # Do not expose webhook URL, request, response or the member map.
+        except NETWORK_ERRORS:
             raise SafeError(f"{service} 연결 또는 응답 오류. 비밀 값은 로그에 출력하지 않습니다.") from None
 
 
-def clean(value, limit=250):
-    # Prevent titles/branch names from introducing mentions or formatting.
+def escape_discord_text(value, limit=250):
     text = re.sub(r"[\x00-\x1f\x7f]", " ", str(value))[:limit]
     text = text.replace("@", "＠").replace("<", "＜").replace(">", "＞")
     return re.sub(r"([\\`*_~|\[\]])", r"\\\1", text)
 
 
-def member_map(raw):
+def parse_discord_user_ids(raw_user_ids):
     try:
-        result = json.loads(raw or "{}")
-        if not isinstance(result, dict):
+        user_ids = json.loads(raw_user_ids or "{}")
+        if not isinstance(user_ids, dict):
             raise ValueError()
-        if any(not isinstance(k, str) or not isinstance(v, str)
-               or not re.fullmatch(r"[0-9]{17,20}", v) for k, v in result.items()):
+        if any(not valid_discord_user_id(login, user_id) for login, user_id in user_ids.items()):
             raise ValueError()
-        return {key.lower(): value for key, value in result.items()}
+        return {login.lower(): user_id for login, user_id in user_ids.items()}
     except (ValueError, TypeError):
         raise SafeError("DISCORD_USER_MAP 형식 오류. GitHub 아이디:문자열 사용자 ID 형태의 JSON이 필요합니다.") from None
 
 
-def webhook_url(raw):
-    parsed = urlsplit(raw)
-    if (parsed.scheme != "https" or parsed.netloc != "discord.com"
-            or not re.fullmatch(r"/api(?:/v\d+)?/webhooks/\d+/[A-Za-z0-9._-]+", parsed.path)):
+def valid_discord_user_id(login, user_id):
+    return (isinstance(login, str) and isinstance(user_id, str)
+            and re.fullmatch(r"[0-9]{17,20}", user_id))
+
+
+def build_confirmed_webhook_url(raw_url):
+    webhook = urlsplit(raw_url)
+    if not valid_webhook(webhook):
         raise SafeError("Discord Webhook Secret 형식이 잘못되었거나 비어 있습니다.")
-    query = dict(parse_qsl(parsed.query))
+    query = dict(parse_qsl(webhook.query))
     query["wait"] = "true"
-    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
+    return urlunsplit((webhook.scheme, webhook.netloc, webhook.path, urlencode(query), ""))
+
+
+def valid_webhook(webhook):
+    path_pattern = r"/api(?:/v\d+)?/webhooks/\d+/[A-Za-z0-9._-]+"
+    return (webhook.scheme == "https" and webhook.netloc == "discord.com"
+            and re.fullmatch(path_pattern, webhook.path))
 
 
 def reviewers_for(author, users):
     configured = os.environ.get("REVIEWER_LOGINS", "").strip()
     logins = configured.split(",") if configured else DEFAULT_REVIEWERS
-    # GitHub login matching is case-insensitive. Never ping the author's Discord ID.
     logins = dict.fromkeys(login.strip().lower() for login in logins if login.strip())
     selected = [login for login in logins if login != author.lower()]
     if any(login not in users for login in selected):
@@ -89,14 +115,13 @@ def reviewers_for(author, users):
 
 
 def payload(content, title, url, description, user_ids=()):
-    # Mentions must be in message content to notify reviewers; embeds alone do not ping.
-    message = f"{content}\n**[{clean(title)}]({url})**\n{description}"
+    message = f"{content}\n**[{escape_discord_text(title)}]({url})**\n{description}"
     if len(message) > 2000:
         raise SafeError("Discord 알림이 메시지 길이 제한을 초과했습니다.")
     return {
         "content": message,
         "allowed_mentions": {"parse": [], "users": list(dict.fromkeys(user_ids))},
-        "flags": 4,  # Keep the requested compact layout without automatic link previews.
+        "flags": SUPPRESS_LINK_EMBEDS,
     }
 
 
@@ -109,17 +134,23 @@ def is_ready(pr):
             and pr.get("mergeQueueEntry") is None)
 
 
+def build_github_headers(token):
+    return {"Authorization": "Bearer " + token,
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "User-Agent": "dobby-discord-notifier",
+            "X-GitHub-Api-Version": "2022-11-28"}
+
+
 class Notifier:
     def __init__(self):
         self.repo = os.environ["GITHUB_REPOSITORY"]
         self.owner, self.name = self.repo.split("/")
         self.api = os.environ.get("GITHUB_API_URL", "https://api.github.com")
         self.graphql_url = os.environ.get("GITHUB_GRAPHQL_URL", "https://api.github.com/graphql")
-        self.headers = {"Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
-                        "Accept": "application/vnd.github+json", "Content-Type": "application/json",
-                        "User-Agent": "dobby-discord-notifier", "X-GitHub-Api-Version": "2022-11-28"}
+        self.headers = build_github_headers(os.environ["GITHUB_TOKEN"])
 
-    def github(self, path, method="GET", body=None):
+    def request_repository_json(self, path, method="GET", body=None):
         return request_json(self.api + "/repos/" + self.repo + path, self.headers, method, body)
 
     def graphql(self, query, variables):
@@ -133,7 +164,7 @@ class Notifier:
         separator = "&" if "?" in path else "?"
         page = 1
         while True:
-            items = self.github(f"{path}{separator}per_page=100&page={page}")
+            items = self.request_repository_json(f"{path}{separator}per_page=100&page={page}")
             yield from items
             if len(items) < 100:
                 return
@@ -144,7 +175,7 @@ class Notifier:
 
     def send(self, route, message):
         variable = "DISCORD_ISSUE_WEBHOOK_URL" if route == "issue" else "DISCORD_PR_WEBHOOK_URL"
-        response = request_json(webhook_url(os.environ.get(variable, "")),
+        response = request_json(build_confirmed_webhook_url(os.environ.get(variable, "")),
                                 {"Content-Type": "application/json", "User-Agent": "dobby-discord-notifier"},
                                 "POST", message, "Discord")
         if not isinstance(response, dict) or not response.get("id"):
@@ -158,8 +189,7 @@ class Notifier:
                     and marker in (comment.get("body") or "")):
                 return False
         self.send(route, message)
-        # Only GitHub state appears in this public comment. No Discord IDs/URLs.
-        self.github(f"/issues/{number}/comments", "POST", {
+        self.request_repository_json(f"/issues/{number}/comments", "POST", {
             "body": marker + "\nDiscord 알림 발송 기록입니다. 중복 방지를 위해 유지해 주세요."})
         print(f"Notification sent: #{number}, {key.split(':')[0]}.")
         return True
@@ -171,7 +201,7 @@ class Notifier:
                 return
             self.send("issue", payload(
                 "📝 새 이슈가 등록됐어요.", f'#{item["number"]} {item["title"]}',
-                item["html_url"], f'작성자: {clean(item["user"]["login"])}'))
+                item["html_url"], f'작성자: {escape_discord_text(item["user"]["login"])}'))
             return
         if event_name != "pull_request_target":
             return
@@ -181,22 +211,22 @@ class Notifier:
             return
         if action == "closed" and item.get("merged"):
             branch = item["base"]["ref"]
-            author = clean(item["user"]["login"])
+            author = escape_discord_text(item["user"]["login"])
             self.send_once(item["number"], "pr-merged", "pr", payload(
                 "🎉 PR이 머지됐어요.", f'#{item["number"]} {item["title"]}', item["html_url"],
-                f'작성자: {author}\n대상: {clean(branch)}'))
+                f'작성자: {author}\n대상: {escape_discord_text(branch)}'))
         elif action in ("opened", "ready_for_review") and not item.get("draft"):
-            current = self.github(f'/pulls/{item["number"]}')
+            current = self.request_repository_json(f'/pulls/{item["number"]}')
             if current["draft"] or current["state"] != "open" or not self.allowed(current["base"]["ref"]):
                 return
-            users = member_map(os.environ.get("DISCORD_USER_MAP", ""))
+            users = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
             reviewer_ids = reviewers_for(current["user"]["login"], users)
             reviewer_line = " ".join(f"<@{user_id}>" for user_id in reviewer_ids) or "없음"
-            # Shared key: drafting/reopening repeatedly won't repeat the introduction.
             self.send_once(item["number"], "pr-announced", "pr", payload(
                 "🚨 리뷰할 PR이 올라왔어요.", f'#{current["number"]} {current["title"]}',
-                current["html_url"], f'작성자: {clean(current["user"]["login"])}\n'
-                f'{clean(current["head"]["ref"], 120)} → {clean(current["base"]["ref"], 120)}\n'
+                current["html_url"], f'작성자: {escape_discord_text(current["user"]["login"])}\n'
+                f'{escape_discord_text(current["head"]["ref"], 120)} → '
+                f'{escape_discord_text(current["base"]["ref"], 120)}\n'
                 f'리뷰어: {reviewer_line}', reviewer_ids))
 
     def snapshot(self, number):
@@ -215,7 +245,7 @@ class Notifier:
         return self.graphql(query, {"branch": branch})["mergeQueue"] is not None
 
     def ready(self):
-        users = member_map(os.environ.get("DISCORD_USER_MAP", ""))
+        users = parse_discord_user_ids(os.environ.get("DISCORD_USER_MAP", ""))
         failed = False
         queues = {}
         for listed in self.pages("/pulls?state=open"):
@@ -237,7 +267,6 @@ class Notifier:
                 if queues[branch]:
                     print(f"Skipped #{number}: merge queue requires a separate notification policy.")
                     continue
-                # Re-query before notifying to catch new commits/drafts/changed approvals.
                 latest = self.snapshot(number)
                 if (not is_ready(latest) or latest["headRefOid"] != pr["headRefOid"]
                         or latest["baseRefName"] != branch):
@@ -246,16 +275,14 @@ class Notifier:
                 login = (pr.get("author") or {}).get("login", "")
                 user_id = users.get(login.lower())
                 if not user_id:
-                    # No unmentionable notification/marker: fixing the map lets next run retry.
                     print(f"::warning::PR #{number}: 작성자 대응표가 없어 머지 준비 알림을 보류합니다.")
                     continue
                 key = f'pr-ready:{pr["headRefOid"]}'
                 self.send_once(number, key, "pr", payload(
                     f"✅ <@{user_id}> GitHub에서 머지 준비 상태가 확인됐어요. PR을 확인하고 직접 머지해 주세요.",
                     f'#{number} {pr["title"]}', pr["url"],
-                    f'작성자: <@{user_id}>\n대상: {clean(branch)}', [user_id]))
+                    f'작성자: <@{user_id}>\n대상: {escape_discord_text(branch)}', [user_id]))
             except SafeError as error:
-                # Error strings here are controlled and never contain secrets.
                 print(f"::error::PR #{number}: {error}")
                 failed = True
         if failed:
