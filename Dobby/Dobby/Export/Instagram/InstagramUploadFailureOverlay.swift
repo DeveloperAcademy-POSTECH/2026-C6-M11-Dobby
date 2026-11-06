@@ -55,39 +55,10 @@ private struct InstagramUploadFailureActions: View {
     let onRetry: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            InstagramUploadFailureButton(
-                title: "취소하기",
-                foregroundColor: Color(.brandNeutral900),
-                backgroundColor: Color(.brandNeutral100),
-                action: onCancel
-            )
-            InstagramUploadFailureButton(
-                title: "다시 업로드하기",
-                foregroundColor: Color(.brandNeutralWhite),
-                backgroundColor: Color(.brandMain500),
-                action: onRetry
-            )
-        }
-    }
-}
-
-private struct InstagramUploadFailureButton: View {
-    let title: String
-    let foregroundColor: Color
-    let backgroundColor: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.custom("Pretendard-Medium", fixedSize: 16))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, minHeight: 56)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(foregroundColor)
-        .background(backgroundColor, in: Capsule())
+        PairedActionButtons(
+            secondary: .init(title: "취소하기", handler: onCancel),
+            primary: .init(title: "다시 업로드하기", handler: onRetry)
+        )
     }
 }
 

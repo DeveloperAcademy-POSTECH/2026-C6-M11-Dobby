@@ -14,7 +14,7 @@ struct InstagramUploadCompletionView: View {
             VStack(spacing: Layout.contentSpacing) {
                 Image(systemName: "square.and.arrow.up.badge.checkmark")
                     .font(.system(size: 61.96363, weight: .medium))
-                    .foregroundStyle(Color(.brandMain100))
+                    .foregroundStyle(Color(.brandMain500))
                     .accessibilityHidden(true)
 
                 Text("업로드 완료")
@@ -27,34 +27,25 @@ struct InstagramUploadCompletionView: View {
             .multilineTextAlignment(.center)
             .foregroundStyle(Color(.brandNeutralBlack))
 
-            HStack(spacing: 0) {
-                Button("인스타그램 열기", action: {})
-                    .buttonStyle(InstagramUploadCompletionButtonStyle())
-                    .accessibilityIdentifier("export.instagram.open")
-
-                Button("보관함으로 가기", action: {})
-                    .buttonStyle(InstagramUploadCompletionButtonStyle())
-                    .accessibilityIdentifier("export.instagram.library")
-            }
+            PairedActionButtons(
+                secondary: .init(
+                    title: "보관함으로 가기",
+                    accessibilityIdentifier: "export.instagram.library",
+                    handler: {}
+                ),
+                primary: .init(
+                    title: "인스타그램 열기",
+                    accessibilityIdentifier: "export.instagram.open",
+                    handler: {}
+                ),
+                minimumHeight: 62
+            )
             .padding(.horizontal, Layout.buttonBarHorizontalPadding)
             .padding(.top, Layout.buttonBarTopPadding)
             .padding(.bottom, Layout.buttonBarBottomPadding)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color(.brandNeutral50).ignoresSafeArea())
-    }
-}
-
-private struct InstagramUploadCompletionButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.custom("Pretendard-Medium", fixedSize: 16))
-            .multilineTextAlignment(.center)
-            .foregroundStyle(Color(.brandNeutralWhite))
-            .padding(.horizontal, 28)
-            .frame(maxWidth: .infinity, minHeight: 62, maxHeight: 62)
-            .background(Color(.brandMain100), in: Capsule())
-            .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }
 
