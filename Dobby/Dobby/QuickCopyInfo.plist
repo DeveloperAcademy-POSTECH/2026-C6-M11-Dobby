@@ -24,7 +24,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>선택한 상품 사진을 기기에 저장하기 위해 사진 보관함 접근이 필요합니다.</string>
+	<string>촬영한 상세 사진과 선택한 상품 사진을 아이폰 사진 앱에 저장하기 위해 사진 추가 권한이 필요합니다.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Pretendard-Regular.otf</string>
