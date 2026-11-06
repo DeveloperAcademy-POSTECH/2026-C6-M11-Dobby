@@ -1,6 +1,6 @@
 import XCTest
 
-/// Explicit synthetic responses exercise the A flow without uploading a photo
+/// Explicit synthetic responses exercise the final manual B flow without uploading a photo
 /// or spending API credits. Live garment recognition is tested separately.
 final class ProductAutofillFlowTests: XCTestCase {
     private let generatedName = "AI 테스트 네이비 집업 후드"
@@ -8,21 +8,23 @@ final class ProductAutofillFlowTests: XCTestCase {
     private let generatedDescription = "네이비 컬러와 전면 지퍼가 돋보이는 후드입니다.\n\n심플한 디자인으로 다양한 하의와 매치하기 좋습니다."
 
     @MainActor
-    func testEnabledNextShowsLoadingAndAutofillsOnlyThreeFields() {
+    func testInformationButtonStartsGenerationAndAutofillsOnlyThreeFields() {
         let app = openSelection(result: "delay")
         defer { app.terminate() }
-        XCTAssertEqual(app.switches["product-ai.toggle"].value as? String, "1")
+        XCTAssertFalse(app.switches["product-ai.toggle"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists,
-                       "Changing photo selection or the toggle must not start generation")
+                       "Changing photo selection must not start generation")
         // The newly selectable measurement visualization must coexist with
-        // the original and the captured detail in the A flow's saved output.
+        // the original and the captured detail in the saved product output.
         tap(app, "camera.grid.select.1")
         XCTAssertEqual(app.buttons["camera.grid.select.1"].value as? String, "3번째 선택")
-        screenshot(app, name: "a-flow-photo-selection-ai-enabled")
+        screenshot(app, name: "manual-b-flow-photo-selection")
         tap(app, "camera.completePhotos")
-        XCTAssertTrue(app.descendants(matching: .any)["product-ai.loading"].firstMatch.waitForExistence(timeout: 5))
-        screenshot(app, name: "a-flow-generating-information")
         waitForInformation(in: app)
+        assertEmptyFields(in: app)
+        tap(app, "product-ai.generate")
+        XCTAssertTrue(app.descendants(matching: .any)["product-ai.loading"].firstMatch.waitForExistence(timeout: 5))
+        screenshot(app, name: "manual-b-flow-generating-information")
         assertGeneratedFields(in: app)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo.")).count, 3)
         XCTAssertEqual(field("price", in: app).value as? String, "")
@@ -30,21 +32,22 @@ final class ProductAutofillFlowTests: XCTestCase {
         XCTAssertTrue(field("measurement.shoulderWidth", in: app).exists)
         XCTAssertFalse((field("measurement.shoulderWidth", in: app).value as? String ?? "").isEmpty)
         XCTAssertFalse(app.descendants(matching: .any)["product-ai.reviewNotes"].firstMatch.exists)
-        screenshot(app, name: "a-flow-generated-fields-and-retained-measurements")
+        screenshot(app, name: "manual-b-flow-generated-fields-and-retained-measurements")
     }
 
     @MainActor
-    func testDisabledNextSkipsGenerationAndKeepsManualFieldsEmpty() {
-        // A failure fixture would fail if the disabled flow accidentally called AI.
+    func testPhotoSelectionNextSkipsGenerationAndKeepsManualFieldsEmpty() {
+        // A failure fixture exposes any accidental automatic AI request.
         let app = openSelection(result: "failure")
         defer { app.terminate() }
-        disableProductAutofillIfPresent(in: app)
+        XCTAssertFalse(app.switches["product-ai.toggle"].exists)
         tap(app, "camera.completePhotos")
         waitForInformation(in: app)
         assertEmptyFields(in: app)
         XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists)
         XCTAssertFalse(app.buttons["product-ai.retry"].firstMatch.exists)
-        screenshot(app, name: "a-flow-ai-disabled-manual-information")
+        XCTAssertTrue(app.buttons["product-ai.generate"].exists)
+        screenshot(app, name: "manual-b-flow-information-before-generation")
     }
 
     @MainActor
@@ -52,11 +55,13 @@ final class ProductAutofillFlowTests: XCTestCase {
         let app = openSelection(result: "failure-once")
         defer { app.terminate() }
         tap(app, "camera.completePhotos")
+        waitForInformation(in: app)
+        tap(app, "product-ai.generate")
         XCTAssertTrue(app.buttons["product-ai.retry"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["product-ai.manual"].firstMatch.exists)
-        screenshot(app, name: "a-flow-generation-failed-retry-or-manual")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
+        screenshot(app, name: "manual-b-flow-generation-failed-retry-or-manual")
         tap(app, "product-ai.retry")
-        waitForInformation(in: app)
         assertGeneratedFields(in: app)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo.")).count, 2)
         XCTAssertFalse(app.descendants(matching: .any)["product-ai.reviewNotes"].firstMatch.exists)
@@ -67,6 +72,8 @@ final class ProductAutofillFlowTests: XCTestCase {
         let app = openSelection(result: "failure")
         defer { app.terminate() }
         tap(app, "camera.completePhotos")
+        waitForInformation(in: app)
+        tap(app, "product-ai.generate")
         tap(app, "product-ai.manual")
         waitForInformation(in: app)
         assertEmptyFields(in: app)
@@ -78,15 +85,17 @@ final class ProductAutofillFlowTests: XCTestCase {
         let app = openSelection(result: "delay")
         defer { app.terminate() }
         tap(app, "camera.completePhotos")
-        tap(app, "product-ai.cancel")
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["camera.grid.select.0"].value as? String, "1번째 선택")
-        XCTAssertEqual(app.buttons["camera.grid.select.2"].value as? String, "2번째 선택")
-        XCTAssertFalse(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 6),
-                       "A cancelled response must not move the user or fill a later screen")
-        disableProductAutofillIfPresent(in: app)
-        tap(app, "camera.completePhotos")
         waitForInformation(in: app)
+        tap(app, "product-ai.generate")
+        tap(app, "product-ai.cancel")
+        waitForInformation(in: app)
+        assertEmptyFields(in: app)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo.")).count, 2)
+        XCTAssertTrue(app.buttons["product-ai.generate"].isEnabled)
+        let lateOverwrite = expectation(for: NSPredicate(format: "value == %@", generatedName),
+                                        evaluatedWith: field("name", in: app))
+        lateOverwrite.isInverted = true
+        wait(for: [lateOverwrite], timeout: 6)
         assertEmptyFields(in: app)
     }
 
@@ -115,16 +124,20 @@ final class ProductAutofillFlowTests: XCTestCase {
     @MainActor
     private func waitForInformation(in app: XCUIApplication) {
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["product-ai.loading"].firstMatch.waitForNonExistence(timeout: 5))
     }
 
     @MainActor
     private func assertGeneratedFields(in app: XCUIApplication) {
+        let generated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", generatedName),
+                                                 object: field("name", in: app))
+        XCTAssertEqual(XCTWaiter.wait(for: [generated], timeout: 15), .completed)
+        XCTAssertTrue(app.descendants(matching: .any)["product-ai.loading"].firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertEqual(field("name", in: app).value as? String, generatedName)
         XCTAssertEqual(field("detail", in: app).value as? String, generatedDescription)
         XCTAssertEqual(field("brand", in: app).value as? String, generatedBrand)
         XCTAssertFalse(generatedDescription.contains("실물로 확인"), "Review guidance belongs outside sale copy")
-        screenshot(app, name: "a-flow-generated-product-information")
+        screenshot(app, name: "manual-b-flow-generated-product-information")
     }
 
     @MainActor

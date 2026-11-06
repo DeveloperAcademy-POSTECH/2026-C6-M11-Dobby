@@ -1,6 +1,6 @@
 import XCTest
 
-/// B is selected through the real Settings screen. All generation responses
+/// B is the final flow without a Settings choice. All generation responses
 /// are explicit local fixtures; these tests never upload photos or spend API credits.
 final class ProductAutofillBFlowTests: XCTestCase {
     private let generatedName = "AI 테스트 네이비 집업 후드"
@@ -8,25 +8,26 @@ final class ProductAutofillBFlowTests: XCTestCase {
     private let generatedDescription = "네이비 컬러와 전면 지퍼가 돋보이는 후드입니다.\n\n심플한 디자인으로 다양한 하의와 매치하기 좋습니다."
 
     @MainActor
-    func testSettingsPersistsBAndCanRestoreTheAFlow() {
+    func testFinalBFlowHasNoSettingsChoiceAndNextNeverStartsGeneration() {
         let app = makeApp(result: "failure")
         defer { app.terminate() }
         app.launch()
         openSettings(in: app)
-        assertSelectedFlow(isB: false, in: app)
-        setBFlow(true, in: app)
-        screenshot(app, name: "ai-flow-settings-b-selected")
+        screenshot(app, name: "ai-flow-settings-without-ab-choice")
 
         app.terminate()
         app.launch()
         openSettings(in: app)
-        assertSelectedFlow(isB: true, in: app)
-        setBFlow(false, in: app)
-        screenshot(app, name: "ai-flow-settings-a-restored")
         app.tabBars.buttons["홈"].tap()
         openPhotoSelection(in: app)
-        XCTAssertTrue(app.switches["product-ai.toggle"].exists, "Returning to A must restore its photo-screen toggle")
-        XCTAssertEqual(app.switches["product-ai.toggle"].value as? String, "1")
+        XCTAssertFalse(app.switches["product-ai.toggle"].exists)
+        tap(app, "camera.completePhotos")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["product-ai.generate"].waitForExistence(timeout: 5))
+        assertEmptyFields(in: app)
+        XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists)
+        XCTAssertFalse(app.buttons["product-ai.retry"].firstMatch.exists,
+                       "The failure fixture must not run merely by advancing to information")
     }
 
     @MainActor
@@ -172,9 +173,6 @@ final class ProductAutofillBFlowTests: XCTestCase {
     private func openInformation(result: String) -> XCUIApplication {
         let app = makeApp(result: result)
         app.launch()
-        openSettings(in: app)
-        setBFlow(true, in: app)
-        app.tabBars.buttons["홈"].tap()
         openPhotoSelection(in: app)
         XCTAssertFalse(app.switches["product-ai.toggle"].exists,
                        "B generation belongs to information entry, not photo selection")
@@ -190,39 +188,9 @@ final class ProductAutofillBFlowTests: XCTestCase {
         let settings = app.tabBars.buttons["설정"]
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
         settings.tap()
-        let a = flowOption(isB: false, in: app)
-        let b = flowOption(isB: true, in: app)
-        XCTAssertTrue(a.waitForExistence(timeout: 5))
-        XCTAssertTrue(b.waitForExistence(timeout: 5))
-        XCTAssertEqual(a.label, "A안(사진 선택 뷰 토글)")
-        XCTAssertEqual(b.label, "B안(제품 정보 입력 뷰)")
-        XCTAssertTrue(app.frame.contains(a.frame), "The complete A choice must fit in the settings screen")
-        XCTAssertTrue(app.frame.contains(b.frame), "The complete B choice must fit in the settings screen")
-    }
-
-    @MainActor
-    private func flowOption(isB: Bool, in app: XCUIApplication) -> XCUIElement {
-        app.buttons[isB ? "settings.aiFlow.b" : "settings.aiFlow.a"].firstMatch
-    }
-
-    @MainActor
-    private func setBFlow(_ enabled: Bool, in app: XCUIApplication) {
-        let option = flowOption(isB: enabled, in: app)
-        if option.value as? String != "선택됨" {
-            option.tap()
-        }
-        waitForValue("선택됨", of: option, timeout: 3)
-        assertSelectedFlow(isB: enabled, in: app)
-    }
-
-    @MainActor
-    private func assertSelectedFlow(isB: Bool, in app: XCUIApplication) {
-        let selected = flowOption(isB: isB, in: app)
-        let other = flowOption(isB: !isB, in: app)
-        XCTAssertEqual(selected.value as? String, "선택됨")
-        XCTAssertEqual(other.value as? String, "선택 안 됨")
-        XCTAssertTrue(selected.isSelected)
-        XCTAssertFalse(other.isSelected)
+        XCTAssertTrue(app.staticTexts["기본 설정"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["settings.aiFlow.a"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["settings.aiFlow.b"].firstMatch.exists)
     }
 
     @MainActor

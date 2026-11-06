@@ -4,16 +4,19 @@ import SwiftUI
 struct ProductInputPhotoSection: View {
     let garment: Garment
     var allowsEditing = false
+    // Entry and archive editing both allow removal. The edit-mode flag only
+    // controls the existing spacing; it must not rename entry as editing.
+    var allowsRemoval = true
     @Environment(\.modelContext) private var context
     @State private var expandedPhoto: GarmentPhoto?
     @State private var showsDeletionError = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: allowsEditing ? 4 : 8) {
+        VStack(alignment: .leading, spacing: allowsRemoval ? 4 : 8) {
             ProductFieldTitle(title: "제품 사진")
             ScrollView(.horizontal, showsIndicators: false) {
                 photoRow.padding(.horizontal, 20)
-                    .padding(.top, allowsEditing ? 4 : 0)
+                    .padding(.top, allowsRemoval ? 4 : 0)
             }
             .padding(.horizontal, -20)
         }
@@ -39,7 +42,7 @@ struct ProductInputPhotoSection: View {
         } else {
             HStack(spacing: allowsEditing ? 16 : 8) {
                 ForEach(garment.productPhotos) { photo in
-                    if allowsEditing {
+                    if allowsRemoval {
                         ProductInputEditablePhoto(photo: photo, onExpand: { expand(photo) },
                                                   onDelete: { deletePhoto(photo.id) })
                     } else {
@@ -66,7 +69,7 @@ struct ProductInputPhotoSection: View {
     }
 
     private var deletionAction: ((UUID) throws -> Bool)? {
-        guard allowsEditing else { return nil }
+        guard allowsRemoval else { return nil }
         return { id in try removePhoto(id) }
     }
 
@@ -89,18 +92,23 @@ private struct ProductInputEditablePhoto: View {
         .accessibilityIdentifier("product-info.photo.\(photo.id)")
         .overlay(alignment: .topTrailing) {
             Button(action: onDelete) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
-                    .background(Color("BrandNeutral700"), in: Circle())
-                    .padding(12)
-                    .contentShape(Rectangle())
+                ZStack(alignment: .topTrailing) {
+                    Color.clear
+                    Image(systemName: "minus")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 17, height: 17)
+                        .background(Color("BrandNeutral700"), in: Circle())
+                }
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("제품 사진 삭제")
             .accessibilityIdentifier("product-info.delete-photo.\(photo.id)")
-            .offset(x: 17.5, y: -16)
+            // The visible badge overhangs by four points, while the hit area
+            // stays out of the next thumbnail (including the eight-point gap).
+            .offset(x: 4, y: -3)
         }
     }
 }
