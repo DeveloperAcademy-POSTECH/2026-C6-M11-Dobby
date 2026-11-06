@@ -15,8 +15,8 @@ struct PairedActionButtons: View {
         HStack(spacing: 8) {
             actionButton(
                 secondary,
-                foregroundColor: Color(.brandNeutral900),
-                backgroundColor: Color(.brandNeutral100)
+                foregroundColor: Color(.brandMain500),
+                backgroundColor: Color(.brandMain100)
             )
             actionButton(
                 primary,

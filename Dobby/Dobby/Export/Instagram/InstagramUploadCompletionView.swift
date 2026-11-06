@@ -44,7 +44,7 @@ struct InstagramUploadCompletionView: View {
             .padding(.top, Layout.buttonBarTopPadding)
             .padding(.bottom, Layout.buttonBarBottomPadding)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .background(Color(.brandNeutral50).ignoresSafeArea())
     }
 }
