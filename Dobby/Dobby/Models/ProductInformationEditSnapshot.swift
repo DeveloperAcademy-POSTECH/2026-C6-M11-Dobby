@@ -6,6 +6,7 @@ struct ProductInformationEditSnapshot: Equatable {
         let id: UUID
         let isSelectedForProduct: Bool?
         let roleRaw: String
+        let order: Int
     }
 
     private struct MeasurementState: Equatable {
@@ -40,7 +41,7 @@ struct ProductInformationEditSnapshot: Equatable {
         sleeveCm = garment.sleeveCm
         waistCm = garment.waistCm
         photos = garment.photos.map {
-            PhotoState(id: $0.id, isSelectedForProduct: $0.isSelectedForProduct, roleRaw: $0.roleRaw)
+            PhotoState(id: $0.id, isSelectedForProduct: $0.isSelectedForProduct, roleRaw: $0.roleRaw, order: $0.order)
         }.sorted { $0.id.uuidString < $1.id.uuidString }
         measurements = garment.measurements.map {
             MeasurementState(id: $0.id, valueBitPattern: $0.valueCm.bitPattern, isEdited: $0.isEdited)
@@ -68,6 +69,7 @@ struct ProductInformationEditSnapshot: Equatable {
             guard let state = photoStates[photo.id] else { continue }
             photo.isSelectedForProduct = state.isSelectedForProduct
             photo.roleRaw = state.roleRaw
+            photo.order = state.order
         }
 
         let measurementStates = Dictionary(uniqueKeysWithValues: measurements.map { ($0.id, $0) })
