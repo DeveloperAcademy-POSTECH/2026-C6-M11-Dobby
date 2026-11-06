@@ -19,18 +19,20 @@ def create_discord_user_ids():
 def create_test_environment(discord_user_ids):
     return {"DISCORD_USER_MAP": json.dumps(discord_user_ids), "REVIEWER_LOGINS": "",
             "DISCORD_ISSUE_WEBHOOK_URL": "https://discord.com/api/webhooks/111/issue_test",
-            "DISCORD_PR_WEBHOOK_URL": "https://discord.com/api/webhooks/222/pr_test"}
+            "DISCORD_PR_WEBHOOK_URL": "https://discord.com/api/webhooks/222/pr_test",
+            "GITHUB_REPOSITORY": "example/project", "GITHUB_TOKEN": "test-token",
+            "PULL_REQUEST_NUMBER": "12"}
 
 
 def create_pull_request():
     return {"number": 12, "title": "Feature", "html_url": "https://github.com/example/project/pull/12",
-            "draft": False, "state": "open", "head": {"ref": "feature"},
+            "draft": False, "state": "open", "head": {"ref": "feature", "sha": "head-sha"},
             "base": {"ref": "main"}, "user": {"login": "alice"}, "merged": False}
 
 
-def create_review_event(pull_request, state="approved"):
-    return {"action": "submitted", "pull_request": pull_request,
-            "review": {"state": state, "user": {"login": "reviewer"}}}
+def create_review(state="APPROVED", commit_id="head-sha"):
+    return {"state": state, "commit_id": commit_id, "submitted_at": "2026-11-06T00:00:00Z",
+            "user": {"login": "reviewer"}}
 
 
 class NotificationTests(unittest.TestCase):
@@ -88,31 +90,54 @@ class NotificationTests(unittest.TestCase):
             send.assert_not_called()
 
     def test_approval_mentions_pull_request_author(self):
-        with patch.object(self.notifier, "send_discord_message") as send:
-            self.notifier.handle_event(create_review_event(self.pull_request), "pull_request_review")
+        with patch.object(self.notifier, "request_pull_request", return_value=self.pull_request), \
+             patch.object(self.notifier, "request_reviews", return_value=[create_review()]), \
+             patch.object(self.notifier, "send_discord_message") as send:
+            self.notifier.notify_approved_pull_request()
             message = send.call_args.args[1]
             self.assertEqual(send.call_args.args[0], "pr")
             self.assertEqual(message["allowed_mentions"]["users"], [self.discord_user_ids["alice"]])
             self.assertIn("승인자: reviewer", message["content"])
 
     def test_non_approval_review_is_silent(self):
-        event = create_review_event(self.pull_request, "commented")
-        with patch.object(self.notifier, "send_discord_message") as send:
-            self.notifier.handle_event(event, "pull_request_review")
+        with patch.object(self.notifier, "request_pull_request", return_value=self.pull_request), \
+             patch.object(self.notifier, "request_reviews", return_value=[create_review("COMMENTED")]), \
+             patch.object(self.notifier, "send_discord_message") as send:
+            self.notifier.notify_approved_pull_request()
             send.assert_not_called()
 
     def test_approval_to_unsupported_branch_is_silent(self):
         pull_request = dict(self.pull_request, base={"ref": "feature"})
-        with patch.object(self.notifier, "send_discord_message") as send:
-            self.notifier.handle_event(create_review_event(pull_request), "pull_request_review")
+        with patch.object(self.notifier, "request_pull_request", return_value=pull_request), \
+             patch.object(self.notifier, "request_reviews") as reviews, \
+             patch.object(self.notifier, "send_discord_message") as send:
+            self.notifier.notify_approved_pull_request()
+            reviews.assert_not_called()
             send.assert_not_called()
 
     def test_missing_author_mapping_defers_approval(self):
         with patch.dict(os.environ, {"DISCORD_USER_MAP": "{}"}), \
+             patch.object(self.notifier, "request_pull_request", return_value=self.pull_request), \
+             patch.object(self.notifier, "request_reviews", return_value=[create_review()]), \
              patch.object(self.notifier, "send_discord_message") as send, \
              contextlib.redirect_stdout(io.StringIO()):
-            self.notifier.handle_event(create_review_event(self.pull_request), "pull_request_review")
+            self.notifier.notify_approved_pull_request()
             send.assert_not_called()
+
+    def test_approval_for_old_commit_is_silent(self):
+        with patch.object(self.notifier, "request_pull_request", return_value=self.pull_request), \
+             patch.object(self.notifier, "request_reviews", return_value=[create_review(commit_id="old")]), \
+             patch.object(self.notifier, "send_discord_message") as send:
+            self.notifier.notify_approved_pull_request()
+            send.assert_not_called()
+
+    def test_approval_reads_only_selected_pull_request(self):
+        with patch.object(d, "request_json", side_effect=[self.pull_request, [create_review()]]) as request, \
+             patch.object(self.notifier, "send_discord_message"):
+            self.notifier.notify_approved_pull_request()
+            urls = [call.args[0] for call in request.call_args_list]
+            self.assertEqual(urls[0], "https://api.github.com/repos/example/project/pulls/12")
+            self.assertEqual(urls[1], "https://api.github.com/repos/example/project/pulls/12/reviews?per_page=100")
 
     def test_merge_completion_uses_pr_webhook_without_mentions(self):
         pull_request = dict(self.pull_request, merged=True)

@@ -52,16 +52,16 @@ def retry_after_rate_limit(error, attempt):
     return False
 
 
-def request_json(url, headers, method="GET", body=None):
+def request_json(url, headers, method="GET", body=None, service="Discord"):
     for attempt in range(REQUEST_ATTEMPTS):
         try:
             return read_json_response(build_json_request(url, headers, method, body))
         except HTTPError as error:
             if retry_after_rate_limit(error, attempt):
                 continue
-            raise SafeError(f"Discord HTTP {error.code}; 응답/URL은 비밀 보호를 위해 생략합니다.") from None
+            raise SafeError(f"{service} HTTP {error.code}; 응답/URL은 비밀 보호를 위해 생략합니다.") from None
         except NETWORK_ERRORS:
-            raise SafeError("Discord 연결 또는 응답 오류. 비밀 값은 로그에 출력하지 않습니다.") from None
+            raise SafeError(f"{service} 연결 또는 응답 오류. 비밀 값은 로그에 출력하지 않습니다.") from None
 
 
 def escape_discord_text(value, limit=250):
@@ -164,10 +164,44 @@ def review_request_is_current(pull_request):
             and pull_request["base"]["ref"] in MERGE_TARGETS)
 
 
-def review_approves_supported_branch(event):
-    return (event.get("action") == "submitted"
-            and (event.get("review") or {}).get("state", "").lower() == "approved"
-            and event["pull_request"]["base"]["ref"] in MERGE_TARGETS)
+def required_environment(name):
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise SafeError(f"필수 GitHub Actions 설정 {name}이 비어 있습니다.")
+    return value
+
+
+def github_headers():
+    return {"Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {required_environment('GITHUB_TOKEN')}",
+            "User-Agent": "dobby-discord-notifier",
+            "X-GitHub-Api-Version": "2022-11-28"}
+
+
+def github_repository():
+    repository = required_environment("GITHUB_REPOSITORY")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        raise SafeError("GITHUB_REPOSITORY 형식이 올바르지 않습니다.")
+    return repository
+
+
+def pull_request_number():
+    number = required_environment("PULL_REQUEST_NUMBER")
+    if not number.isdigit():
+        raise SafeError("PULL_REQUEST_NUMBER 형식이 올바르지 않습니다.")
+    return number
+
+
+def github_pull_request_path(number, suffix=""):
+    repository = github_repository()
+    return f"https://api.github.com/repos/{repository}/pulls/{number}{suffix}"
+
+
+def latest_current_approval(pull_request, reviews):
+    head_sha = pull_request["head"]["sha"]
+    approvals = [review for review in reviews
+                 if review.get("state") == "APPROVED" and review.get("commit_id") == head_sha]
+    return max(approvals, key=lambda review: review.get("submitted_at", ""), default=None)
 
 
 class Notifier:
@@ -184,8 +218,7 @@ class Notifier:
 
     def handle_event(self, event, event_name):
         handlers = {"issues": self.handle_issue_event,
-                    "pull_request_target": self.handle_pull_request_event,
-                    "pull_request_review": self.handle_review_event}
+                    "pull_request_target": self.handle_pull_request_event}
         handler = handlers.get(event_name)
         if handler:
             handler(event)
@@ -212,15 +245,29 @@ class Notifier:
         author_login = pull_request["user"]["login"].lower()
         return self.discord_user_ids().get(author_login)
 
-    def handle_review_event(self, event):
-        if not review_approves_supported_branch(event):
+    def request_pull_request(self, number):
+        return request_json(github_pull_request_path(number), github_headers(), service="GitHub")
+
+    def request_reviews(self, number):
+        path = github_pull_request_path(number, "/reviews?per_page=100")
+        return request_json(path, github_headers(), service="GitHub")
+
+    def notify_approved_pull_request(self):
+        number = pull_request_number()
+        pull_request = self.request_pull_request(number)
+        if not review_request_is_current(pull_request):
             return
-        pull_request = event["pull_request"]
+        approval = latest_current_approval(pull_request, self.request_reviews(number))
+        if not approval:
+            return
+        self.notify_approval(pull_request, approval["user"]["login"])
+
+    def notify_approval(self, pull_request, reviewer_login):
         author_user_id = self.discord_user_id_for_author(pull_request)
         if not author_user_id:
             print(f'::warning::PR #{pull_request["number"]}: 작성자 대응표가 없어 승인 알림을 보류합니다.')
             return
-        message = build_approval_message(pull_request, event["review"]["user"]["login"], author_user_id)
+        message = build_approval_message(pull_request, reviewer_login, author_user_id)
         self.send_discord_message("pr", message)
 
     def notify_merge_completed(self, pull_request):
@@ -240,9 +287,13 @@ def load_event():
 
 
 def main():
-    if sys.argv[1:] != ["event"]:
-        raise SafeError("사용법: discord_notify.py event")
-    Notifier().handle_event(load_event(), os.environ["GITHUB_EVENT_NAME"])
+    command = sys.argv[1:]
+    if command == ["event"]:
+        Notifier().handle_event(load_event(), required_environment("GITHUB_EVENT_NAME"))
+    elif command == ["approval"]:
+        Notifier().notify_approved_pull_request()
+    else:
+        raise SafeError("사용법: discord_notify.py event|approval")
 
 
 if __name__ == "__main__":
