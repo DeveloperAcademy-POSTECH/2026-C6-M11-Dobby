@@ -4,79 +4,50 @@ on:
   issues:
     types: [opened]
   pull_request_target:
-    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, edited, closed]
+    types: [opened, ready_for_review, closed]
   workflow_run:
-    # 앱 CI를 추가하면 해당 워크플로의 최상단 name 값도 여기에 추가하세요.
-    workflows: [PR Review Signal, Discord Notification Tests]
+    workflows: [PR Review Signal]
     types: [completed]
-  check_run:
-    types: [completed]
-  status:
-  branch_protection_rule:
-    types: [created, edited, deleted]
-  push:
-    # 기본 브랜치가 다르면 변경하세요.
-    branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   event-notification:
     if: >-
-      github.event_name == 'issues' ||
-      (github.event_name == 'pull_request_target' &&
-      (github.event.action == 'opened' || github.event.action == 'ready_for_review' ||
-      (github.event.action == 'closed' && github.event.pull_request.merged == true)))
+      (github.event_name != 'pull_request_target' || github.event.action != 'closed' ||
+      github.event.pull_request.merged == true) &&
+      (github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.pull_requests[0].number != null))
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: write
     concurrency:
-      group: discord-event-${{ github.event.issue.number || github.event.pull_request.number }}
+      group: >-
+        discord-event-${{ github.event.issue.number || github.event.pull_request.number ||
+        github.event.workflow_run.pull_requests[0].number || github.run_id }}
       cancel-in-progress: false
     steps:
       - name: Read trusted default-branch files
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           sparse-checkout: .github/scripts
-      - name: Notify issue or PR event
+      - name: Notify Discord about repository event
+        if: github.event_name != 'workflow_run'
         run: python3 .github/scripts/discord_notify.py event
         env:
-          GITHUB_TOKEN: ${{ github.token }}
           DISCORD_ISSUE_WEBHOOK_URL: ${{ secrets.DISCORD_ISSUE_WEBHOOK_URL }}
           DISCORD_PR_WEBHOOK_URL: ${{ secrets.DISCORD_PR_WEBHOOK_URL }}
           DISCORD_USER_MAP: ${{ secrets.DISCORD_USER_MAP }}
-          # 비워 두면 moogoochung, tobae-time, hana5111, decl5th를 사용합니다.
           REVIEWER_LOGINS: ${{ vars.DISCORD_REVIEWER_LOGINS }}
-          TARGET_BRANCHES: ${{ vars.DISCORD_TARGET_BRANCHES }}
-
-  merge-readiness:
-    if: github.event_name != 'issues'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
-    concurrency:
-      group: discord-merge-readiness
-      cancel-in-progress: false
-    steps:
-      - name: Read trusted default-branch files
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-          sparse-checkout: .github/scripts
-      - name: Check open PRs and notify their authors
-        run: python3 .github/scripts/discord_notify.py ready
+      - name: Notify Discord about approved pull request
+        if: github.event_name == 'workflow_run'
+        run: python3 .github/scripts/discord_notify.py approval
         env:
-          GITHUB_TOKEN: ${{ github.token }}
           DISCORD_PR_WEBHOOK_URL: ${{ secrets.DISCORD_PR_WEBHOOK_URL }}
           DISCORD_USER_MAP: ${{ secrets.DISCORD_USER_MAP }}
-          TARGET_BRANCHES: ${{ vars.DISCORD_TARGET_BRANCHES }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PULL_REQUEST_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
