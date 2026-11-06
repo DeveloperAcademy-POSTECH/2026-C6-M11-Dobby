@@ -154,6 +154,10 @@ struct ProductCreationFlowView: View {
             }
         }
         .task { if isRestoring { await restoreDraft() } }
+        .onChange(of: garment?.productPhotos.map(\.id)) { _, _ in
+            guard path.last == .information else { return }
+            synchronizeInformationPhotoSelection()
+        }
     }
 
     @ViewBuilder
@@ -179,7 +183,9 @@ struct ProductCreationFlowView: View {
                         onExit: handleInformationBack, onGenerateAI: informationAICompletion,
                         onCancelGeneration: { autofill.cancel() },
                         onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 }) {
-                        _ in path.append(.completed)
+                        _ in
+                        synchronizeInformationPhotoSelection()
+                        path.append(.completed)
                     }
                 case .completed:
                     ProductInputCompletionView(garment: garment,
@@ -226,6 +232,7 @@ struct ProductCreationFlowView: View {
 
     private func handleInformationBack() {
         guard path.last == .information, !isFinishing, let garment else { return }
+        synchronizeInformationPhotoSelection()
         // Use the Done button's enabled condition, not full completion validation.
         if GarmentInformationValidation.hasAnyInformation(garment) {
             requestDraftExit()
@@ -233,6 +240,11 @@ struct ProductCreationFlowView: View {
             // Retain the product, selected photos and measurement input in this flow.
             path.removeLast()
         }
+    }
+
+    private func synchronizeInformationPhotoSelection() {
+        guard let garment, let photoModel else { return }
+        photoModel.synchronizeSelectedProductPhotos(garment.productPhotos.map(\.id))
     }
 
     private func receiveMeasurement(_ record: SavedMeasurement) async throws {
@@ -367,6 +379,7 @@ struct ProductCreationFlowView: View {
     }
 
     private func generateInformationFromButton() async throws {
+        synchronizeInformationPhotoSelection()
         guard let garment, let output = photoModel?.output,
               autofillFlow == .information, path.last == .information else {
             throw ProductAutofillError.invalidPhotos
@@ -539,6 +552,7 @@ struct ProductCreationFlowView: View {
     }
 
     private func persistDraft(_ garment: Garment, step: ProductDraftStep) throws {
+        if step == .information { synchronizeInformationPhotoSelection() }
         // Revisiting photo selection after completion keeps this a saved product.
         if garment.informationCompletedAt != nil {
             try context.save()

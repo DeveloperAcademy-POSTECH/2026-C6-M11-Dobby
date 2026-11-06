@@ -4,6 +4,7 @@ import SwiftUI
 struct ProductInputPhotoSection: View {
     let garment: Garment
     var allowsEditing = false
+    var allowsRemoval = true
     @Environment(\.modelContext) private var context
     @State private var expandedPhoto: GarmentPhoto?
     @State private var showsDeletionError = false
@@ -66,7 +67,7 @@ struct ProductInputPhotoSection: View {
     }
 
     private var deletionAction: ((UUID) throws -> Bool)? {
-        guard allowsEditing else { return nil }
+        guard allowsRemoval else { return nil }
         return { id in try removePhoto(id) }
     }
 
