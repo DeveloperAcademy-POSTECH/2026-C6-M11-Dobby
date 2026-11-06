@@ -14,10 +14,15 @@ nonisolated enum MeasurementCalculator {
         }
     }
 
-    static func algorithmVersion(for options: MeasurementOptions) -> String {
+    static func algorithmVersion(for options: MeasurementOptions, landmarks: GarmentLandmarkSet? = nil) -> String {
         switch options.effectiveCalculationMode {
         case .legacyLocal: LiDARMeasurementEngine.algorithmVersion
-        case .garmentPlane: GarmentPlaneMeasurementEngine.algorithmVersion
+        case .garmentPlane:
+            if let landmarks, GarmentLandmarkModelContract.usesSideNeckLength(landmarks) {
+                GarmentPlaneMeasurementEngine.sideNeckAlgorithmVersion
+            } else {
+                GarmentPlaneMeasurementEngine.algorithmVersion
+            }
         }
     }
 }

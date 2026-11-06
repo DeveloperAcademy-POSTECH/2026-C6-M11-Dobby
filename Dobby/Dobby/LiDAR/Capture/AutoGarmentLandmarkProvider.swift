@@ -89,6 +89,7 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
     private let orientationProvider: GarmentOrientationModelProvider
     private let classifierURL: URL
     private nonisolated let outerwear: (any OuterwearLandmarkProviding)?
+    private let localNeck: (any LocalNeckLandmarkProviding)?
     private var classifier: VNCoreMLModel?
     private let foreground = GarmentForegroundMaskAnalyzer()
     private let context = CIContext(options: [.cacheIntermediates: false])
@@ -101,7 +102,8 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
 
     init(top: CoreMLGarmentLandmarkProvider, bottoms: CoreMLGarmentLandmarkProvider,
          classifierModelURL: URL, orientationModelURL: URL? = nil,
-         outerwear: (any OuterwearLandmarkProviding)? = nil) throws {
+         outerwear: (any OuterwearLandmarkProviding)? = nil,
+         localNeck: (any LocalNeckLandmarkProviding)? = nil) throws {
         guard top.kind == .top, bottoms.kind == .bottoms else {
             throw AutoGarmentRecognitionError.invalidProvenance
         }
@@ -109,6 +111,7 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         self.bottoms = bottoms
         self.classifierURL = classifierModelURL
         self.outerwear = outerwear
+        self.localNeck = localNeck
         self.orientationProvider = .init(modelURL: orientationModelURL
             ?? GarmentOrientationModelProvider.siblingURL(of: classifierModelURL))
     }
@@ -122,7 +125,8 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
                          bottoms: CoreMLGarmentLandmarkProvider.bundled(kind: .bottoms, in: bundle),
                          classifierModelURL: classifier,
                          orientationModelURL: GarmentOrientationModelProvider.resourceURL(in: bundle),
-                         outerwear: OuterwearLandmarkClient.makeDefault())
+                         outerwear: OuterwearLandmarkClient.makeDefault(),
+                         localNeck: CoreMLNeckLandmarkProvider(bundle: bundle))
     }
 
     func prepare() async throws {
@@ -152,13 +156,16 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         let calculationIDs = kind == .top
             ? (["top_length_start"] + (GarmentLandmarkModelContract.isViewLengthOuterwear(version: landmarks.modelVersion, kind: kind)
                 ? ["front_length_start"] : [])) : ["thigh_right"]
-        let known = Set(provider.schema.keypoints + provider.schema.derivedOrder + calculationIDs)
+        let usesSideNeckLength = GarmentLandmarkModelContract.usesSideNeckLength(landmarks)
+        let known = Set(provider.schema.keypoints + provider.schema.derivedOrder + calculationIDs
+            + (usesSideNeckLength ? [TopSideNeckLength.hemID] : []))
         guard GarmentLandmarkModelContract.isCurrent(version: landmarks.modelVersion, kind: kind),
               !identifiers.isEmpty,
               identifiers.count == landmarks.points.count,
               identifiers.isSubset(of: known) else {
             throw AutoGarmentRecognitionError.invalidProvenance
         }
+        if usesSideNeckLength { return TopLandmarkSchema.sideNeckMeasurementDefinitions }
         if GarmentLandmarkModelContract.isViewLengthOuterwear(version: landmarks.modelVersion, kind: kind) {
             return TopLandmarkSchema.viewLengthMeasurementDefinitions(for: landmarks.recognitionDiagnostics?.remoteView)
         }
@@ -396,7 +403,7 @@ actor AutoGarmentLandmarkProvider: GarmentMeasurementDefinitionProviding, Garmen
         return try await OuterwearGarmentCropPipeline.recognize(image, orientation: orientation,
             category: category, provider: outerwear, masks: { [foreground] upright in
                 try foreground.masks(for: upright, orientation: .up)
-            })
+            }, usesSideNeckLength: true, localNeck: localNeck)
     }
 
     /// The fresh-photo fallback uses the same bounded, complete-field sRGB

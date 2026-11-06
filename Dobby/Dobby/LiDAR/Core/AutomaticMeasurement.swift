@@ -84,7 +84,7 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     mutating func apply(_ updated: GarmentMeasurementResult, for revision: UUID) -> Bool {
         guard revision == calculationRevision,
               options.effectiveCalculationMode != .garmentPlane
-                || updated.algorithmVersion == MeasurementCalculator.algorithmVersion(for: options),
+                || updated.algorithmVersion == MeasurementCalculator.algorithmVersion(for: options, landmarks: calculationLandmarks),
               updated.sessionID == snapshot.frame.sessionID,
               updated.frameID == snapshot.frame.frameID,
               updated.source == snapshot.frame.source,
@@ -197,7 +197,9 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         editable.points = editable.points.filter {
             current.effectiveDerivedSourceIDs(for: $0.id) == nil
                 && ($0.contourRule == nil || ($0.id == editableThighPointID
-                    && $0.contourRule == .waistParallelRightThighMaskV1))
+                    && $0.contourRule == .waistParallelRightThighMaskV1)
+                    || (usesSideNeckTotalLength && $0.id == TopSideNeckLength.hemID
+                        && $0.contourRule == .leftNeckVerticalHemMaskV1))
         }
         return editable
     }
@@ -238,8 +240,13 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         let matches = definitions.filter { ["top.totalLength", "top.frontLength"].contains($0.id) }
         return matches.count == 1
             && (matches[0].id == "top.frontLength" ? matches[0].landmarkIDs == ["front_length_start", "hem_center"]
-                : [["neck_center", "hem_center"], ["top_length_start", "hem_center"]].contains(matches[0].landmarkIDs))
+                : [["neck_center", "hem_center"], ["top_length_start", "hem_center"]].contains(matches[0].landmarkIDs)
+                    || (usesSideNeckTotalLength && matches[0].landmarkIDs == ["neck_left", TopSideNeckLength.hemID]))
             && matches[0].projection == nil
+    }
+
+    var usesSideNeckTotalLength: Bool {
+        GarmentLandmarkModelContract.usesSideNeckLength(calculationLandmarks)
     }
 
     var lengthDefinition: MeasurementDefinition? {
@@ -318,12 +325,15 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
               let index = updated.points.firstIndex(where: { $0.id == id }),
               (updated.effectiveDerivedSourceIDs(for: id) == nil && updated.points[index].contourRule == nil)
                 || id == editableTotalLengthStartID
+                || (usesSideNeckTotalLength && id == TopSideNeckLength.hemID
+                    && updated.points[index].contourRule == .leftNeckVerticalHemMaskV1)
                 || (id == editableThighPointID && updated.points[index].contourRule == .waistParallelRightThighMaskV1)
               else { return false }
         if updated.points[index].origin == .manual, updated.points[index].point == originalPoint { return false }
         // An explicitly placed contour endpoint becomes a direct manual ray on
         // the same garment plane. Later parent edits must not move it again.
-        if id == editableTotalLengthStartID || id == editableThighPointID {
+        if id == editableTotalLengthStartID || id == editableThighPointID
+            || (usesSideNeckTotalLength && id == TopSideNeckLength.hemID) {
             updated.points[index].derivedFrom = nil
             updated.points[index].contourRule = nil
         }

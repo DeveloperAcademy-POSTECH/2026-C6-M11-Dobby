@@ -1,5 +1,6 @@
 import { buildOpenAIRequest, DraftResponseError, parseOpenAIResponse } from "./garment-draft.js";
 import { buildLandmarkOpenAIRequest, buildRefinementOpenAIRequest, OUTERWEAR_CATEGORIES,
+  buildNeckRefinementOpenAIRequest, parseNeckRefinementOpenAIResponse, NECK_REFINEMENT_REGIONS,
   buildLengthRefinementOpenAIRequest, parseLengthRefinementOpenAIResponse, LENGTH_REFINEMENT_REGIONS,
   parseLandmarkOpenAIResponse, REFINEMENT_REGIONS, REFINEMENT_VERSION, REFINEMENT_VERSION_V3, REFINEMENT_VERSION_V4 } from "./garment-landmarks.js";
 import { enforceAppUsageLimits, UsageProtectionFailure } from "./usage-protection.js";
@@ -231,9 +232,14 @@ function upstreamFailure(status) {
 }
 
 function validateRefinementRequest(body, allowedRegions = REFINEMENT_REGIONS) {
-  if (!isObject(body) || !hasOnlyKeys(body, ["requestId", "category", "image", "regions"])
+  const neck = allowedRegions === NECK_REFINEMENT_REGIONS;
+  const keys = neck ? ["requestId", "category", "image", "regions", "target"] : ["requestId", "category", "image", "regions"];
+  if (!isObject(body) || !hasOnlyKeys(body, keys)
       || !Array.isArray(body.regions) || body.regions.length !== Object.keys(allowedRegions).length) {
     throw new Failure(400, "invalid_request", "확대 비교 요청을 확인해 주세요.");
+  }
+  if (neck && body.target !== undefined && !["neck_left", "neck_right"].includes(body.target)) {
+    throw new Failure(400, "invalid_request", "목옆 확대 대상을 확인해 주세요.");
   }
   const input = validateLandmarkRequest({ requestId: body.requestId, category: body.category, image: body.image });
   let total = imageBytes(input.image.imageDataUrl);
@@ -249,7 +255,7 @@ function validateRefinementRequest(body, allowedRegions = REFINEMENT_REGIONS) {
     return { id: region.id, image: validated.image };
   });
   if (total > MAX_TOTAL_PHOTO_BYTES) throw new Failure(413, "photos_too_large", "사진 전체 용량은 8MiB 이하여야 합니다.");
-  return { ...input, regions };
+  return { ...input, regions, ...(neck && body.target !== undefined ? { target: body.target } : {}) };
 }
 
 async function generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion = 0, refinement = false) {
@@ -259,7 +265,8 @@ async function generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion = 0,
     const response = await fetchImpl(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify(refinement === "length" ? buildLengthRefinementOpenAIRequest(input)
+      body: JSON.stringify(refinement === "neck" ? buildNeckRefinementOpenAIRequest(input)
+        : refinement === "length" ? buildLengthRefinementOpenAIRequest(input)
         : refinement ? buildRefinementOpenAIRequest(input, { version: landmarkVersion })
         : landmarkVersion ? buildLandmarkOpenAIRequest(input, { version: landmarkVersion }) : buildOpenAIRequest(input)),
       signal: controller.signal,
@@ -275,6 +282,13 @@ async function generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion = 0,
       throw new Failure(502, "invalid_ai_response", "AI 응답 형식을 확인할 수 없습니다.");
     }
     try {
+      if (refinement === "neck") {
+        const result = parseNeckRefinementOpenAIResponse(payload, input.requestId);
+        if (input.target && Object.entries(result.points).some(([id, observation]) => id !== input.target && observation.point !== null)) {
+          throw new Failure(502, "invalid_ai_response", "목옆 확대 응답을 확인할 수 없습니다.");
+        }
+        return result;
+      }
       if (refinement === "length") return parseLengthRefinementOpenAIResponse(payload, input.requestId);
       if (refinement) return { refinementVersion: landmarkVersion === 4 ? REFINEMENT_VERSION_V4 : landmarkVersion === 3 ? REFINEMENT_VERSION_V3 : REFINEMENT_VERSION,
         localResponse: parseLandmarkOpenAIResponse(payload, input.requestId, { version: landmarkVersion }) };
@@ -312,7 +326,7 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
         if (path === "/health" && request.method === "GET") {
           return json({ service: "dobby-garment-ai", status: "ok" }, 200, requestId);
         }
-        if (!["/v1/garments/autofill", "/v1/garments/landmarks", "/v2/garments/landmarks", "/v2/garments/landmark-refinement", "/v3/garments/landmarks", "/v3/garments/landmark-refinement", "/v4/garments/landmarks", "/v4/garments/landmark-refinement", "/v4/garments/length-refinement", "/health"].includes(path)) {
+        if (!["/v1/garments/autofill", "/v1/garments/landmarks", "/v2/garments/landmarks", "/v2/garments/landmark-refinement", "/v3/garments/landmarks", "/v3/garments/landmark-refinement", "/v4/garments/landmarks", "/v4/garments/landmark-refinement", "/v4/garments/length-refinement", "/v4/garments/neck-refinement", "/health"].includes(path)) {
           throw new Failure(404, "not_found", "요청 경로를 확인해 주세요.");
         }
         const method = path === "/health" ? "GET" : "POST";
@@ -325,10 +339,10 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
           await enforceAppUsageLimits(env, authentication.installationID);
         }
         const body = await readJSON(request);
-        const refinement = path.endsWith("/length-refinement") ? "length" : path.endsWith("/landmark-refinement");
+        const refinement = path.endsWith("/neck-refinement") ? "neck" : path.endsWith("/length-refinement") ? "length" : path.endsWith("/landmark-refinement");
         const landmarkVersion = path.startsWith("/v4/") ? 4 : path.startsWith("/v3/") ? 3 : path.startsWith("/v2/") ? 2
           : path === "/v1/garments/landmarks" ? 1 : 0;
-        const input = refinement ? validateRefinementRequest(body, refinement === "length" ? LENGTH_REFINEMENT_REGIONS : REFINEMENT_REGIONS)
+        const input = refinement ? validateRefinementRequest(body, refinement === "neck" ? NECK_REFINEMENT_REGIONS : refinement === "length" ? LENGTH_REFINEMENT_REGIONS : REFINEMENT_REGIONS)
           : landmarkVersion ? validateLandmarkRequest(body) : validatePhotos(body);
         return json(await generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion, refinement), 200, requestId);
       } catch (error) {

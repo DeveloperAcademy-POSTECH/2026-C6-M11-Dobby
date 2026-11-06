@@ -70,7 +70,7 @@ nonisolated enum TopContourLength {
 
     /// Original bitmap is immutable. Closed holes are not exterior; a neck
     /// opening connected to the image edge is. Each background pixel is queued once.
-    private static func exteriorBackground(_ mask: GarmentMask) -> [UInt8] {
+    static func exteriorBackground(_ mask: GarmentMask) -> [UInt8] {
         let width = mask.size.width, height = mask.size.height
         var exterior = [UInt8](repeating: 0, count: mask.values.count)
         var queue: [Int32] = []

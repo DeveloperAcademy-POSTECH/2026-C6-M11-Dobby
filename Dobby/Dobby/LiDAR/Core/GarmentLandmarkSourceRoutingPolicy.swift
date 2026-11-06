@@ -5,10 +5,10 @@ nonisolated enum GarmentLandmarkSourceRoute: Equatable, Sendable {
 }
 
 nonisolated enum GarmentLandmarkSourceRoutingPolicy {
-    static let outerwearCategories: Set<String> = ["Blazer", "Jacket", "Coat", "Denim Jacket", "Sports Jacket", "Hoodie", "Sweater"]
+    static let outerwearCategories: Set<String> = ["Blazer", "Jacket", "Coat", "Denim Jacket", "Sports Jacket", "Hoodie", "Sweater", "Polo"]
 
     /// Require separation from categories outside the AI target group. Close
-    /// scores among Hoodie, Sweater and outerwear share the same AI route.
+    /// scores among Polo, Hoodie, Sweater and outerwear share the same AI route.
     static func route(classification: GarmentClassifierRoute, scores: [GarmentClassificationScore],
                       minimumOuterwearMargin: Double = 0.01) -> GarmentLandmarkSourceRoute {
         guard case let .selected(kind, category, confidence) = classification,
