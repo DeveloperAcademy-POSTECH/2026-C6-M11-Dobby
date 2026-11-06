@@ -25,7 +25,6 @@ struct InstagramExportView: View {
     @State private var draft: InstagramExportDraft
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
-    @State private var confirmingRepublish = false
     @State private var isShowingUploadFailure = false
     @State private var message: String?
     @State private var requestID = UUID().uuidString
@@ -38,12 +37,13 @@ struct InstagramExportView: View {
 
     var body: some View {
         Group {
-            if let account {
+            if uploadState.isCompleted {
+                InstagramUploadCompletionView()
+            } else if let account {
                 InstagramComposeView(
                     account: account,
                     draft: $draft,
-                    isDisabled: busy || uploadState.isCompleted,
-                    isCompleted: uploadState.isCompleted
+                    isDisabled: busy
                 )
             } else {
                 InstagramConnectionView(
@@ -67,7 +67,7 @@ struct InstagramExportView: View {
                     }
                 }
             }
-            if account != nil && !uploadState.isUploading {
+            if account != nil && !uploadState.isUploading && !uploadState.isCompleted {
                 ToolbarItem(placement: .topBarTrailing) {
                     ExportAccountMenu(
                         accessibilityLabel: "Instagram 계정 메뉴",
@@ -78,19 +78,15 @@ struct InstagramExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if account != nil {
+            if account != nil && !uploadState.isCompleted {
                 ExportBottomActionBar {
                     ExportBottomAction(
                         title: "업로드하기",
                         isWorking: uploadState.isUploading,
                         isComplete: false,
-                        isEnabled: uploadState.isCompleted || canPublish
+                        isEnabled: canPublish
                     ) {
-                        if uploadState.isCompleted {
-                            confirmingRepublish = true
-                        } else {
-                            Task { await publish() }
-                        }
+                        Task { await publish() }
                     }
                 }
             }
@@ -112,13 +108,6 @@ struct InstagramExportView: View {
         }
         .interactiveDismissDisabled(uploadState.isUploading)
         .task { await loadAccount() }
-        .confirmationDialog("게시물을 한 번 더 올릴까요?", isPresented: $confirmingRepublish,
-                            titleVisibility: .visible) {
-            Button("다시 업로드하기") { Task { await republish() } }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text("다시 업로드하면 같은 계정에 새 게시물이 추가됩니다.")
-        }
         .alert("Instagram 안내", isPresented: Binding(
             get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("확인", role: .cancel) {}
