@@ -31,9 +31,9 @@ struct CameraFlowView: View {
     @State private var isMoreOptionsPresented = false
     @State private var librarySaver = DetailPhotoLibrarySaver()
     @State private var isCompletingCapture = false
-    @State private var detailPhotosToSave: [CapturedAsset] = []
+    @State private var capturePhotosToSave: [CapturedAsset] = []
     @State private var hasStartedLibrarySaving = false
-    @State private var didSaveAllDetailPhotos = false
+    @State private var didSaveAllCapturePhotos = false
     @State private var isStandaloneSelectionPresented = false
     @State private var librarySaveFailure: LibrarySaveFailure?
 
@@ -98,8 +98,8 @@ struct CameraFlowView: View {
             if isCompletingCapture {
                 DetailPhotoLibrarySavingOverlay(
                     savedCount: hasStartedLibrarySaving
-                        ? min(librarySaver.savedCount, detailPhotosToSave.count) : 0,
-                    totalCount: detailPhotosToSave.count)
+                        ? min(librarySaver.savedCount, capturePhotosToSave.count) : 0,
+                    totalCount: capturePhotosToSave.count)
             }
         }
         .interactiveDismissDisabled(isCompletingCapture)
@@ -161,15 +161,15 @@ struct CameraFlowView: View {
             guard isCompletingCapture else { return }
             hasStartedLibrarySaving = true
             do {
-                try await librarySaver.save(detailPhotosToSave)
+                try await librarySaver.save(capturePhotosToSave)
                 try Task.checkCancellation()
-                didSaveAllDetailPhotos = true
+                didSaveAllCapturePhotos = true
                 // The Photos authorization dialog temporarily makes the scene
                 // inactive. Navigate only after it has returned to the app.
                 continueToPhotoSelectionIfReady()
             } catch {
                 let shouldPresentFailure = !(error is CancellationError) && !Task.isCancelled
-                didSaveAllDetailPhotos = false
+                didSaveAllCapturePhotos = false
                 isCompletingCapture = false
                 if shouldPresentFailure {
                     let saveError = error as? DetailPhotoLibrarySaveError
@@ -196,7 +196,7 @@ struct CameraFlowView: View {
             captureRequested = false
             isMoreOptionsPresented = false
             isCompletingCapture = false
-            didSaveAllDetailPhotos = false
+            didSaveAllCapturePhotos = false
         }
     }
 
@@ -395,19 +395,19 @@ struct CameraFlowView: View {
         librarySaveFailure = nil
         failureMessage = nil
         isMoreOptionsPresented = false
-        guard !model.detailPhotos.isEmpty else {
+        guard !model.selectablePhotos.isEmpty else {
             showPhotoSelection()
             return
         }
-        didSaveAllDetailPhotos = false
-        detailPhotosToSave = model.detailPhotos
+        didSaveAllCapturePhotos = false
+        capturePhotosToSave = model.selectablePhotos
         hasStartedLibrarySaving = false
         isCompletingCapture = true
     }
 
     private func continueToPhotoSelectionIfReady() {
-        guard isCompletingCapture, didSaveAllDetailPhotos, scenePhase == .active else { return }
-        didSaveAllDetailPhotos = false
+        guard isCompletingCapture, didSaveAllCapturePhotos, scenePhase == .active else { return }
+        didSaveAllCapturePhotos = false
         isCompletingCapture = false
         showPhotoSelection()
     }

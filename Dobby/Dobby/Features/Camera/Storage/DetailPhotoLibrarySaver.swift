@@ -2,7 +2,8 @@ import Foundation
 import Observation
 import Photos
 
-/// Saves the detail originals, independently of the ten-photo product selection.
+/// Saves the measurement original, measurement-overlay image and all detail
+/// originals after detail capture, independently of the ten-photo selection.
 /// Progress counts successful Photos transactions, including receipts from a
 /// previous visit. Neither the original files nor the photo library are read back.
 @MainActor
@@ -49,9 +50,9 @@ nonisolated enum DetailPhotoLibrarySaveError: Error, LocalizedError, Equatable, 
         case .accessRestricted:
             "스크린 타임이나 기기 관리 설정으로 사진 추가가 제한되어 있어요."
         case .invalidPhotos:
-            "촬영한 상세 사진 목록을 확인할 수 없어요."
+            "저장할 사진 목록을 확인할 수 없어요."
         case .missingFile:
-            "촬영한 상세 사진의 원본 파일을 찾거나 읽을 수 없어요."
+            "저장할 사진의 원본 파일을 찾거나 읽을 수 없어요."
         case .insufficientStorage:
             "기기의 저장 공간이 부족해 사진을 저장할 수 없어요."
         case .photoLibraryFailed:
@@ -70,7 +71,7 @@ nonisolated enum DetailPhotoLibrarySaveError: Error, LocalizedError, Equatable, 
         case .accessRestricted:
             "기기의 사진 접근 제한을 확인한 뒤 다시 시도해 주세요. 촬영한 사진은 앱에 남아 있어요."
         case .missingFile:
-            "상세 촬영 화면에서 해당 사진을 확인하고 다시 촬영해 주세요."
+            "실측 사진과 상세 사진을 확인하고 필요한 사진을 다시 촬영해 주세요."
         case .insufficientStorage, .receiptStorageFailed:
             "기기의 저장 공간을 확인한 뒤 다시 시도해 주세요. 이미 저장을 완료한 사진은 다시 저장하지 않아요."
         case .invalidPhotos, .photoLibraryFailed:
@@ -131,6 +132,7 @@ private actor DetailPhotoLibraryArchive {
     private struct Receipt: Codable, Sendable {
         let schemaVersion: Int
         let captureID: UUID
+        let captureSessionID: UUID?
         // A successful transaction still counts if PhotoKit omits a placeholder.
         // No read permission is requested merely to recover that identifier.
         let photoLibraryIdentifier: String?
@@ -145,7 +147,6 @@ private actor DetailPhotoLibraryArchive {
         try Task.checkCancellation()
         guard !photos.isEmpty else { return }
         guard Set(photos.map(\.id)).count == photos.count,
-              photos.allSatisfy({ $0.purpose == .detail }),
               Set(photos.map(\.garmentID)).count == 1 else {
             throw DetailPhotoLibrarySaveError.invalidPhotos
         }
@@ -156,12 +157,13 @@ private actor DetailPhotoLibraryArchive {
         for photo in photos {
             try Task.checkCancellation()
             // A prior receipt-write failure does not undo the Photos commit.
-            if unrecordedReceipt?.captureID == photo.id {
+            if unrecordedReceipt?.captureID == photo.id,
+               unrecordedReceipt?.captureSessionID == photo.sessionID {
                 completed += 1
                 continue
             }
             do {
-                if try hasReceipt(for: photo.id) {
+                if try hasReceipt(for: photo) {
                     completed += 1
                 } else {
                     pending.append(photo)
@@ -193,7 +195,7 @@ private actor DetailPhotoLibraryArchive {
             let localIdentifier = try await createPhoto(photo)
             // Do not check cancellation between Photos success and this write:
             // PhotoKit transactions cannot be cancelled after submission.
-            unrecordedReceipt = Receipt(schemaVersion: 1, captureID: photo.id,
+            unrecordedReceipt = Receipt(schemaVersion: 1, captureID: photo.id, captureSessionID: photo.sessionID,
                 photoLibraryIdentifier: localIdentifier, savedAt: .now)
             completed += 1
             do {
@@ -277,7 +279,8 @@ private actor DetailPhotoLibraryArchive {
         directory.appending(path: "\(id.uuidString).json")
     }
 
-    private func hasReceipt(for id: UUID) throws -> Bool {
+    private func hasReceipt(for photo: CapturedAsset) throws -> Bool {
+        let id = photo.id
         let url = receiptURL(for: id)
         do {
             let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
@@ -288,7 +291,11 @@ private actor DetailPhotoLibraryArchive {
             guard receipt.schemaVersion == 1, receipt.captureID == id else {
                 throw DetailPhotoLibrarySaveError.receiptStorageFailed
             }
-            return true
+            // Retaking measurement reuses the product photo ID but replaces
+            // its capture session. Save that new original instead of skipping it.
+            // Legacy receipts were detail-only; their IDs are immutable.
+            return receipt.captureSessionID == photo.sessionID
+                || (receipt.captureSessionID == nil && photo.purpose == .detail)
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
             return false
         } catch {
