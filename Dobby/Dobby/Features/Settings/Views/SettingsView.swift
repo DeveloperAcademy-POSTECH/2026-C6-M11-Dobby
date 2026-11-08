@@ -94,6 +94,21 @@ private struct SettingsContent: View {
 
             SettingsSectionSeparator()
 
+            #if DEBUG
+            SettingsSection(title: "개발 테스트") {
+                NavigationLink {
+                    ProductAutofillTestView()
+                } label: {
+                    SettingsNavigationRow(title: "AI 정보 생성 테스트",
+                        subtitle: "앨범 사진으로 생성 결과 확인", systemImage: "chevron.right")
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.aiTest")
+            }
+
+            SettingsSectionSeparator()
+            #endif
+
             SettingsSection(title: "정책") {
                 Button(action: onPrivacyPolicy) {
                     SettingsNavigationRow(title: "개인정보 처리방침", systemImage: "arrow.up.right")
