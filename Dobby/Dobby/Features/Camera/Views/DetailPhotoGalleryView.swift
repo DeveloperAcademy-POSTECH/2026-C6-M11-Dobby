@@ -7,6 +7,9 @@ struct DetailPhotoGalleryView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
     @State private var focusedID: String
+    @State private var deletionTarget: UUID?
+    @State private var isDeletingPhoto = false
+    @State private var deletionError: String?
 
     init(model: ProductPhotoModel) {
         self.model = model
@@ -65,22 +68,76 @@ struct DetailPhotoGalleryView: View {
                 .overlay(alignment: .top) {
                     Rectangle().fill(Color(.separator)).frame(height: 1 / displayScale)
                 }
+                .overlay(alignment: .trailing) {
+                    Button {
+                        deletionTarget = UUID(uuidString: focusedID)
+                    } label: {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(.black)
+                            .frame(width: 48, height: 48)
+                            .glassEffect(.regular.interactive(), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.isDeleting || model.isCapturing || items.isEmpty)
+                    .accessibilityLabel("현재 사진 삭제")
+                    .accessibilityIdentifier("camera.galleryDelete")
+                    .padding(.trailing, 28).offset(y: 8)
+                }
         }
         .background(Color(.systemBackground).ignoresSafeArea())
+        .overlay {
+            if deletionTarget != nil {
+                DetailPhotoDeleteConfirmation(isDeleting: isDeletingPhoto,
+                    onCancel: { deletionTarget = nil }, onDelete: deletePhoto)
+                    .ignoresSafeArea(edges: .bottom)
+            }
+        }
         .preferredColorScheme(.light)
         .toolbarBackground(Color(.systemBackground), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("촬영으로 돌아가기", systemImage: "chevron.left") { dismiss() }.labelStyle(.iconOnly)
+                Button("촬영으로 돌아가기", systemImage: "chevron.left") {
+                    if deletionTarget == nil { dismiss() }
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityHidden(deletionTarget != nil)
             }
         }
         .tint(.primary)
+        .interactiveDismissDisabled(deletionTarget != nil)
+        .alert("사진을 삭제하지 못했어요", isPresented: Binding(
+            get: { deletionError != nil }, set: { if !$0 { deletionError = nil } })) {
+            Button("확인", role: .cancel) { deletionError = nil }
+        } message: {
+            Text(deletionError ?? "다시 시도해 주세요.")
+        }
     }
 
     private func thumbnailStrip(width: CGFloat) -> some View {
         DetailPhotoFilmstrip(ids: items.map(\.id), focusedID: $focusedID, width: width) { index in
-            thumbnail(items[index], index: index)
+            if items.indices.contains(index) { thumbnail(items[index], index: index) }
+        }
+    }
+
+    private func deletePhoto() {
+        guard let target = deletionTarget, !isDeletingPhoto,
+              let index = items.firstIndex(where: { $0.photo.id == target }) else { return }
+        isDeletingPhoto = true
+        Task { @MainActor in
+            defer { isDeletingPhoto = false; deletionTarget = nil }
+            do {
+                try await model.deletePhoto(target)
+                let remaining = items
+                if remaining.isEmpty {
+                    dismiss()
+                } else {
+                    focusedID = remaining[min(index, remaining.count - 1)].id
+                }
+            } catch {
+                deletionError = error.localizedDescription
+            }
         }
     }
 

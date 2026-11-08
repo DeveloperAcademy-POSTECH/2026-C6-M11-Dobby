@@ -44,6 +44,10 @@ struct DetailPhotoFilmstrip<Thumbnail: View>: View {
             if isUserScrolling { focus(at: index) }
         }
         .onChange(of: width, initial: true) { _, _ in align(animated: false) }
+        .onChange(of: ids) { _, _ in
+            isUserScrolling = false
+            align(animated: false)
+        }
         .onChange(of: focusedID) { _, _ in
             if !isUserScrolling { align(animated: true) }
         }
