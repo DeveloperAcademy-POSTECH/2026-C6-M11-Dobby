@@ -36,7 +36,7 @@ struct ProductPhotoDeletionTests {
         #expect(try Data(contentsOf: seedURL) == data)
     }
 
-    @Test func deletionProtectsMeasurementAndPreservesRemainingOrder() async throws {
+    @Test func detailOnlyDeletionRejectsMeasurementAndPreservesRemainingOrder() async throws {
         let (model, provider) = try fixture()
         for _ in 0..<3 { try await model.captureDetail() }
         let ids = model.detailPhotos.map(\.id)
@@ -67,13 +67,15 @@ struct ProductPhotoDeletionTests {
         model.toggleSelection(id)
         let before = model.photos
         provider.shouldFail = true
-        await #expect(throws: CameraFailure.saveFailed) { try await model.deleteDetail(id) }
+        await #expect(throws: CameraFailure.saveFailed) { try await model.deletePhoto(id) }
         #expect(model.photos == before)
+        #expect(model.allPhotosOutput?.selectedPhotos.map(\.id) == before.map(\.id))
+        #expect(model.allPhotosOutput?.deletedPhotoIDs.isEmpty == true)
         #expect(model.selectedPhotoIDs == [id])
         #expect(model.output?.representativePhotoID == id)
         #expect(!model.isDeleting)
         provider.shouldFail = false
-        try await model.deleteDetail(id)
+        try await model.deletePhoto(id)
         #expect(model.detailPhotos.isEmpty && model.selectedPhotoIDs.isEmpty)
     }
 
@@ -83,11 +85,11 @@ struct ProductPhotoDeletionTests {
         let id = try #require(model.detailPhotos.first?.id)
         model.toggleSelection(id)
         provider.suspend = true
-        let deletion = Task { try await model.deleteDetail(id) }
+        let deletion = Task { try await model.deletePhoto(id) }
         await provider.waitUntilStarted()
-        #expect(model.isDeleting && model.output == nil)
+        #expect(model.isDeleting && model.output == nil && model.allPhotosOutput == nil)
         #expect(model.detailPhotos.count == 1)
-        await #expect(throws: CameraFailure.operationInProgress) { try await model.deleteDetail(id) }
+        await #expect(throws: CameraFailure.operationInProgress) { try await model.deletePhoto(id) }
         await #expect(throws: CameraFailure.operationInProgress) { try await model.captureDetail() }
         model.toggleSelection(id)
         #expect(model.selectedPhotoIDs == [id])
