@@ -24,7 +24,7 @@ struct CameraDemoEntryView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text(usesSamplePreview ? "상세 촬영·사진 선택 목 데모" : "상세 촬영 카메라 확인")
+            Text(usesSamplePreview ? "상세 촬영·전체 사진 전달 목 데모" : "상세 촬영 카메라 확인")
                 .font(.title2.bold())
             Text(usesSamplePreview
                  ? "샘플 사진으로 화면을 확인합니다. 촬영은 목 데이터입니다."
@@ -33,7 +33,7 @@ struct CameraDemoEntryView: View {
             Button("카메라 흐름 살펴보기", action: startDemo)
                 .buttonStyle(.borderedProminent)
             if let completed {
-                Text("완료 결과 수신: 선택 \(completed.selectedPhotos.count)장 / 상세 \(completed.detailPhotos.count)장")
+                Text("완료 결과 수신: 전체 \(completed.selectedPhotos.count)장 / 상세 \(completed.detailPhotos.count)장")
             }
             if let inputError { Text(inputError).foregroundStyle(.red) }
         }
