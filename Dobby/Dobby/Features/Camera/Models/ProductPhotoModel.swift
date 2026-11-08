@@ -20,6 +20,7 @@ final class ProductPhotoModel {
     private(set) var measurementRecord: SavedMeasurement?
     private(set) var detailPhotos: [CapturedAsset] = []
     private(set) var selectedPhotoIDs: [UUID] = []
+    private(set) var deletedPhotoIDs: Set<UUID> = []
     private(set) var isCapturing = false
     private(set) var isDeleting = false
     // 같은 사진 초안으로 재진입할 때 안내를 반복하지 않는다. 앱 전체 영구 설정은 아니다.
@@ -32,17 +33,20 @@ final class ProductPhotoModel {
     @ObservationIgnored private let captureProvider: any CaptureProviding
     @ObservationIgnored private var discardRevision = 0
 
-    var photos: [CapturedAsset] { [input.measurement] + detailPhotos }
+    var photos: [CapturedAsset] { ([input.measurement] + detailPhotos).filter { !deletedPhotoIDs.contains($0.id) } }
     /// 같은 촬영의 원본·실측값 표시본을 나란히 두고 상세 사진은 촬영 순서로 이어 붙인다.
-    var selectablePhotos: [CapturedAsset] { input.measurementPhotos + detailPhotos }
+    var selectablePhotos: [CapturedAsset] {
+        (input.measurementPhotos + detailPhotos).filter { !deletedPhotoIDs.contains($0.id) }
+    }
 
     /// 선택 화면을 거치지 않는 전체 촬영 결과. 기존 선택 상태와 10장 제한을 적용하지 않는다.
     /// 저장소에서 이미 편집한 상품 사진의 순서·제외 여부는 전달받는 쪽에서 보존한다.
     var allPhotosOutput: ProductPhotoOutput? {
-        guard !isCapturing, !isDeleting, !isDiscardingDetails else { return nil }
+        guard !isCapturing, !isDeleting, !isDiscardingDetails,
+              let first = selectablePhotos.first else { return nil }
         return ProductPhotoOutput(sessionID: input.sessionID, garmentID: input.garmentID,
             detailPhotos: detailPhotos, selectedPhotos: selectablePhotos,
-            representativePhotoID: input.measurement.id)
+            representativePhotoID: first.id, deletedPhotoIDs: deletedPhotoIDs)
     }
 
     /// 하단 표시 전용. 상단 캐러셀이 사용하는 촬영 순서는 바꾸지 않는다.
@@ -61,13 +65,14 @@ final class ProductPhotoModel {
             sessionID: input.sessionID, garmentID: input.garmentID,
             detailPhotos: detailPhotos,
             selectedPhotos: selectedPhotoIDs.compactMap { id in selectablePhotos.first { $0.id == id } },
-            representativePhotoID: representativeID
+            representativePhotoID: representativeID, deletedPhotoIDs: deletedPhotoIDs
         )
     }
 
     init(input: ProductPhotoInput, captureProvider: any CaptureProviding,
          initialDetailPhotos: [CapturedAsset] = [],
-         initialSelectedPhotoIDs: [UUID] = [], measurementRecord: SavedMeasurement? = nil) throws {
+         initialSelectedPhotoIDs: [UUID] = [], measurementRecord: SavedMeasurement? = nil,
+         initialDeletedPhotoIDs: Set<UUID> = []) throws {
         guard input.measurement.purpose == .measurement,
               input.measurement.sessionID == input.sessionID,
               input.measurement.garmentID == input.garmentID,
@@ -82,6 +87,8 @@ final class ProductPhotoModel {
                         case let .localFile(url, metadata) = asset.source else { return false }
                   return url.isFileURL && metadata.pixelWidth > 0 && metadata.pixelHeight > 0
               }),
+              initialDeletedPhotoIDs.isDisjoint(with: initialSelectedPhotoIDs),
+              initialDeletedPhotoIDs.isDisjoint(with: initialDetailPhotos.map(\.id)),
               Set(initialSelectedPhotoIDs).count == initialSelectedPhotoIDs.count,
               Set(initialSelectedPhotoIDs).isSubset(of: Set(input.measurementPhotos.map(\.id) + initialDetailPhotos.map(\.id))) else {
             throw CameraFailure.mismatchedCapture
@@ -98,6 +105,7 @@ final class ProductPhotoModel {
         detailPhotos = initialDetailPhotos
         persistedDetailPhotoIDs = Set(initialDetailPhotos.map(\.id))
         selectedPhotoIDs = initialSelectedPhotoIDs
+        deletedPhotoIDs = initialDeletedPhotoIDs
     }
 
     func makeDraftSnapshot() throws -> ProductPhotoDraftSnapshot {
@@ -105,7 +113,8 @@ final class ProductPhotoModel {
             throw ProductDraftStore.DraftError.operationInProgress
         }
         return try ProductPhotoDraftSnapshot(input: input, detailPhotos: detailPhotos,
-            selectedPhotoIDs: selectedPhotoIDs, hasAcknowledgedCaptureGuide: hasAcknowledgedCaptureGuide)
+            selectedPhotoIDs: selectedPhotoIDs, hasAcknowledgedCaptureGuide: hasAcknowledgedCaptureGuide,
+            deletedPhotoIDs: deletedPhotoIDs)
     }
 
     /// A retake changes the measurement session, not the ownership or capture
@@ -121,6 +130,8 @@ final class ProductPhotoModel {
         }
         let candidate = try ProductPhotoModel(input: input, captureProvider: captureProvider,
             initialDetailPhotos: detailPhotos, initialSelectedPhotoIDs: selected, measurementRecord: record)
+        // 새로 실측한 사진은 다시 제공하되 이전 상세 컷 삭제 내역은 유지한다.
+        candidate.deletedPhotoIDs = deletedPhotoIDs.subtracting(self.input.measurementPhotos.map(\.id))
         candidate.hasAcknowledgedCaptureGuide = hasAcknowledgedCaptureGuide
         candidate.persistedDetailPhotoIDs = persistedDetailPhotoIDs
         candidate.deferredDetailDeletions = deferredDetailDeletions
@@ -138,6 +149,9 @@ final class ProductPhotoModel {
         try Self.validateVisualization(visualization, input: input, details: detailPhotos)
         if let old = input.measurementVisualization, old.id != visualization?.id {
             selectedPhotoIDs = selectedPhotoIDs.compactMap { $0 == old.id ? visualization?.id : $0 }
+            if deletedPhotoIDs.contains(old.id), let visualization {
+                deletedPhotoIDs.insert(visualization.id)
+            }
         }
         input.measurementVisualization = visualization
         measurementRecord = record
@@ -191,14 +205,32 @@ final class ProductPhotoModel {
             try Task.checkCancellation()
             guard revision == discardRevision else { throw CancellationError() }
             guard asset.sessionID == input.sessionID, asset.garmentID == input.garmentID,
-                  asset.purpose == .detail, !selectablePhotos.contains(where: { $0.id == asset.id }) else {
+                  asset.purpose == .detail, !deletedPhotoIDs.contains(asset.id),
+                  !input.measurementPhotos.contains(where: { $0.id == asset.id }),
+                  !detailPhotos.contains(where: { $0.id == asset.id }) else {
                 throw CameraFailure.mismatchedCapture
             }
             detailPhotos.append(asset)
         } catch {
             // 이미 목록에 있는 ID는 중복 응답이므로 기존 원본을 지우지 않는다.
-            if !selectablePhotos.contains(where: { $0.id == asset.id }) { try await captureProvider.discardUncommitted(asset) }
+            if !deletedPhotoIDs.contains(asset.id),
+               !(input.measurementPhotos + detailPhotos).contains(where: { $0.id == asset.id }) {
+                try await captureProvider.discardUncommitted(asset)
+            }
             throw error
+        }
+    }
+
+    /// 실측 수치·보정용 원자료는 보존하고 갤러리 및 상품 전달에서 제외한다.
+    func deletePhoto(_ id: UUID) async throws {
+        try Task.checkCancellation()
+        guard !isCapturing, !isDeleting, !isDiscardingDetails else { throw CameraFailure.operationInProgress }
+        guard let photo = selectablePhotos.first(where: { $0.id == id }) else { throw CameraFailure.missingCapture }
+        if photo.purpose == .detail {
+            try await deleteDetail(id)
+        } else {
+            deletedPhotoIDs.insert(id)
+            selectedPhotoIDs.removeAll { $0 == id }
         }
     }
 
@@ -220,6 +252,7 @@ final class ProductPhotoModel {
             } else {
                 try await captureProvider.discardUncommitted(photo)
             }
+            deletedPhotoIDs.insert(id)
             detailPhotos.removeAll { $0.id == id }
             selectedPhotoIDs.removeAll { $0 == id }
         }

@@ -302,20 +302,23 @@ struct ProductCreationFlowView: View {
             model = try ProductPhotoModel(input: input,
                 captureProvider: ProductPhotoFixtureCaptureProvider(seed: input.measurement.source,
                     directory: ProductAppStorage.fixtureDirectory?.appending(path: "detail-captures")),
-                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
+                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record,
+                initialDeletedPhotoIDs: snapshot?.deletedPhotoIDs ?? [])
             permission = CameraPermission(authorizer: MockCameraAuthorization())
             camera = nil
         } else {
             let session = CameraPreviewSession()
             model = try ProductPhotoModel(input: input, captureProvider: session,
-                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
+                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record,
+                initialDeletedPhotoIDs: snapshot?.deletedPhotoIDs ?? [])
             camera = session
             permission = CameraPermission(authorizer: SystemCameraAuthorization())
         }
 #else
         let session = CameraPreviewSession()
         model = try ProductPhotoModel(input: input, captureProvider: session,
-            initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
+            initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record,
+                initialDeletedPhotoIDs: snapshot?.deletedPhotoIDs ?? [])
         camera = session
         permission = CameraPermission(authorizer: SystemCameraAuthorization())
 #endif
@@ -329,11 +332,13 @@ struct ProductCreationFlowView: View {
         guard isPresented, path.last == .details, let garment, let photoModel else {
             throw CameraFailure.mismatchedCapture
         }
+        // 상품 반영과 삭제 내역이 담긴 초안을 한 번에 저장해 이전 사진이 복원되지 않게 한다.
         try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input,
-            includesAllCapturedPhotos: true)
+            includesAllCapturedPhotos: true, persist: { _ in
+                try persistDraft(garment, step: .information)
+            })
         try Task.checkCancellation()
         guard isPresented, path.last == .details else { throw CancellationError() }
-        try persistDraft(garment, step: .information)
         path.append(.information)
     }
 

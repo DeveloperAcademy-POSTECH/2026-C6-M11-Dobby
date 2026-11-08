@@ -28,4 +28,6 @@ struct ProductPhotoOutput: Equatable, Sendable {
     /// 기존 선택 흐름은 선택 순서, 전체 전달 흐름은 실측 원본·표시본·상세 촬영 순서다.
     let selectedPhotos: [CapturedAsset]
     let representativePhotoID: UUID
+    /// 촬영 갤러리에서 삭제한 사진. 사진 앱 원본 삭제 요청이 아니다.
+    var deletedPhotoIDs: Set<UUID> = []
 }
