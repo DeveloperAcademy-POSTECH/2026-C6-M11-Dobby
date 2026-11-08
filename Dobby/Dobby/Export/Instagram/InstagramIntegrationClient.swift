@@ -139,14 +139,12 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
 
     private static func prepareImage(_ image: UIImage, ratio: CGFloat) throws -> Data {
         let canvas = CGSize(width: 1080, height: 1080 / ratio)
-        let scale = min(canvas.width / image.size.width, canvas.height / image.size.height)
+        let scale = max(canvas.width / image.size.width, canvas.height / image.size.height)
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
-        let rendered = UIGraphicsImageRenderer(size: canvas, format: format).image { context in
-            UIColor.white.setFill()
-            context.fill(CGRect(origin: .zero, size: canvas))
+        let rendered = UIGraphicsImageRenderer(size: canvas, format: format).image { _ in
             image.draw(in: CGRect(x: (canvas.width - size.width) / 2, y: (canvas.height - size.height) / 2,
                                   width: size.width, height: size.height))
         }
@@ -190,7 +188,6 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
         Self.logger.info("[Instagram] /\(path, privacy: .public) HTTP \(http.statusCode)")
         guard (200..<300).contains(http.statusCode) else {
             let failure = try? JSONDecoder().decode(InstagramErrorResponse.self, from: data)
-            // Do not log raw responses: upstream messages can contain URLs or credentials.
             Self.logger.error("[Instagram] code=\(failure?.code ?? 0) subcode=\(failure?.subcode ?? 0) trace=\(failure?.traceID ?? "none", privacy: .public)")
             var message = failure?.message ?? "서버 요청에 실패했습니다. HTTP \(http.statusCode)"
             if let code = failure?.code { message += "\n오류 코드: \(code)" }
