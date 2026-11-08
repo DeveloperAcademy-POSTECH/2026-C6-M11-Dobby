@@ -21,6 +21,8 @@ final class Garment {
     var informationCompletedAt: Date? = nil
     /// 나가기를 눌러 보관한 등록 과정. 과거 상품의 nil은 초안으로 취급하지 않는다.
     var creationDraftData: Data? = nil
+    /// 전체 촬영 사진의 최초 상품 반영 시점. 재진입 시 편집한 사진 순서·제외 상태를 보존한다.
+    var capturePhotosAppliedAt: Date? = nil
 
     // MARK: 분류 — 모델이 채운다
 
