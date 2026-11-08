@@ -45,109 +45,7 @@ final class ProductAutofillClientTests: XCTestCase {
         XCTAssertEqual(photos.count, 7, "AI 전송 제한이 제품 사진을 줄이면 안 된다")
     }
 
-    func testGenerationReturnsValidatedResponseDiagnosticsWithOneAuthorizedRequest() async throws {
-        let directory = try makeDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let photos = try makePhotos(count: 1, directory: directory)
-        let draft = ProductAutofillDraft(productName: "진단 테스트 재킷", brand: "TEST",
-            description: "- 차콜 컬러\n- 전면 지퍼", reviewNotes: [])
-        let identifier = UUID()
-        let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft), headers: [
-            "X-Dobby-AI-Search-Calls": "2", "X-Dobby-AI-Search-Attempts": "2",
-            "X-Dobby-AI-Research-Status": "matched", "X-Request-Id": identifier.uuidString,
-        ])
-        defer { stub.remove() }
-        let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
-            bearerTokenProvider: { "test-only-authorization" })
-
-        let result = try await client.generateWithDiagnostics(photos: photos)
-        XCTAssertEqual(result.draft, draft)
-        let diagnostics = try XCTUnwrap(result.diagnostics)
-        XCTAssertEqual(diagnostics.searchCalls, 2)
-        XCTAssertEqual(diagnostics.searchAttempts, 2)
-        XCTAssertEqual(diagnostics.researchStatus, .matched)
-        XCTAssertEqual(diagnostics.requestID, identifier)
-        XCTAssertEqual(stub.requestCount, 1, "진단 정보를 얻으려고 AI 요청을 다시 보내지 않는다")
-        XCTAssertEqual(stub.request?.value(forHTTPHeaderField: "Authorization"), "Bearer test-only-authorization")
-    }
-
-    func testAbsentDiagnosticsDoNotChangeSuccessfulLegacyDrafts() async throws {
-        let directory = try makeDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let draft = ProductAutofillDraft(productName: "연결 테스트 후드", brand: nil,
-            description: "- 긴소매 후드", reviewNotes: [])
-        let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft),
-            headers: ["X-Request-Id": UUID().uuidString])
-        defer { stub.remove() }
-        let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
-            bearerTokenProvider: { "test-only-authorization" })
-
-        let result = try await client.generateWithDiagnostics(photos: makePhotos(count: 1, directory: directory))
-        XCTAssertEqual(result.draft, draft)
-        XCTAssertNil(result.diagnostics, "검색 헤더가 없는 응답의 검색 횟수를 추측하지 않는다")
-        XCTAssertEqual(stub.requestCount, 1)
-    }
-
-    func testMalformedOrInconsistentDiagnosticsAreOmittedWithoutRejectingTheDraft() async throws {
-        let directory = try makeDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let photos = try makePhotos(count: 1, directory: directory)
-        let draft = ProductAutofillDraft(productName: "연결 테스트 후드", brand: nil,
-            description: "- 긴소매 후드", reviewNotes: [])
-        let valid = ["X-Dobby-AI-Search-Calls": "1", "X-Dobby-AI-Search-Attempts": "1",
-                     "X-Dobby-AI-Research-Status": "matched"]
-        var missing = valid
-        missing.removeValue(forKey: "X-Dobby-AI-Search-Attempts")
-        let invalid = [missing,
-            valid.merging(["X-Dobby-AI-Search-Calls": "-1"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Search-Calls": "3"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Search-Attempts": "3"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Search-Calls": "01"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Search-Calls": "1.0"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Search-Calls": "2"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Research-Status": "raw-upstream-message"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Research-Status": "skipped"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Search-Calls": "0"]) { _, value in value },
-            valid.merging(["X-Dobby-AI-Research-Status": "incomplete"]) { _, value in value },
-        ]
-        for headers in invalid {
-            let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft), headers: headers)
-            defer { stub.remove() }
-            let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
-                bearerTokenProvider: { "test-only-authorization" })
-            let result = try await client.generateWithDiagnostics(photos: photos)
-            XCTAssertEqual(result.draft, draft)
-            XCTAssertNil(result.diagnostics)
-            XCTAssertEqual(stub.requestCount, 1)
-        }
-    }
-
-    func testKnownDiagnosticsStatesAndInvalidRequestIDNeverExposeRawHeaderContent() async throws {
-        let directory = try makeDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let photos = try makePhotos(count: 1, directory: directory)
-        let draft = ProductAutofillDraft(productName: "연결 테스트 후드", brand: nil,
-            description: "- 긴소매 후드", reviewNotes: [])
-        for (calls, attempts, status) in [(0, 0, ProductAutofillResearchStatus.skipped),
-                                         (1, 1, .noMatch), (0, 1, .incomplete), (1, 2, .incomplete)] {
-            let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft), headers: [
-                "X-Dobby-AI-Search-Calls": String(calls), "X-Dobby-AI-Search-Attempts": String(attempts),
-                "X-Dobby-AI-Research-Status": status.rawValue, "X-Request-Id": "raw-upstream-message",
-            ])
-            defer { stub.remove() }
-            let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
-                bearerTokenProvider: { "test-only-authorization" })
-            let result = try await client.generateWithDiagnostics(photos: photos)
-            let diagnostics = try XCTUnwrap(result.diagnostics)
-            XCTAssertEqual(diagnostics.searchCalls, calls)
-            XCTAssertEqual(diagnostics.searchAttempts, attempts)
-            XCTAssertEqual(diagnostics.researchStatus, status)
-            XCTAssertNil(diagnostics.requestID, "검증하지 않은 요청 식별자 문자열은 보관하지 않는다")
-            XCTAssertEqual(stub.requestCount, 1)
-        }
-    }
-
-    func testOrdinaryGenerateStillReturnsOnlyTheDraftWithOneRequestWhenMetadataExists() async throws {
+    func testSearchMetadataHeadersDoNotChangeOrdinaryDraftOrAddRequests() async throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let draft = ProductAutofillDraft(productName: "연결 테스트 후드", brand: nil,
@@ -163,17 +61,6 @@ final class ProductAutofillClientTests: XCTestCase {
         let result = try await client.generate(photos: makePhotos(count: 1, directory: directory))
         XCTAssertEqual(result, draft)
         XCTAssertEqual(stub.requestCount, 1)
-    }
-
-    func testExistingGeneratorUsesDefaultDiagnosticsWithoutInventingSearchCounts() async throws {
-        let draft = ProductAutofillDraft(productName: "모의 응답", brand: nil,
-            description: "- 합성 테스트 설명", reviewNotes: [])
-        let generator = DraftOnlyAutofillGenerator(draft: draft)
-        let result = try await generator.generateWithDiagnostics(photos: [])
-        XCTAssertEqual(result.draft, draft)
-        XCTAssertNil(result.diagnostics)
-        let count = await generator.generateCount
-        XCTAssertEqual(count, 1)
     }
 
     func testCommonAuthorizationAddsAppKeyAndInstallationBearerToTheExistingRequest() async throws {
@@ -508,15 +395,4 @@ private nonisolated final class AutofillURLProtocol: URLProtocol, @unchecked Sen
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
-}
-
-private actor DraftOnlyAutofillGenerator: ProductAutofillGenerating {
-    let draft: ProductAutofillDraft
-    private(set) var generateCount = 0
-    init(draft: ProductAutofillDraft) { self.draft = draft }
-
-    func generate(photos: [CapturedAsset]) async throws -> ProductAutofillDraft {
-        generateCount += 1
-        return draft
-    }
 }

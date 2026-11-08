@@ -74,63 +74,8 @@ nonisolated struct ProductAutofillDraft: Codable, Equatable, Sendable {
     }
 }
 
-nonisolated enum ProductAutofillResearchStatus: String, Equatable, Sendable {
-    case skipped, matched, incomplete
-    case noMatch = "no_match"
-}
-
-nonisolated struct ProductAutofillDiagnostics: Equatable, Sendable {
-    let searchCalls: Int
-    let searchAttempts: Int
-    let researchStatus: ProductAutofillResearchStatus
-    let requestID: UUID?
-
-    /// Accept only the Worker's bounded counters and known states, never raw headers.
-    init?(response: HTTPURLResponse) {
-        guard let callsHeader = response.value(forHTTPHeaderField: "X-Dobby-AI-Search-Calls"),
-              let attemptsHeader = response.value(forHTTPHeaderField: "X-Dobby-AI-Search-Attempts"),
-              ["0", "1", "2"].contains(callsHeader), ["0", "1", "2"].contains(attemptsHeader),
-              let calls = Int(callsHeader), let attempts = Int(attemptsHeader), calls <= attempts,
-              let statusHeader = response.value(forHTTPHeaderField: "X-Dobby-AI-Research-Status"),
-              let status = ProductAutofillResearchStatus(rawValue: statusHeader) else { return nil }
-        switch status {
-        case .skipped:
-            guard calls == 0 && attempts == 0 else { return nil }
-        case .matched, .noMatch:
-            guard calls > 0 && calls == attempts else { return nil }
-        case .incomplete:
-            guard attempts > 0 && calls < attempts else { return nil }
-        }
-        searchCalls = calls
-        searchAttempts = attempts
-        researchStatus = status
-        if let identifier = response.value(forHTTPHeaderField: "X-Request-Id"), identifier.count == 36 {
-            requestID = UUID(uuidString: identifier)
-        } else {
-            requestID = nil
-        }
-    }
-}
-
-nonisolated struct ProductAutofillGenerationResult: Equatable, Sendable {
-    let draft: ProductAutofillDraft
-    let diagnostics: ProductAutofillDiagnostics?
-
-    init(draft: ProductAutofillDraft, diagnostics: ProductAutofillDiagnostics? = nil) {
-        self.draft = draft
-        self.diagnostics = diagnostics
-    }
-}
-
 nonisolated protocol ProductAutofillGenerating: Sendable {
     func generate(photos: [CapturedAsset]) async throws -> ProductAutofillDraft
-    func generateWithDiagnostics(photos: [CapturedAsset]) async throws -> ProductAutofillGenerationResult
-}
-
-extension ProductAutofillGenerating {
-    nonisolated func generateWithDiagnostics(photos: [CapturedAsset]) async throws -> ProductAutofillGenerationResult {
-        ProductAutofillGenerationResult(draft: try await generate(photos: photos))
-    }
 }
 
 nonisolated enum ProductAutofillError: Error, Equatable, LocalizedError, Sendable {
@@ -217,12 +162,8 @@ actor ProductAutofillClient: ProductAutofillGenerating {
     #endif
 
     func generate(photos: [CapturedAsset]) async throws -> ProductAutofillDraft {
-        try await generateWithDiagnostics(photos: photos).draft
-    }
-
-    func generateWithDiagnostics(photos: [CapturedAsset]) async throws -> ProductAutofillGenerationResult {
         try Task.checkCancellation()
-        return try await withThrowingTaskGroup(of: ProductAutofillGenerationResult.self) { group in
+        return try await withThrowingTaskGroup(of: ProductAutofillDraft.self) { group in
             group.addTask { try await self.performRequest(photos: photos) }
             group.addTask {
                 try await Task.sleep(for: .seconds(60))
@@ -234,7 +175,7 @@ actor ProductAutofillClient: ProductAutofillGenerating {
         }
     }
 
-    private func performRequest(photos: [CapturedAsset]) async throws -> ProductAutofillGenerationResult {
+    private func performRequest(photos: [CapturedAsset]) async throws -> ProductAutofillDraft {
         try Task.checkCancellation()
         guard let authorization = try await authorizationProvider(), !authorization.token.isEmpty,
               authorization.token.count <= 1024, !authorization.token.contains(where: \.isWhitespace) else {
@@ -270,7 +211,7 @@ actor ProductAutofillClient: ProductAutofillGenerating {
             guard let draft = try? JSONDecoder().decode(ProductAutofillDraft.self, from: data), draft.isValid else {
                 throw ProductAutofillError.invalidResponse
             }
-            return ProductAutofillGenerationResult(draft: draft, diagnostics: ProductAutofillDiagnostics(response: response))
+            return draft
         } catch let error as URLError {
             if Task.isCancelled || error.code == .cancelled { throw CancellationError() }
             if error.code == .timedOut { throw ProductAutofillError.timeout }
