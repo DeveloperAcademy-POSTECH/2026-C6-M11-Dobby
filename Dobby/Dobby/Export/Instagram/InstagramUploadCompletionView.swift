@@ -2,30 +2,38 @@ import SwiftUI
 
 struct InstagramUploadCompletionView: View {
     private enum Layout {
-        static let contentSpacing: CGFloat = 20
-        static let sectionSpacing: CGFloat = 144
         static let buttonBarHorizontalPadding: CGFloat = 34
         static let buttonBarTopPadding: CGFloat = 16
         static let buttonBarBottomPadding: CGFloat = 34
     }
 
     var body: some View {
-        VStack(spacing: Layout.sectionSpacing) {
-            VStack(spacing: Layout.contentSpacing) {
+        VStack(spacing: 0) {
+            VStack(spacing: 0) {
                 Image(systemName: "square.and.arrow.up.badge.checkmark")
-                    .font(.system(size: 61.96363, weight: .medium))
-                    .foregroundStyle(Color(.brandMain500))
+                    .font(.system(size: 62, weight: .medium))
+                    .foregroundStyle(Color(.brandNeutralBlack))
                     .accessibilityHidden(true)
+                
+                Spacer()
+                    .frame(height: 54)
 
                 Text("업로드 완료")
                     .font(.custom("Pretendard-Bold", fixedSize: 30))
                     .accessibilityAddTraits(.isHeader)
+                
+                
+                Spacer()
+                    .frame(height: 20)
 
                 Text("연결된 계정에 자동으로 업로드했어요!")
                     .font(.custom("Pretendard-Medium", fixedSize: 18))
             }
             .multilineTextAlignment(.center)
             .foregroundStyle(Color(.brandNeutralBlack))
+            
+            Spacer()
+                .frame(height: 242)
 
             PairedActionButtons(
                 secondary: .init(
