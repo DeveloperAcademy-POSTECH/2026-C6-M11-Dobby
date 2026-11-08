@@ -15,8 +15,8 @@ nonisolated enum OuterwearLandmarkPolicy {
 
     static func evaluate(response: OuterwearLandmarkResponse, expectedRequestID: String,
                          imageSize: PixelSize, masks: [GarmentMask],
-                         orientation: ImageOrientation) throws -> OuterwearLandmarkEvaluation {
-        try response.validate(expectedRequestID: expectedRequestID)
+                         orientation: ImageOrientation, allowingNeckEstimates: Bool = false) throws -> OuterwearLandmarkEvaluation {
+        try response.validate(expectedRequestID: expectedRequestID, allowingNeckEstimates: allowingNeckEstimates)
         guard imageSize.isValid else { throw GarmentMaskAssociationError.invalidMask }
         var raw = try TopLandmarkSchema.expectedKeypoints.map {
             try landmark(id: $0, observation: response.points[$0]!, orientation: orientation)
@@ -46,8 +46,11 @@ nonisolated enum OuterwearLandmarkPolicy {
         try validateLayout(response: response)
         let estimatedIDs = Set(OuterwearComparisonGeometry.observations(response)
             .filter { $0.value.visibility == .estimated }.map(\.key))
-        let acceptedEstimates = OuterwearCenterGapPolicy.accepted(response: response,
+        var acceptedEstimates = OuterwearCenterGapPolicy.accepted(response: response,
             mask: try GarmentMaskOrientation.uprightMask(fromOriginal: mask, orientation: orientation))
+        if allowingNeckEstimates {
+            acceptedEstimates.formUnion(associated.intersection(estimatedIDs).intersection(["neck_left", "neck_right"]))
+        }
         var calculationResponse = response
         var calculationPoints = raw
         var calculationAssociated = associated.subtracting(estimatedIDs).union(acceptedEstimates)
@@ -57,7 +60,8 @@ nonisolated enum OuterwearLandmarkPolicy {
         // its column-specific correction below, rather than snapping sideways
         // onto an opening, notch or another part of the silhouette.
         let snapped = try GarmentOutlineSnap.apply(points: raw.filter {
-            !estimatedIDs.contains($0.id) && $0.id != "hem_center"
+            (!estimatedIDs.contains($0.id) || (allowingNeckEstimates && ["neck_left", "neck_right"].contains($0.id)))
+                && $0.id != "hem_center"
         }, mask: mask, imageSize: imageSize)
         var adjustments = snapped.adjustments
         for adjustment in adjustments {
@@ -128,7 +132,8 @@ nonisolated enum OuterwearLandmarkPolicy {
                                  pointAssessments: assessments)], kindEvidence: evidence)
         if !adjustments.isEmpty { diagnostics.automaticAdjustments = adjustments }
         let estimates = acceptedEstimates.subtracting(rejected).sorted().compactMap { id -> GarmentCenterEstimate? in
-            guard let support = id == totalLengthStartID ? response.centerSupport?.frontNeckSeamCenter
+            guard [totalLengthStartID, "hem_center"].contains(id),
+                  let support = id == totalLengthStartID ? response.centerSupport?.frontNeckSeamCenter
                 : response.centerSupport?.hemCenter else { return nil }
             return .init(landmarkID: id,
                 point: ImageCoordinateTransform.displayToOriginal(support.midpoint, orientation: orientation),

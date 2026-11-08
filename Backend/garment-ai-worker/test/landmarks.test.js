@@ -265,8 +265,8 @@ test("landmarks reuse app auth and aggregate quotas, and echo only the caller re
   assert.equal(new Headers(h.calls[0].init.headers).has("X-Dobby-App-Key"), false);
 });
 
-test("landmarks accept all seven outerwear and sweater categories and preserve partial/unknown observations", async () => {
-  for (const category of ["Blazer", "Jacket", "Coat", "Denim Jacket", "Sports Jacket", "Hoodie", "Sweater"]) {
+test("landmarks accept all eight AI garment categories and preserve partial/unknown observations", async () => {
+  for (const category of ["Blazer", "Jacket", "Coat", "Denim Jacket", "Sports Jacket", "Hoodie", "Sweater", "Polo"]) {
     const value = result();
     value.view = "unknown";
     value.neckStyle = "unknown";
@@ -625,4 +625,77 @@ test("v3 preserves missing front observations without requesting a rear replacem
     assert.deepEqual(data.points, value.points);
     assert.equal(data.backNeckSeamCenter, undefined);
   }
+});
+
+function neckRequest(payload = { ...body(), regions: [{ id: "upper", image: body().image }] }) {
+  return new Request("https://worker.example/v4/garments/neck-refinement", {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Dobby-App-Key": APP_KEY,
+      Authorization: `Bearer ${INSTALLATION_ID}` }, body: JSON.stringify(payload),
+  });
+}
+test("neck refinement asks only necks and retains direct versus estimated evidence", async () => {
+  const value = { view: "front", neckStyle: "hood", points: {
+    neck_left: { point: { x: 0.3, y: 0.4 }, visibility: "estimated" }, neck_right: hidden() } };
+  const h = harness({ value });
+  const response = await h.worker.fetch(neckRequest(), h.env);
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.refinementVersion, "outerwear-side-neck-refinement-v1");
+  assert.deepEqual(data.points, value.points);
+  assert.equal(h.calls.length, 1);
+  const sent = JSON.parse(h.calls[0].init.body);
+  assert.deepEqual(sent.text.format.schema.properties.points.required, ["neck_left", "neck_right"]);
+  assert.equal(sent.input[0].content.filter(c => c.type === "input_image").length, 2);
+  assert.match(sent.instructions, /카라 앞쪽 끝/);
+  assert.match(sent.instructions, /좌우를 독립적으로/);
+  assert.match(sent.instructions, /estimated/);
+});
+test("neck route rejects hem crops, extra points, invalid estimates and wrong faces", async () => {
+  await failure(harness(), neckRequest(lengthBody()), 400, "invalid_request");
+  const valid = { view: "front", neckStyle: "collar", points: { neck_left: visible(0.3, 0.4), neck_right: hidden() } };
+  for (const value of [
+    { ...valid, points: { ...valid.points, shoulder_left: visible() } },
+    { ...valid, points: { ...valid.points, neck_left: { point: null, visibility: "estimated" } } },
+    { ...valid, points: { ...valid.points, neck_left: visible(1, 0.4) } },
+    { ...valid, view: "back" },
+  ]) await failure(harness({ value }), neckRequest(), 502, "invalid_ai_response");
+  const h = harness({ installationAllowed: false });
+  await failure(h, neckRequest(), 429, "rate_limited");
+  assert.equal(h.calls.length, 0);
+});
+
+test("single-side neck requests use the new boundary definition", async () => {
+  for (const target of ["neck_left", "neck_right"]) {
+    const opposite = target === "neck_left" ? "neck_right" : "neck_left";
+    const h = harness({ value: { view: "front", neckStyle: "collar", points: { [target]: visible(0.4, 0.35), [opposite]: hidden() } } });
+    assert.equal((await h.worker.fetch(neckRequest({ ...body(), regions: [{ id: "upper", image: body().image }], target }), h.env)).status, 200);
+    const sent = JSON.parse(h.calls[0].init.body);
+    assert.match(sent.instructions, /어깨 윗라인이 목 옆의 카라 뿌리/);
+    assert.ok(sent.instructions.includes(`대상은 화면 기준 ${target} 하나`));
+    const region = sent.input[0].content.filter(c => c.type === "input_text").map(c => JSON.parse(c.text)).find(c => c.region === "upper");
+    assert.deepEqual(region.targets, [target]);
+  }
+});
+test("single-side neck rejects unknown targets and opposite-side coordinates", async () => {
+  const payload = { ...body(), regions: [{ id: "upper", image: body().image }], target: "neck_left" };
+  const invalid = harness();
+  await failure(invalid, neckRequest({ ...payload, target: "shoulder_left" }), 400, "invalid_request");
+  assert.equal(invalid.calls.length, 0);
+  const h = harness({ value: { view: "front", neckStyle: "collar", points: { neck_left: visible(), neck_right: visible() } } });
+  await failure(h, neckRequest(payload), 502, "invalid_ai_response");
+});
+
+test("Polo reaches current v4 landmarks and independent neck refinement unchanged", async () => {
+  const whole = harness({ value: resultV4() });
+  const wholeResponse = await whole.worker.fetch(request({ ...body(), category: "Polo" }, { version: 4 }), whole.env);
+  assert.equal(wholeResponse.status, 200);
+  assert.equal(JSON.parse(JSON.parse(whole.calls[0].init.body).input[0].content[0].text).category, "Polo");
+  const detail = harness({ value: { view: "front", neckStyle: "collar", points: {
+    neck_left: visible(0.4, 0.3), neck_right: hidden() } } });
+  const response = await detail.worker.fetch(neckRequest({ ...body(), category: "Polo",
+    regions: [{ id: "upper", image: body().image }], target: "neck_left" }), detail.env);
+  assert.equal(response.status, 200);
+  const sent = JSON.parse(detail.calls[0].init.body);
+  assert.equal(JSON.parse(sent.input[0].content[0].text).category, "Polo");
+  assert.match(sent.instructions, /대상은 화면 기준 neck_left 하나/);
 });

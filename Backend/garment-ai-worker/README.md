@@ -188,7 +188,7 @@ npm run dry-run
 }
 ```
 
-- `category`: `Blazer`, `Jacket`, `Coat`, `Denim Jacket`, `Sports Jacket`, `Hoodie`(후드티), `Sweater`(스웨터·니트)만 허용합니다.
+- `category`: `Blazer`, `Jacket`, `Coat`, `Denim Jacket`, `Sports Jacket`, `Hoodie`(후드티), `Sweater`(스웨터·니트), `Polo`(폴로)만 허용합니다.
 - 사진은 이미 올바른 방향으로 편 **전체 사진**이어야 합니다. 화면 표시용 크롭·패딩·가로세로 늘리기를 적용하지 않습니다. `width`와 `height`는 업로드 사본의 실제 픽셀 크기이며 1~16,384 정수입니다. Worker는 이 숫자의 형식·범위를 검증하며 전체 이미지 디코딩으로 크기를 재측정하지는 않습니다.
 - 기존 JPEG/PNG/WebP 데이터 URL 검사와 한 장 2MiB, 요청 12MiB 제한을 적용합니다. 원본 사진·EXIF·GPS·깊이는 서버가 필요로 하지 않습니다.
 - 좌표는 업로드 사진 전체 왼쪽 위 원점, x 오른쪽·y 아래 방향의 정규화 좌표이며 `0 <= x,y < 1`입니다. 앱은 업로드 방향을 원래 센서 방향으로 한 번 역변환한 뒤 기존 같은 프레임의 LiDAR 깊이와 연결해야 합니다.
@@ -326,3 +326,17 @@ npm run check:cloud -- https://dobby-garment-ai-dev.dobbyisvintage.workers.dev
 본문은 `{requestId, category, image, regions}`이며 전체 옷 참고 사진과 정확히 두 확대 영역 `upper`, `hem`을 보냅니다. 모델 응답은 `frontNeckSeamCenter`, `hem_center`, 두 점의 `centerSupport`, `view`, `neckStyle`만 요청합니다. 각 중앙점과 support는 해당 확대 사진의 정규화 좌표입니다. 서버 응답은 `refinementVersion: "outerwear-two-center-refinement-v4"`, `requestId`, `model`, `modelVersion`과 위 관측 필드이며 공용 11점 응답과 구분합니다. 이전 앱·비교 실험의 5부위 `/landmark-refinement` 계약은 유지합니다.
 
 확대 응답에서는 빠졌던 총장점만 검증 후 채택하고, 최초 응답의 정상 총장점과 어깨·가슴·소매 점은 보존합니다. 확대 실패 시 최초 측정 결과를 유지하고 취소는 전파합니다. `remoteCenterRefinement`에 두 확대 영역·원본 관측·채택한 점을 저장합니다. 기존 기록과 함께 읽도록 저장용 `localResponse`의 다른 점은 null이며 새 AI 관측으로 취급하지 않습니다. Worker 배포 후 새 앱을 빌드해야 전용 경로가 사용됩니다.
+
+## model-test: 새 목옆점 정의와 좌우 개별 확대 재분석
+
+`POST /v4/garments/neck-refinement`는 `{requestId, category, image, regions}` 형식이며 `regions`에는 `upper` 한 장만 허용합니다. `image`는 전체 옷 참고용입니다. 반환값은 `refinementVersion: outerwear-side-neck-refinement-v1`, `modelVersion: luna-outerwear11-front-gap-v4`, `model`, `requestId`, `view`, `neckStyle`, `points`입니다. `points`는 `neck_left`, `neck_right` 두 개뿐이며 좌표는 **upper 확대 사진 기준**입니다. 목 형태별 정의는 `SIDE_NECK_INSTRUCTIONS`를 v4 첫 분석과 재분석에서 공유합니다.
+
+재분석은 관측 가능한 교점은 `visible`, 주변 목둘레·어깨선의 진행으로 좁힐 수 있는 가려진 교점은 `estimated`로 구분합니다. 두 경우 좌표가 필요하며 `occluded`/`uncertain`은 null입니다. 기존 v4 전체 응답에 목옆점 estimated를 추가하지 않고 이 전용 응답에서만 허용합니다. 앞면이 아니면 좌표를 반환하지 않습니다. 기존 인증, 설치별/공유 요청 제한, 사진 용량 검증을 그대로 적용합니다.
+
+새 앱은 첫 분석 후 목·어깨 통합 확대를 한 번(12초 제한) 요청하고, 그 결과의 좌우 목옆점 각각을 중심으로 두 개의 정사각형 확대를 추가 요청합니다(각 20초 제한). 개별 요청은 같은 경로에 `target: "neck_left"` 또는 `"neck_right"`를 추가합니다. 반대쪽 점은 null이어야 하며, 구버전의 target 없는 요청도 계속 지원합니다. 전체 촬영 처리 제한은 100초입니다. 마스크 검증을 통과한 대상 목옆점만 교체하고, 실패·null·검증 탈락은 직전 점을 유지합니다. 목옆점을 기준으로 마스크 밑단 교점을 계산하므로 밑단 AI 재분석은 하지 않습니다. 저장 진단 `remoteNeckRefinement`에는 크롭 범위·원본 응답·반영한 점·실패 여부가 남습니다.
+
+적용 순서: 이 디렉터리에서 `npm test`, `npm run dry-run`, `npm run deploy` 후 앱을 다시 빌드합니다. 배포 전 새 경로의 실패는 앱에서 첫 분석으로 복귀하므로 확대 분석 개선은 적용되지 않습니다. 실제 사진의 위치 정확도는 배포 후 별도 확인해야 합니다.
+
+좌우 개별 확대는 원본 정렬 이미지에서 각 AI 목옆점 중심으로 생성합니다. 정사각형 한 변은 `max(원본 폭 × 0.14, 좌우 AI 점 사이 픽셀 거리 × 0.95)`를 올림하고 이미지 안으로 제한합니다. 양쪽 크롭은 한쪽 재분석 결과가 다른 쪽 입력을 바꾸지 않도록 같은 시점의 예측으로 고정합니다. 저장 진단 `remoteNeckSideRefinements`는 대상 ID·크롭·원본 응답·채택 여부·실패를 보존하며 기존 기록에는 없어도 됩니다. 한 촬영당 최대 4회 호출이며 설치별 5회/60초 제한을 공유합니다.
+
+새 카라 기준은 어깨 윗라인이 목 옆의 카라 뿌리로 이어지는 연결 지점입니다. 카라 앞끝·라펠 끝은 제외합니다. 좌우 확대 비교에서 일부 사진은 개선되고 일부는 악화됐으므로 실제 위치의 정확도를 보장하는 검증은 아닙니다. 기존 마스크 검증은 원단 근접/형상 검증이며, 올바른 목 구조를 선택했는지까지 보증하지 않습니다.

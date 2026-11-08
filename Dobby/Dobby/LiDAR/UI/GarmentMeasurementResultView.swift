@@ -424,21 +424,25 @@ struct GarmentMeasurementResultView: View {
             failure: model.result.values.first { $0.id == measurement.definition.id }?.failure,
             failureFeedback: model.result.values.first { $0.id == measurement.definition.id }?.failureFeedback,
             usesFrontNeckSeam: measurement.definition.id == "top.frontLength" || usesFrontTotalLength,
-            usesBackNeckSeam: GarmentLandmarkModelContract.isLunaOuterwear(version: model.landmarks.modelVersion, kind: .top)) { correction in
+            usesBackNeckSeam: !model.usesSideNeckTotalLength
+                && GarmentLandmarkModelContract.isLunaOuterwear(version: model.landmarks.modelVersion, kind: .top)) { correction in
                 guard !isSaving, !isEditingPoint, !model.needsRecalculation else { return false }
                 return model.applyTotalLengthCorrection(from: correction)
             }
     }
 
     private var usesFrontTotalLength: Bool {
-        GarmentLandmarkModelContract.isFrontLengthOuterwear(version: model.landmarks.modelVersion, kind: .top)
+        !model.usesSideNeckTotalLength
+            && GarmentLandmarkModelContract.isFrontLengthOuterwear(version: model.landmarks.modelVersion, kind: .top)
     }
 
     private var measurementGuide: String {
         guard let total = model.lengthDefinition else {
             return "펼친 옷의 두 점 사이 직선거리예요. 주름이나 굽은 봉제선을 따라 잰 길이와 다를 수 있어요."
         }
-        let totalGuide = usesFrontTotalLength
+        let totalGuide = model.usesSideNeckTotalLength
+            ? "총장은 사진 기준 왼쪽 목옆점에서 옷의 세로 방향으로 내려간 밑단 교점까지의 거리예요."
+            : usesFrontTotalLength
             ? "총장은 후드·카라 높이를 제외한 앞목 몸판 연결 봉제선 중앙부터 앞면 밑단 중앙까지의 거리예요."
             : total.id == "top.frontLength"
             ? "앞판 총장은 후드·카라를 제외한 앞목 몸판 연결 봉제선 중앙부터 앞 밑단 중앙까지의 거리예요. 뒤판 총장과 기준이 달라요."
