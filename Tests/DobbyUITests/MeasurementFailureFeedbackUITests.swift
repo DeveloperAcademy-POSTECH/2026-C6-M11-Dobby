@@ -12,7 +12,9 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
             XCTAssertTrue(confirm.waitForExistence(timeout: 15))
             XCTAssertFalse(app.buttons["garmentUnavailableNotice"].exists)
             XCTAssertFalse(app.buttons["garmentUncertainNotice"].exists)
-            XCTAssertTrue(app.staticTexts["자동으로 실측을 완료했어요"].exists)
+            XCTAssertTrue(app.navigationBars["실측 결과"].exists)
+            // Synthetic fixtures show the point tutorial only with its explicit opt-in flag.
+            XCTAssertFalse(app.buttons["dismissGarmentResultTutorial"].exists)
             let labels = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_"))
             XCTAssertEqual(labels.count, 4)
             for label in labels.allElementsBoundByIndex {
@@ -26,13 +28,11 @@ final class MeasurementFailureFeedbackUITests: XCTestCase {
                 format: "identifier BEGINSWITH %@", "measurementFailureFeedback_")).firstMatch.exists)
             XCTAssertTrue(confirm.isEnabled && confirm.isHittable)
             confirm.tap()
+            let guide = app.buttons["camera.startDetailCapture"]
+            if guide.waitForExistence(timeout: 2) { guide.tap() }
             let select = app.buttons["camera.selectPhotos"]
             XCTAssertTrue(select.waitForExistence(timeout: 15))
             select.tap()
-            let completePhotos = app.buttons["camera.completePhotos"]
-            XCTAssertTrue(completePhotos.waitForExistence(timeout: 10))
-            disableProductAutofillIfPresent(in: app)
-            completePhotos.tap()
             XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
             XCTAssertFalse(app.descendants(matching: .any)["product-info.measurement-warning"].firstMatch.exists)
             attach(app, name: top ? "top-uncertain-number-without-warning" : "bottom-uncertain-number-without-warning")

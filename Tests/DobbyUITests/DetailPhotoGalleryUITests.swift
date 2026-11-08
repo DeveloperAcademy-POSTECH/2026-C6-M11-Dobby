@@ -64,9 +64,9 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         capture.tap()
         let next = app.buttons["camera.selectPhotos"]
         XCTAssertTrue(next.wait(for: \.isEnabled, toEqual: true, timeout: 10)); next.tap()
-        XCTAssertTrue(app.buttons["camera.thumbnail.3"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["camera.thumbnail.4"].exists)
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-info.photo.")).count, 5)
     }
 
     @MainActor

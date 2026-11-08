@@ -3,6 +3,34 @@ import XCTest
 
 final class DetailCaptureInformationHandoffUITests: XCTestCase {
     @MainActor
+    func testMeasurementOnlyAndMoreThanTenPhotosReachInformation() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString, "--garment-preview-top"]
+        app.launch()
+        defer { app.terminate() }
+        tap(app, "product-flow.start")
+        armSyntheticGarmentCapture(in: app)
+        tap(app, "captureGarment")
+        tap(app, "confirmGarmentMeasurement")
+        tap(app, "camera.startDetailCapture")
+        tap(app, "camera.selectPhotos")
+        assertInformation(app, count: 2) // 실측 원본과 표시본은 상세 컷 없이도 전달된다.
+        let measurementIDs = informationPhotoIDs(app)
+        tap(app, "product-flow.back")
+        for _ in 0..<9 { tap(app, "camera.captureDetail") }
+        tap(app, "camera.selectPhotos")
+        assertInformation(app, count: 11) // 폐기된 선택 화면의 최대 10장 제한을 적용하지 않는다.
+        let allIDs = informationPhotoIDs(app)
+        XCTAssertEqual(Array(allIDs.prefix(2)), measurementIDs)
+        XCTAssertEqual(Set(allIDs).count, 11)
+        tap(app, "product-flow.back")
+        tap(app, "camera.selectPhotos")
+        assertInformation(app, count: 11)
+        XCTAssertEqual(informationPhotoIDs(app), allIDs)
+    }
+
+    @MainActor
     func testRelaunchResumesInformationAndBackKeepsCaptureSession() {
         continueAfterFailure = false
         let app = XCUIApplication()
