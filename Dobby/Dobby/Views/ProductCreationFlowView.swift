@@ -229,8 +229,9 @@ struct ProductCreationFlowView: View {
         if GarmentInformationValidation.hasAnyInformation(garment) {
             requestDraftExit()
         } else {
-            // Retain the product, selected photos and measurement input in this flow.
-            path.removeLast()
+            // Both new and restored drafts return to the same capture session.
+            // Do not rebuild the model or pass through the retired selection screen.
+            path = [.details]
         }
     }
 
@@ -550,7 +551,7 @@ struct ProductCreationFlowView: View {
     }
 
     private func persistDraft(_ garment: Garment, step: ProductDraftStep) throws {
-        // Revisiting photo selection after completion keeps this a saved product.
+        // Revisiting capture after completion keeps this a saved product.
         if garment.informationCompletedAt != nil {
             try context.save()
             preservesDraftPhotos = false
@@ -594,9 +595,9 @@ struct ProductCreationFlowView: View {
             restoredRecord = record
             switch draft.step {
             case .measurementResult: path = []
-            case .details: path = [.details]
-            case .photoSelection: path = [.details, .photoSelection]
-            case .information: path = [.details, .photoSelection, .information]
+            // Decode legacy selection drafts without deleting their captures.
+            case .details, .photoSelection: path = [.details]
+            case .information: path = [.details, .information]
             }
         } catch {
             restorationError = "저장한 작업은 보관함에 남아 있어요. \(error.localizedDescription)"
