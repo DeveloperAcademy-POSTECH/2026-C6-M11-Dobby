@@ -164,8 +164,7 @@ struct ProductCreationFlowView: View {
                 case .details:
                     CameraFlowView(model: photoModel, permission: permission, camera: camera,
                         previewSource: isFixture ? photoModel.input.measurement.source : nil,
-                        onSelectPhotos: { path.append(.photoSelection) },
-                        onExit: returnToMeasurementResult, onComplete: receivePhotos)
+                        onExit: returnToMeasurementResult, onComplete: receiveAllCapturedPhotos)
                 case .photoSelection:
                     ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
                         usesAI: $usesProductAutofill,
@@ -341,6 +340,18 @@ struct ProductCreationFlowView: View {
             model.acknowledgeCaptureGuide()
         }
         photoModel = model
+    }
+
+    private func receiveAllCapturedPhotos(_ output: ProductPhotoOutput) async throws {
+        guard isPresented, path.last == .details, let garment, let photoModel else {
+            throw CameraFailure.mismatchedCapture
+        }
+        try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input,
+            includesAllCapturedPhotos: true)
+        try Task.checkCancellation()
+        guard isPresented, path.last == .details else { throw CancellationError() }
+        try persistDraft(garment, step: .information)
+        path.append(.information)
     }
 
     private func receivePhotos(_ output: ProductPhotoOutput) async throws {
