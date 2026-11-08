@@ -7,6 +7,9 @@ struct InstagramUploadCompletionView: View {
         static let buttonBarBottomPadding: CGFloat = 34
     }
 
+    let onOpenLibrary: () -> Void
+    let onOpenInstagram: () -> Void
+
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -14,15 +17,14 @@ struct InstagramUploadCompletionView: View {
                     .font(.system(size: 62, weight: .medium))
                     .foregroundStyle(Color(.brandNeutralBlack))
                     .accessibilityHidden(true)
-                
+
                 Spacer()
                     .frame(height: 54)
 
                 Text("업로드 완료")
                     .font(.custom("Pretendard-Bold", fixedSize: 30))
                     .accessibilityAddTraits(.isHeader)
-                
-                
+
                 Spacer()
                     .frame(height: 20)
 
@@ -31,7 +33,7 @@ struct InstagramUploadCompletionView: View {
             }
             .multilineTextAlignment(.center)
             .foregroundStyle(Color(.brandNeutralBlack))
-            
+
             Spacer()
                 .frame(height: 242)
 
@@ -39,12 +41,12 @@ struct InstagramUploadCompletionView: View {
                 secondary: .init(
                     title: "보관함으로 가기",
                     accessibilityIdentifier: "export.instagram.library",
-                    handler: {}
+                    handler: onOpenLibrary
                 ),
                 primary: .init(
                     title: "인스타그램 열기",
                     accessibilityIdentifier: "export.instagram.open",
-                    handler: {}
+                    handler: onOpenInstagram
                 ),
                 minimumHeight: 62
             )
@@ -58,5 +60,5 @@ struct InstagramUploadCompletionView: View {
 }
 
 #Preview("인스타그램 업로드 완료") {
-    InstagramUploadCompletionView()
+    InstagramUploadCompletionView(onOpenLibrary: {}, onOpenInstagram: {})
 }

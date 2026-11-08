@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum InstagramUploadState {
     case idle
@@ -16,6 +17,7 @@ private enum InstagramUploadState {
 
 struct InstagramExportView: View {
     let product: ExportProduct
+    let onRequestExit: (ExportReturnDestination) -> Void
     let onPublished: (InstagramPublishResult) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var client = InstagramIntegrationClient()
@@ -29,8 +31,10 @@ struct InstagramExportView: View {
     @State private var message: String?
     @State private var requestID = UUID().uuidString
 
-    init(product: ExportProduct, onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
+    init(product: ExportProduct, onRequestExit: @escaping (ExportReturnDestination) -> Void,
+         onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
         self.product = product
+        self.onRequestExit = onRequestExit
         self.onPublished = onPublished
         _draft = State(initialValue: InstagramExportDraft(product: product))
     }
@@ -38,7 +42,10 @@ struct InstagramExportView: View {
     var body: some View {
         Group {
             if uploadState.isCompleted {
-                InstagramUploadCompletionView()
+                InstagramUploadCompletionView(
+                    onOpenLibrary: requestLibraryExit,
+                    onOpenInstagram: openInstagram
+                )
             } else if let account {
                 InstagramComposeView(
                     account: account,
@@ -56,6 +63,7 @@ struct InstagramExportView: View {
         .navigationTitle("인스타그램으로 내보내기")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
+        .toolbar(uploadState.isCompleted ? .hidden : .visible, for: .navigationBar)
         .toolbar {
             if !uploadState.isUploading {
                 ToolbarItem(placement: .topBarLeading) {
@@ -118,6 +126,24 @@ struct InstagramExportView: View {
 
     private var canPublish: Bool {
         !busy && !uploadState.isUploading && account != nil && draft.canPublish
+    }
+
+    private func requestLibraryExit() {
+        onRequestExit(.library)
+    }
+
+    private func openInstagram() {
+        Task { await openInstagramDestination() }
+    }
+
+    private func openInstagramDestination() async {
+        let destination = ExportChannel.instagram.destinationURL
+        let didOpenApp = await UIApplication.shared.open(
+            destination,
+            options: [.universalLinksOnly: true]
+        )
+        guard !didOpenApp else { return }
+        await UIApplication.shared.open(destination)
     }
 
     private func loadAccount() async {

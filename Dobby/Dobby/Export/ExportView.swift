@@ -56,7 +56,7 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showInstagram) {
-                InstagramExportView(product: product) { _ in
+                InstagramExportView(product: product, onRequestExit: requestExit) { _ in
                     completedChannels.insert(.instagram)
                     try? ExportCompletionRecorder.record(productID: product.id, channel: .instagram,
                                                          in: modelContext)
