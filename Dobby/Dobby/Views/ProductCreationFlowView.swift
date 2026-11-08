@@ -5,7 +5,7 @@ import UIKit
 /// Holds the same product and photo session through the complete creation flow.
 struct ProductCreationFlowView: View {
     @Environment(\.returnHomeFromExport) private var returnHomeFromExport
-    private enum Step: Hashable { case details, photoSelection, information, completed }
+    private enum Step: Hashable { case details, information, completed }
     private enum ExitAction { case save, discard }
     let controller: CopyActivityController
     let onFinish: () -> Void
@@ -111,7 +111,7 @@ struct ProductCreationFlowView: View {
             }
         }
         .environment(\.modelContext, context)
-        .tint(path.last == .photoSelection || path.last == .information ? .black
+        .tint(path.last == .information ? .black
             : path.last == .completed ? .orange : .white)
         .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
             ExportView(product: product, showFruits: $showFruits,
@@ -165,13 +165,6 @@ struct ProductCreationFlowView: View {
                     CameraFlowView(model: photoModel, permission: permission, camera: camera,
                         previewSource: isFixture ? photoModel.input.measurement.source : nil,
                         onExit: returnToMeasurementResult, onComplete: receiveAllCapturedPhotos)
-                case .photoSelection:
-                    ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
-                        usesAI: $usesProductAutofill,
-                        hasProductInformation: ProductAutofillInputSnapshot(garment: garment).hasInformation,
-                        onCancelGeneration: { autofill.cancel() },
-                        onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 },
-                        onCompleteWithAI: photoAICompletion, onComplete: receivePhotos)
                 case .information:
                     // Restored creation drafts continue input; they are not saved-product edits.
                     InfoInputView(garment: garment, measurementInput: $measurementInput,
@@ -189,11 +182,6 @@ struct ProductCreationFlowView: View {
             .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
             .preferredColorScheme(step == .details ? .dark : .light)
         }
-    }
-
-    private var photoAICompletion: ((ProductPhotoOutput, Bool) async throws -> Void)? {
-        guard autofillFlow == .photoSelection else { return nil }
-        return receiveSelectedPhotos
     }
 
     private var informationAICompletion: (() async throws -> Void)? {
@@ -214,12 +202,6 @@ struct ProductCreationFlowView: View {
         guard path.last == .details, !isFinishing, pendingExitAction == nil,
               let photoModel, !photoModel.isCapturing, !photoModel.isDeleting else { return }
         // Pop only the detail screen; retain the measurement result and photo session.
-        path.removeLast()
-    }
-
-    private func returnToDetailCapture() {
-        guard path.last == .photoSelection else { return }
-        // Keep the current photo model and camera session alive for additional captures.
         path.removeLast()
     }
 
@@ -355,29 +337,6 @@ struct ProductCreationFlowView: View {
         path.append(.information)
     }
 
-    private func receivePhotos(_ output: ProductPhotoOutput) async throws {
-        guard let garment, let photoModel else { throw CameraFailure.mismatchedCapture }
-        try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input)
-        try persistDraft(garment, step: .information)
-        path.append(.information)
-    }
-
-    private func receiveSelectedPhotos(_ output: ProductPhotoOutput, usingAI: Bool) async throws {
-        guard let garment, let photoModel else { throw CameraFailure.mismatchedCapture }
-        // Save every selected product photo before the network request. AI uses at most five.
-        try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input)
-        try Task.checkCancellation()
-        try persistDraft(garment, step: .photoSelection)
-        guard usingAI else {
-            try persistDraft(garment, step: .information)
-            path.append(.information)
-            return
-        }
-
-        try await generateAndApplyInformation(output, expectedStep: .photoSelection)
-        path.append(.information)
-    }
-
     private func generateInformationFromButton() async throws {
         guard let garment, let output = photoModel?.output,
               autofillFlow == .information, path.last == .information else {
@@ -444,7 +403,6 @@ struct ProductCreationFlowView: View {
                 let step: ProductDraftStep
                 switch path.last {
                 case .details: step = .details
-                case .photoSelection: step = .photoSelection
                 case .information, .completed: step = .information
                 case nil: step = .measurementResult
                 }
@@ -503,7 +461,6 @@ struct ProductCreationFlowView: View {
             let step: ProductDraftStep
             switch path.last {
             case .details: step = .details
-            case .photoSelection: step = .photoSelection
             case .information: step = .information
             case .completed:
                 try context.save()
