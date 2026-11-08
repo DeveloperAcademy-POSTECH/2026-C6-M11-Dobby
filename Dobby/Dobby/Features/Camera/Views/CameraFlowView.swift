@@ -11,6 +11,7 @@ import AVFoundation
 /// 상세 촬영 Hi-Fi 화면. 기본은 실제 영상이며 Canvas에서만 샘플 이미지를 주입한다.
 /// 상위 NavigationStack에 삽입하며 화면 이동 중 같은 Model을 유지한다.
 struct CameraFlowView: View {
+    @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let model: ProductPhotoModel
@@ -23,10 +24,23 @@ struct CameraFlowView: View {
     var previewSource: CapturedAsset.Source?
     private let background = Color.black
     @State private var captureRequested = false
+    @State private var captureIndicatorPhase: AutomaticMeasurementPhase = .capturing
     @State private var failureMessage: String?
     @State private var isCaptureGuidePresented = false
     @State private var isGalleryPresented = false
     @State private var isMoreOptionsPresented = false
+    @State private var librarySaver = DetailPhotoLibrarySaver()
+    @State private var isCompletingCapture = false
+    @State private var capturePhotosToSave: [CapturedAsset] = []
+    @State private var hasStartedLibrarySaving = false
+    @State private var didSaveAllCapturePhotos = false
+    @State private var isStandaloneSelectionPresented = false
+    @State private var librarySaveFailure: LibrarySaveFailure?
+
+    private struct LibrarySaveFailure {
+        let message: String
+        let canOpenSettings: Bool
+    }
 
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
@@ -57,9 +71,10 @@ struct CameraFlowView: View {
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(onExit != nil)
+        .navigationBarBackButtonHidden(onExit != nil || isCompletingCapture)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar(isCompletingCapture ? .hidden : .automatic, for: .navigationBar)
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
@@ -68,6 +83,7 @@ struct CameraFlowView: View {
                             .foregroundStyle(.white)
                     }
                         .disabled(isExitDisabled)
+                        .accessibilityHidden(isCompletingCapture)
                         .accessibilityLabel("뒤로가기")
                         .accessibilityIdentifier("product-flow.back")
                 }
@@ -75,6 +91,37 @@ struct CameraFlowView: View {
             ToolbarItem(placement: .confirmationAction) {
                 // 기존 사진 선택에는 카메라 권한이 필요하지 않다.
                 photoSelectionControl
+            }
+        }
+        .accessibilityHidden(isCompletingCapture)
+        .overlay {
+            if isCompletingCapture {
+                DetailPhotoLibrarySavingOverlay(
+                    savedCount: hasStartedLibrarySaving
+                        ? min(librarySaver.savedCount, capturePhotosToSave.count) : 0,
+                    totalCount: capturePhotosToSave.count)
+            }
+        }
+        .interactiveDismissDisabled(isCompletingCapture)
+        .navigationDestination(isPresented: $isStandaloneSelectionPresented) {
+            ProductPhotoSelectionView(model: model, onComplete: onComplete)
+                .onAppear { onSelectionVisibilityChange(true) }
+                .onDisappear { onSelectionVisibilityChange(false) }
+        }
+        .alert("사진을 저장하지 못했어요", isPresented: Binding(
+            get: { librarySaveFailure != nil },
+            set: { if !$0 { librarySaveFailure = nil } }
+        )) {
+            Button("다시 시도") { requestPhotoSelection() }
+            if librarySaveFailure?.canOpenSettings == true {
+                Button("설정 열기") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }
+            }
+            Button("촬영 화면으로", role: .cancel) {}
+        } message: {
+            if let failure = librarySaveFailure {
+                Text("\(librarySaver.totalCount)장 중 \(librarySaver.savedCount)장을 저장했어요.\n\(failure.message)\n촬영 목록은 유지돼요. 이미 저장한 사진은 다시 저장하지 않아요.")
             }
         }
         .fullScreenCover(isPresented: $isCaptureGuidePresented) {
@@ -93,6 +140,7 @@ struct CameraFlowView: View {
         .task(id: captureRequested) {
             guard captureRequested else { return }
             failureMessage = nil
+            captureIndicatorPhase = .capturing
             do {
                 permission.refresh()
                 guard permission.status == .authorized else {
@@ -100,12 +148,38 @@ struct CameraFlowView: View {
                     return
                 }
                 try await model.captureDetail()
+                captureIndicatorPhase = .completed
+                if !reduceMotion { try await Task.sleep(for: .milliseconds(280)) }
             } catch {
                 if !(error is CancellationError) && !Task.isCancelled {
                     failureMessage = (error as? CameraFailure ?? .captureFailed).message
                 }
             }
             captureRequested = false
+        }
+        .task(id: isCompletingCapture) {
+            guard isCompletingCapture else { return }
+            hasStartedLibrarySaving = true
+            do {
+                try await librarySaver.save(capturePhotosToSave)
+                try Task.checkCancellation()
+                didSaveAllCapturePhotos = true
+                // The Photos authorization dialog temporarily makes the scene
+                // inactive. Navigate only after it has returned to the app.
+                continueToPhotoSelectionIfReady()
+            } catch {
+                let shouldPresentFailure = !(error is CancellationError) && !Task.isCancelled
+                didSaveAllCapturePhotos = false
+                isCompletingCapture = false
+                if shouldPresentFailure {
+                    let saveError = error as? DetailPhotoLibrarySaveError
+                    let explanation = [saveError?.failureReason, saveError?.recoverySuggestion]
+                        .compactMap { $0 }.joined(separator: "\n")
+                    librarySaveFailure = LibrarySaveFailure(
+                        message: explanation.isEmpty ? error.localizedDescription : explanation,
+                        canOpenSettings: saveError?.canOpenSettings == true)
+                }
+            }
         }
         .onChange(of: permission.status) { _, status in
             if status != .authorized {
@@ -115,11 +189,14 @@ struct CameraFlowView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { isMoreOptionsPresented = false }
+            if phase == .active { continueToPhotoSelectionIfReady() }
         }
         // 화면 이탈은 요청만 취소한다. 사진과 선택 결과는 초기화하지 않는다.
         .onDisappear {
             captureRequested = false
             isMoreOptionsPresented = false
+            isCompletingCapture = false
+            didSaveAllCapturePhotos = false
         }
     }
 
@@ -154,12 +231,12 @@ struct CameraFlowView: View {
     @ViewBuilder
     private func captureFeedback(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
         if let frame = shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset),
-           failureMessage != nil || model.isCapturing {
+           failureMessage != nil {
             Group {
                 if let failureMessage {
                     Text(failureMessage).multilineTextAlignment(.center)
                 } else {
-                    ProgressView("사진 촬영·저장 중")
+                    EmptyView()
                 }
             }
             .padding(12)
@@ -208,21 +285,12 @@ struct CameraFlowView: View {
     }
 
     private var photoSelectionControl: some View {
-        Group {
-            if let onSelectPhotos {
-                Button(action: onSelectPhotos) { selectionLabel }
-            } else {
-                NavigationLink {
-                    ProductPhotoSelectionView(model: model, onComplete: onComplete)
-                        .onAppear { onSelectionVisibilityChange(true) }
-                        .onDisappear { onSelectionVisibilityChange(false) }
-                } label: { selectionLabel }
-            }
-        }
+        Button(action: requestPhotoSelection) { selectionLabel }
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.capsule)
         .tint(Color(red: 0.94, green: 0.24, blue: 0.07))
         .disabled(isPhotoOperationInProgress)
+        .accessibilityHidden(isCompletingCapture)
         .accessibilityIdentifier("camera.selectPhotos")
     }
 
@@ -231,8 +299,14 @@ struct CameraFlowView: View {
     }
 
     private var shutter: some View {
-        CameraShutterControl(isEnabled: canCapture, isCapturing: isPhotoOperationInProgress,
-            showsReadyState: canCapture, action: { captureRequested = true })
+        ZStack {
+            CameraShutterControl(isEnabled: canCapture, isCapturing: false,
+                showsReadyState: canCapture, action: { captureRequested = true })
+                .opacity(captureRequested || model.isCapturing ? 0 : 1)
+            if captureRequested || model.isCapturing {
+                MeasurementProcessingIndicator(phase: captureIndicatorPhase)
+            }
+        }
             .accessibilityLabel(isPhotoOperationInProgress ? "상세 사진 처리 중" : "상세 사진 촬영")
             .accessibilityValue(isPhotoOperationInProgress ? "촬영 중" : canCapture ? "촬영 가능" : "카메라 준비 중")
             .accessibilityHint(previewSource == nil ? "사진을 촬영하고 상세 사진 목록에 추가합니다."
@@ -285,6 +359,7 @@ struct CameraFlowView: View {
     }
 
     private func updateCaptureGuide() {
+        guard !isCompletingCapture else { return }
         if permission.status != .authorized {
             setCaptureGuidePresented(false)
         } else if !model.hasAcknowledgedCaptureGuide,
@@ -301,6 +376,7 @@ struct CameraFlowView: View {
 
     private var isPhotoOperationInProgress: Bool {
         captureRequested || model.isCapturing || model.isDeleting
+            || isCompletingCapture || librarySaver.isSaving
     }
 
     private var isExitDisabled: Bool {
@@ -312,6 +388,33 @@ struct CameraFlowView: View {
         guard !isExitDisabled else { return }
         isMoreOptionsPresented = false
         onExit()
+    }
+
+    private func requestPhotoSelection() {
+        guard !isPhotoOperationInProgress, scenePhase == .active else { return }
+        librarySaveFailure = nil
+        failureMessage = nil
+        isMoreOptionsPresented = false
+        guard !model.selectablePhotos.isEmpty else {
+            showPhotoSelection()
+            return
+        }
+        didSaveAllCapturePhotos = false
+        capturePhotosToSave = model.selectablePhotos
+        hasStartedLibrarySaving = false
+        isCompletingCapture = true
+    }
+
+    private func continueToPhotoSelectionIfReady() {
+        guard isCompletingCapture, didSaveAllCapturePhotos, scenePhase == .active else { return }
+        didSaveAllCapturePhotos = false
+        isCompletingCapture = false
+        showPhotoSelection()
+    }
+
+    private func showPhotoSelection() {
+        if let onSelectPhotos { onSelectPhotos() }
+        else { isStandaloneSelectionPresented = true }
     }
 }
 
