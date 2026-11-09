@@ -13,6 +13,7 @@ struct GarmentMeasurementPhotoEditor: View {
     let isEnabled: Bool
     let isRecalculating: Bool
     var showsEnlargeControl = true
+    var allowsViewportZoom = false
     var pendingPointIDs: Set<String> = []
     let onEnlarge: () -> Void
     let onMove: (String, ImagePoint) -> Void
@@ -27,6 +28,11 @@ struct GarmentMeasurementPhotoEditor: View {
     @State private var drag: PointDrag?
     @State private var dragEpoch = UUID()
     @GestureState private var gestureIsActive = false
+    @State private var viewport = MeasurementPhotoViewport()
+    @State private var interactionID = UUID()
+    @State private var nativePointDragIsActive = false
+
+    private var pointDragIsActive: Bool { allowsViewportZoom ? nativePointDragIsActive : gestureIsActive }
 
     private struct PointDrag {
         let sessionID = UUID()
@@ -37,6 +43,7 @@ struct GarmentMeasurementPhotoEditor: View {
         let orientation: ImageOrientation
         let displayCrop: PhotoDisplayCrop
         let photoSize: CGSize
+        let viewport: MeasurementPhotoViewport
         var current: ImagePoint
     }
 
@@ -54,18 +61,18 @@ struct GarmentMeasurementPhotoEditor: View {
     }
 
     private func magnifiedPoint(in size: CGSize) -> GarmentLandmark? {
-        guard image != nil, isEnabled, scenePhase == .active, gestureIsActive, let drag,
+        guard image != nil, isEnabled, scenePhase == .active, pointDragIsActive, let drag,
               drag.frameID == snapshot.frame.frameID,
               drag.orientation == snapshot.frame.orientation,
               drag.displayCrop == displayCrop,
-              drag.photoSize == size else { return nil }
+              drag.photoSize == size, drag.viewport == viewport else { return nil }
         return handles.first { $0.id == drag.id }
     }
 
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            let annotations = annotations(in: size)
+            let annotations = annotations(in: size).map(displayedAnnotation)
             ZStack(alignment: .topLeading) {
                 photograph(size: size)
                 measurementLines(annotations)
@@ -84,7 +91,23 @@ struct GarmentMeasurementPhotoEditor: View {
                 // touch regions take priority when a finger grabs nearby.
                 ForEach(handles) { point in
                     pointHandle(point, size: size)
-                        .position(screenPoint(previewPoint(point), size: size))
+                        .position(viewport.screenPoint(for: screenPoint(previewPoint(point), size: size)))
+                }
+                if allowsViewportZoom {
+                    MeasurementPhotoViewportInteraction(viewport: viewport,
+                        pointTargets: handles.map {
+                            MeasurementPhotoPointTarget(id: $0.id,
+                                center: viewport.screenPoint(for: screenPoint(previewPoint($0), size: size)))
+                        }, excludedRects: showsZoomControl ? [zoomControlRect(in: size)] : [],
+                        interactionID: interactionID,
+                        isEnabled: isEnabled && image != nil && scenePhase == .active,
+                        onViewportGestureBegan: { cancelDrag(invalidateInteraction: false) },
+                        onViewportChange: { setViewport($0) },
+                        onPointDragBegan: { beginNativeDrag($0, size: size) },
+                        onPointDragChanged: { updateNativeDrag($0, translation: $1, size: size) },
+                        onPointDragEnded: { endNativeDrag($0, size: size) },
+                        onPointDragCancelled: cancelNativeDrag)
+                        .accessibilityHidden(true)
                 }
                 if let image, let point = magnifiedPoint(in: size) {
                     let loupe = magnifierRect(in: size)
@@ -92,17 +115,27 @@ struct GarmentMeasurementPhotoEditor: View {
                         .position(x: loupe.midX, y: loupe.midY).allowsHitTesting(false)
                         .transition(.identity)
                 }
-                if showsEnlargeControl {
-                    Button(action: onEnlarge) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 15, weight: .semibold))
+                if showsZoomControl {
+                    Button {
+                        if allowsViewportZoom { toggleZoom(in: size) }
+                        else { onEnlarge() }
+                    } label: {
+                        Group {
+                            if allowsViewportZoom && viewport.isZoomed {
+                                Text("1×").font(.system(size: 14, weight: .semibold))
+                            } else {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                        }
                             .frame(width: 36, height: 36)
                             .modifier(MeasurementGlassCapsule(reduceTransparency: reduceTransparency))
                             .frame(width: 44, height: 44).contentShape(Rectangle())
                     }.buttonStyle(.plain).foregroundStyle(.white)
-                        .disabled(image == nil)
+                        .disabled(image == nil || !isEnabled)
                         .position(x: size.width - 30, y: 30)
-                        .accessibilityLabel("촬영 사진 확대")
+                        .accessibilityLabel(allowsViewportZoom && viewport.isZoomed ? "사진을 원래 크기로 보기" : "촬영 사진 확대")
+                        .accessibilityValue(allowsViewportZoom ? String(format: "%.1f배", viewport.scale) : "")
                         .accessibilityIdentifier("enlargeGarmentPhoto")
                 }
             }.frame(width: size.width, height: size.height).clipped()
@@ -111,6 +144,7 @@ struct GarmentMeasurementPhotoEditor: View {
                     // A rotation/window resize invalidates the cached display
                     // geometry, so finish without committing that touch preview.
                     cancelDrag()
+                    setViewport(.init())
                 }
         }
         .aspectRatio(SnapshotPresentation.aspectRatio(for: snapshot) * CGFloat(displayCrop.width / displayCrop.height),
@@ -119,7 +153,7 @@ struct GarmentMeasurementPhotoEditor: View {
         .onChange(of: gestureIsActive) { _, active in
             // Interrupted touches (for example, app backgrounding) don't always
             // call onEnded. Discard that preview and unblock confirmation.
-            guard !active, let sessionID = drag?.sessionID else { return }
+            guard !allowsViewportZoom, !active, let sessionID = drag?.sessionID else { return }
             // Hide via gestureIsActive immediately, but let a normal onEnded
             // commit before cancelling an interrupted stream. An old cleanup
             // cannot erase a new drag that started in the meantime.
@@ -130,20 +164,113 @@ struct GarmentMeasurementPhotoEditor: View {
         }
         .onChange(of: isEnabled) { _, enabled in if !enabled { cancelDrag() } }
         .onChange(of: scenePhase) { _, phase in if phase != .active { cancelDrag() } }
-        .onChange(of: snapshot.frame.frameID) { _, _ in cancelDrag() }
-        .onChange(of: snapshot.frame.orientation) { _, _ in cancelDrag() }
-        .onChange(of: displayCrop) { _, _ in cancelDrag() }
+        .onChange(of: snapshot.frame.frameID) { _, _ in resetViewport() }
+        .onChange(of: snapshot.frame.orientation) { _, _ in resetViewport() }
+        .onChange(of: displayCrop) { _, _ in resetViewport() }
         .onChange(of: handles.map(\.id)) { _, _ in cancelDrag() }
         .onChange(of: definitions.map(\.id)) { _, _ in cancelDrag() }
         .onChange(of: image == nil) { _, missing in if missing { cancelDrag() } }
         .onDisappear { cancelDrag() }
     }
 
-    private func cancelDrag() {
+    private func cancelDrag(invalidateInteraction: Bool = true) {
         // Replacing the gesture subtree invalidates callbacks captured before
         // a rotation, scene change or other cancellation, including late ends.
+        let wasEditing = drag != nil || nativePointDragIsActive
+        guard invalidateInteraction || wasEditing else { return }
         dragEpoch = UUID()
+        if invalidateInteraction { interactionID = UUID() }
         drag = nil
+        nativePointDragIsActive = false
+        if wasEditing { onEditingChanged(false) }
+    }
+
+    private func cancelNativeDrag() {
+        // UIKit can cancel while its representable updates or lays out. Defer
+        // SwiftUI state cleanup, but never clear a newer finger's edit.
+        guard let token = drag?.sessionID else { return }
+        Task { @MainActor in
+            guard drag?.sessionID == token else { return }
+            cancelDrag(invalidateInteraction: false)
+        }
+    }
+
+    private var showsZoomControl: Bool {
+        showsEnlargeControl && !(allowsViewportZoom && viewport.isZoomed)
+    }
+
+    private func zoomControlRect(in size: CGSize) -> CGRect {
+        CGRect(x: size.width - 52, y: 8, width: 44, height: 44)
+    }
+
+    private func setViewport(_ value: MeasurementPhotoViewport) {
+        // Canvas pixels and overlay positions must adopt the same transform
+        // in one frame; independent implicit animations would separate them.
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { viewport = value }
+    }
+
+    private func resetViewport() {
+        cancelDrag()
+        setViewport(.init())
+    }
+
+    private func toggleZoom(in size: CGSize) {
+        guard allowsViewportZoom, isEnabled, image != nil else { return }
+        cancelDrag()
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        setViewport(viewport.isZoomed ? .init()
+            : viewport.applyingPinch(magnification: 2, from: center, to: center, in: size))
+    }
+
+    private func beginNativeDrag(_ id: String, size: CGSize) {
+        guard isEnabled, scenePhase == .active, image != nil,
+              let point = handles.first(where: { $0.id == id }) else { return }
+        selectedPointID = id
+        drag = .init(id: id, start: point.point, annotations: annotations(in: size),
+            frameID: snapshot.frame.frameID, orientation: snapshot.frame.orientation,
+            displayCrop: displayCrop, photoSize: size, viewport: viewport, current: point.point)
+        nativePointDragIsActive = true
+        onEditingChanged(true)
+    }
+
+    private func updateNativeDrag(_ id: String, translation: CGSize, size: CGSize) {
+        guard isEnabled, scenePhase == .active, let moving = drag,
+              moving.id == id, moving.frameID == snapshot.frame.frameID,
+              moving.orientation == snapshot.frame.orientation, moving.displayCrop == displayCrop,
+              moving.photoSize == size, moving.viewport == viewport else {
+            cancelDrag(invalidateInteraction: false)
+            return
+        }
+        // Start at the marker, not the initial touch in its larger hit region.
+        // Invert the display zoom once, then reuse the crop/orientation mapping
+        // into original RGB coordinates used by the depth measurement pipeline.
+        let start = moving.viewport.screenPoint(for: screenPoint(moving.start, size: size))
+        let location = CGPoint(x: min(size.width, max(0, start.x + translation.width)),
+            y: min(size.height, max(0, start.y + translation.height)))
+        if let original = GarmentPhotoGeometry.originalPoint(at: moving.viewport.photoPoint(for: location),
+            photoSize: size, orientation: snapshot.frame.orientation, displayCrop: displayCrop) {
+            drag?.current = original
+        }
+    }
+
+    private func endNativeDrag(_ id: String, size: CGSize) {
+        guard isEnabled, scenePhase == .active, let completed = drag,
+              completed.id == id, completed.frameID == snapshot.frame.frameID,
+              completed.orientation == snapshot.frame.orientation, completed.displayCrop == displayCrop,
+              completed.photoSize == size, completed.viewport == viewport,
+              handles.contains(where: { $0.id == id }) else {
+            cancelDrag(invalidateInteraction: false)
+            return
+        }
+        drag = nil
+        nativePointDragIsActive = false
+        // An unchanged endpoint must not become a manual correction or trigger
+        // recalculation merely because a finger touched its neighbourhood.
+        if abs(completed.current.x - completed.start.x) + abs(completed.current.y - completed.start.y) > 1e-10 {
+            onMove(id, completed.current)
+        }
         onEditingChanged(false)
     }
 
@@ -152,12 +279,15 @@ struct GarmentMeasurementPhotoEditor: View {
             if let image {
                 Canvas { context, _ in
                     context.draw(context.resolve(Image(uiImage: image)),
-                        in: GarmentPhotoGeometry.photoRect(photoSize: size, displayCrop: displayCrop))
+                        in: viewport.screenRect(for: GarmentPhotoGeometry.photoRect(photoSize: size, displayCrop: displayCrop)))
                 }.frame(width: size.width, height: size.height)
                     .accessibilityElement(children: .ignore)
                     .accessibilityAddTraits(.isImage)
                     .accessibilityLabel("촬영한 옷과 측정점")
                     .accessibilityIdentifier("garmentMeasurementPhoto")
+                    .accessibilityHint(allowsViewportZoom
+                        ? "두 손가락으로 확대하고, 빈 곳을 끌어 사진을 이동할 수 있어요. 측정점은 한 손가락으로 움직여요."
+                        : "")
             } else {
                 ContentUnavailableView("사진을 불러올 수 없어요", systemImage: "photo")
                     .frame(width: size.width, height: size.height)
@@ -221,12 +351,12 @@ struct GarmentMeasurementPhotoEditor: View {
         let epoch = dragEpoch
         let selected = selectedPoint?.id == point.id
         let pending = pendingPointIDs.contains(point.id)
-        let center = screenPoint(previewPoint(point), size: size)
+        let center = viewport.screenPoint(for: screenPoint(previewPoint(point), size: size))
         let neighbors = handles.filter { $0.id != point.id }.map {
-            let other = screenPoint(previewPoint($0), size: size)
+            let other = viewport.screenPoint(for: screenPoint(previewPoint($0), size: size))
             return CGPoint(x: other.x - center.x, y: other.y - center.y)
         }
-        return Button { selectedPointID = point.id } label: {
+        let button = Button { selectedPointID = point.id } label: {
             ZStack {
                 Circle().fill(.black.opacity(0.35)).frame(width: 12.5, height: 12.5)
                 if selected {
@@ -245,7 +375,7 @@ struct GarmentMeasurementPhotoEditor: View {
                 .frame(width: 56, height: 56)
                 .contentShape(MeasurementPointHitShape(neighborOffsets: neighbors))
         }.buttonStyle(.plain).disabled(!isEnabled)
-            .highPriorityGesture(DragGesture(minimumDistance: 2, coordinateSpace: .named("garmentPhoto"))
+        let movement = DragGesture(minimumDistance: 2, coordinateSpace: .named("garmentPhoto"))
                 .updating($gestureIsActive) { _, active, _ in active = true }
                 .onChanged { value in
                     guard epoch == dragEpoch, isEnabled, scenePhase == .active else { return }
@@ -255,7 +385,7 @@ struct GarmentMeasurementPhotoEditor: View {
                         drag = .init(id: point.id, start: point.point,
                             annotations: annotations(in: size), frameID: snapshot.frame.frameID,
                             orientation: snapshot.frame.orientation, displayCrop: displayCrop,
-                            photoSize: size, current: point.point)
+                            photoSize: size, viewport: viewport, current: point.point)
                         onEditingChanged(true)
                     }
                     guard let currentDrag = drag else { return }
@@ -284,7 +414,11 @@ struct GarmentMeasurementPhotoEditor: View {
                     dragEpoch = UUID()
                     onMove(completed.id, completed.current)
                     onEditingChanged(false)
-                })
+                }
+        return Group {
+            if allowsViewportZoom { button }
+            else { button.highPriorityGesture(movement) }
+        }
             .id(epoch)
             .accessibilityLabel(GarmentPointName.title(point.id))
             .accessibilityValue((pending ? "위치 확인 필요, " : "") + String(format: "x %.4f, y %.4f", previewPoint(point).x, previewPoint(point).y))
@@ -299,17 +433,18 @@ struct GarmentMeasurementPhotoEditor: View {
     private func nudge(_ point: GarmentLandmark, dx: CGFloat, dy: CGFloat, size: CGSize) {
         guard isEnabled else { return }
         selectedPointID = point.id
-        let current = screenPoint(point.point, size: size)
-        guard let original = GarmentPhotoGeometry.originalPoint(at: .init(x: current.x + dx, y: current.y + dy),
+        let current = viewport.screenPoint(for: screenPoint(point.point, size: size))
+        let photoPoint = viewport.photoPoint(for: .init(x: current.x + dx, y: current.y + dy))
+        guard let original = GarmentPhotoGeometry.originalPoint(at: photoPoint,
             photoSize: size, orientation: snapshot.frame.orientation, displayCrop: displayCrop) else { return }
-        onMove(point.id, original)
+        if original != point.point { onMove(point.id, original) }
     }
 
     private func magnifier(image: UIImage, point: GarmentLandmark, photoSize: CGSize) -> some View {
         let loupeSize = magnifierRect(in: photoSize).size
         let display = ImageCoordinateTransform.originalToDisplay(previewPoint(point), orientation: snapshot.frame.orientation)
         let layout = GarmentPhotoGeometry.magnifier(displayPoint: display, photoSize: photoSize,
-            loupeSize: loupeSize, displayCrop: displayCrop)
+            loupeSize: loupeSize, displayCrop: displayCrop, magnification: 3 * viewport.scale)
         // A bounded canvas avoids a three-times-larger SwiftUI Image's
         // layout/accessibility bounds leaking outside the clipped inset.
         return Canvas { context, size in
@@ -340,7 +475,7 @@ struct GarmentMeasurementPhotoEditor: View {
             // The image is deliberately three times larger than the viewport.
             // Expose only the bounded loupe, never the clipped image's AX frame.
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(GarmentPointName.title(point.id)) 확대, 3배")
+            .accessibilityLabel("\(GarmentPointName.title(point.id)) 확대, 현재 사진의 3배")
             .accessibilityValue(String(format: "x %.4f, y %.4f", previewPoint(point).x, previewPoint(point).y))
             .accessibilityIdentifier("garmentPointMagnifier")
     }
@@ -354,6 +489,15 @@ struct GarmentMeasurementPhotoEditor: View {
         let labelSize: CGSize
         let isCallout: Bool
         var id: String { definition.id }
+    }
+
+    private func displayedAnnotation(_ item: Annotation) -> Annotation {
+        // Text keeps its readable size while its anchor, both endpoints and
+        // the photograph follow exactly the same presentation-only transform.
+        .init(definition: item.definition, value: item.value,
+            start: viewport.screenPoint(for: item.start), end: viewport.screenPoint(for: item.end),
+            labelCenter: item.labelCenter.map { viewport.screenPoint(for: $0) },
+            labelSize: item.labelSize, isCallout: item.isCallout)
     }
 
     private func annotations(in size: CGSize) -> [Annotation] {
@@ -412,7 +556,9 @@ struct GarmentMeasurementPhotoEditor: View {
         if magnifiedPoint(in: size) != nil {
             occupied.append(magnifierRect(in: size).insetBy(dx: -4, dy: -4))
         }
-        if showsEnlargeControl {
+        // Reserve the same base-image region before and after the first pinch.
+        // The reset button appearing must not reposition a measurement label.
+        if showsEnlargeControl || allowsViewportZoom {
             occupied.append(CGRect(x: size.width - 56, y: 8, width: 48, height: 48))
         }
         return items.map { item in
@@ -660,8 +806,8 @@ nonisolated enum GarmentPhotoGeometry {
     }
 
     static func magnifier(displayPoint: ImagePoint, photoSize: CGSize, loupeSize: CGSize,
-                          displayCrop: PhotoDisplayCrop = .full) -> MagnifierLayout {
-        let scale: CGFloat = 3
+                          displayCrop: PhotoDisplayCrop = .full, magnification: CGFloat = 3) -> MagnifierLayout {
+        let scale: CGFloat = magnification.isFinite ? min(12, max(1, magnification)) : 3
         let fullPhoto = photoRect(photoSize: photoSize, displayCrop: displayCrop).size
         let enlarged = CGSize(width: fullPhoto.width * scale, height: fullPhoto.height * scale)
         let point = CGPoint(x: displayPoint.x * enlarged.width, y: displayPoint.y * enlarged.height)

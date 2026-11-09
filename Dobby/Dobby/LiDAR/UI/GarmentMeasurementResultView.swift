@@ -14,7 +14,6 @@ struct GarmentMeasurementResultView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @State private var image: UIImage?
-    @State private var showPhoto = false
     @State private var showDetails = false
     @State private var showAuxiliaryDetails = false
     @State private var detailManualReview: ManualMeasurement?
@@ -138,9 +137,6 @@ struct GarmentMeasurementResultView: View {
             if phase == .active { presentPointTutorialIfNeeded() }
         }
         .task(id: model.calculationRevision) { await recalculate() }
-        .sheet(isPresented: $showPhoto) {
-            if let image { GarmentMeasurementPhotoSheet(image: image) }
-        }
         .sheet(item: $manualReview) { measurement in
             MeasurementDetailView(model: measurement, archive: archive)
         }
@@ -235,8 +231,9 @@ struct GarmentMeasurementResultView: View {
             values: model.visibleValues, showLabels: !dynamicTypeSize.isAccessibilitySize,
             isEnabled: !isSaving && !awaitsPointTutorial, isRecalculating: model.needsRecalculation,
             showsEnlargeControl: showsEnlargeControl,
+            allowsViewportZoom: true,
             pendingPointIDs: presentation.pendingIDs,
-            onEnlarge: { if !awaitsPointTutorial { showPhoto = true } }, onMove: { id, point in
+            onEnlarge: {}, onMove: { id, point in
                 guard !awaitsPointTutorial else { return }
                 _ = model.placePoint(originalPoint: point, id: id)
             }, onEditingChanged: { isEditingPoint = $0 })
@@ -247,7 +244,7 @@ struct GarmentMeasurementResultView: View {
               !showsPointTutorial, image != nil,
               !model.needsRecalculation, !isSaving, !isEditingPoint,
               manualReview == nil, totalLengthCorrection == nil,
-              !showPhoto, !showAuxiliaryDetails else { return }
+              !showAuxiliaryDetails else { return }
         showsPointTutorial = true
     }
 
@@ -701,41 +698,5 @@ enum GarmentMeasurementText {
         default: fallback = definition.title
         }
         return GarmentMeasurementPresentation.shortTitle(for: definition.id, fallback: fallback)
-    }
-}
-
-private struct GarmentMeasurementPhotoSheet: View {
-    let image: UIImage
-    @Environment(\.dismiss) private var dismiss
-    @State private var scale: CGFloat = 1
-    @State private var previousScale: CGFloat = 1
-
-    var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
-                ScrollView([.horizontal, .vertical]) {
-                    Image(uiImage: image).resizable().scaledToFit()
-                        .frame(width: geometry.size.width * scale, height: geometry.size.height * scale)
-                        .gesture(MagnificationGesture().onChanged { value in
-                            scale = min(4, max(1, previousScale * value))
-                        }.onEnded { _ in previousScale = scale })
-                        .onTapGesture(count: 2) {
-                            scale = scale > 1 ? 1 : 2
-                            previousScale = scale
-                        }
-                        .accessibilityLabel("촬영한 원본 사진")
-                }
-            }.background(GarmentCaptureStyle.background)
-                .navigationTitle("촬영 사진").navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button(scale > 1 ? "축소" : "확대") {
-                            scale = scale > 1 ? 1 : 2
-                            previousScale = scale
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) { Button("닫기") { dismiss() } }
-                }
-        }.tint(.white).preferredColorScheme(.dark)
     }
 }
