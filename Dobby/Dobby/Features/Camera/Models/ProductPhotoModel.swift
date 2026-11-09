@@ -36,6 +36,15 @@ final class ProductPhotoModel {
     /// 같은 촬영의 원본·실측값 표시본을 나란히 두고 상세 사진은 촬영 순서로 이어 붙인다.
     var selectablePhotos: [CapturedAsset] { input.measurementPhotos + detailPhotos }
 
+    /// 선택 화면을 거치지 않는 전체 촬영 결과. 기존 선택 상태와 10장 제한을 적용하지 않는다.
+    /// 저장소에서 이미 편집한 상품 사진의 순서·제외 여부는 전달받는 쪽에서 보존한다.
+    var allPhotosOutput: ProductPhotoOutput? {
+        guard !isCapturing, !isDeleting, !isDiscardingDetails else { return nil }
+        return ProductPhotoOutput(sessionID: input.sessionID, garmentID: input.garmentID,
+            detailPhotos: detailPhotos, selectedPhotos: selectablePhotos,
+            representativePhotoID: input.measurement.id)
+    }
+
     /// 하단 표시 전용. 상단 캐러셀이 사용하는 촬영 순서는 바꾸지 않는다.
     var selectionOrderedPhotos: [CapturedAsset] {
         let selected = Set(selectedPhotoIDs)

@@ -19,15 +19,9 @@ final class ProductAutofillBFlowTests: XCTestCase {
         app.launch()
         openSettings(in: app)
         app.tabBars.buttons["홈"].tap()
-        openPhotoSelection(in: app)
+        openCaptureAndInformation(in: app)
         XCTAssertFalse(app.switches["product-ai.toggle"].exists)
-        tap(app, "camera.completePhotos")
-        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["product-ai.generate"].waitForExistence(timeout: 5))
-        assertEmptyFields(in: app)
-        XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists)
-        XCTAssertFalse(app.buttons["product-ai.retry"].firstMatch.exists,
-                       "The failure fixture must not run merely by advancing to information")
+        XCTAssertFalse(app.scrollViews["camera.selectionGrid"].exists)
     }
 
     @MainActor
@@ -36,9 +30,9 @@ final class ProductAutofillBFlowTests: XCTestCase {
         defer { app.terminate() }
         assertEmptyFields(in: app)
         XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists,
-                       "In B, advancing from photo selection must not start generation")
+                       "In B, advancing from detail capture must not start generation")
         XCTAssertFalse(app.buttons["product-ai.retry"].firstMatch.exists)
-        XCTAssertEqual(selectedPhotoCount(in: app), 2)
+        XCTAssertEqual(selectedPhotoCount(in: app), 3)
         screenshot(app, name: "b-flow-information-before-generation")
 
         let originalMeasurement = measurementValue(in: app)
@@ -48,7 +42,7 @@ final class ProductAutofillBFlowTests: XCTestCase {
         waitForGeneratedFields(in: app)
         XCTAssertEqual(field("price", in: app).value as? String, "")
         XCTAssertEqual(measurementValue(in: app), originalMeasurement)
-        XCTAssertEqual(selectedPhotoCount(in: app), 2)
+        XCTAssertEqual(selectedPhotoCount(in: app), 3)
         XCTAssertFalse(app.descendants(matching: .any)["product-ai.reviewNotes"].firstMatch.exists)
         reveal(field("name", in: app), in: app)
         screenshot(app, name: "b-flow-generated-information")
@@ -65,7 +59,7 @@ final class ProductAutofillBFlowTests: XCTestCase {
         screenshot(app, name: "b-flow-generation-failure")
         tap(app, "product-ai.retry")
         waitForGeneratedFields(in: app)
-        XCTAssertEqual(selectedPhotoCount(in: app), 2)
+        XCTAssertEqual(selectedPhotoCount(in: app), 3)
         XCTAssertTrue(app.buttons["product-ai.generate"].exists)
     }
 
@@ -78,7 +72,7 @@ final class ProductAutofillBFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
         XCTAssertTrue(app.buttons["product-ai.generate"].isEnabled)
         assertEmptyFields(in: app)
-        XCTAssertEqual(selectedPhotoCount(in: app), 2)
+        XCTAssertEqual(selectedPhotoCount(in: app), 3)
         replaceText(in: field("name", in: app), with: "Manual after AI failure", app: app)
         dismissKeyboard(in: app)
         XCTAssertEqual(field("name", in: app).value as? String, "Manual after AI failure")
@@ -97,7 +91,7 @@ final class ProductAutofillBFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
         XCTAssertTrue(app.buttons["product-ai.generate"].isEnabled)
         XCTAssertEqual(field("name", in: app).value as? String, manualName)
-        XCTAssertEqual(selectedPhotoCount(in: app), 2)
+        XCTAssertEqual(selectedPhotoCount(in: app), 3)
         let lateOverwrite = expectation(for: NSPredicate(format: "value == %@", generatedName),
                                         evaluatedWith: field("name", in: app))
         lateOverwrite.isInverted = true
@@ -138,7 +132,7 @@ final class ProductAutofillBFlowTests: XCTestCase {
         waitForGeneratedFields(in: app)
         XCTAssertEqual(field("price", in: app).value as? String, "40,000")
         XCTAssertEqual(measurementValue(in: app), "67.25")
-        XCTAssertEqual(selectedPhotoCount(in: app), 2)
+        XCTAssertEqual(selectedPhotoCount(in: app), 3)
 
         // Adding the AI failure alert must not suppress the existing save
         // validation alert. Keep the same unfinished product on screen.
@@ -173,11 +167,10 @@ final class ProductAutofillBFlowTests: XCTestCase {
     private func openInformation(result: String) -> XCUIApplication {
         let app = makeApp(result: result)
         app.launch()
-        openPhotoSelection(in: app)
+        openCaptureAndInformation(in: app)
         XCTAssertFalse(app.switches["product-ai.toggle"].exists,
                        "B generation belongs to information entry, not photo selection")
         XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists)
-        tap(app, "camera.completePhotos")
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["product-ai.generate"].waitForExistence(timeout: 5))
         return app
@@ -194,7 +187,7 @@ final class ProductAutofillBFlowTests: XCTestCase {
     }
 
     @MainActor
-    private func openPhotoSelection(in app: XCUIApplication) {
+    private func openCaptureAndInformation(in app: XCUIApplication) {
         tap(app, "product-flow.start")
         armSyntheticGarmentCapture(in: app)
         tap(app, "captureGarment")
@@ -202,9 +195,7 @@ final class ProductAutofillBFlowTests: XCTestCase {
         tap(app, "camera.startDetailCapture")
         tap(app, "camera.captureDetail")
         tap(app, "camera.selectPhotos")
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        tap(app, "camera.grid.select.2")
-        XCTAssertEqual(app.buttons["camera.grid.select.2"].value as? String, "2번째 선택")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
     }
 
     @MainActor

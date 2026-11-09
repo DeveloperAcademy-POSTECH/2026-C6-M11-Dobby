@@ -35,19 +35,22 @@ final class ProductAutofillSession {
     }
 }
 
-/// Only these three fields belong to AI. Photos, price, and measurements never enter this transaction.
+/// AI copy and its separate reference metadata share one transaction.
+/// Photos, price, and measurements never enter this transaction.
 @MainActor
 struct ProductAutofillInputSnapshot: Equatable {
     let garmentID: UUID
     let name: String
     let brand: String
     let detail: String
+    let aiSourcesData: Data?
 
     init(garment: Garment) {
         garmentID = garment.id
         name = garment.name
         brand = garment.brand
         detail = garment.detail
+        aiSourcesData = garment.aiSourcesData
     }
 
     var hasInformation: Bool {
@@ -61,6 +64,7 @@ struct ProductAutofillInputSnapshot: Equatable {
         garment.name = name
         garment.brand = brand
         garment.detail = detail
+        garment.aiSourcesData = aiSourcesData
     }
 
     func apply(_ draft: ProductAutofillDraft, to garment: Garment) throws {
@@ -68,6 +72,7 @@ struct ProductAutofillInputSnapshot: Equatable {
         garment.name = draft.productName
         garment.brand = draft.brand ?? ""
         garment.detail = draft.description
+        garment.aiSources = draft.sources
     }
 }
 

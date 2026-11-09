@@ -30,6 +30,31 @@ nonisolated struct GarmentEditingPointPresentation {
             let x = corners.map(\.x).min()!, y = corners.map(\.y).min()!
             bounds = .init(x: x, y: y, width: corners.map(\.x).max()! - x, height: corners.map(\.y).max()! - y)
         }
+        // A failed depth plane must not turn the calculated hem into a global
+        // bounding-box hint (a lower sleeve can extend below the body hem).
+        // This is photo-only evidence, never a substitute measurement endpoint.
+        func sideNeckHemHint() -> ImagePoint? {
+            guard let neck = anchor("neck_left"), let mask = source.mask,
+                  mask.values.count <= 4_194_304,
+                  let uprightMask = try? GarmentMaskOrientation.uprightMask(fromOriginal: mask, orientation: upright),
+                  uprightMask.size.isValid, neck.isValid else { return nil }
+            let width = uprightMask.size.width, height = uprightMask.size.height
+            let column = Int(neck.x * Double(width))
+            let exterior = TopContourLength.exteriorBackground(uprightMask)
+            var lastInside: Int?, outsideRun = 0
+            for row in Int(neck.y * Double(height))..<height {
+                let pixel = row * width + column
+                if uprightMask.values[pixel] == 1 {
+                    lastInside = row; outsideRun = 0
+                } else if lastInside != nil && exterior[pixel] != 0 {
+                    outsideRun += 1
+                    if outsideRun >= 3 { break }
+                } else { outsideRun = 0 }
+            }
+            guard let row = lastInside else { return nil }
+            return ImageCoordinateTransform.displayToOriginal(
+                .init(x: neck.x, y: (Double(row) + 0.5) / Double(height)), orientation: upright)
+        }
         func hint(_ id: String, index: Int) -> ImagePoint {
             let position: ImagePoint
             switch id {
@@ -40,6 +65,10 @@ nonisolated struct GarmentEditingPointPresentation {
                 position = midpoint("hem_left", "hem_right")
                     ?? .init(x: midpoint("armpit_left", "armpit_right")?.x ?? bounds.x + bounds.width / 2,
                              y: bounds.y + bounds.height * 0.92)
+            case TopSideNeckLength.hemID:
+                if let boundary = sideNeckHemHint() { return boundary }
+                position = .init(x: anchor("neck_left")?.x ?? bounds.x + bounds.width * 0.4,
+                                 y: bounds.y + bounds.height * 0.98)
             default:
                 // Layout hints only. These ratios are never measured or saved.
                 let ratios: [String: (Double, Double)] = [
@@ -61,6 +90,26 @@ nonisolated struct GarmentEditingPointPresentation {
                 y: min(viewport.y + viewport.height * 0.98, max(viewport.y + viewport.height * 0.02, p.y)))
             return ImageCoordinateTransform.displayToOriginal(visible, orientation: snapshot.frame.orientation)
         }
+        func onVisibleMask(_ point: ImagePoint) -> ImagePoint {
+            guard point.isValid, let mask = source.mask, mask.size.isValid,
+                  mask.values.count == mask.size.width * mask.size.height,
+                  mask.values.count <= 4_194_304 else { return point }
+            let width = mask.size.width, height = mask.size.height
+            let column = Int(point.x * Double(width)), row = Int(point.y * Double(height))
+            if point.isValid, mask.values[row * width + column] == 1 { return point }
+            var closest: ImagePoint?, best = Double.infinity
+            for index in mask.values.indices where mask.values[index] == 1 {
+                let candidate = ImagePoint(x: (Double(index % width) + 0.5) / Double(width),
+                                           y: (Double(index / width) + 0.5) / Double(height))
+                let display = ImageCoordinateTransform.originalToDisplay(candidate, orientation: snapshot.frame.orientation)
+                guard display.x >= viewport.x, display.x < viewport.x + viewport.width,
+                      display.y >= viewport.y, display.y < viewport.y + viewport.height else { continue }
+                let dx = (candidate.x - point.x) * Double(width), dy = (candidate.y - point.y) * Double(height)
+                let distance = dx * dx + dy * dy
+                if distance < best { closest = candidate; best = distance }
+            }
+            return closest ?? point
+        }
         for index in result.points.indices {
             let point = result.points[index]
             guard !point.isVisible || !point.point.isValid else { continue }
@@ -68,7 +117,8 @@ nonisolated struct GarmentEditingPointPresentation {
             // A rejected AI position is more useful than a generic hint. A null
             // remote slot's (0.5,0.5) sentinel is not an observed coordinate.
             let candidate = raw.first { $0.id == point.id && $0.isVisible && $0.point.isValid }?.point
-            result.points[index].point = onScreen(candidate ?? hint(point.id, index: index))
+            let shown = onScreen(candidate ?? hint(point.id, index: index))
+            result.points[index].point = point.id == TopSideNeckLength.hemID ? onVisibleMask(shown) : shown
             result.points[index].isVisible = true
         }
         return .init(landmarks: result, pendingIDs: pending)

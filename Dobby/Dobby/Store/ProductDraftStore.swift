@@ -9,7 +9,8 @@ nonisolated enum ProductDraftStep: String, Codable, Sendable, CaseIterable {
         switch self {
         case .measurementResult: "실측 결과 단계"
         case .details: "상세 촬영 단계"
-        case .photoSelection: "제품 사진 선택 단계"
+        // Keep the stored raw value readable; legacy drafts now resume capture.
+        case .photoSelection: "상세 촬영 단계"
         case .information: "제품 정보 입력 단계"
         }
     }

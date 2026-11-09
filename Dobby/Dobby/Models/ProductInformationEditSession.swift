@@ -32,7 +32,9 @@ final class ProductInformationEditSession {
 
     func discard() {
         context.rollback()
-        measurementInput = GarmentMeasurementInputState()
+        // Rollback can leave optional binary metadata stale on the loaded object.
+        // Restore the same initial snapshot used by change detection before reusing it.
+        initialSnapshot.restore(garment, measurementInput: &measurementInput)
     }
 
     /// InfoInputView의 저장 성공 이후, 기존 상세·목록에서 관찰 중인 객체도 갱신합니다.
