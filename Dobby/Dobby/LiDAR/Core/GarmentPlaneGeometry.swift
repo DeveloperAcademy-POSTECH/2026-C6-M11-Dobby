@@ -24,7 +24,8 @@ nonisolated struct GarmentPlane: Sendable {
 /// Frozen raw RGB/depth geometry. Display/device/garment rotations never enter
 /// unprojection. Only the lateral-clipping policy uses the composed upright angle.
 nonisolated enum GarmentPlaneGeometry {
-    static let algorithmVersion = "garment-plane-2"
+    static let algorithmVersion = "garment-plane-4"
+    static let candidateIterations = 1024
     static let maximumSamples = 4096
     static let minimumSamples = 60
     static let minimumDepthMeters = 0.15
@@ -42,8 +43,11 @@ nonisolated enum GarmentPlaneGeometry {
     }
 
     static func fitDetailed(frame: MeasurementFrame, mask: GarmentMask,
-                            uprightOrientation: ImageOrientation) throws -> GarmentPlane {
+                            uprightOrientation: ImageOrientation,
+                            landmarks: GarmentLandmarkSet? = nil,
+                            diagnosticTrace trace: GarmentPlaneDiagnosticTrace? = nil) throws -> GarmentPlane {
         try validate(frame: frame, mask: mask)
+        trace?.stage = .mask
         let foreground = mask.values.reduce(0) { $0 + ($1 == 1 ? 1 : 0) }
         let fraction = Double(foreground) / Double(mask.values.count)
         guard fraction >= 0.10, fraction <= 0.85 else {
@@ -52,6 +56,9 @@ nonisolated enum GarmentPlaneGeometry {
         guard !touchesUprightLateralEdge(mask, orientation: uprightOrientation) else {
             throw failure(.invalidMask, .maskClipped)
         }
+        trace?.stage = .sampling
+        let region = try bodyRegion(landmarks: landmarks)
+        trace?.samplingRegion = region == nil ? "wholeGarment" : "torsoCenter"
         let width = frame.depth.size.width, height = frame.depth.size.height
         var step = max(1, Int(ceil(sqrt(Double(width * height) / Double(maximumSamples)))))
         while ((width + step - 1) / step) * ((height + step - 1) / step) > maximumSamples { step += 1 }
@@ -66,18 +73,79 @@ nonisolated enum GarmentPlaneGeometry {
         for y in stride(from: 1, to: height - 1, by: step) {
             for x in stride(from: 1, to: width - 1, by: step) {
                 guard isInterior(x: x, y: y, depthSize: frame.depth.size, mask: mask) else { continue }
-                interiorCount += 1
                 let location = ImagePoint(x: Double(x) / Double(width), y: Double(y) / Double(height))
+                guard region?.contains(location) ?? true else { continue }
+                interiorCount += 1
                 interiorBounds.include(location)
                 let index = y * width + x, z = Double(frame.depth.values[y * width + x])
-                guard z.isFinite, (minimumDepthMeters...maximumDepthMeters).contains(z) else { continue }
+                let depthValid = z.isFinite && (minimumDepthMeters...maximumDepthMeters).contains(z)
+                let level = confidence?[index]
+                let confidenceValid = level.map { (1...2).contains($0) } ?? true
+                if trace != nil {
+                    trace?.samples.append(.init(id: index, point: location,
+                        depthMeters: z.isFinite ? z : nil, sensorConfidence: level,
+                        status: !depthValid ? .invalidDepth : !confidenceValid ? .lowConfidence : .candidate))
+                }
+                guard depthValid else { continue }
                 inRangeInteriorCount += 1
                 if let confidence, !(1...2).contains(confidence[index]) { continue }
                 let position = scale(ray(location, frame: frame), z)
                 guard finite(position) else { continue }
                 samples.append(.init(position: position, raw: location))
+                if let trace, !trace.samples.isEmpty { trace.samples[trace.samples.count - 1].position = position }
             }
         }
+        return try fitSamples(samples, interiorCount: interiorCount, inRangeInteriorCount: inRangeInteriorCount, interiorBounds: interiorBounds, trace: trace)
+    }
+
+    /// The inner 80% across and 70% along the underarm-to-hem quadrilateral.
+    /// Raw-image coordinates make this independent of device/garment rotation.
+    /// Mask membership is still required; a front opening never supplies depth.
+    struct BodyRegion {
+        let corners: [ImagePoint]
+        func contains(_ point: ImagePoint) -> Bool {
+            let turns = corners.indices.map { i -> Double in
+                let a = corners[i], b = corners[(i + 1) % corners.count]
+                return (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+            }
+            return turns.allSatisfy { $0 >= -1e-10 } || turns.allSatisfy { $0 <= 1e-10 }
+        }
+    }
+
+    static func bodyRegion(landmarks: GarmentLandmarkSet?) throws -> BodyRegion? {
+        guard let landmarks else { return nil }
+        let ids = ["armpit_left", "armpit_right", "hem_right", "hem_left"]
+        guard landmarks.points.contains(where: { ids.prefix(2).contains($0.id) }) else { return nil }
+        var points: [ImagePoint] = []
+        for id in ids {
+            let matches = landmarks.points.filter { $0.id == id }
+            guard matches.count == 1, let landmark = matches.first,
+                  landmark.isVisible, landmark.point.isValid else {
+                throw failure(.insufficientGarmentPlane, .planeNarrowSupport)
+            }
+            points.append(landmark.point)
+        }
+        func blend(_ a: ImagePoint, _ b: ImagePoint, _ t: Double) -> ImagePoint {
+            .init(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+        }
+        func at(_ u: Double, _ v: Double) -> ImagePoint {
+            blend(blend(points[0], points[1], u), blend(points[3], points[2], u), v)
+        }
+        let corners = [at(0.10, 0.15), at(0.90, 0.15), at(0.90, 0.85), at(0.10, 0.85)]
+        let turns = corners.indices.map { i -> Double in
+            let a = corners[i], b = corners[(i + 1) % 4], c = corners[(i + 2) % 4]
+            return (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+        }
+        guard turns.allSatisfy({ $0 > 1e-6 }) || turns.allSatisfy({ $0 < -1e-6 }) else {
+            throw failure(.insufficientGarmentPlane, .planeNarrowSupport)
+        }
+        return BodyRegion(corners: corners)
+    }
+
+    /// Shared post-sampling calculation; tests can replay exported metric point
+    /// clouds without manufacturing a camera frame, mask or calibration.
+    static func fitSamples(_ samples: [Sample], interiorCount: Int, inRangeInteriorCount: Int, interiorBounds: Bounds,
+                           trace: GarmentPlaneDiagnosticTrace? = nil) throws -> GarmentPlane {
         guard interiorCount > 0 else { throw failure(.invalidMask, .maskHasNoInterior) }
         guard samples.count >= minimumSamples else {
             let reason: MeasurementFailureReason = inRangeInteriorCount >= minimumSamples
@@ -90,10 +158,13 @@ nonisolated enum GarmentPlaneGeometry {
             throw failure(.insufficientGarmentPlane, .planeLowValidFraction, evidence: ["fraction": validFraction, "minimum": 0.25])
         }
 
+        trace?.stage = .ransacSupport
+        trace?.candidateIterations = candidateIterations
         var random = DeterministicRandom()
         var bestIndices: [Int] = []
         var bestSquaredError = Double.infinity
-        for _ in 0..<128 {
+        var bestPlane: (normal: Point3D, offset: Double)?
+        for _ in 0..<candidateIterations {
             let i = random.index(samples.count), j = random.index(samples.count), k = random.index(samples.count)
             guard i != j, i != k, j != k else { continue }
             let a = samples[i].position, b = samples[j].position, c = samples[k].position
@@ -107,35 +178,45 @@ nonisolated enum GarmentPlaneGeometry {
             }
             if indices.count > bestIndices.count || (indices.count == bestIndices.count && squaredError < bestSquaredError) {
                 bestIndices = indices; bestSquaredError = squaredError
+                bestPlane = normal.z < 0 ? (scale(normal, -1), -offset) : (normal, offset)
+                trace?.normal = bestPlane?.normal; trace?.offset = bestPlane?.offset
             }
         }
+        trace?.initialInlierCount = bestIndices.count
         let required = max(minimumSamples, Int(ceil(Double(samples.count) * minimumInlierFraction)))
         guard bestIndices.count >= required else { throw failure(.insufficientGarmentPlane, .planeInsufficientInliers, evidence: ["inliers": Double(bestIndices.count), "required": Double(required)]) }
         var indices = bestIndices
-        var fitted = try principalPlane(samples: samples, indices: indices)
-        for _ in 0..<3 {
+        guard var fitted = bestPlane else { throw failure(.insufficientGarmentPlane, .planeDegenerate) }
+        trace?.candidateIterations = candidateIterations
+        trace?.initialInlierCount = indices.count
+        // The original three-point candidate is already supported. TLS minimizes
+        // squared residual, not the number of points inside the 10mm boundary.
+        // Treat every TLS pass, including the first, as a proposed replacement.
+        for iteration in 0..<3 {
+            trace?.stage = iteration == 0 ? .initialRefit : .refinementSupport
+            let refined = try principalPlane(samples: samples, indices: indices)
             let next = samples.indices.filter {
-                abs(dot(fitted.normal, samples[$0].position) + fitted.offset) <= inlierToleranceMeters
-            }
-            guard next.count >= required else { throw failure(.insufficientGarmentPlane, .planeInsufficientInliers, evidence: ["inliers": Double(next.count), "required": Double(required)]) }
-            if next == indices { break }
-            let refined = try principalPlane(samples: samples, indices: next)
-            let refinedIndices = samples.indices.filter {
                 abs(dot(refined.normal, samples[$0].position) + refined.offset) <= inlierToleranceMeters
             }
-            // A least-squares refit can lose support near the inlier boundary.
-            // Keep the supported plane instead of replacing it with a worse fit;
-            // all final coverage, residual and viewing-angle checks still apply.
-            guard refinedIndices.count >= next.count else { break }
-            indices = next
-            fitted = refined
+            let nextError = next.reduce(0.0) { total, index in
+                let residual = dot(refined.normal, samples[index].position) + refined.offset
+                return total + residual * residual
+            }
+            trace?.refinementProposals.append(.init(beforeInliers: indices.count, proposedInliers: next.count,
+                adopted: next.count > indices.count || (next.count == indices.count && nextError <= bestSquaredError)))
+            guard next.count > indices.count || (next.count == indices.count && nextError <= bestSquaredError) else { break }
+            let stable = next == indices
+            fitted = (refined.normal, refined.offset); indices = next; bestSquaredError = nextError
+            trace?.normal = fitted.normal; trace?.offset = fitted.offset
+            if stable { break }
         }
-        // Preserve the reference order: final support statistics use final inliers,
-        // but the returned plane is fitted, not a further support-only refit.
+        // Quality and spatial checks below apply to the plane actually retained.
+        trace?.stage = .finalSupport
         indices = samples.indices.filter {
             abs(dot(fitted.normal, samples[$0].position) + fitted.offset) <= inlierToleranceMeters
         }
         guard indices.count >= required else { throw failure(.insufficientGarmentPlane, .planeInsufficientInliers, evidence: ["inliers": Double(indices.count), "required": Double(required)]) }
+        trace?.stage = .spatialSupport
         let support = try principalPlane(samples: samples, indices: indices)
         guard support.minorVariance >= 0.000225,
               support.minorVariance / max(support.majorVariance, 1e-12) >= 0.005
@@ -146,20 +227,24 @@ nonisolated enum GarmentPlaneGeometry {
             let error = dot(fitted.normal, samples[index].position) + fitted.offset
             squaredError += error * error
         }
+        trace?.stage = .coverage
         guard interiorBounds.extentX > 0, interiorBounds.extentY > 0 else { throw failure(.insufficientGarmentPlane, .planeNarrowSupport) }
         let horizontalCoverage = inlierBounds.extentX / interiorBounds.extentX
         let verticalCoverage = inlierBounds.extentY / interiorBounds.extentY
         guard horizontalCoverage >= 0.6, verticalCoverage >= 0.6 else { throw failure(.insufficientGarmentPlane, .planeLowCoverage, evidence: ["horizontal": horizontalCoverage, "vertical": verticalCoverage, "minimum": 0.6]) }
         let rms = sqrt(squaredError / Double(indices.count))
         let viewCosine = abs(dot(fitted.normal, scale(support.center, 1 / length(support.center))))
+        trace?.stage = .residual
         guard rms.isFinite, rms <= maximumOrthogonalRMSMeters else {
             throw failure(.insufficientGarmentPlane, .planeHighResidual,
                           evidence: rms.isFinite ? ["rmsMeters": rms, "maximum": maximumOrthogonalRMSMeters] : nil)
         }
+        trace?.stage = .viewingAngle
         guard viewCosine.isFinite, viewCosine >= minimumRayCosine else {
             throw failure(.insufficientGarmentPlane, .planeViewingAngle,
                           evidence: viewCosine.isFinite ? ["cosine": viewCosine, "minimum": minimumRayCosine] : nil)
         }
+        trace?.stage = .accepted
         return .init(normal: fitted.normal, offset: fitted.offset,
                      quality: .init(interiorCount: interiorCount, candidateCount: samples.count,
                          inlierCount: indices.count, orthogonalRMSMeters: rms,
@@ -281,8 +366,8 @@ nonisolated enum GarmentPlaneGeometry {
         .init(x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x)
     }
 
-    private struct Sample { var position: Point3D; var raw: ImagePoint }
-    private struct Bounds {
+    struct Sample { var position: Point3D; var raw: ImagePoint }
+    struct Bounds {
         var minX = Double.infinity, minY = Double.infinity, maxX = -Double.infinity, maxY = -Double.infinity
         var extentX: Double { maxX - minX }
         var extentY: Double { maxY - minY }
