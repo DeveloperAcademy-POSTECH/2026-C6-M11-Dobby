@@ -15,6 +15,7 @@ const UPSTREAM_RESPONSE = {
     productNameWithoutBrand: "네이비 후드 집업",
     description: "네이비 색상의 후드 집업입니다.",
     reviewNotes: [],
+    identification: null,
   }) }] }],
 };
 

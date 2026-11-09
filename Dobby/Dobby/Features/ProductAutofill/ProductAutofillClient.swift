@@ -1,10 +1,64 @@
 import Foundation
 
+nonisolated struct ProductAutofillSource: Codable, Equatable, Sendable {
+    let title: String
+    let url: String
+
+    /// Links are metadata, never executable or local-file URLs from model output.
+    var publicURL: URL? {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              title.count <= 300, url.count <= 2048,
+              !url.contains(where: { $0.isWhitespace || $0 == "\\" }),
+              let components = URLComponents(string: url), components.scheme?.lowercased() == "https",
+              components.user == nil, components.password == nil,
+              components.port.map({ (1...65535).contains($0) }) ?? true,
+              let result = components.url, let host = result.host()?.lowercased(),
+              host.count <= 253, !host.hasSuffix("."), !host.contains(":"),
+              !host.contains("%") else { return nil }
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        let reserved = ["localhost", "local", "localdomain", "internal", "lan", "home", "invalid", "test", "example", "onion"]
+        guard labels.count >= 2, !reserved.contains(String(labels.last ?? "")),
+              !host.hasSuffix(".home.arpa"),
+              labels.allSatisfy({ label in
+                  !label.isEmpty && label.count <= 63 && !label.hasPrefix("-") && !label.hasSuffix("-")
+                      && label.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+              }),
+              // Reject decimal, octal and hexadecimal IPv4 representations as well as ordinary IPs.
+              !labels.allSatisfy({ label in
+                  label.allSatisfy(\.isNumber)
+                      || (label.hasPrefix("0x") && label.dropFirst(2).allSatisfy(\.isHexDigit))
+              }),
+              labels.last?.contains(where: { $0.isLetter }) == true else { return nil }
+        return result
+    }
+}
+
 nonisolated struct ProductAutofillDraft: Codable, Equatable, Sendable {
     let productName: String
     let brand: String?
     let description: String
     let reviewNotes: [String]
+    let sources: [ProductAutofillSource]
+
+    init(productName: String, brand: String?, description: String, reviewNotes: [String],
+         sources: [ProductAutofillSource] = []) {
+        self.productName = productName
+        self.brand = brand
+        self.description = description
+        self.reviewNotes = reviewNotes
+        self.sources = sources
+    }
+
+    private enum CodingKeys: String, CodingKey { case productName, brand, description, reviewNotes, sources }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        productName = try values.decode(String.self, forKey: .productName)
+        brand = try values.decodeIfPresent(String.self, forKey: .brand)
+        description = try values.decode(String.self, forKey: .description)
+        reviewNotes = try values.decode([String].self, forKey: .reviewNotes)
+        sources = try values.decodeIfPresent([ProductAutofillSource].self, forKey: .sources) ?? []
+    }
 
     /// Keep paragraph breaks intact; review notes are never merged into sales copy.
     var isValid: Bool {
@@ -15,6 +69,8 @@ nonisolated struct ProductAutofillDraft: Codable, Equatable, Sendable {
             && description.count <= 1200
             && reviewNotes.count <= 14
             && reviewNotes.allSatisfy { !$0.isEmpty && $0.count <= 400 }
+            && sources.count <= 3
+            && sources.allSatisfy { $0.publicURL != nil }
     }
 }
 
@@ -100,7 +156,7 @@ actor ProductAutofillClient: ProductAutofillGenerating {
     #if DEBUG
     nonisolated static func fixtureMode(environment: [String: String], isFixture: Bool) -> String? {
         guard isFixture, let mode = environment["DOBBY_AI_FIXTURE_RESULT"],
-              ["success", "failure", "delay", "failure-once"].contains(mode) else { return nil }
+              ["success", "success-with-sources", "failure", "delay", "failure-once"].contains(mode) else { return nil }
         return mode
     }
     #endif
@@ -213,7 +269,9 @@ private actor ProductAutofillFixtureClient: ProductAutofillGenerating {
         return ProductAutofillDraft(productName: "AI 테스트 네이비 집업 후드",
             brand: "TEST BRAND (테스트 브랜드)",
             description: "네이비 컬러와 전면 지퍼가 돋보이는 후드입니다.\n\n심플한 디자인으로 다양한 하의와 매치하기 좋습니다.",
-            reviewNotes: ["라벨과 하자·오염 상태를 실물로 확인해 주세요."])
+            reviewNotes: ["라벨과 하자·오염 상태를 실물로 확인해 주세요."],
+            sources: mode == "success-with-sources"
+                ? [.init(title: "테스트 브랜드 아카이브", url: "https://example.com/archive/test-product")] : [])
     }
 }
 #endif

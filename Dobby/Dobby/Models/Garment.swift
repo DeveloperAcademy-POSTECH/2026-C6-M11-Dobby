@@ -41,6 +41,9 @@ final class Garment {
     var detail: String
     var price: Int?
 
+    /// Optional metadata survives completion; old products have no AI sources.
+    var aiSourcesData: Data? = nil
+
     /// 내보내기 화면에서 선택한 플랫폼. 기존 상품은 nil이며 업로드 성공 기록과 구분한다.
     var selectedExportChannelRawValues: [String]? = nil
 
@@ -90,6 +93,19 @@ final class Garment {
 // MARK: - 읽기 편의
 
 extension Garment {
+    var aiSources: [ProductAutofillSource] {
+        get {
+            guard let aiSourcesData, aiSourcesData.count <= 16 * 1024,
+                  let sources = try? JSONDecoder().decode([ProductAutofillSource].self, from: aiSourcesData),
+                  sources.count <= 3, sources.allSatisfy({ $0.publicURL != nil }) else { return [] }
+            return sources
+        }
+        set {
+            let sources = Array(newValue.filter { $0.publicURL != nil }.prefix(3))
+            aiSourcesData = sources.isEmpty ? nil : try? JSONEncoder().encode(sources)
+        }
+    }
+
     var creationDraft: ProductCreationDraft? {
         guard let creationDraftData,
               let draft = try? JSONDecoder().decode(ProductCreationDraft.self, from: creationDraftData),
