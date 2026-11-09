@@ -47,6 +47,7 @@ final class ProductDraftPersistenceTests: XCTestCase {
             let draft = try XCTUnwrap(garment.creationDraft)
             XCTAssertTrue(garment.isCreationDraft)
             XCTAssertEqual(draft.step, .photoSelection)
+            XCTAssertEqual(draft.step.title, "상세 촬영 단계", "기존 저장 값은 유지하고 이어하기 안내만 새 경로에 맞춘다")
             XCTAssertEqual(draft.measurementRecordID, record.id)
             XCTAssertEqual(draft.measurementInputData, inputData)
             XCTAssertEqual(draft.aiReviewNotes, ["라벨을 실물로 확인해 주세요."])
@@ -66,6 +67,8 @@ final class ProductDraftPersistenceTests: XCTestCase {
             XCTAssertEqual(restored.selectedPhotoIDs, [second.id, measuredPhotoID!, first.id])
             XCTAssertEqual(restored.output?.representativePhotoID, second.id)
             XCTAssertEqual(restored.output?.selectedPhotos.map(\.id), restored.selectedPhotoIDs)
+            XCTAssertEqual(restored.allPhotosOutput?.selectedPhotos.map(\.id),
+                [measuredPhotoID!, first.id, second.id], "이전 선택 순서와 관계없이 보존된 전체 촬영 사진을 전달한다")
             var legacyJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
             legacyJSON.removeValue(forKey: "hasAcknowledgedCaptureGuide")
             let legacy = try JSONDecoder().decode(ProductPhotoDraftSnapshot.self,

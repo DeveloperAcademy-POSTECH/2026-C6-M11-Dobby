@@ -8,6 +8,7 @@ nonisolated enum GarmentLandmarkModelContract {
     static let lunaFrontLengthVersion = "luna-outerwear11-front-length-v3"
     static let lunaGapLengthVersion = "luna-outerwear11-front-gap-v4"
     static let frontGapConvention = "center-front-neck-to-hem-small-gap-midpoint-v1"
+    static let sideNeckConvention = "left-side-neck-to-vertical-hem-mask-v1"
     static let backNeckSeamConvention = "center-back-neck-body-seam-to-back-hem-v1"
     static let frontNeckSeamConvention = "center-front-neck-body-seam-to-front-hem-v1"
 
@@ -25,5 +26,10 @@ nonisolated enum GarmentLandmarkModelContract {
 
     static func isCurrent(version: String?, kind: AutomaticGarmentKind) -> Bool {
         version == kind.modelVersion || isLunaOuterwear(version: version, kind: kind)
+    }
+
+    static func usesSideNeckLength(_ landmarks: GarmentLandmarkSet) -> Bool {
+        landmarks.garmentKind == .top && landmarks.modelVersion == lunaGapLengthVersion
+            && landmarks.recognitionDiagnostics?.totalLengthConvention == sideNeckConvention
     }
 }

@@ -65,27 +65,15 @@ final class DetailCaptureGuideUITests: XCTestCase {
         let next = app.buttons["camera.selectPhotos"]
         waitEnabled(next)
         next.tap()
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        let selections = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "camera.grid.select."))
-        XCTAssertEqual(selections.count, 3, "안내 닫기는 촬영하지 않고 이후 셔터 한 번만 상세 사진을 추가해야 한다")
-        XCTAssertTrue(app.buttons["camera.grid.select.0"].exists)
-        XCTAssertTrue(app.buttons["camera.grid.select.1"].exists)
-        XCTAssertTrue(app.buttons["camera.grid.select.2"].exists)
-        XCTAssertFalse(app.buttons["camera.grid.select.3"].exists)
-
-        // 확대 사진의 보조 뒤로가기는 임시저장 확인창을 열지 않는다.
-        let preview = app.buttons["camera.grid.preview.2"]
-        waitEnabled(preview)
-        preview.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch.waitForExistence(timeout: 10))
-        app.buttons["camera.closeSelectionPreview"].tap()
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        XCTAssertFalse(exitConfirmation(in: app).exists)
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo."))
+        XCTAssertEqual(photos.count, 3, "안내 닫기는 촬영하지 않고 이후 셔터 한 번만 상세 사진을 추가해야 한다")
+        let originalIDs = photos.allElementsBoundByIndex.map(\.identifier)
         returnToDetails(in: app)
         XCTAssertFalse(guide.exists)
         next.tap()
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        XCTAssertEqual(selections.count, 3)
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        XCTAssertEqual(photos.allElementsBoundByIndex.map(\.identifier), originalIDs)
         returnToDetails(in: app)
         XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
 

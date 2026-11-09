@@ -258,7 +258,7 @@ extension GarmentStore {
         point.derivedFrom = record.landmarks.effectiveDerivedSourceIDs(for: current.id)
         if let rawOriginal = originalLandmarks.points.first(where: { $0.id == current.id }),
            (!GarmentLandmarkModelContract.isLunaOuterwear(version: originalLandmarks.modelVersion, kind: .top)
-                || rawOriginal.isVisible),
+                || rawOriginal.isVisible || rawOriginal.contourRule != nil),
            rawOriginal.contourRule == nil || productPoint(rawOriginal, displayed: displayedAutomatic).isVisible {
             let original = productPoint(rawOriginal, displayed: displayedAutomatic)
             point.hasAutomaticObservation = true
@@ -350,9 +350,11 @@ extension GarmentStore {
         let isRemoteOuterwear = GarmentLandmarkModelContract.isLunaOuterwear(version: record.landmarks.modelVersion, kind: kind)
         let isViewLengthOuterwear = GarmentLandmarkModelContract.isViewLengthOuterwear(version: record.landmarks.modelVersion, kind: kind)
         let isFrontLengthOuterwear = GarmentLandmarkModelContract.isFrontLengthOuterwear(version: record.landmarks.modelVersion, kind: kind)
+        let usesSideNeckLength = GarmentLandmarkModelContract.usesSideNeckLength(record.landmarks)
         let remoteView = record.landmarks.recognitionDiagnostics?.remoteView
         if isViewLengthOuterwear || isFrontLengthOuterwear {
-            let convention = record.landmarks.modelVersion == GarmentLandmarkModelContract.lunaGapLengthVersion
+            let convention = usesSideNeckLength ? GarmentLandmarkModelContract.sideNeckConvention
+                : record.landmarks.modelVersion == GarmentLandmarkModelContract.lunaGapLengthVersion
                 ? GarmentLandmarkModelContract.frontGapConvention
                 : isFrontLengthOuterwear || remoteView == "front" ? GarmentLandmarkModelContract.frontNeckSeamConvention
                 : GarmentLandmarkModelContract.backNeckSeamConvention
@@ -379,7 +381,9 @@ extension GarmentStore {
             // Preview records predate the contour contract. They do not grant
             // arbitrary production model/definition combinations.
             usesContourLength = isCurrentModel && !isSyntheticPreview
-            if isViewLengthOuterwear {
+            if usesSideNeckLength {
+                expected = TopLandmarkSchema.sideNeckMeasurementDefinitions
+            } else if isViewLengthOuterwear {
                 expected = TopLandmarkSchema.viewLengthMeasurementDefinitions(for: remoteView)
             } else if usesContourLength || isRemoteOuterwear {
                 expected = TopLandmarkSchema.canonicalMeasurementDefinitions
@@ -390,6 +394,7 @@ extension GarmentStore {
             }
             physicalPointNames = TopLandmarkSchema.expectedKeypoints + ((usesContourLength || isRemoteOuterwear) ? ["top_length_start"] : [])
                 + (isViewLengthOuterwear ? ["front_length_start"] : [])
+                + (usesSideNeckLength ? [TopSideNeckLength.hemID] : [])
             derived = ["neck_center": ["neck_left", "neck_right"]]
         case .bottoms:
             usesContourLength = false
@@ -411,7 +416,9 @@ extension GarmentStore {
 
         func validContourRule(_ point: GarmentLandmark) -> Bool {
             let expectedRule: GarmentContourRule?
-            if usesContourLength && point.id == "top_length_start" {
+            if usesSideNeckLength && point.id == TopSideNeckLength.hemID {
+                expectedRule = .leftNeckVerticalHemMaskV1
+            } else if usesContourLength && point.id == "top_length_start" {
                 expectedRule = .neckPerpendicularMaskV1
             } else if usesContourThigh && point.id == "thigh_right" {
                 expectedRule = .waistParallelRightThighMaskV1
@@ -462,7 +469,8 @@ extension GarmentStore {
             let definitionID: String
             if kind == .top {
                 let usesFrontLength = isViewLengthOuterwear && remoteView == "front"
-                endpoints = usesFrontLength ? ["front_length_start", "hem_center"]
+                endpoints = usesSideNeckLength ? ["neck_left", TopSideNeckLength.hemID]
+                    : usesFrontLength ? ["front_length_start", "hem_center"]
                     : (usesContourLength || isRemoteOuterwear) ? ["top_length_start", "hem_center"] : ["neck_center", "hem_center"]
                 definitionID = usesFrontLength ? "top.frontLength" : "top.totalLength"
             } else if usesContourThigh {

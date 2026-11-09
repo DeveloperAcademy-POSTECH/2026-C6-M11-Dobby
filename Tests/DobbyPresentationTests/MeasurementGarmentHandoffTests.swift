@@ -85,6 +85,71 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         return record
     }
 
+    private func sideNeckFixture() throws -> SavedMeasurement {
+        var record = try remoteOuterwearFixture(seamVisible: false)
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaGapLengthVersion
+        record.landmarks.recognitionDiagnostics?.remoteSchemaVersion = "outerwear-landmarks-v4"
+        let neck = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "neck_left" })
+        record.landmarks.points[neck].point = .init(x: 0.35, y: 0.25)
+        let hem = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "hem_center" })
+        record.landmarks.points[hem].isVisible = false
+        record.landmarks.recognitionDiagnostics?.rawPoints = record.landmarks.points
+        record.landmarks = TopSideNeckLength.applying(to: record.landmarks)
+        record.definitions = TopLandmarkSchema.sideNeckMeasurementDefinitions
+        record.result = GarmentPlaneMeasurementEngine(options: record.options).measure(
+            frame: record.snapshot.frame, landmarks: record.landmarks, definitions: record.definitions)
+        return record
+    }
+
+    func testSideNeckLengthArchiveAndProductImportPreserveConventionAndContour() async throws {
+        let record = try sideNeckFixture()
+        XCTAssertNotNil(record.result.values.last?.meters)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = MeasurementArchive(folder: directory.appendingPathComponent("archive"))
+        _ = try await archive.save(record)
+        let restored = try await archive.load(record.id)
+        let stored = try GarmentStore.importMeasurement(restored, in: ModelContext(makeContainer()),
+            photosDirectory: directory.appendingPathComponent("photos"), allowsSynthetic: true)
+        XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+        XCTAssertEqual(restored.landmarks.recognitionDiagnostics?.totalLengthConvention,
+                       GarmentLandmarkModelContract.sideNeckConvention)
+        let resolved = try XCTUnwrap(restored.result.values.last?.points.last)
+        let endpoint = try XCTUnwrap(stored.measurementPhoto?.landmark(TopSideNeckLength.hemID))
+        XCTAssertEqual(endpoint.x, resolved.imagePoint.x)
+        XCTAssertEqual(endpoint.y, resolved.imagePoint.y)
+        XCTAssertEqual(endpoint.hasAutomaticObservation, true)
+        XCTAssertFalse(try XCTUnwrap(restored.landmarks.points.first { $0.id == "hem_center" }).isVisible)
+        var wrongConvention = restored
+        wrongConvention.landmarks.recognitionDiagnostics?.totalLengthConvention = GarmentLandmarkModelContract.frontGapConvention
+        XCTAssertThrowsError(try GarmentStore.importMeasurement(wrongConvention, in: ModelContext(makeContainer()),
+            photosDirectory: directory.appendingPathComponent("invalid"), allowsSynthetic: true))
+    }
+
+    func testSideNeckManualCorrectionCanBeImportedAndResetToOriginalContour() throws {
+        let record = try sideNeckFixture()
+        var model = AutomaticMeasurement(record: record)
+        XCTAssertTrue(model.canCorrectTotalLength)
+        var manual = try XCTUnwrap(model.manualMeasurement(for: "top.totalLength"))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.4, y: 0.25), index: 0))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.4, y: 0.85), index: 1))
+        XCTAssertTrue(model.applyTotalLengthCorrection(from: manual))
+        let result = GarmentPlaneMeasurementEngine(options: model.options).measure(
+            frame: model.snapshot.frame, landmarks: model.calculationLandmarks, definitions: model.definitions)
+        XCTAssertTrue(model.apply(result, for: model.calculationRevision))
+        let corrected = try model.makeRecord()
+        XCTAssertNil(corrected.landmarks.points.first { $0.id == TopSideNeckLength.hemID }?.contourRule)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(corrected, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        XCTAssertEqual(stored.measurementPhoto?.landmark("neck_left")?.originRaw, "manual")
+        var reopened = AutomaticMeasurement(record: corrected)
+        reopened.resetPointAdjustments()
+        XCTAssertEqual(reopened.calculationLandmarks.points.first { $0.id == TopSideNeckLength.hemID }?.contourRule,
+                       .leftNeckVerticalHemMaskV1)
+    }
+
     /// The remote seam is an independently observed physical point. Unknown
     /// remote confidence and a missing seam must survive product persistence.
     private func remoteOuterwearFixture(seamVisible: Bool = true) throws -> SavedMeasurement {
