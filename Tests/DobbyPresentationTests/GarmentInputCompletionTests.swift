@@ -31,6 +31,106 @@ struct GarmentInputCompletionTests {
         return (garment, length, chest)
     }
 
+    private func markAsSavedDraft(_ garment: Garment, savedAt: Date) throws {
+        let measurementID = UUID()
+        garment.sourceMeasurementID = measurementID
+        garment.creationDraftData = try JSONEncoder().encode(ProductCreationDraft(
+            step: .information, measurementRecordID: measurementID,
+            photoState: nil, measurementInputData: nil, savedAt: savedAt))
+    }
+
+    @Test func registrationTimeHidesDraftsAndUsesLegacyCreationDate() throws {
+        let (garment, _, _) = product()
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        garment.createdAt = createdAt
+        #expect(garment.registeredAt == createdAt)
+
+        try markAsSavedDraft(garment, savedAt: createdAt.addingTimeInterval(60))
+        #expect(garment.isCreationDraft)
+        #expect(garment.registeredAt == nil)
+
+        let completedAt = createdAt.addingTimeInterval(3_600)
+        garment.informationCompletedAt = completedAt
+        #expect(garment.registeredAt == completedAt)
+    }
+
+    @Test func resumedDraftRegistersAtCompletionAndPersistsThatDateAcrossEdits() throws {
+        let container = try ModelContainer(for: Garment.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let (garment, _, _) = product()
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        garment.createdAt = createdAt
+        try markAsSavedDraft(garment, savedAt: createdAt.addingTimeInterval(60))
+        context.insert(garment)
+        try context.save()
+        #expect(garment.registeredAt == nil)
+
+        var drafts: [UUID: String] = [:]
+        let beforeCompletion = Date.now
+        try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { try context.save() }
+        let completedAt = try #require(garment.informationCompletedAt)
+        #expect(completedAt >= beforeCompletion && completedAt <= Date.now)
+        #expect(completedAt != createdAt)
+        #expect(garment.createdAt == createdAt)
+        #expect(garment.registeredAt == completedAt && garment.creationDraftData == nil)
+
+        garment.name = "정보를 수정한 자켓"
+        try GarmentInputCompletion.save(garment: garment, drafts: &drafts,
+                                       isEditingExistingProduct: true) { try context.save() }
+        // Revisiting the creation flow must also preserve its original completion.
+        try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { try context.save() }
+        #expect(garment.informationCompletedAt == completedAt)
+
+        let reader = ModelContext(container)
+        let saved = try #require(reader.fetch(FetchDescriptor<Garment>()).first)
+        #expect(saved.name == "정보를 수정한 자켓")
+        #expect(saved.createdAt == createdAt)
+        #expect(saved.informationCompletedAt == completedAt && saved.registeredAt == completedAt)
+        #expect(!saved.isCreationDraft && saved.creationDraftData == nil)
+    }
+
+    @Test func failedFirstCompletionKeepsDraftUnregisteredAndRetryUsesSuccessfulAttempt() throws {
+        enum PersistenceError: Error { case unavailable }
+        let (garment, _, _) = product()
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        garment.createdAt = createdAt
+        try markAsSavedDraft(garment, savedAt: createdAt.addingTimeInterval(60))
+        let originalDraft = garment.creationDraftData
+        var drafts: [UUID: String] = [:]
+        var failedAttemptAt: Date?
+        #expect(throws: PersistenceError.self) {
+            try GarmentInputCompletion.save(garment: garment, drafts: &drafts) {
+                failedAttemptAt = garment.informationCompletedAt
+                throw PersistenceError.unavailable
+            }
+        }
+        #expect(failedAttemptAt != nil)
+        #expect(garment.informationCompletedAt == nil && garment.registeredAt == nil)
+        #expect(garment.creationDraftData == originalDraft && garment.isCreationDraft)
+
+        let beforeRetry = Date.now
+        try GarmentInputCompletion.save(garment: garment, drafts: &drafts) {}
+        let completedAt = try #require(garment.informationCompletedAt)
+        #expect(completedAt >= beforeRetry && completedAt <= Date.now)
+        #expect(garment.registeredAt == completedAt && garment.creationDraftData == nil)
+        #expect(garment.createdAt == createdAt)
+    }
+
+    @Test func legacyInformationEditPreservesHistoricalRegistrationDate() throws {
+        let (garment, _, _) = product()
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        garment.createdAt = createdAt
+        #expect(garment.informationCompletedAt == nil && garment.registeredAt == createdAt)
+        var drafts: [UUID: String] = [:]
+
+        try GarmentInputCompletion.save(garment: garment, drafts: &drafts,
+                                       isEditingExistingProduct: true) {}
+        #expect(garment.informationCompletedAt == createdAt && garment.registeredAt == createdAt)
+        #expect(garment.createdAt == createdAt)
+    }
+
     @Test func requiredInformationPreventsSavingWithoutConsumingMeasurementDrafts() {
         let (garment, length, _) = product()
         let cases: [(String, String, Int?)] = [
