@@ -281,7 +281,7 @@ struct CameraFlowView: View {
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.capsule)
         .tint(Color(red: 0.94, green: 0.24, blue: 0.07))
-        .disabled(isPhotoOperationInProgress)
+        .disabled(isPhotoOperationInProgress || model.allPhotosOutput == nil)
         .accessibilityHidden(isCompletingCapture)
         .accessibilityIdentifier("camera.selectPhotos")
     }
@@ -332,13 +332,13 @@ struct CameraFlowView: View {
                 .accessibilityLabel("촬영 옵션 더보기")
                 .accessibilityIdentifier("camera.moreOptions")
             Button { isGalleryPresented = true } label: {
-                CameraPhotoView(source: (model.photos.last ?? model.input.measurement).source,
+                CameraPhotoView(source: (model.photos.last ?? model.selectablePhotos.last)?.source ?? .mockPlaceholder,
                                 maximumPixelSize: 192)
                     .frame(width: 48, height: 48).clipShape(Circle())
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .disabled(isPhotoOperationInProgress)
+            .disabled(isPhotoOperationInProgress || model.selectablePhotos.isEmpty)
             .position(x: controls.accessory.x + controls.accessory.width / 2,
                 y: controls.accessory.y + controls.accessory.height / 2)
             .accessibilityLabel("촬영한 사진 보기")

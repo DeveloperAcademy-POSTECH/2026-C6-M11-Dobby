@@ -10,7 +10,7 @@ struct DetailPhotoFilmstrip<Thumbnail: View>: View {
     @State private var position = ScrollPosition(x: 0)
     @State private var isUserScrolling = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let step: CGFloat = 26
+    private let step: CGFloat = 22
     private var focusedIndex: Int { ids.firstIndex(of: focusedID) ?? 0 }
 
     var body: some View {
@@ -18,7 +18,7 @@ struct DetailPhotoFilmstrip<Thumbnail: View>: View {
             HStack(spacing: 0) {
                 ForEach(Array(ids.enumerated()), id: \.element) { index, _ in
                     thumbnail(index)
-                        .offset(x: index == focusedIndex ? 0 : index < focusedIndex ? -16 : 16)
+                        .offset(x: index == focusedIndex ? 0 : index < focusedIndex ? -6 : 6)
                         .frame(width: step, height: 44)
                         .zIndex(index == focusedIndex ? 1 : 0)
                 }
@@ -44,6 +44,10 @@ struct DetailPhotoFilmstrip<Thumbnail: View>: View {
             if isUserScrolling { focus(at: index) }
         }
         .onChange(of: width, initial: true) { _, _ in align(animated: false) }
+        .onChange(of: ids) { _, _ in
+            isUserScrolling = false
+            align(animated: false)
+        }
         .onChange(of: focusedID) { _, _ in
             if !isUserScrolling { align(animated: true) }
         }
