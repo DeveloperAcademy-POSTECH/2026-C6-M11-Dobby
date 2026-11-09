@@ -84,7 +84,7 @@ final class DetailExtendedPreviewTests: XCTestCase {
         view.tearDownInteraction()
     }
 
-    func testRenderedTopIsFortyPercentBlackAndBottomShowsVideo() throws {
+    func testRenderedTopIsOpaqueForEveryRatioAndExtendedBottomShowsVideo() throws {
         for ratio in [DetailPhotoAspectRatio.fourThree, .sixteenNine, .square] {
             let renderer = ImageRenderer(content:
                 DetailAspectRatioPreview(aspectRatio: ratio, extendsPreviewBehindChrome: true) { _ in
@@ -95,11 +95,10 @@ final class DetailExtendedPreviewTests: XCTestCase {
             let top = try pixel(image, x: 20, y: 80)
             let bottom = try pixel(image, x: 20, y: 840)
             let center = try pixel(image, x: 201, y: 440)
+            XCTAssertEqual(top, 0, accuracy: 1, "All ratios use the same opaque header")
             if ratio == .sixteenNine {
-                XCTAssertEqual(top, 153, accuracy: 3, "White video behind a 40% black header")
                 XCTAssertEqual(bottom, 255, accuracy: 1, "No lower black cover remains")
             } else {
-                XCTAssertEqual(top, 0, accuracy: 1)
                 XCTAssertEqual(bottom, 0, accuracy: 1)
             }
             XCTAssertEqual(center, 255, accuracy: 1)

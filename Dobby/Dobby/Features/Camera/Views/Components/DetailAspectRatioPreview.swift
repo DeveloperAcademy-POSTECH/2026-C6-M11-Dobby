@@ -1,8 +1,8 @@
 // Created by mason on 10/24/26.
 import SwiftUI
 
-/// One video surface. Opt-in extended mode shows surroundings behind the header
-/// and passes the actual photograph rectangle in surface-local coordinates.
+/// One video surface with opaque surroundings shared with measurement capture.
+/// Passes the actual photograph rectangle in surface-local coordinates.
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
     var extendsPreviewBehindChrome = false
@@ -13,8 +13,7 @@ struct DetailAspectRatioPreview<Content: View>: View {
         GeometryReader { geometry in
             let layout = DetailCameraPreviewLayout(containerSize: geometry.size,
                 aspectRatio: aspectRatio, extendsPreviewBehindChrome: extendsPreviewBehindChrome)
-            DetailPreviewViewport(rect: layout.photoFrame, surfaceRect: layout.previewFrame,
-                topOpacity: layout.usesExtendedPreview ? 0.4 : 1, content: content)
+            DetailPreviewViewport(rect: layout.photoFrame, surfaceRect: layout.previewFrame, content: content)
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
                 .animation(nil, value: geometry.size)
@@ -29,20 +28,18 @@ struct DetailAspectRatioPreview<Content: View>: View {
 private struct DetailPreviewViewport<Content: View>: View, Animatable {
     var rect: CGRect
     var surfaceRect: CGRect
-    var topOpacity: Double
     let content: (CGRect) -> Content
 
     var animatableData: AnimatablePair<CameraSurroundingsMask.AnimatableData,
-        AnimatablePair<CameraSurroundingsMask.AnimatableData, Double>> {
+        CameraSurroundingsMask.AnimatableData> {
         get { .init(CameraSurroundingsMask(photoRect: rect).animatableData,
-                    .init(CameraSurroundingsMask(photoRect: surfaceRect).animatableData, topOpacity)) }
+                    CameraSurroundingsMask(photoRect: surfaceRect).animatableData) }
         set {
             var mask = CameraSurroundingsMask(photoRect: rect)
             mask.animatableData = newValue.first
             rect = mask.photoRect
-            mask.animatableData = newValue.second.first
+            mask.animatableData = newValue.second
             surfaceRect = mask.photoRect
-            topOpacity = newValue.second.second
         }
     }
 
@@ -52,7 +49,7 @@ private struct DetailPreviewViewport<Content: View>: View, Animatable {
                 .frame(width: surfaceRect.width, height: surfaceRect.height)
                 .clipped()
                 .position(x: surfaceRect.midX, y: surfaceRect.midY)
-            DetailCameraSurroundings(photoFrame: rect, topOpacity: topOpacity)
+            CameraBlackSurroundings(photoRect: rect)
         }
         // 이 영역은 이미 보간된 값이다. 하위 뷰에서 다시 애니메이션하지 않는다.
         .transaction { $0.animation = nil }
