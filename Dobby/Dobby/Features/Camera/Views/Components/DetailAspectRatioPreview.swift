@@ -1,17 +1,20 @@
 // Created by mason on 10/24/26.
 import SwiftUI
 
-/// Fit the camera itself to the photo window so fullscreen aspect-fill cannot add a hidden zoom.
+/// One video surface. Opt-in extended mode shows surroundings behind the header
+/// and passes the actual photograph rectangle in surface-local coordinates.
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
+    var extendsPreviewBehindChrome = false
     @ViewBuilder var content: (CGRect) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
-            let layout = DetailAspectRatioPreviewLayout(containerSize: geometry.size,
-                aspectRatio: aspectRatio)
-            DetailPreviewViewport(rect: layout.frame, content: content)
+            let layout = DetailCameraPreviewLayout(containerSize: geometry.size,
+                aspectRatio: aspectRatio, extendsPreviewBehindChrome: extendsPreviewBehindChrome)
+            DetailPreviewViewport(rect: layout.photoFrame, surfaceRect: layout.previewFrame,
+                topOpacity: layout.usesExtendedPreview ? 0.4 : 1, content: content)
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
                 .animation(nil, value: geometry.size)
@@ -25,24 +28,31 @@ struct DetailAspectRatioPreview<Content: View>: View {
 /// 실제 bounds를 갱신하므로 마지막 크기의 영상만 늘여 보이는 전환을 피한다.
 private struct DetailPreviewViewport<Content: View>: View, Animatable {
     var rect: CGRect
+    var surfaceRect: CGRect
+    var topOpacity: Double
     let content: (CGRect) -> Content
 
-    var animatableData: CameraSurroundingsMask.AnimatableData {
-        get { CameraSurroundingsMask(photoRect: rect).animatableData }
+    var animatableData: AnimatablePair<CameraSurroundingsMask.AnimatableData,
+        AnimatablePair<CameraSurroundingsMask.AnimatableData, Double>> {
+        get { .init(CameraSurroundingsMask(photoRect: rect).animatableData,
+                    .init(CameraSurroundingsMask(photoRect: surfaceRect).animatableData, topOpacity)) }
         set {
             var mask = CameraSurroundingsMask(photoRect: rect)
-            mask.animatableData = newValue
+            mask.animatableData = newValue.first
             rect = mask.photoRect
+            mask.animatableData = newValue.second.first
+            surfaceRect = mask.photoRect
+            topOpacity = newValue.second.second
         }
     }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            content(rect)
-                .frame(width: rect.width, height: rect.height)
+            content(rect.offsetBy(dx: -surfaceRect.minX, dy: -surfaceRect.minY))
+                .frame(width: surfaceRect.width, height: surfaceRect.height)
                 .clipped()
-                .position(x: rect.midX, y: rect.midY)
-            CameraBlackSurroundings(photoRect: rect)
+                .position(x: surfaceRect.midX, y: surfaceRect.midY)
+            DetailCameraSurroundings(photoFrame: rect, topOpacity: topOpacity)
         }
         // 이 영역은 이미 보간된 값이다. 하위 뷰에서 다시 애니메이션하지 않는다.
         .transaction { $0.animation = nil }
@@ -69,11 +79,6 @@ nonisolated struct DetailAspectRatioPreviewLayout {
     let frame: CGRect
 
     init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio) {
-        let ratio = aspectRatio.previewRatio(isLandscape: containerSize.width > containerSize.height)
-        if let viewport = MeasurementCameraChromeLayout.photoViewport(
-            containerWidth: Double(containerSize.width), containerHeight: Double(containerSize.height),
-            photoAspectRatio: ratio) {
-            frame = CGRect(x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height)
-        } else { frame = .zero }
+        frame = DetailCameraPreviewLayout(containerSize: containerSize, aspectRatio: aspectRatio).photoFrame
     }
 }
