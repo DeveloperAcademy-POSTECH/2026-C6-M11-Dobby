@@ -160,8 +160,8 @@ struct CameraPreviewSurface: UIViewRepresentable {
             }
         }
 
-        /// Convert only the photograph within the video surface. In extended
-        /// 16:9 mode the translucent header is visible but is not saved.
+        /// Convert the surface-local photograph using the current lens and zoom.
+        /// Navigation and controls do not enlarge the video surface or saved crop.
         func normalizedPhotoCrop() -> CGRect? {
             layoutIfNeeded()
             guard let connection = previewLayer.connection, connection.isActive,

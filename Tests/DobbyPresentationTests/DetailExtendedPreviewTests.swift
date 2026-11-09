@@ -7,15 +7,15 @@ import XCTest
 final class DetailExtendedPreviewTests: XCTestCase {
     func testFigmaPhotographFillsWidthAndEndsAtScreenBottom() {
         let layout = DetailCameraPreviewLayout(containerSize: CGSize(width: 402, height: 874),
-            aspectRatio: .sixteenNine, extendsPreviewBehindChrome: true)
-        XCTAssertTrue(layout.usesExtendedPreview)
+            aspectRatio: .sixteenNine, prefersBottomAlignedPortrait: true)
+        XCTAssertTrue(layout.isBottomAligned)
         XCTAssertEqual(layout.photoFrame.minX, 0)
         XCTAssertEqual(layout.photoFrame.minY, 159.333333, accuracy: 0.001)
         XCTAssertEqual(layout.photoFrame.width, 402)
         XCTAssertEqual(layout.photoFrame.height, 714.666667, accuracy: 0.001)
         XCTAssertEqual(layout.photoFrame.maxY, 874, accuracy: 0.001)
-        XCTAssertEqual(layout.previewFrame, CGRect(x: 0, y: 0, width: 402, height: 874))
-        XCTAssertEqual(layout.photoRectInPreview, layout.photoFrame)
+        XCTAssertEqual(layout.previewFrame, layout.photoFrame)
+        XCTAssertEqual(layout.photoRectInPreview, CGRect(origin: .zero, size: layout.photoFrame.size))
     }
 
     func testOtherRatiosAndCompactWindowsRetainExistingPlacement() {
@@ -24,9 +24,9 @@ final class DetailExtendedPreviewTests: XCTestCase {
             for ratio in DetailPhotoAspectRatio.allCases {
                 if size == CGSize(width: 402, height: 874), ratio == .sixteenNine { continue }
                 let layout = DetailCameraPreviewLayout(containerSize: size, aspectRatio: ratio,
-                    extendsPreviewBehindChrome: true)
+                    prefersBottomAlignedPortrait: true)
                 let baseline = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: ratio).frame
-                XCTAssertFalse(layout.usesExtendedPreview)
+                XCTAssertFalse(layout.isBottomAligned)
                 XCTAssertEqual(layout.photoFrame, baseline)
                 XCTAssertEqual(layout.previewFrame, baseline)
                 XCTAssertEqual(layout.photoRectInPreview.origin, .zero)
@@ -38,7 +38,7 @@ final class DetailExtendedPreviewTests: XCTestCase {
         for size in [CGSize(width: 390, height: 844), CGSize(width: 402, height: 874),
                      CGSize(width: 440, height: 956)] {
             let layout = DetailCameraPreviewLayout(containerSize: size, aspectRatio: .sixteenNine,
-                extendsPreviewBehindChrome: true)
+                prefersBottomAlignedPortrait: true)
             let controls = try XCTUnwrap(layout.controls(in: size, bottomSafeAreaInset: 34))
             let photo = layout.photoFrame
             XCTAssertEqual(photo.width, size.width)
@@ -62,10 +62,10 @@ final class DetailExtendedPreviewTests: XCTestCase {
         for size in [CGSize.zero, CGSize(width: -1, height: 874),
                      CGSize(width: CGFloat.nan, height: 874), CGSize(width: 402, height: CGFloat.infinity)] {
             let layout = DetailCameraPreviewLayout(containerSize: size, aspectRatio: .sixteenNine,
-                extendsPreviewBehindChrome: true)
+                prefersBottomAlignedPortrait: true)
             XCTAssertEqual(layout.photoFrame, .zero)
             XCTAssertEqual(layout.previewFrame, .zero)
-            XCTAssertFalse(layout.usesExtendedPreview)
+            XCTAssertFalse(layout.isBottomAligned)
         }
     }
 
@@ -87,7 +87,7 @@ final class DetailExtendedPreviewTests: XCTestCase {
     func testRenderedTopIsOpaqueForEveryRatioAndExtendedBottomShowsVideo() throws {
         for ratio in [DetailPhotoAspectRatio.fourThree, .sixteenNine, .square] {
             let renderer = ImageRenderer(content:
-                DetailAspectRatioPreview(aspectRatio: ratio, extendsPreviewBehindChrome: true) { _ in
+                DetailAspectRatioPreview(aspectRatio: ratio, prefersBottomAlignedPortrait: true) { _ in
                     Color.white
                 }.frame(width: 402, height: 874))
             renderer.scale = 1
@@ -116,7 +116,7 @@ final class DetailExtendedPreviewTests: XCTestCase {
         let photo = try XCTUnwrap(UIImage(contentsOfFile: url.path))
         for ratio in [DetailPhotoAspectRatio.fourThree, .sixteenNine, .square] {
             let renderer = ImageRenderer(content:
-                DetailAspectRatioPreview(aspectRatio: ratio, extendsPreviewBehindChrome: true) { _ in
+                DetailAspectRatioPreview(aspectRatio: ratio, prefersBottomAlignedPortrait: true) { _ in
                     GeometryReader { geometry in
                         Image(uiImage: photo).resizable().scaledToFill()
                             .frame(width: geometry.size.width, height: geometry.size.height).clipped()

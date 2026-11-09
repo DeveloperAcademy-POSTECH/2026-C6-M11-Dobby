@@ -18,7 +18,7 @@ struct CameraLivePreviewView: View {
     @State private var isVisible = false
 
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: aspectRatio, extendsPreviewBehindChrome: true) { photoRect in
+        DetailAspectRatioPreview(aspectRatio: aspectRatio, prefersBottomAlignedPortrait: true) { photoRect in
             CameraPreviewSurface(session: camera.session, photoRect: photoRect,
                 onRotationChange: { camera.rotationAngle = $0 },
                 onFramingReady: { camera.previewCrop = $0 },

@@ -58,7 +58,7 @@ struct DetailZoomModifier: ViewModifier {
 
     private func zoomLayout(in size: CGSize) -> MeasurementCameraChromeLayout? {
         let layout = DetailCameraPreviewLayout(containerSize: size,
-            aspectRatio: options?.photoAspectRatio ?? .fourThree, extendsPreviewBehindChrome: true)
+            aspectRatio: options?.photoAspectRatio ?? .fourThree, prefersBottomAlignedPortrait: true)
         let rect = layout.photoFrame
         let photo = CameraPhotoViewport(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
         guard let controls = layout.controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset) else { return nil }

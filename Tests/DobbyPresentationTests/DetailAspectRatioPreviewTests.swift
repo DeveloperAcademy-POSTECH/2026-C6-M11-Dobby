@@ -110,7 +110,7 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
 
     func testExtendedTransitionKeepsOneSurfaceAndPassesLocalPhotographBounds() async throws {
         let size = CGSize(width: 402, height: 874)
-        let fixture = try host(extendsPreviewBehindChrome: true, size: size)
+        let fixture = try host(prefersBottomAlignedPortrait: true, size: size)
         defer { fixture.close() }
         let initial = DetailAspectRatioPreviewLayout(containerSize: size,
             aspectRatio: .fourThree).frame.size
@@ -118,16 +118,18 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         fixture.samples.sizes.removeAll()
         fixture.samples.framings.removeAll()
         fixture.options.photoAspectRatio = .sixteenNine
-        try await waitForSize(fixture, size: size)
+        let photoSize = CGSize(width: 402, height: 402 * 16.0 / 9)
+        try await waitForSize(fixture, size: photoSize)
         try await Task.sleep(for: .milliseconds(400))
         let framing = try XCTUnwrap(fixture.samples.framings.last)
-        XCTAssertEqual(framing.1.minY, 159.333333, accuracy: 1)
+        XCTAssertEqual(framing.1.minY, 0, accuracy: 0.001)
         XCTAssertEqual(framing.1.height, 714.666667, accuracy: 1)
+        XCTAssertEqual(framing.0.height, photoSize.height, accuracy: 1)
         fixture.options.photoAspectRatio = .fourThree
         let normal = DetailAspectRatioPreviewLayout(containerSize: CGSize(width: 402, height: 874),
             aspectRatio: .fourThree).frame.size
         try await waitForSize(fixture, size: normal)
-        XCTAssertTrue(fixture.samples.sizes.contains { $0.height > normal.height + 1 && $0.height < 873 })
+        XCTAssertTrue(fixture.samples.sizes.contains { $0.height > normal.height + 1 && $0.height < photoSize.height - 1 })
         XCTAssertEqual(fixture.samples.creations, 1)
         // UIKit can stop issuing layoutSubviews after bounds round to their
         // final pixel size. Check the last supplied crop, not an earlier layout sample.
@@ -138,7 +140,7 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
 
     func testRapidExtendedRatioChangesSettleOnLatestPhotograph() async throws {
         let size = CGSize(width: 402, height: 874)
-        let fixture = try host(extendsPreviewBehindChrome: true, size: size)
+        let fixture = try host(prefersBottomAlignedPortrait: true, size: size)
         defer { fixture.close() }
         try await waitForSize(fixture, size: CGSize(width: 402, height: 536))
         fixture.options.photoAspectRatio = .sixteenNine
@@ -156,14 +158,14 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
     }
 
     func testExtendedPreviewRespectsDisabledAnimations() async throws {
-        let fixture = try host(disablesAnimations: true, extendsPreviewBehindChrome: true,
+        let fixture = try host(disablesAnimations: true, prefersBottomAlignedPortrait: true,
             size: CGSize(width: 402, height: 874))
         defer { fixture.close() }
         try await waitForSize(fixture, size: CGSize(width: 402, height: 536))
         fixture.samples.sizes.removeAll()
         fixture.options.photoAspectRatio = .sixteenNine
-        try await waitForSize(fixture, size: CGSize(width: 402, height: 874))
-        XCTAssertFalse(fixture.samples.sizes.contains { $0.height > 537 && $0.height < 873 })
+        try await waitForSize(fixture, size: CGSize(width: 402, height: 402 * 16.0 / 9))
+        XCTAssertFalse(fixture.samples.sizes.contains { $0.height > 537 && $0.height < 713 })
         XCTAssertEqual(fixture.samples.creations, 1)
     }
 
@@ -203,7 +205,7 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
     }
 
     private func host(ratio: DetailPhotoAspectRatio = .fourThree, disablesAnimations: Bool = false,
-                      extendsPreviewBehindChrome: Bool = false,
+                      prefersBottomAlignedPortrait: Bool = false,
                       size: CGSize = CGSize(width: 400, height: 800)) throws -> Fixture {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previousKeyWindow = scene.windows.first { $0.isKeyWindow }
@@ -213,7 +215,7 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         let samples = PreviewSamples()
         window.rootViewController = UIHostingController(rootView:
             PreviewHarness(options: options, samples: samples, size: size, disablesAnimations: disablesAnimations,
-                extendsPreviewBehindChrome: extendsPreviewBehindChrome))
+                prefersBottomAlignedPortrait: prefersBottomAlignedPortrait))
         window.makeKeyAndVisible()
         return Fixture(window: window, previousKeyWindow: previousKeyWindow, options: options,
                        samples: samples)
@@ -251,10 +253,10 @@ private struct PreviewHarness: View {
     let samples: PreviewSamples
     var size = CGSize(width: 400, height: 800)
     var disablesAnimations = false
-    var extendsPreviewBehindChrome = false
+    var prefersBottomAlignedPortrait = false
     var body: some View {
         DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio,
-            extendsPreviewBehindChrome: extendsPreviewBehindChrome) { viewport in
+            prefersBottomAlignedPortrait: prefersBottomAlignedPortrait) { viewport in
             PreviewProbe(samples: samples, viewport: viewport)
         }
         .frame(width: size.width, height: size.height)

@@ -1,22 +1,22 @@
 // Created by mason on 11/9/26.
 import CoreGraphics
 
-/// Detail adapter for shared photo placement. The video surface remains separate
-/// until the capture/framing integration is migrated to the photo-sized surface.
+/// Detail adapter for shared photo placement. Video fills only the photograph,
+/// so navigation space cannot introduce an additional aspect-fill crop.
 nonisolated struct DetailCameraPreviewLayout {
     let photoFrame: CGRect
     let previewFrame: CGRect
-    let usesExtendedPreview: Bool
+    let isBottomAligned: Bool
     private let layout: CameraPhotoPreviewLayout
 
     init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio,
-         extendsPreviewBehindChrome: Bool = false) {
+         prefersBottomAlignedPortrait: Bool = false) {
         layout = CameraPhotoPreviewLayout(containerSize: containerSize,
             photoAspectRatio: aspectRatio.previewRatio(isLandscape: containerSize.width > containerSize.height),
-            prefersBottomAlignedPortrait: extendsPreviewBehindChrome && aspectRatio == .sixteenNine)
+            prefersBottomAlignedPortrait: prefersBottomAlignedPortrait && aspectRatio == .sixteenNine)
         photoFrame = layout.photoFrame
-        usesExtendedPreview = layout.isBottomAligned
-        previewFrame = usesExtendedPreview ? CGRect(origin: .zero, size: containerSize) : photoFrame
+        isBottomAligned = layout.isBottomAligned
+        previewFrame = photoFrame
     }
 
     var photoRectInPreview: CGRect {

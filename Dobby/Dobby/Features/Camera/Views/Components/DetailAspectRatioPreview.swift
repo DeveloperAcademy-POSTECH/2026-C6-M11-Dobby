@@ -5,15 +5,15 @@ import SwiftUI
 /// Passes the actual photograph rectangle in surface-local coordinates.
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
-    var extendsPreviewBehindChrome = false
+    var prefersBottomAlignedPortrait = false
     @ViewBuilder var content: (CGRect) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
             let layout = DetailCameraPreviewLayout(containerSize: geometry.size,
-                aspectRatio: aspectRatio, extendsPreviewBehindChrome: extendsPreviewBehindChrome)
-            DetailPreviewViewport(rect: layout.photoFrame, surfaceRect: layout.previewFrame, content: content)
+                aspectRatio: aspectRatio, prefersBottomAlignedPortrait: prefersBottomAlignedPortrait)
+            DetailPreviewViewport(rect: layout.photoFrame, content: content)
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
                 .animation(nil, value: geometry.size)
@@ -27,28 +27,23 @@ struct DetailAspectRatioPreview<Content: View>: View {
 /// 실제 bounds를 갱신하므로 마지막 크기의 영상만 늘여 보이는 전환을 피한다.
 private struct DetailPreviewViewport<Content: View>: View, Animatable {
     var rect: CGRect
-    var surfaceRect: CGRect
     let content: (CGRect) -> Content
 
-    var animatableData: AnimatablePair<CameraSurroundingsMask.AnimatableData,
-        CameraSurroundingsMask.AnimatableData> {
-        get { .init(CameraSurroundingsMask(photoRect: rect).animatableData,
-                    CameraSurroundingsMask(photoRect: surfaceRect).animatableData) }
+    var animatableData: CameraSurroundingsMask.AnimatableData {
+        get { CameraSurroundingsMask(photoRect: rect).animatableData }
         set {
             var mask = CameraSurroundingsMask(photoRect: rect)
-            mask.animatableData = newValue.first
+            mask.animatableData = newValue
             rect = mask.photoRect
-            mask.animatableData = newValue.second
-            surfaceRect = mask.photoRect
         }
     }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            content(rect.offsetBy(dx: -surfaceRect.minX, dy: -surfaceRect.minY))
-                .frame(width: surfaceRect.width, height: surfaceRect.height)
+            content(CGRect(origin: .zero, size: rect.size))
+                .frame(width: rect.width, height: rect.height)
                 .clipped()
-                .position(x: surfaceRect.midX, y: surfaceRect.midY)
+                .position(x: rect.midX, y: rect.midY)
             CameraBlackSurroundings(photoRect: rect)
         }
         // 이 영역은 이미 보간된 값이다. 하위 뷰에서 다시 애니메이션하지 않는다.
