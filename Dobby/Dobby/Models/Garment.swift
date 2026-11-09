@@ -17,7 +17,8 @@ final class Garment {
     var updatedAt: Date
     /// 확인한 LiDAR 보관 기록. 같은 기록을 다시 전달해도 상품을 중복 생성하지 않는다.
     var sourceMeasurementID: UUID? = nil
-    /// 사진·치수와 제품 정보 입력을 저장한 시점. nil이면 새 연결 흐름의 초안이다.
+    /// 사진·치수와 제품 정보 입력을 처음 완료한 시점. 이후 수정해도 최초 등록 시점을 보존한다.
+    /// 이 값이 없는 과거 상품은 표시할 때 createdAt을 사용한다.
     var informationCompletedAt: Date? = nil
     /// 나가기를 눌러 보관한 등록 과정. 과거 상품의 nil은 초안으로 취급하지 않는다.
     var creationDraftData: Data? = nil
@@ -115,6 +116,12 @@ extension Garment {
     }
 
     var isCreationDraft: Bool { informationCompletedAt == nil && creationDraft != nil }
+
+    /// 임시저장은 등록 전이므로 날짜를 표시하지 않는다. 완료 시점을 기록하지 않은 과거 상품은
+    /// 기존 생성 시점을 사용하며, 새 상품은 제품 정보 입력을 처음 완료한 시점을 사용한다.
+    var registeredAt: Date? {
+        isCreationDraft ? nil : informationCompletedAt ?? createdAt
+    }
 
     /// 관계 배열은 저장 순서를 보장하지 않으므로 읽을 때마다 정렬한다. 화면에서는 `photos`가
     /// 아니라 반드시 이쪽을 쓴다.

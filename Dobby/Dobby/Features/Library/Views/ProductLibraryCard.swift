@@ -8,9 +8,11 @@ struct ProductLibraryCard: View {
     @ScaledMetric(relativeTo: .subheadline) private var titleLineHeight: CGFloat = 16
     @ScaledMetric(relativeTo: .callout) private var brandLineHeight: CGFloat = 20
     @ScaledMetric(relativeTo: .subheadline) private var priceLineHeight: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) private var registrationLineHeight: CGFloat = 16
 
     private var informationHeight: CGFloat {
         brandLineHeight + titleLineHeight * 2 + priceLineHeight + 30 + 3 * 8 + 2 * 10
+            + (garment.registeredAt == nil ? 0 : registrationLineHeight + 8)
     }
 
     init(garment: Garment, showsDraftPlaceholders: Bool = false) {
@@ -22,24 +24,37 @@ struct ProductLibraryCard: View {
         VStack(alignment: .leading, spacing: 0) {
             thumbnail
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(displayBrand)
-                    .modifier(LibraryCardTextStyle(size: 16, lineHeight: 20, relativeTo: .callout))
-                    .foregroundStyle(garment.brand.isBlank ? Color("BrandNeutral500") : LibraryCardStyle.brand)
-                    .lineLimit(1)
-                    .frame(height: brandLineHeight, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(displayBrand)
+                        .modifier(LibraryCardTextStyle(size: 16, lineHeight: 20, relativeTo: .callout))
+                        .foregroundStyle(garment.brand.isBlank ? Color("BrandNeutral500") : LibraryCardStyle.brand)
+                        .lineLimit(1)
+                        .frame(height: brandLineHeight, alignment: .topLeading)
 
-                LibraryCardTitle(text: displayName)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .frame(minHeight: titleLineHeight, alignment: .topLeading)
+                    LibraryCardTitle(text: displayName)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .frame(minHeight: titleLineHeight, alignment: .topLeading)
 
-                Text(displayPrice)
-                    .modifier(LibraryCardTextStyle(size: 14, lineHeight: 16, relativeTo: .subheadline))
-                    .foregroundStyle(LibraryCardStyle.price)
-                    .lineLimit(1)
-                    .frame(height: priceLineHeight, alignment: .topLeading)
+                    Text(displayPrice)
+                        .modifier(LibraryCardTextStyle(size: 14, lineHeight: 16, relativeTo: .subheadline))
+                        .foregroundStyle(LibraryCardStyle.price)
+                        .lineLimit(1)
+                        .frame(height: priceLineHeight, alignment: .topLeading)
 
-                platformBadges
+                    platformBadges
+                }
+
+                if let registrationDateText {
+                    Spacer(minLength: 8)
+                    Text(registrationDateText)
+                        .modifier(LibraryCardTextStyle(size: 14, lineHeight: 16, relativeTo: .subheadline))
+                        .foregroundStyle(Color("BrandNeutral400"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .frame(height: registrationLineHeight, alignment: .topLeading)
+                        .accessibilityIdentifier("library.registration-date.\(garment.id.uuidString)")
+                }
             }
             .padding(10)
             .frame(height: informationHeight, alignment: .topLeading)
@@ -95,7 +110,14 @@ struct ProductLibraryCard: View {
         if !garment.selectedExportChannels.isEmpty {
             values.append("선택한 내보내기 플랫폼: " + garment.selectedExportChannels.map(\.title).joined(separator: ", "))
         }
+        if let registrationDateText {
+            values.append("최초 등록일: " + registrationDateText)
+        }
         return values.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+
+    private var registrationDateText: String? {
+        garment.registeredAt.map { LibraryCardStyle.registrationDateFormatter.string(from: $0) }
     }
 
     private var displayBrand: String {
@@ -132,6 +154,14 @@ private extension ExportChannel {
 }
 
 private enum LibraryCardStyle {
+    static let registrationDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "yyyy.MM.dd"
+        return formatter
+    }()
     static let fontName = "Pretendard-Medium"
     static let title = UIColor(red: 16.0 / 255, green: 16.0 / 255, blue: 15.0 / 255, alpha: 1)
     static let brand = Color(red: 32.0 / 255, green: 30.0 / 255, blue: 27.0 / 255)
