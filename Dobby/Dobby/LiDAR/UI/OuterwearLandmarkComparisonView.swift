@@ -29,7 +29,7 @@ struct OuterwearLandmarkComparisonView: View {
                     }.buttonStyle(.bordered).disabled(running)
                         .accessibilityIdentifier("pickOuterwearComparisonPhoto")
                     if loading { ProgressView("사진을 불러오고 있어요") }
-                    Text("자동 분류 대상: 아우터·후드가 달린 아우터·Hoodie·Sweater")
+                    Text("자동 분류 대상: 아우터·후드가 달린 아우터·Hoodie·Sweater·Polo")
                         .font(.caption).foregroundStyle(.secondary)
                     Button { start() } label: {
                         Label("같은 사진으로 A/B/C 비교", systemImage: "point.3.connected.trianglepath.dotted")

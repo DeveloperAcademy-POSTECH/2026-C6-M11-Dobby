@@ -9,7 +9,7 @@ import SwiftUI
 import AVFoundation
 
 #if DEBUG
-/// Canvas에서 상위 화면 → 상세 촬영 → 선택을 직접 확인하는 목 진입점.
+/// Canvas에서 상위 화면 → 상세 촬영 → 전체 사진 전달을 직접 확인하는 목 진입점.
 struct DetailCapturePreview: View {
     var photoCount = 3
     var authorization: AVAuthorizationStatus = .authorized
@@ -27,7 +27,7 @@ struct DetailCapturePreview: View {
                                 permission: CameraPermission(authorizer: MockCameraAuthorization(status: authorization)),
                                 previewSource: (try? CameraPreviewPhotos.source(at: model.detailPhotos.count + 1)) ?? .mockPlaceholder
                             ) { output in
-                                message = "선택 결과 수신: \(output.selectedPhotos.count)장"
+                                message = "전체 촬영 결과 수신: \(output.selectedPhotos.count)장"
                                 path.removeAll()
                             }
                         }

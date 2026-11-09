@@ -41,7 +41,7 @@ function upstream(draft = DRAFT, overrides = {}) {
     status: "completed",
     output: [{
       type: "message", role: "assistant",
-      content: [{ type: "output_text", text: JSON.stringify(draft) }],
+      content: [{ type: "output_text", text: JSON.stringify({ ...draft, identification: null }) }],
     }],
     ...overrides,
   };
@@ -185,11 +185,26 @@ test("description formatting removes excess spacing without losing paragraph bou
   assert.equal(data.description, "블랙 바탕에 레드 배색이 보입니다.\n\n소매에 작은 자국이 보입니다.");
 });
 
-test("paragraph descriptions retain empty, length, and control-character validation", async (t) => {
+test("short feature-list descriptions keep each hyphen entry on its own line", async () => {
+  const { worker } = harness(upstream({
+    ...DRAFT,
+    description: "\r\n  - 블랙\t 바탕  \r\n  배색 집업 디자인\r\n - 곡선형 레드  배색\r\n\r\n - 왼쪽  소매 작은 자국\r\n",
+  }));
+  const response = await worker.fetch(request(), ENV);
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.description, "- 블랙 바탕 배색 집업 디자인\n- 곡선형 레드 배색\n- 왼쪽 소매 작은 자국");
+  assert.equal(data.productName, "나이키 블랙·레드 배색 집업 재킷");
+  assert.equal(data.brand, "NIKE (나이키)");
+});
+
+test("paragraph and feature-list descriptions retain empty, length, and control-character validation", async (t) => {
   for (const [name, description] of [
     ["blank paragraphs", " \r\n\r\n\t "],
     ["too long", `${"가".repeat(600)}\n\n${"나".repeat(600)}`],
     ["control character", "제품 특징입니다.\n\n확인\u0000필요합니다."],
+    ["too long feature list", `- ${"가".repeat(600)}\n- ${"나".repeat(600)}`],
+    ["feature list control character", "- 제품 특징\n- 확인\u0000필요"],
   ]) {
     await t.test(name, async () => {
       const { worker } = harness(upstream({ ...DRAFT, description }));

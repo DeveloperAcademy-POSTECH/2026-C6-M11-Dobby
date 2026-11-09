@@ -45,6 +45,24 @@ final class ProductAutofillClientTests: XCTestCase {
         XCTAssertEqual(photos.count, 7, "AI 전송 제한이 제품 사진을 줄이면 안 된다")
     }
 
+    func testSearchMetadataHeadersDoNotChangeOrdinaryDraftOrAddRequests() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let draft = ProductAutofillDraft(productName: "연결 테스트 후드", brand: nil,
+            description: "- 긴소매 후드", reviewNotes: [])
+        let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft), headers: [
+            "X-Dobby-AI-Search-Calls": "1", "X-Dobby-AI-Search-Attempts": "1",
+            "X-Dobby-AI-Research-Status": "matched",
+        ])
+        defer { stub.remove() }
+        let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
+            bearerTokenProvider: { "test-only-authorization" })
+
+        let result = try await client.generate(photos: makePhotos(count: 1, directory: directory))
+        XCTAssertEqual(result, draft)
+        XCTAssertEqual(stub.requestCount, 1)
+    }
+
     func testCommonAuthorizationAddsAppKeyAndInstallationBearerToTheExistingRequest() async throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -324,6 +342,7 @@ private nonisolated final class AutofillHTTPStub: @unchecked Sendable {
     let endpoint = URL(string: "https://autofill-test.invalid/" + UUID().uuidString)!
     let status: Int
     let body: Data
+    let headers: [String: String]
     private let lock = NSLock()
     private var requests: [URLRequest] = []
     var request: URLRequest? { lock.withLock { requests.last } }
@@ -333,9 +352,10 @@ private nonisolated final class AutofillHTTPStub: @unchecked Sendable {
         configuration.protocolClasses = [AutofillURLProtocol.self]
         return URLSession(configuration: configuration)
     }
-    init(status: Int, body: Data) {
+    init(status: Int, body: Data, headers: [String: String] = [:]) {
         self.status = status
         self.body = body
+        self.headers = headers
         AutofillURLProtocol.register(self)
     }
     func record(_ request: URLRequest) { lock.withLock { requests.append(request) } }
@@ -369,7 +389,7 @@ private nonisolated final class AutofillURLProtocol: URLProtocol, @unchecked Sen
         }
         stub.record(captured)
         let response = HTTPURLResponse(url: url, statusCode: stub.status, httpVersion: nil,
-            headerFields: ["Content-Type": "application/json"])!
+            headerFields: ["Content-Type": "application/json"].merging(stub.headers) { _, value in value })!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: stub.body)
         client?.urlProtocolDidFinishLoading(self)

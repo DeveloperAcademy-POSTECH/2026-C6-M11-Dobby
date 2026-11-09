@@ -42,6 +42,11 @@ nonisolated struct GarmentRecognitionDiagnostics: Codable, Sendable {
     /// Accepted virtual centers and their observed supports in raw RGB space.
     var centerEstimates: [GarmentCenterEstimate]? = nil
     var remoteCenterRefinement: OuterwearCenterRefinementDiagnostics? = nil
+    var remoteNeckRefinement: OuterwearNeckRefinementDiagnostics? = nil
+    /// Optional for archives created before independent left/right refinement.
+    var remoteNeckSideRefinements: [OuterwearNeckRefinementDiagnostics]? = nil
+    /// Separate local provenance for hybrid Luna body + on-device neck captures.
+    var localNeckLandmarks: LocalNeckLandmarkDiagnostics? = nil
 
     /// Provider uncertainty, silhouette rejection and actual occlusion are
     /// different failures even though none is currently a usable endpoint.
@@ -51,6 +56,8 @@ nonisolated struct GarmentRecognitionDiagnostics: Codable, Sendable {
             return pointAssessments.first(where: { $0.landmarkID == id })?.status == .outsideMask
                 ? .landmarkOutsideGarment : .landmarkGeometryRejected
         }
+        if remoteNeckRefinement?.localResponse?.points[id] != nil,
+           remoteNeckRefinement?.localResponse?.points[id]?.visibility == .uncertain { return .landmarkUncertain }
         if let response = remoteGarmentCrop?.localResponse {
             let observation = id == "top_length_start" ? response.totalLengthStart : response.points[id]
             if observation?.visibility == .uncertain { return .landmarkUncertain }
@@ -88,4 +95,12 @@ nonisolated struct LandmarkMeasurementFailure: Codable, Sendable, Equatable {
     var landmarkID: String
     var reason: MeasurementFailure
     var context: MeasurementFailureContext? = nil
+}
+
+nonisolated struct OuterwearNeckRefinementDiagnostics: Codable, Sendable {
+    var crop: OuterwearComparisonCrop
+    var localResponse: OuterwearNeckRefinementResponse?
+    var adoptedLandmarkIDs: [String] = []
+    var failure: String? = nil
+    var targetLandmarkID: String? = nil
 }

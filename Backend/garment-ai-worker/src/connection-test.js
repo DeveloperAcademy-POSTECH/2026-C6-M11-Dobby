@@ -15,13 +15,16 @@ const connectionWorker = createWorker({
     output: [{
       type: "message",
       role: "assistant",
-      content: [{ type: "output_text", text: JSON.stringify(MOCK_DRAFT) }],
+      content: [{ type: "output_text", text: JSON.stringify({ ...MOCK_DRAFT, identification: null }) }],
     }],
   }),
 });
 
 function withMockHeader(response) {
   const headers = new Headers(response.headers);
+  headers.delete("X-Dobby-AI-Search-Calls");
+  headers.delete("X-Dobby-AI-Search-Attempts");
+  headers.delete("X-Dobby-AI-Research-Status");
   headers.set("X-Dobby-AI-Mode", "mock");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

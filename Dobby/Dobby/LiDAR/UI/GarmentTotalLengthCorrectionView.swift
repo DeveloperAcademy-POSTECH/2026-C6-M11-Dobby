@@ -41,10 +41,17 @@ struct GarmentTotalLengthCorrectionView: View {
     }
 
     private var startTitle: String {
-        usesFrontNeckSeam ? "앞목 몸판 연결 봉제선 중앙"
+        usesSideNeckLength ? "사진 기준 왼쪽 목옆점"
+            : usesFrontNeckSeam ? "앞목 몸판 연결 봉제선 중앙"
             : usesBackNeckSeam ? "뒷목 몸판 연결 봉제선 중앙"
             : model.definition.landmarkIDs.first == "top_length_start" ? "총장 상단" : "목 중앙"
     }
+
+    private var usesSideNeckLength: Bool {
+        model.definition.landmarkIDs == ["neck_left", TopSideNeckLength.hemID]
+    }
+
+    private var endTitle: String { usesSideNeckLength ? "목옆 세로선의 밑단 교점" : "밑단 중앙" }
 
     private var editingPresentation: GarmentEditingPointPresentation {
         .make(displayed: model.displayLandmarks, source: model.landmarks,
@@ -55,7 +62,7 @@ struct GarmentTotalLengthCorrectionView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("사진에서 \(startTitle)과 밑단 중앙을 차례로 눌러 주세요.")
+                    Text("사진에서 \(startTitle)과 \(endTitle)을 차례로 눌러 주세요.")
                         .font(.headline)
                     Text("같은 사진의 깊이로 총장을 다시 측정하고 현재 실측 결과에 반영해요. 깊이가 부족한 위치는 다시 촬영해야 해요.")
                         .font(.subheadline).foregroundStyle(.secondary)
@@ -66,9 +73,9 @@ struct GarmentTotalLengthCorrectionView: View {
                     }
                     HStack(spacing: 10) {
                         endpointButton(index: 0, title: "A · \(startTitle)")
-                        endpointButton(index: 1, title: "B · 밑단 중앙")
+                        endpointButton(index: 1, title: "B · \(endTitle)")
                     }
-                    Text(activePointIndex == 0 ? "A · \(startTitle) 위치를 눌러 주세요" : "B · 밑단 중앙 위치를 눌러 주세요")
+                    Text(activePointIndex == 0 ? "A · \(startTitle) 위치를 눌러 주세요" : "B · \(endTitle) 위치를 눌러 주세요")
                         .font(.caption.weight(.semibold))
                     let presentation = editingPresentation
                     MeasurementImageView(snapshot: model.snapshot, landmarks: presentation.landmarks,
