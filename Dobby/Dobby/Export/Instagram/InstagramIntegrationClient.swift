@@ -124,17 +124,13 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
               firstImage.size.width > 0, firstImage.size.height > 0 else {
             throw InstagramIntegrationError.message("사진을 읽을 수 없습니다.")
         }
-        let ratio = boundedRatio(for: firstImage)
+        let ratio = max(firstImage.size.width / firstImage.size.height, 4.0 / 5.0)
         return try data.map { item in
             guard let image = UIImage(data: item), image.size.width > 0, image.size.height > 0 else {
                 throw InstagramIntegrationError.message("사진을 읽을 수 없습니다.")
             }
             return try prepareImage(image, ratio: ratio)
         }
-    }
-
-    private static func boundedRatio(for image: UIImage) -> CGFloat {
-        min(max(image.size.width / image.size.height, 0.8), 1.91)
     }
 
     private static func prepareImage(_ image: UIImage, ratio: CGFloat) throws -> Data {
