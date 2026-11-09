@@ -263,7 +263,7 @@ struct CameraFlowView: View {
         let ratio = camera?.options.photoAspectRatio ?? .fourThree
         Group {
             if let previewSource {
-                DetailAspectRatioPreview(aspectRatio: ratio) { _ in
+                DetailAspectRatioPreview(aspectRatio: ratio, extendsPreviewBehindChrome: true) { _ in
                     CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
                 }
             } else if let camera {
@@ -311,13 +311,10 @@ struct CameraFlowView: View {
     }
 
     private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
-        let rect = DetailAspectRatioPreviewLayout(containerSize: size,
-            aspectRatio: camera?.options.photoAspectRatio ?? .fourThree).frame
-        return MeasurementCameraChromeLayout.controls(containerWidth: Double(size.width),
-            containerHeight: Double(size.height),
-            photo: .init(x: Double(rect.minX), y: Double(rect.minY),
-                width: Double(rect.width), height: Double(rect.height)),
-            bottomSafeAreaInset: Double(bottomSafeAreaInset))
+        DetailCameraPreviewLayout(containerSize: size,
+            aspectRatio: camera?.options.photoAspectRatio ?? .fourThree,
+            extendsPreviewBehindChrome: true)
+            .controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset)
     }
 
     @ViewBuilder

@@ -12,6 +12,9 @@ import UIKit
 /// 영상 표시만 담당한다. 카메라 구성·시작·중지는 CameraPreviewSession의 책임이다.
 struct CameraPreviewSurface: UIViewRepresentable {
     let session: AVCaptureSession
+    /// Surface-local photograph bounds, excluding decorative camera surroundings.
+    /// Nil preserves the full-surface contract for callers without camera chrome.
+    var photoRect: CGRect?
     var onRotationChange: (CGFloat) -> Void = { _ in }
     var onFramingReady: (@escaping () -> CGRect?) -> Void = { _ in }
     var interactionEnabled = false
@@ -41,6 +44,7 @@ struct CameraPreviewSurface: UIViewRepresentable {
     }
 
     private func configure(_ view: PreviewView) {
+        view.photoRect = photoRect
         view.onRotationChange = onRotationChange
         view.interactionEnabled = interactionEnabled
         view.controlCapabilities = controlCapabilities
@@ -59,6 +63,16 @@ struct CameraPreviewSurface: UIViewRepresentable {
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+        var photoRect: CGRect? {
+            didSet { if photoRect != oldValue { invalidateFocusFeedback() } }
+        }
+        var photoViewport: CGRect {
+            guard let photoRect else { return bounds }
+            guard [photoRect.minX, photoRect.minY, photoRect.width, photoRect.height].allSatisfy(\.isFinite),
+                  photoRect.width > 0, photoRect.height > 0 else { return .zero }
+            let clipped = photoRect.intersection(bounds)
+            return clipped.isNull ? .zero : clipped
+        }
         var onRotationChange: (CGFloat) -> Void = { _ in }
         var interactionEnabled = false
         var controlCapabilities = CameraControlCapabilities.unavailable
@@ -97,7 +111,7 @@ struct CameraPreviewSurface: UIViewRepresentable {
         /// mirroring and zoom. Device controls need its uncropped sensor point.
         private func sensorPoint(at location: CGPoint) -> ImagePoint? {
             guard interactionEnabled, window != nil, previewLayer.connection?.isActive == true,
-                  !bounds.isEmpty, bounds.contains(location) else { return nil }
+                  !photoViewport.isEmpty, photoViewport.contains(location) else { return nil }
             let converted = previewLayer.captureDevicePointConverted(fromLayerPoint: location)
             let point = ImagePoint(x: Double(converted.x), y: Double(converted.y))
             return point.isValid ? point : nil
@@ -105,9 +119,9 @@ struct CameraPreviewSurface: UIViewRepresentable {
 
         func updateFocus() {
             let enabled = interactionEnabled && controlCapabilities.focusSupported
-                && window != nil && !bounds.isEmpty && previewLayer.connection?.isActive == true
+                && window != nil && !photoViewport.isEmpty && previewLayer.connection?.isActive == true
             interaction.capabilities = controlCapabilities
-            interaction.visibleViewport = bounds
+            interaction.visibleViewport = photoViewport
             interaction.sensorPoint = { [weak self] in self?.sensorPoint(at: $0) }
             interaction.onFocus = onFocus
             interaction.onExposure = onExposure
@@ -116,7 +130,7 @@ struct CameraPreviewSurface: UIViewRepresentable {
             interaction.pointLabel = "초점 요청 위치"
             interaction.reduceMotion = UIAccessibility.isReduceMotionEnabled
             if interaction.enabled != enabled { interaction.enabled = enabled }
-            interaction.synchronize(state: controlState, viewportHeight: Double(bounds.height))
+            interaction.synchronize(state: controlState, viewportHeight: Double(photoViewport.height))
             guard enabled, let feedback = interaction.focusFeedback() else {
                 interaction.cancelAdjustment()
                 focusRenderer.clear()
@@ -125,7 +139,7 @@ struct CameraPreviewSurface: UIViewRepresentable {
             let displayed = previewLayer.layerPointConverted(fromCaptureDevicePoint:
                 CGPoint(x: feedback.point.x, y: feedback.point.y))
             focusRenderer.update(point: displayed, requestID: feedback.requestID,
-                visibleViewport: bounds, exposureBias: interaction.presentationExposureBias,
+                visibleViewport: photoViewport, exposureBias: interaction.presentationExposureBias,
                 exposureRange: controlCapabilities.exposureRange,
                 onExposure: { [weak self] in self?.interaction.requestAccessibleExposure($0) },
                 reduceMotion: UIAccessibility.isReduceMotionEnabled)
@@ -146,13 +160,13 @@ struct CameraPreviewSurface: UIViewRepresentable {
             }
         }
 
-        /// 프리뷰 자체가 사진 영역 크기이므로 화면 좌표가 아닌 로컬 bounds를 변환한다.
-        /// 촬영 직전의 실제 레이어 크기·렌즈·줌을 저장 크롭에도 동일하게 적용한다.
+        /// Convert only the photograph within the video surface. In extended
+        /// 16:9 mode the translucent header is visible but is not saved.
         func normalizedPhotoCrop() -> CGRect? {
             layoutIfNeeded()
             guard let connection = previewLayer.connection, connection.isActive,
-                  !bounds.isEmpty else { return nil }
-            let sensorRect = previewLayer.metadataOutputRectConverted(fromLayerRect: bounds)
+                  !photoViewport.isEmpty else { return nil }
+            let sensorRect = previewLayer.metadataOutputRectConverted(fromLayerRect: photoViewport)
             return DetailPreviewCropMapping.uprightRect(sensorRect, rotationAngle: connection.videoRotationAngle)
         }
 
