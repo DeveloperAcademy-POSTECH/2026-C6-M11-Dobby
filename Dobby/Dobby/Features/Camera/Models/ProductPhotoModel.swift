@@ -177,6 +177,18 @@ final class ProductPhotoModel {
         hasAcknowledgedCaptureGuide = true
     }
 
+    /// Product-information edits use stored photos, while camera selection and
+    /// draft restoration use this model. Keep their exact selection order equal.
+    @discardableResult
+    func synchronizeSelectedProductPhotos(_ orderedIDs: [UUID]) -> Bool {
+        guard !isCapturing, !isDeleting, !isDiscardingDetails,
+              orderedIDs.count <= Self.maximumSelectionCount,
+              Set(orderedIDs).count == orderedIDs.count,
+              Set(orderedIDs).isSubset(of: Set(selectablePhotos.map(\.id))) else { return false }
+        selectedPhotoIDs = orderedIDs
+        return true
+    }
+
     func captureDetail() async throws {
         try Task.checkCancellation()
         guard !isCapturing, !isDeleting, !isDiscardingDetails else { throw CameraFailure.operationInProgress }
