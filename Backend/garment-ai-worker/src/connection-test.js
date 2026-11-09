@@ -10,14 +10,18 @@ const MOCK_DRAFT = {
   reviewNotes: ["모의 응답입니다. 실제 사진 분석 결과가 아닙니다."],
 };
 const connectionWorker = createWorker({
-  fetchImpl: async () => Response.json({
+  fetchImpl: async (_url, init) => {
+    // Simulate unavailable research without pretending a real web search ran.
+    if (JSON.parse(init.body).text?.format?.name === "garment_brand_discovery") throw new Error("mock-research-unavailable");
+    return Response.json({
     status: "completed",
     output: [{
       type: "message",
       role: "assistant",
       content: [{ type: "output_text", text: JSON.stringify({ ...MOCK_DRAFT, identification: null }) }],
     }],
-  }),
+    });
+  },
 });
 
 function withMockHeader(response) {
