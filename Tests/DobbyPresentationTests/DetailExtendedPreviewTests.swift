@@ -69,19 +69,25 @@ final class DetailExtendedPreviewTests: XCTestCase {
         }
     }
 
-    func testSurfaceCropExcludesHeaderAndRejectsInvalidRectangles() {
-        let view = CameraPreviewSurface.PreviewView(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
-        view.photoRect = CGRect(x: 0, y: 159.333333, width: 402, height: 714.666667)
-        XCTAssertFalse(view.photoViewport.contains(CGPoint(x: 201, y: 100)))
-        XCTAssertTrue(view.photoViewport.contains(CGPoint(x: 201, y: 800)))
-        XCTAssertEqual(view.photoViewport.minY, 159.333333, accuracy: 0.001)
+    func testPhotoSizedSurfaceUsesLocalFocusCoordinatesAndRejectsInvalidRectangles() {
+        let layout = DetailCameraPreviewLayout(containerSize: CGSize(width: 402, height: 874),
+            aspectRatio: .sixteenNine, prefersBottomAlignedPortrait: true)
+        let view = CameraPreviewSurface.PreviewView(frame: layout.previewFrame)
+        defer { view.tearDownInteraction() }
+        view.photoRect = layout.photoRectInPreview
+        XCTAssertEqual(view.photoViewport, view.bounds)
+        // Convert screen points to surface-local coordinates, as UIKit hit testing does.
+        let headerPoint = CGPoint(x: 201, y: 100 - layout.previewFrame.minY)
+        let photographPoint = CGPoint(x: 201, y: 800 - layout.previewFrame.minY)
+        XCTAssertFalse(view.photoViewport.contains(headerPoint))
+        XCTAssertTrue(view.photoViewport.contains(photographPoint))
+        XCTAssertEqual(view.photoViewport.minY, 0)
         view.photoRect = CGRect(x: 0, y: 900, width: 402, height: 10)
         XCTAssertTrue(view.photoViewport.isEmpty)
         view.photoRect = CGRect(x: CGFloat.nan, y: 0, width: 402, height: 874)
         XCTAssertTrue(view.photoViewport.isEmpty)
         view.photoRect = nil
         XCTAssertEqual(view.photoViewport, view.bounds)
-        view.tearDownInteraction()
     }
 
     func testRenderedTopIsOpaqueForEveryRatioAndExtendedBottomShowsVideo() throws {
