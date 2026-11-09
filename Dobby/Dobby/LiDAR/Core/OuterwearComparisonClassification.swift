@@ -1,7 +1,7 @@
 import Foundation
 
 /// Use the same automatic target gate as capture. Hooded outerwear is covered
-/// by the existing jacket/coat labels; Hoodie and Sweater are also explicit targets.
+/// by the existing jacket/coat labels; Hoodie, Sweater and Polo are also explicit targets.
 nonisolated enum OuterwearComparisonClassificationPolicy {
     static func category(route: GarmentClassifierRoute, scores: [GarmentClassificationScore]) throws -> String {
         guard case let .selected(kind, category, _) = route, kind == .top,
@@ -41,6 +41,6 @@ nonisolated struct OuterwearComparisonClassificationError: Error, LocalizedError
         let candidates = scores.filter { $0.confidence.isFinite }.sorted { $0.confidence > $1.confidence }
             .prefix(3).map { "\($0.label) \(String(format: "%.3f", $0.confidence))" }.joined(separator: " · ")
         let details = candidates.isEmpty ? "" : "\n분류 점수: " + candidates
-        return reason + "\n비교 대상은 아우터·후드가 달린 아우터·Hoodie·Sweater입니다. AI 측정점 요청은 시작하지 않았어요." + details
+        return reason + "\n비교 대상은 아우터·후드가 달린 아우터·Hoodie·Sweater·Polo입니다. AI 측정점 요청은 시작하지 않았어요." + details
     }
 }

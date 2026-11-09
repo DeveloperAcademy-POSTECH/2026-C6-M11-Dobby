@@ -24,6 +24,36 @@ final class OuterwearCenterGapTests: XCTestCase {
         return (response, .init(size: .init(width: 100, height: 100), values: values))
     }
 
+    func testDetailNeckEstimatesRequireExplicitPolicyAndNeverBecomeGapCenters() throws {
+        var (wire, mask) = fixture()
+        wire.points["neck_left"]?.visibility = .estimated
+        XCTAssertThrowsError(try wire.validate(expectedRequestID: "gap"))
+        for orientation in ImageOrientation.allCases {
+            let rawMask = try GarmentMaskOrientation.originalMask(fromUpright: mask, orientation: orientation)
+            let result = try OuterwearLandmarkPolicy.evaluate(response: wire, expectedRequestID: "gap",
+                imageSize: mask.size, masks: [rawMask], orientation: orientation, allowingNeckEstimates: true)
+            XCTAssertTrue(try XCTUnwrap(result.points.first { $0.id == "neck_left" }).isVisible)
+            XCTAssertEqual(Set(result.diagnostics.centerEstimates?.map(\.landmarkID) ?? []),
+                           Set(["top_length_start", "hem_center"]))
+        }
+    }
+
+    func testEstimatedNeckUsesBoundedMaskSnapAndRejectsDistantBackground() throws {
+        for x in [0.195, 0.1] {
+            var (wire, mask) = fixture()
+            wire.points["neck_left"] = .init(point: .init(x: x, y: 0.2), visibility: .estimated)
+            let result = try OuterwearLandmarkPolicy.evaluate(response: wire, expectedRequestID: "gap",
+                imageSize: mask.size, masks: [mask], orientation: .up, allowingNeckEstimates: true)
+            let neck = try XCTUnwrap(result.points.first { $0.id == "neck_left" })
+            XCTAssertEqual(neck.isVisible, x == 0.195)
+            if neck.isVisible {
+                XCTAssertGreaterThanOrEqual(neck.point.x, 0.2)
+                XCTAssertTrue(result.diagnostics.automaticAdjustments?.contains { $0.landmarkID == "neck_left" } == true)
+            }
+            XCTAssertTrue(try XCTUnwrap(result.points.first { $0.id == "shoulder_left" }).isVisible)
+        }
+    }
+
     func testVirtualCentersRemainInGapAndPreserveSupportsForEveryRotation() throws {
         let (wire, mask) = fixture()
         for orientation in ImageOrientation.allCases {

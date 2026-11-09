@@ -106,7 +106,7 @@ final class OuterwearComparisonPreparationTests: XCTestCase {
     }
 
     func testAutomaticTargetsMatchCaptureForEveryClassifierLabel() throws {
-        let expected: Set<String> = ["Blazer", "Jacket", "Coat", "Denim Jacket", "Sports Jacket", "Hoodie", "Sweater"]
+        let expected: Set<String> = ["Blazer", "Jacket", "Coat", "Denim Jacket", "Sports Jacket", "Hoodie", "Sweater", "Polo"]
         for label in GarmentClassificationCategory.allCases.map(\.rawValue) {
             let scores: [GarmentClassificationScore] = [.init(label: label, confidence: 0.8)]
             let route = GarmentClassifierRoutingPolicy.route(scores: scores, minimumConfidence: 0.10, minimumCrossKindMargin: 0.01)

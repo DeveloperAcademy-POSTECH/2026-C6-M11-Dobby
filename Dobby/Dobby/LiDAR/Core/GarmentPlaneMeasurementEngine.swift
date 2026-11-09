@@ -5,6 +5,7 @@ import Foundation
 /// endpoint or contour derivation affects only measurements that depend on it.
 nonisolated struct GarmentPlaneMeasurementEngine {
     static let algorithmVersion = "garment-plane-neck-perpendicular-mask-2"
+    static let sideNeckAlgorithmVersion = "garment-plane-left-neck-vertical-hem-mask-1"
     private let options: MeasurementOptions
 
     init(options: MeasurementOptions = .init()) { self.options = options }
@@ -71,7 +72,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                 if landmark.contourRule == nil,
                    let failure = validator.validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
                     resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
-                } else if sources.count < 2 || sources.count > 64 || sources.contains(where: \.isEmpty)
+                } else if sources.count < (landmark.contourRule == nil ? 2 : 1) || sources.count > 64 || sources.contains(where: \.isEmpty)
                     || Set(sources).count != sources.count || (landmark.contourRule != nil && landmark.derivedFrom != nil) {
                     resolution = .failure(.init(reason: .invalidDefinition, context: .landmark(.invalidDerivation, ids: [id], recovery: .retry)))
                 } else {
@@ -90,7 +91,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                             let position: Point3D, method: DepthSamplingMethod
                             if let rule = landmark.contourRule {
                                 guard sources == rule.sourceLandmarkIDs, let mask = landmarks.mask,
-                                      contributors.count == 3 else { throw MeasurementFailure.invalidDefinition }
+                                      contributors.count == sources.count else { throw MeasurementFailure.invalidDefinition }
                                 switch rule {
                                 case .neckPerpendicularMaskV1:
                                     guard id == "top_length_start" else { throw MeasurementFailure.invalidDefinition }
@@ -102,6 +103,14 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                                     position = try BottomThighContour.right(waistLeft: contributors[0].position,
                                         waistRight: contributors[1].position, crotch: contributors[2].position,
                                         mask: mask, frame: frame)
+                                case .leftNeckVerticalHemMaskV1:
+                                    guard id == TopSideNeckLength.hemID,
+                                          GarmentLandmarkModelContract.usesSideNeckLength(landmarks) else {
+                                        throw MeasurementFailure.invalidDefinition
+                                    }
+                                    position = try TopSideNeckLength.end(neck: contributors[0].position,
+                                        mask: mask, frame: frame, plane: plane!,
+                                        orientation: landmarks.recognitionDiagnostics?.selectedPoseOrientation ?? frame.orientation)
                                 }
                                 method = .contourIntersection
                             } else {
@@ -236,7 +245,9 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                          status: uncertain ? .uncertain : .valid, failure: nil, points: points)
         }
         return .init(sessionID: frame.sessionID, frameID: frame.frameID,
-                     algorithmVersion: Self.algorithmVersion, source: frame.source, values: values)
+                     algorithmVersion: GarmentLandmarkModelContract.usesSideNeckLength(landmarks)
+                        ? Self.sideNeckAlgorithmVersion : Self.algorithmVersion,
+                     source: frame.source, values: values)
     }
 
     private struct ResolutionError: Error {

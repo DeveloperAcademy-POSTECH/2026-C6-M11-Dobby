@@ -224,7 +224,7 @@ nonisolated struct OuterwearLandmarkResponse: Codable, Sendable {
         try container.encodeIfPresent(centerSupport, forKey: .centerSupport)
     }
 
-    func validate(expectedRequestID: String) throws {
+    func validate(expectedRequestID: String, allowingNeckEstimates: Bool = false) throws {
         guard !expectedRequestID.isEmpty, expectedRequestID.count <= 128,
               requestID == expectedRequestID else { throw OuterwearLandmarkError.mismatchedRequest }
         let isLegacy = schemaVersion == Self.expectedSchemaVersion && modelVersion == Self.expectedModelVersion
@@ -243,7 +243,8 @@ nonisolated struct OuterwearLandmarkResponse: Codable, Sendable {
         }
         for id in TopLandmarkSchema.expectedKeypoints {
             try points[id]!.validate(id: id)
-            if points[id]!.visibility == .estimated && !(allowsCenterEstimates && id == "hem_center") {
+            if points[id]!.visibility == .estimated
+                && !(allowsCenterEstimates && (id == "hem_center" || (allowingNeckEstimates && view == .front && ["neck_left", "neck_right"].contains(id)))) {
                 throw OuterwearLandmarkError.invalidResponse
             }
         }
@@ -364,6 +365,49 @@ private nonisolated enum OuterwearWireKeys {
         let container = try decoder.container(keyedBy: Key.self)
         guard Set(container.allKeys.map(\.stringValue)) == Set(keys) else {
             throw OuterwearLandmarkError.invalidResponse
+        }
+    }
+}
+
+/// A separate narrow contract: coordinates refer only to the upper crop.
+nonisolated struct OuterwearNeckRefinementResponse: Codable, Sendable {
+    var requestId: String
+    var refinementVersion: String = "outerwear-side-neck-refinement-v1"
+    var modelVersion: String = OuterwearLandmarkResponse.expectedGapModelVersion
+    var model: String = OuterwearLandmarkResponse.expectedModel
+    var view: OuterwearLandmarkView
+    var neckStyle: OuterwearLandmarkNeckStyle
+    var points: [String: OuterwearLandmarkObservation]
+
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+        case requestId, refinementVersion, modelVersion, model, view, neckStyle, points
+    }
+    init(requestId: String, view: OuterwearLandmarkView, neckStyle: OuterwearLandmarkNeckStyle,
+         points: [String: OuterwearLandmarkObservation]) {
+        self.requestId = requestId; self.view = view; self.neckStyle = neckStyle; self.points = points
+    }
+    init(from decoder: any Decoder) throws {
+        try OuterwearWireKeys.require(decoder, keys: CodingKeys.allCases.map(\.rawValue))
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        requestId = try c.decode(String.self, forKey: .requestId)
+        refinementVersion = try c.decode(String.self, forKey: .refinementVersion)
+        modelVersion = try c.decode(String.self, forKey: .modelVersion)
+        model = try c.decode(String.self, forKey: .model)
+        view = try c.decode(OuterwearLandmarkView.self, forKey: .view)
+        neckStyle = try c.decode(OuterwearLandmarkNeckStyle.self, forKey: .neckStyle)
+        points = try c.decode([String: OuterwearLandmarkObservation].self, forKey: .points)
+    }
+    func validate(expectedRequestID: String) throws {
+        guard requestId == expectedRequestID, !expectedRequestID.isEmpty,
+              refinementVersion == "outerwear-side-neck-refinement-v1",
+              modelVersion == OuterwearLandmarkResponse.expectedGapModelVersion,
+              model == OuterwearLandmarkResponse.expectedModel,
+              Set(points.keys) == Set(["neck_left", "neck_right"]) else {
+            throw OuterwearLandmarkError.invalidResponse
+        }
+        for (id, point) in points {
+            try point.validate(id: id)
+            if view != .front && point.point != nil { throw OuterwearLandmarkError.invalidResponse }
         }
     }
 }

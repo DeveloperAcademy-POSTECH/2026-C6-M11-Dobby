@@ -135,7 +135,7 @@ nonisolated struct ManualMeasurement: Identifiable, Sendable {
     mutating func apply(_ output: GarmentMeasurementResult, for revision: UUID) -> Bool {
         guard revision == calculationRevision,
               options.effectiveCalculationMode != .garmentPlane
-                || output.algorithmVersion == MeasurementCalculator.algorithmVersion(for: options),
+                || output.algorithmVersion == MeasurementCalculator.algorithmVersion(for: options, landmarks: landmarks),
               output.sessionID == snapshot.frame.sessionID,
               output.frameID == snapshot.frame.frameID,
               output.source == snapshot.frame.source,

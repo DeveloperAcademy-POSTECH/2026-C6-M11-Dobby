@@ -33,6 +33,11 @@ nonisolated struct OuterwearComparisonCrop: Codable, Sendable {
     var rect: NormalizedRect
 }
 
+nonisolated enum OuterwearNeckSide: String, Codable, CaseIterable, Sendable {
+    case left, right
+    var landmarkID: String { "neck_" + rawValue }
+}
+
 nonisolated enum OuterwearComparisonGeometry {
     static let full = NormalizedRect(x: 0, y: 0, width: 1, height: 1)
 
@@ -106,6 +111,44 @@ nonisolated enum OuterwearComparisonGeometry {
             else { result.points[id] = restored }
         }
         return result
+    }
+
+    /// Never center on a possibly incorrect coarse neck point alone. Shoulders
+    /// bound the neckline horizontally; missing shoulders use garment bounds.
+    static func neckRefinementCrop(response: OuterwearLandmarkResponse, bounds: NormalizedRect,
+                                   size: PixelSize) throws -> OuterwearComparisonCrop {
+        let left = response.points["shoulder_left"]?.point
+        let right = response.points["shoulder_right"]?.point
+        var box = NormalizedRect(x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height * 0.62)
+        if let left, let right, left.x < right.x,
+           left.x >= bounds.x, right.x <= bounds.x + bounds.width,
+           left.y >= bounds.y, right.y >= bounds.y,
+           max(left.y, right.y) < bounds.y + bounds.height * 0.6 {
+            let pad = bounds.width * 0.08
+            let x = max(0, left.x - pad)
+            let bottom = min(1, max(left.y, right.y) + bounds.height * 0.16)
+            box = .init(x: x, y: bounds.y, width: min(1, right.x + pad) - x, height: bottom - bounds.y)
+        }
+        return .init(region: .upper, rect: try aligned(box, size: size))
+    }
+
+    /// Mirrors the local-boundary experiment. All anchors are upright AI
+    /// observations; no annotation, mask snap or display coordinate centers it.
+    static func neckSideCrop(side: OuterwearNeckSide, response: OuterwearLandmarkResponse,
+                             size: PixelSize) throws -> OuterwearComparisonCrop? {
+        guard size.isValid, let seed = response.points[side.landmarkID]?.point,
+              seed.isValid else { return nil }
+        let w = Double(size.width), h = Double(size.height)
+        let span: Double
+        if let left = response.points["neck_left"]?.point,
+           let right = response.points["neck_right"]?.point, left.isValid, right.isValid, left.x < right.x {
+            span = hypot((right.x - left.x) * w, (right.y - left.y) * h)
+        } else { span = 0 }
+        let length = min(min(w, h), ceil(max(w * 0.14, span * 0.95)))
+        let x = max(0, min(w - length, floor(seed.x * w - length / 2)))
+        let y = max(0, min(h - length, floor(seed.y * h - length / 2)))
+        return .init(region: .upper, rect: .init(x: x / w, y: y / h,
+                                                width: length / w, height: length / h))
     }
 
     /// Coarse B observations choose generous windows, never final coordinates.

@@ -37,7 +37,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    func testRepeatedResumeAndRetakeKeepDetailPhotosSelectionAndRepresentative() {
+    func testRepeatedResumeAndRetakeKeepAllDetailPhotos() {
         let app = launchResult(isTop: true)
         defer { app.terminate() }
         moveShoulderPoint(in: app)
@@ -51,18 +51,8 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             waitEnabled(shutter)
         }
         let oldEvidence = galleryEvidence(in: app, expectedPhotoCount: 4)
-        openSelection(in: app)
-        XCTAssertEqual(selectionControls(in: app).count, 4)
-        // Retain a detail representative, selected measurement visualization and original.
-        for index in [0, 3, 1, 0] {
-            let photo = selectionControl(index, in: app)
-            waitEnabled(photo)
-            photo.tap()
-        }
-        assertSelection(in: app)
-        returnToDetails(in: app)
-        openSelection(in: app)
-        assertSelection(in: app)
+        openInformation(in: app)
+        assertAllPhotos(in: app)
 
         var productID: String?
         for _ in 0..<2 {
@@ -76,24 +66,11 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
             waitForDetails(in: app, expectsGuide: false)
             XCTAssertNotEqual(galleryEvidence(in: app, expectedPhotoCount: 4), oldEvidence,
                               "Retake must publish new measurements, not reuse the restored corrected record")
-            openSelection(in: app)
+            openInformation(in: app)
             if let productID { XCTAssertEqual(restoredID, productID) }
             productID = restoredID
-            XCTAssertEqual(selectionControls(in: app).count, 4)
-            assertSelection(in: app)
-            let preview = app.buttons["camera.grid.preview.3"]
-            waitEnabled(preview)
-            preview.tap()
-            XCTAssertTrue(app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch.waitForExistence(timeout: 10))
-            XCTAssertEqual(app.buttons["camera.selectionPreviewToggle"].value as? String, "1번째 선택")
-            screenshot(app, name: "selected-detail-representative-after-resume")
-            app.buttons["camera.closeSelectionPreview"].tap()
-            XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-            XCTAssertFalse(exitConfirmation(in: app).exists, "Preview Back only closes the auxiliary preview")
-            assertSelection(in: app)
+            assertAllPhotos(in: app)
         }
-        disableProductAutofillIfPresent(in: app)
-        app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
     }
 
@@ -186,32 +163,18 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    private func openSelection(in app: XCUIApplication) {
+    private func openInformation(in app: XCUIApplication) {
         let choose = app.buttons["camera.selectPhotos"]
         waitEnabled(choose)
         choose.tap()
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
     }
 
     @MainActor
-    private func assertSelection(in app: XCUIApplication) {
-        for (index, order) in [(3, 1), (1, 2), (0, 3)] {
-            XCTAssertEqual(selectionControl(index, in: app).value as? String, "\(order)번째 선택")
-        }
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "3장 선택 · 최소 1장 · 최대 10장")
-        XCTAssertTrue(app.buttons["camera.completePhotos"].isEnabled)
-    }
-
-    @MainActor
-    private func selectionControl(_ index: Int, in app: XCUIApplication) -> XCUIElement {
-        let control = app.buttons["camera.grid.select.\(index)"]
-        XCTAssertTrue(control.waitForExistence(timeout: 5))
-        return control
-    }
-
-    @MainActor
-    private func selectionControls(in app: XCUIApplication) -> XCUIElementQuery {
-        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "camera.grid.select."))
+    private func assertAllPhotos(in app: XCUIApplication) {
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-info.photo.")).count, 4)
+        XCTAssertFalse(app.scrollViews["camera.selectionGrid"].exists)
     }
 
     @MainActor
