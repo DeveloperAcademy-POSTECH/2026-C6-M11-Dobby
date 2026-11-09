@@ -25,10 +25,17 @@ enum ProductPhotoHandoff {
     static func apply(_ output: ProductPhotoOutput, to garment: Garment, in context: ModelContext,
                       input: ProductPhotoInput,
                       photosDirectory: URL? = nil,
+                      includesAllCapturedPhotos: Bool = false,
                       persist: @MainActor (ModelContext) throws -> Void = { try $0.save() }) async throws {
         let photosDirectory = photosDirectory ?? GarmentStore.photosDirectory
         try Task.checkCancellation()
         try validate(output, input: input, garment: garment, photosDirectory: photosDirectory)
+        if includesAllCapturedPhotos {
+            guard output.selectedPhotos == input.measurementPhotos + output.detailPhotos,
+                  output.representativePhotoID == input.measurement.id else {
+                throw HandoffError.invalidOutput
+            }
+        }
         let existingIDs = Set(garment.photos.map(\.id))
         let newAssets = output.selectedPhotos.filter { !existingIDs.contains($0.id) }
         let plans = newAssets.map { PhotoCopyPlan(asset: $0, garmentID: garment.id, directory: photosDirectory) }
@@ -40,6 +47,7 @@ enum ProductPhotoHandoff {
         let previousPhotos = garment.photos
         let previousState = previousPhotos.map { PhotoState(photo: $0) }
         let previousUpdatedAt = garment.updatedAt
+        let previousAppliedAt = garment.capturePhotosAppliedAt
         do {
             try Task.checkCancellation()
             // 같은 초안에서 중복 완료가 겹쳐 원본이나 선택 순서를 덮어쓰지 않게 한다.
@@ -56,19 +64,29 @@ enum ProductPhotoHandoff {
                 added.append(photo)
                 garment.photos.append(photo)
             }
-            let selectedIDs = output.selectedPhotos.map(\.id)
-            for photo in garment.photos {
-                photo.isSelectedForProduct = selectedIDs.contains(photo.id)
-                photo.role = photo.id == output.representativePhotoID ? .thumbnail : .detail
+            let preservesEdits = includesAllCapturedPhotos && (previousAppliedAt != nil
+                || garment.informationCompletedAt != nil || garment.creationDraft?.step == .information)
+            if preservesEdits {
+                // 입력 화면의 순서·제외·대표 사진은 유지하고 새 촬영만 끝에 추가한다.
+                for photo in added { photo.isSelectedForProduct = true }
+                GarmentStore.reorder(previousPhotos.sorted { $0.order < $1.order } + added, in: garment)
+            } else {
+                let selectedIDs = output.selectedPhotos.map(\.id)
+                for photo in garment.photos {
+                    photo.isSelectedForProduct = selectedIDs.contains(photo.id)
+                    photo.role = photo.id == output.representativePhotoID ? .thumbnail : .detail
+                }
+                let selected = selectedIDs.compactMap { id in garment.photos.first { $0.id == id } }
+                let retained = garment.orderedPhotos.filter { !selectedIDs.contains($0.id) }
+                GarmentStore.reorder(selected + retained, in: garment)
             }
-            let selected = selectedIDs.compactMap { id in garment.photos.first { $0.id == id } }
-            let retained = garment.orderedPhotos.filter { !selectedIDs.contains($0.id) }
-            GarmentStore.reorder(selected + retained, in: garment)
+            if includesAllCapturedPhotos { garment.capturePhotosAppliedAt = previousAppliedAt ?? .now }
             try persist(context)
         } catch {
             garment.photos = previousPhotos
             for state in previousState { state.restore() }
             garment.updatedAt = previousUpdatedAt
+            garment.capturePhotosAppliedAt = previousAppliedAt
             for photo in added { context.delete(photo) }
             // 촬영 원본과 이전부터 존재한 상품 파일은 삭제하지 않는다.
             await Task.detached { removeCopiedFiles(copied) }.value

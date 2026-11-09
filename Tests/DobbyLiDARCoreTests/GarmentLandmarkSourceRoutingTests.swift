@@ -2,14 +2,31 @@ import XCTest
 @testable import DobbyLiDARCore
 
 final class GarmentLandmarkSourceRoutingTests: XCTestCase {
-    func testOnlyRequestedOuterwearAndSweaterCategoriesSelectLuna() {
+    func testOnlyRequestedAICategoriesSelectLuna() {
         for category in GarmentClassificationCategory.allCases {
             let scores: [GarmentClassificationScore] = [.init(label: category.rawValue, confidence: 0.9)]
             let classification = GarmentClassifierRoutingPolicy.route(scores: scores)
             let selected = GarmentLandmarkSourceRoutingPolicy.route(classification: classification, scores: scores)
-            let outerwear = ["Blazer", "Jacket", "Coat", "Denim Jacket", "Sports Jacket", "Hoodie", "Sweater"].contains(category.rawValue)
+            let outerwear = ["Blazer", "Jacket", "Coat", "Denim Jacket", "Sports Jacket", "Hoodie", "Sweater", "Polo"].contains(category.rawValue)
             XCTAssertEqual(selected, outerwear ? .lunaOuterwear : .coreML, category.rawValue)
         }
+    }
+
+    func testRecordedPoloSweaterMixUsesLunaAndKeepsOtherCategoryMargin() {
+        // The actual leading scores of the failed color-block jacket capture.
+        let scores: [GarmentClassificationScore] = [
+            .init(label: "Polo", confidence: 0.1778564453125),
+            .init(label: "Sweater", confidence: 0.154541015625),
+            .init(label: "Shirt", confidence: 0.09967041015625),
+            .init(label: "Dresses", confidence: 0.061920166015625),
+            .init(label: "Jeans", confidence: 0.045166015625)]
+        let classification = GarmentClassifierRoutingPolicy.route(scores: scores)
+        XCTAssertEqual(classification.category, "Polo")
+        XCTAssertEqual(GarmentLandmarkSourceRoutingPolicy.route(classification: classification, scores: scores), .lunaOuterwear)
+        let ambiguous: [GarmentClassificationScore] = [.init(label: "Polo", confidence: 0.401),
+            .init(label: "Shirt", confidence: 0.4)]
+        XCTAssertEqual(GarmentLandmarkSourceRoutingPolicy.route(classification:
+            GarmentClassifierRoutingPolicy.route(scores: ambiguous), scores: ambiguous), .uncertainOuterwear)
     }
 
     func testTopVsBottomConfidenceCannotHideAnAmbiguousShirt() {

@@ -6,6 +6,285 @@ import XCTest
 
 @MainActor
 final class OuterwearLandmarkClientTests: XCTestCase {
+    func testBundledLocalNeckVisionInferenceMatchesConvertedPilot() async throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "neck-side-pilot-smoke", withExtension: "png"))
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil))
+        let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        let points = try await CoreMLNeckLandmarkProvider().neckPoints(in: image)
+        XCTAssertEqual(try XCTUnwrap(points["neck_left"]).x, 0.3643867, accuracy: 0.002)
+        XCTAssertEqual(try XCTUnwrap(points["neck_left"]).y, 0.1937923, accuracy: 0.002)
+        XCTAssertEqual(try XCTUnwrap(points["neck_right"]).x, 0.6328868, accuracy: 0.002)
+        XCTAssertEqual(try XCTUnwrap(points["neck_right"]).y, 0.2185648, accuracy: 0.002)
+    }
+
+    func testLocalNecksReplaceOnlyNecksAndSkipRemoteDetailForAllRotations() async throws {
+        for orientation in [ImageOrientation.up, .right, .down, .left] {
+            let id = UUID()
+            let wire = try JSONDecoder().decode(OuterwearLandmarkResponse.self, from: responseData(requestID: id))
+            let remote = IndependentNeckSpy(initial: wire, failLeft: false)
+            let mask = garmentMask(width: 200, height: 120)
+            let turn = orientation == .left || orientation == .right
+            let result = try await OuterwearGarmentCropPipeline.recognize(
+                image(width: turn ? 120 : 200, height: turn ? 200 : 120), orientation: orientation,
+                category: "Polo", requestID: id, provider: remote, masks: { _ in [mask] },
+                usesSideNeckLength: true, localNeck: LocalNeckSpy())
+            XCTAssertEqual(result.poseRequests, 1)
+            let diagnostic = try XCTUnwrap(result.recognition.diagnostics?.localNeckLandmarks)
+            XCTAssertEqual(diagnostic.adoptedLandmarkIDs, ["neck_left", "neck_right"])
+            XCTAssertNil(diagnostic.failure)
+            XCTAssertNil(result.recognition.diagnostics?.remoteNeckRefinement)
+            XCTAssertNil(result.recognition.diagnostics?.remoteNeckSideRefinements)
+            for key in ["neck_left", "neck_right"] {
+                let point = try XCTUnwrap(result.recognition.points.first { $0.id == key })
+                let upright = ImageCoordinateTransform.originalToDisplay(point.point, orientation: orientation)
+                let expected = try XCTUnwrap(diagnostic.predictedPoints[key])
+                XCTAssertEqual(upright.x, expected.x, accuracy: 1e-7)
+                XCTAssertEqual(upright.y, expected.y, accuracy: 1e-7)
+                XCTAssertTrue(point.isVisible)
+                XCTAssertNil(point.confidence)
+            }
+            XCTAssertTrue(result.recognition.points.contains { $0.id == TopSideNeckLength.hemID })
+            let crop = try XCTUnwrap(result.recognition.diagnostics?.remoteGarmentCrop?.rect)
+            for key in TopLandmarkSchema.expectedKeypoints where !LocalNeckLandmarks.ids.contains(key) {
+                let observed = try XCTUnwrap(wire.points[key]?.point)
+                let raw = try XCTUnwrap(result.recognition.diagnostics?.rawPoints.first { $0.id == key })
+                let upright = ImageCoordinateTransform.originalToDisplay(raw.point, orientation: orientation)
+                XCTAssertEqual(upright.x, crop.x + observed.x * crop.width, accuracy: 1e-7)
+                XCTAssertEqual(upright.y, crop.y + observed.y * crop.height, accuracy: 1e-7)
+            }
+            let saved = try JSONDecoder().decode(GarmentRecognitionDiagnostics.self,
+                from: JSONEncoder().encode(XCTUnwrap(result.recognition.diagnostics)))
+            XCTAssertEqual(saved.localNeckLandmarks?.adoptedLandmarkIDs, LocalNeckLandmarks.ids)
+        }
+    }
+
+    func testLocalFailureKeepsLunaNecksWithoutExtraRemoteRequests() async throws {
+        for badPoint in [false, true] {
+            let id = UUID()
+            let wire = try JSONDecoder().decode(OuterwearLandmarkResponse.self, from: responseData(requestID: id))
+            let remote = IndependentNeckSpy(initial: wire, failLeft: false)
+            let mask = garmentMask(width: 200, height: 120)
+            let result = try await OuterwearGarmentCropPipeline.recognize(image(width: 200, height: 120),
+                orientation: .up, category: "Sweater", requestID: id, provider: remote, masks: { _ in [mask] },
+                usesSideNeckLength: true, localNeck: LocalNeckSpy(fail: !badPoint, exterior: badPoint))
+            XCTAssertEqual(result.poseRequests, 1)
+            let diagnostic = try XCTUnwrap(result.recognition.diagnostics?.localNeckLandmarks)
+            XCTAssertTrue(diagnostic.adoptedLandmarkIDs.isEmpty)
+            XCTAssertNotNil(diagnostic.failure)
+            let crop = try XCTUnwrap(result.recognition.diagnostics?.remoteGarmentCrop?.rect)
+            let left = try XCTUnwrap(result.recognition.diagnostics?.rawPoints.first { $0.id == "neck_left" })
+            XCTAssertEqual(left.point.x, crop.x + 0.4 * crop.width, accuracy: 1e-7)
+        }
+    }
+
+    func testLocalPilotDoesNotRunForNonLunaCategory() async throws {
+        let id = UUID()
+        let wire = try JSONDecoder().decode(OuterwearLandmarkResponse.self, from: responseData(requestID: id))
+        let mask = garmentMask(width: 200, height: 120)
+        let local = LocalNeckSpy()
+        let result = try await OuterwearGarmentCropPipeline.recognize(image(width: 200, height: 120),
+            orientation: .up, category: "Shirt", requestID: id,
+            provider: IndependentNeckSpy(initial: wire, failLeft: false), masks: { _ in [mask] },
+            usesSideNeckLength: true, localNeck: local)
+        XCTAssertNil(result.recognition.diagnostics?.localNeckLandmarks)
+        let count = await local.count
+        XCTAssertEqual(count, 0)
+        XCTAssertEqual(result.poseRequests, 4)
+    }
+
+    func testIndependentNeckRequestScopesTargetAndRejectsOppositeSide() async throws {
+        let id = UUID()
+        let wire = OuterwearNeckRefinementResponse(requestId: id.uuidString, view: .front, neckStyle: .collar,
+            points: ["neck_left": .init(point: .init(x: 0.4, y: 0.3), visibility: .estimated),
+                     "neck_right": .init(point: nil, visibility: .uncertain)])
+        let stub = OuterwearHTTPStub(body: try JSONEncoder().encode(wire))
+        let result = try await makeClient(stub).refineNeckSide(image: image(width: 200, height: 120),
+            context: .init(x: 0, y: 0, width: 1, height: 1),
+            crop: .init(region: .upper, rect: .init(x: 0.3, y: 0.1, width: 0.2, height: 0.3)),
+            side: .left, category: "Jacket", requestID: id)
+        XCTAssertNotNil(result.points["neck_left"]?.point)
+        let request = try XCTUnwrap(stub.request)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+        XCTAssertEqual(body["target"] as? String, "neck_left")
+        XCTAssertEqual(request.timeoutInterval, 20)
+        var invalid = wire
+        invalid.points["neck_right"] = .init(point: .init(x: 0.7, y: 0.3), visibility: .visible)
+        let invalidStub = OuterwearHTTPStub(body: try JSONEncoder().encode(invalid))
+        do {
+            _ = try await makeClient(invalidStub).refineNeckSide(image: image(),
+                context: .init(x: 0, y: 0, width: 1, height: 1),
+                crop: .init(region: .upper, rect: .init(x: 0, y: 0, width: 1, height: 1)),
+                side: .left, category: "Jacket", requestID: id)
+            XCTFail("An independent crop must not replace the opposite side")
+        } catch {
+            XCTAssertEqual(error as? OuterwearLandmarkClientError, .invalidResponse)
+        }
+    }
+
+    func testIndependentNecksRestoreAcrossRotationsAndKeepFailedSide() async throws {
+        for orientation in [ImageOrientation.up, .right, .down, .left] {
+            for failLeft in [false, true] {
+                let id = UUID()
+                let wire = try JSONDecoder().decode(OuterwearLandmarkResponse.self, from: responseData(requestID: id))
+                let spy = IndependentNeckSpy(initial: wire, failLeft: failLeft)
+                let mask = garmentMask(width: 200, height: 120)
+                let turn = orientation == .left || orientation == .right
+                let output = try await OuterwearGarmentCropPipeline.recognize(
+                    image(width: turn ? 120 : 200, height: turn ? 200 : 120), orientation: orientation,
+                    category: "Jacket", requestID: id, provider: spy, masks: { _ in [mask] }, usesSideNeckLength: true)
+                XCTAssertEqual(output.poseRequests, 4)
+                let attempts = try XCTUnwrap(output.recognition.diagnostics?.remoteNeckSideRefinements)
+                XCTAssertEqual(attempts.map(\.targetLandmarkID), ["neck_left", "neck_right"])
+                XCTAssertEqual(attempts[0].adoptedLandmarkIDs, failLeft ? [] : ["neck_left"])
+                XCTAssertEqual(attempts[1].adoptedLandmarkIDs, ["neck_right"])
+                XCTAssertEqual(attempts[0].failure, failLeft ? "detail_unavailable" : nil)
+                let left = ImageCoordinateTransform.originalToDisplay(
+                    try XCTUnwrap(output.recognition.points.first { $0.id == "neck_left" }).point, orientation: orientation)
+                XCTAssertEqual(left.x, failLeft ? 0.43 : 0.44, accuracy: 0.000001)
+                XCTAssertEqual(left.y, failLeft ? 0.27 : 0.26, accuracy: 0.000001)
+                let diagnostics = try XCTUnwrap(output.recognition.diagnostics)
+                let decoded = try JSONDecoder().decode(GarmentRecognitionDiagnostics.self, from: JSONEncoder().encode(diagnostics))
+                XCTAssertEqual(decoded.remoteNeckSideRefinements?.count, 2)
+            }
+        }
+    }
+
+    func testNeckRefinementDeadlineCancelsItsOnlyRequest() async throws {
+        let stub = OuterwearHTTPStub(body: nil)
+        defer { stub.remove() }
+        do {
+            _ = try await makeClient(stub, timeout: 0.1).refineNeck(image: image(),
+                context: .init(x: 0, y: 0, width: 1, height: 1),
+                crop: .init(region: .upper, rect: .init(x: 0, y: 0, width: 1, height: 0.5)),
+                category: "Hoodie", requestID: UUID())
+            XCTFail("Stalled neck detail must time out")
+        } catch { XCTAssertEqual(error as? OuterwearLandmarkClientError, .timeout) }
+        try await waitForRequestStop(stub)
+        XCTAssertEqual(stub.requestCount, 1)
+    }
+
+    func testNeckRefinementRejectsWrongRequestAndExtraTargets() async throws {
+        for extra in [false, true] {
+            let id = UUID()
+            var wire = OuterwearNeckRefinementResponse(requestId: extra ? id.uuidString : UUID().uuidString,
+                view: .front, neckStyle: .hood, points: [
+                    "neck_left": .init(point: nil, visibility: .uncertain),
+                    "neck_right": .init(point: nil, visibility: .occluded)])
+            if extra { wire.points["shoulder_left"] = .init(point: .init(x: 0.4, y: 0.4), visibility: .visible) }
+            let stub = OuterwearHTTPStub(body: try JSONEncoder().encode(wire))
+            defer { stub.remove() }
+            do {
+                _ = try await makeClient(stub).refineNeck(image: image(),
+                    context: .init(x: 0, y: 0, width: 1, height: 1),
+                    crop: .init(region: .upper, rect: .init(x: 0, y: 0, width: 1, height: 0.5)),
+                    category: "Coat", requestID: id)
+                XCTFail("Invalid neck response accepted")
+            } catch { XCTAssertEqual(error as? OuterwearLandmarkClientError, .invalidResponse) }
+        }
+    }
+
+    func testNeckRefinementUploadsOnlyUpperAndPreservesEstimatedVisibility() async throws {
+        let id = UUID()
+        let wire = OuterwearNeckRefinementResponse(requestId: id.uuidString, view: .front, neckStyle: .hood,
+            points: ["neck_left": .init(point: .init(x: 0.3, y: 0.4), visibility: .estimated),
+                     "neck_right": .init(point: nil, visibility: .occluded)])
+        let stub = OuterwearHTTPStub(body: try JSONEncoder().encode(wire))
+        defer { stub.remove() }
+        let result = try await makeClient(stub).refineNeck(image: image(width: 200, height: 120),
+            context: .init(x: 0, y: 0, width: 1, height: 1),
+            crop: .init(region: .upper, rect: .init(x: 0.2, y: 0, width: 0.6, height: 0.4)),
+            category: "Hoodie", requestID: id)
+        XCTAssertEqual(result.points["neck_left"]?.visibility, .estimated)
+        let request = try XCTUnwrap(stub.request)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+        let regions = try XCTUnwrap(body["regions"] as? [[String: Any]])
+        XCTAssertEqual(regions.compactMap { $0["id"] as? String }, ["upper"])
+        XCTAssertEqual(request.timeoutInterval, 12)
+        XCTAssertEqual(stub.requestCount, 1)
+    }
+
+    func testSideNeckAlwaysRefinesOnlyNecksAndRecoversMissingNeckAcrossRotations() async throws {
+        for orientation in [ImageOrientation.up, .right, .down, .left] {
+            for missing in [false, true] {
+                let requestID = UUID()
+                var wire = try JSONDecoder().decode(OuterwearLandmarkResponse.self, from: responseData(requestID: requestID))
+                if missing { wire.points["neck_left"] = .init(point: nil, visibility: .occluded) }
+                let spy = NeckRefinementSpy(initial: wire, fails: false)
+                let uprightMask = garmentMask(width: 200, height: 120)
+                let output = try await OuterwearGarmentCropPipeline.recognize(
+                    image(width: orientation == .left || orientation == .right ? 120 : 200,
+                          height: orientation == .left || orientation == .right ? 200 : 120),
+                    orientation: orientation, category: "Jacket", requestID: requestID, provider: spy,
+                    masks: { _ in [uprightMask] }, usesSideNeckLength: true)
+                XCTAssertEqual(output.poseRequests, 2)
+                let calls = await spy.calls
+                XCTAssertEqual(calls, 1)
+                let diagnostics = try XCTUnwrap(output.recognition.diagnostics)
+                XCTAssertEqual(diagnostics.remoteNeckRefinement?.adoptedLandmarkIDs, ["neck_left", "neck_right"])
+                XCTAssertEqual(diagnostics.remoteNeckRefinement?.localResponse?.points["neck_left"]?.visibility, .estimated)
+                let original = ImageCoordinateTransform.originalToDisplay(
+                    try XCTUnwrap(output.recognition.points.first { $0.id == "neck_left" }).point, orientation: orientation)
+                XCTAssertEqual(original.x, 0.43, accuracy: 0.000001)
+                XCTAssertEqual(original.y, 0.27, accuracy: 0.000001)
+                XCTAssertNil(diagnostics.remoteCenterRefinement)
+                let crop = try XCTUnwrap(diagnostics.remoteGarmentCrop)
+                XCTAssertEqual(crop.localResponse.points["neck_left"]?.visibility, missing ? .occluded : .visible)
+                let first = try OuterwearComparisonGeometry.restoring(wire, crops: [.init(region: .garment, rect: crop.rect)])
+                for id in ["shoulder_right", "armpit_left", "armpit_right", "sleeve_end_right"] {
+                    let expected = ImageCoordinateTransform.displayToOriginal(try XCTUnwrap(first.points[id]?.point), orientation: orientation)
+                    XCTAssertEqual(output.recognition.points.first { $0.id == id }?.point, expected)
+                }
+                // New optional evidence survives archive serialization.
+                let decoded = try JSONDecoder().decode(GarmentRecognitionDiagnostics.self, from: JSONEncoder().encode(diagnostics))
+                XCTAssertEqual(decoded.remoteNeckRefinement?.adoptedLandmarkIDs, ["neck_left", "neck_right"])
+            }
+        }
+    }
+
+    func testNeckRefinementFailureKeepsFirstPassAndRecordsOneAttempt() async throws {
+        let id = UUID()
+        let wire = try JSONDecoder().decode(OuterwearLandmarkResponse.self, from: responseData(requestID: id))
+        let spy = NeckRefinementSpy(initial: wire, fails: true)
+        let mask = garmentMask(width: 200, height: 120)
+        let result = try await OuterwearGarmentCropPipeline.recognize(image(width: 200, height: 120),
+            orientation: .up, category: "Coat", requestID: id, provider: spy,
+            masks: { _ in [mask] }, usesSideNeckLength: true)
+        XCTAssertEqual(result.poseRequests, 2)
+        XCTAssertEqual(result.recognition.diagnostics?.remoteNeckRefinement?.failure, "detail_unavailable")
+        XCTAssertEqual(result.recognition.diagnostics?.remoteNeckRefinement?.adoptedLandmarkIDs, [])
+        XCTAssertTrue(try XCTUnwrap(result.recognition.points.first { $0.id == "neck_left" }).isVisible)
+    }
+
+    func testSideNeckCaptureKeepsRawObservationsAndSkipsMissingCenterRetry() async throws {
+        let requestID = UUID()
+        var wire = try JSONDecoder().decode(OuterwearLandmarkResponse.self, from: responseData(requestID: requestID))
+        wire.frontNeckSeamCenter = .init(point: nil, visibility: .uncertain)
+        wire.points["hem_center"] = .init(point: nil, visibility: .occluded)
+        let spy = GapRefinementSpy(initial: wire, fails: false)
+        let mask = garmentMask(width: 200, height: 120)
+        let output = try await OuterwearGarmentCropPipeline.recognize(image(width: 200, height: 120),
+            orientation: .up, category: "Jacket", requestID: requestID, provider: spy,
+            masks: { _ in [mask] }, usesSideNeckLength: true)
+        XCTAssertEqual(output.poseRequests, 1)
+        let calls = await spy.detailCalls
+        XCTAssertEqual(calls, 0)
+        let diagnostics = try XCTUnwrap(output.recognition.diagnostics)
+        XCTAssertEqual(diagnostics.totalLengthConvention, GarmentLandmarkModelContract.sideNeckConvention)
+        XCTAssertNil(diagnostics.remoteCenterRefinement)
+        XCTAssertFalse(try XCTUnwrap(output.recognition.points.first { $0.id == "top_length_start" }).isVisible)
+        XCTAssertFalse(try XCTUnwrap(output.recognition.points.first { $0.id == "hem_center" }).isVisible)
+        let hem = try XCTUnwrap(output.recognition.points.first { $0.id == TopSideNeckLength.hemID })
+        XCTAssertEqual(hem.contourRule, .leftNeckVerticalHemMaskV1)
+        XCTAssertFalse(hem.isVisible)
+        XCTAssertFalse(diagnostics.rawPoints.contains { $0.id == TopSideNeckLength.hemID })
+        let landmarks = GarmentLandmarkSet(sessionID: UUID(), frameID: UUID(), origin: .model,
+            modelVersion: output.recognition.modelVersion, points: output.recognition.points,
+            mask: mask, garmentKind: .top, recognitionDiagnostics: diagnostics)
+        let provider = try AutoGarmentLandmarkProvider.bundled()
+        XCTAssertEqual(try provider.measurementDefinitions(for: landmarks).last?.landmarkIDs,
+                       ["neck_left", TopSideNeckLength.hemID])
+    }
+
     func testMissingCentersRetryWithoutGapEvidenceAndCompleteTotalSkipsRetry() async throws {
         for missing in [[], ["top_length_start"], ["hem_center"], ["top_length_start", "hem_center"]] {
             let requestID = UUID()
@@ -511,7 +790,7 @@ final class OuterwearLandmarkClientTests: XCTestCase {
 
     private func makeClient(_ stub: OuterwearHTTPStub, timeout: TimeInterval = 25) -> OuterwearLandmarkClient {
         .init(endpoint: stub.endpoint, session: stub.session, timeout: timeout,
-              lengthRefinementEndpoint: stub.endpoint,
+              lengthRefinementEndpoint: stub.endpoint, neckRefinementEndpoint: stub.endpoint,
               bearerTokenProvider: { "test-development-auth" })
     }
 
@@ -683,5 +962,67 @@ private nonisolated final class OuterwearURLProtocol: URLProtocol, @unchecked Se
     override func stopLoading() {
         guard let url = request.url, let stub = Self.lock.withLock({ Self.stubs[url] }) else { return }
         stub.recordStop()
+    }
+}
+
+private actor NeckRefinementSpy: OuterwearLandmarkProviding, OuterwearNeckRefining {
+    let initial: OuterwearLandmarkResponse
+    let fails: Bool
+    private(set) var calls = 0
+    init(initial: OuterwearLandmarkResponse, fails: Bool) { self.initial = initial; self.fails = fails }
+    func recognize(image: CGImage, orientation: ImageOrientation, category: String,
+                   requestID: UUID) async throws -> OuterwearLandmarkResponse { initial }
+    func refineNeck(image: CGImage, context: NormalizedRect, crop: OuterwearComparisonCrop,
+                    category: String, requestID: UUID) async throws -> OuterwearNeckRefinementResponse {
+        calls += 1
+        if fails { throw OuterwearLandmarkClientError.timeout }
+        let rect = crop.rect
+        func local(_ x: Double, _ y: Double) -> ImagePoint {
+            .init(x: (x - rect.x) / rect.width, y: (y - rect.y) / rect.height)
+        }
+        return .init(requestId: requestID.uuidString, view: .front, neckStyle: .collar,
+            points: ["neck_left": .init(point: local(0.43, 0.27), visibility: .estimated),
+                     "neck_right": .init(point: local(0.57, 0.27), visibility: .visible)])
+    }
+}
+
+private actor IndependentNeckSpy: OuterwearLandmarkProviding, OuterwearNeckRefining, OuterwearNeckSideRefining {
+    let initial: OuterwearLandmarkResponse
+    let failLeft: Bool
+    init(initial: OuterwearLandmarkResponse, failLeft: Bool) { self.initial = initial; self.failLeft = failLeft }
+    func recognize(image: CGImage, orientation: ImageOrientation, category: String,
+                   requestID: UUID) async throws -> OuterwearLandmarkResponse { initial }
+    func refineNeck(image: CGImage, context: NormalizedRect, crop: OuterwearComparisonCrop,
+                    category: String, requestID: UUID) async throws -> OuterwearNeckRefinementResponse {
+        func point(_ x: Double) -> OuterwearLandmarkObservation {
+            .init(point: .init(x: (x - crop.rect.x) / crop.rect.width,
+                              y: (0.27 - crop.rect.y) / crop.rect.height), visibility: .estimated)
+        }
+        return .init(requestId: requestID.uuidString, view: .front, neckStyle: .collar,
+            points: ["neck_left": point(0.43), "neck_right": point(0.57)])
+    }
+    func refineNeckSide(image: CGImage, context: NormalizedRect, crop: OuterwearComparisonCrop,
+                        side: OuterwearNeckSide, category: String,
+                        requestID: UUID) async throws -> OuterwearNeckRefinementResponse {
+        if failLeft && side == .left { throw OuterwearLandmarkClientError.timeout }
+        let x = side == .left ? 0.44 : 0.56
+        var points = ["neck_left": OuterwearLandmarkObservation(point: nil, visibility: .uncertain),
+                      "neck_right": OuterwearLandmarkObservation(point: nil, visibility: .uncertain)]
+        points[side.landmarkID] = .init(point: .init(x: (x - crop.rect.x) / crop.rect.width,
+            y: (0.26 - crop.rect.y) / crop.rect.height), visibility: .estimated)
+        return .init(requestId: requestID.uuidString, view: .front, neckStyle: .collar, points: points)
+    }
+}
+
+private actor LocalNeckSpy: LocalNeckLandmarkProviding {
+    var count = 0
+    let fail: Bool
+    let exterior: Bool
+    init(fail: Bool = false, exterior: Bool = false) { self.fail = fail; self.exterior = exterior }
+    func neckPoints(in image: CGImage) async throws -> [String: ImagePoint] {
+        count += 1
+        if fail { throw LocalNeckLandmarkError.missingModel }
+        return ["neck_left": .init(x: exterior ? 0.001 : 0.44, y: exterior ? 0.001 : 0.26),
+                "neck_right": .init(x: 0.56, y: 0.26)]
     }
 }

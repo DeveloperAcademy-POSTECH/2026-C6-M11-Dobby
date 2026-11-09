@@ -5,7 +5,7 @@ import UIKit
 /// Holds the same product and photo session through the complete creation flow.
 struct ProductCreationFlowView: View {
     @Environment(\.returnHomeFromExport) private var returnHomeFromExport
-    private enum Step: Hashable { case details, photoSelection, information, completed }
+    private enum Step: Hashable { case details, information, completed }
     private enum ExitAction { case save, discard }
     let controller: CopyActivityController
     let onFinish: () -> Void
@@ -111,7 +111,7 @@ struct ProductCreationFlowView: View {
             }
         }
         .environment(\.modelContext, context)
-        .tint(path.last == .photoSelection || path.last == .information ? .black
+        .tint(path.last == .information ? .black
             : path.last == .completed ? .orange : .white)
         .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
             ExportView(product: product, showFruits: $showFruits,
@@ -168,15 +168,7 @@ struct ProductCreationFlowView: View {
                 case .details:
                     CameraFlowView(model: photoModel, permission: permission, camera: camera,
                         previewSource: isFixture ? photoModel.input.measurement.source : nil,
-                        onSelectPhotos: { path.append(.photoSelection) },
-                        onExit: returnToMeasurementResult, onComplete: receivePhotos)
-                case .photoSelection:
-                    ProductPhotoSelectionView(model: photoModel, onBack: returnToDetailCapture,
-                        usesAI: $usesProductAutofill,
-                        hasProductInformation: ProductAutofillInputSnapshot(garment: garment).hasInformation,
-                        onCancelGeneration: { autofill.cancel() },
-                        onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 },
-                        onCompleteWithAI: photoAICompletion, onComplete: receivePhotos)
+                        onExit: returnToMeasurementResult, onComplete: receiveAllCapturedPhotos)
                 case .information:
                     // Restored creation drafts continue input; they are not saved-product edits.
                     InfoInputView(garment: garment, measurementInput: $measurementInput,
@@ -196,11 +188,6 @@ struct ProductCreationFlowView: View {
             .safeAreaInset(edge: .top, spacing: 0) { fixtureBanner }
             .preferredColorScheme(step == .details ? .dark : .light)
         }
-    }
-
-    private var photoAICompletion: ((ProductPhotoOutput, Bool) async throws -> Void)? {
-        guard autofillFlow == .photoSelection else { return nil }
-        return receiveSelectedPhotos
     }
 
     private var informationAICompletion: (() async throws -> Void)? {
@@ -224,12 +211,6 @@ struct ProductCreationFlowView: View {
         path.removeLast()
     }
 
-    private func returnToDetailCapture() {
-        guard path.last == .photoSelection else { return }
-        // Keep the current photo model and camera session alive for additional captures.
-        path.removeLast()
-    }
-
     private func handleInformationBack() {
         guard path.last == .information, !isFinishing, let garment else { return }
         synchronizeInformationPhotoSelection()
@@ -237,14 +218,15 @@ struct ProductCreationFlowView: View {
         if GarmentInformationValidation.hasAnyInformation(garment) {
             requestDraftExit()
         } else {
-            // Retain the product, selected photos and measurement input in this flow.
-            path.removeLast()
+            // Both new and restored drafts return to the same capture session.
+            // Do not rebuild the model or pass through the retired selection screen.
+            path = [.details]
         }
     }
 
     private func synchronizeInformationPhotoSelection() {
         guard let garment, let photoModel else { return }
-        photoModel.synchronizeSelectedProductPhotos(garment.productPhotos.map(\.id))
+        photoModel.synchronizeSelectedProductPhotos(garment.productPhotos.prefix(ProductPhotoModel.maximumSelectionCount).map(\.id))
     }
 
     private func receiveMeasurement(_ record: SavedMeasurement) async throws {
@@ -355,26 +337,15 @@ struct ProductCreationFlowView: View {
         photoModel = model
     }
 
-    private func receivePhotos(_ output: ProductPhotoOutput) async throws {
-        guard let garment, let photoModel else { throw CameraFailure.mismatchedCapture }
-        try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input)
-        try persistDraft(garment, step: .information)
-        path.append(.information)
-    }
-
-    private func receiveSelectedPhotos(_ output: ProductPhotoOutput, usingAI: Bool) async throws {
-        guard let garment, let photoModel else { throw CameraFailure.mismatchedCapture }
-        // Save every selected product photo before the network request. AI uses at most five.
-        try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input)
-        try Task.checkCancellation()
-        try persistDraft(garment, step: .photoSelection)
-        guard usingAI else {
-            try persistDraft(garment, step: .information)
-            path.append(.information)
-            return
+    private func receiveAllCapturedPhotos(_ output: ProductPhotoOutput) async throws {
+        guard isPresented, path.last == .details, let garment, let photoModel else {
+            throw CameraFailure.mismatchedCapture
         }
-
-        try await generateAndApplyInformation(output, expectedStep: .photoSelection)
+        try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input,
+            includesAllCapturedPhotos: true)
+        try Task.checkCancellation()
+        guard isPresented, path.last == .details else { throw CancellationError() }
+        try persistDraft(garment, step: .information)
         path.append(.information)
     }
 
@@ -445,7 +416,6 @@ struct ProductCreationFlowView: View {
                 let step: ProductDraftStep
                 switch path.last {
                 case .details: step = .details
-                case .photoSelection: step = .photoSelection
                 case .information, .completed: step = .information
                 case nil: step = .measurementResult
                 }
@@ -504,7 +474,6 @@ struct ProductCreationFlowView: View {
             let step: ProductDraftStep
             switch path.last {
             case .details: step = .details
-            case .photoSelection: step = .photoSelection
             case .information: step = .information
             case .completed:
                 try context.save()
@@ -553,7 +522,7 @@ struct ProductCreationFlowView: View {
 
     private func persistDraft(_ garment: Garment, step: ProductDraftStep) throws {
         if step == .information { synchronizeInformationPhotoSelection() }
-        // Revisiting photo selection after completion keeps this a saved product.
+        // Revisiting capture after completion keeps this a saved product.
         if garment.informationCompletedAt != nil {
             try context.save()
             preservesDraftPhotos = false
@@ -597,9 +566,9 @@ struct ProductCreationFlowView: View {
             restoredRecord = record
             switch draft.step {
             case .measurementResult: path = []
-            case .details: path = [.details]
-            case .photoSelection: path = [.details, .photoSelection]
-            case .information: path = [.details, .photoSelection, .information]
+            // Decode legacy selection drafts without deleting their captures.
+            case .details, .photoSelection: path = [.details]
+            case .information: path = [.details, .information]
             }
         } catch {
             restorationError = "저장한 작업은 보관함에 남아 있어요. \(error.localizedDescription)"

@@ -74,6 +74,7 @@ enum MeasurementLandmarkName {
         case "neck_right": "오른쪽 목점"
         case "neck_center": "목 중앙점"
         case "top_length_start": "총장 상단점"
+        case "top_length_hem": "목옆 기준 밑단 교점"
         case "front_length_start": "앞판 총장 상단점"
         case "waist_front_center": "앞허리 중앙점"
         case "thigh_right": "오른쪽 허벅지점"

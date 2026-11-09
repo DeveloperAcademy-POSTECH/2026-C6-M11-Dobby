@@ -13,6 +13,17 @@ nonisolated protocol OuterwearCenterRefining: Sendable {
                        category: String, requestID: UUID) async throws -> OuterwearLengthRefinementResponse
 }
 
+nonisolated protocol OuterwearNeckRefining: Sendable {
+    func refineNeck(image: CGImage, context: NormalizedRect, crop: OuterwearComparisonCrop,
+                    category: String, requestID: UUID) async throws -> OuterwearNeckRefinementResponse
+}
+
+nonisolated protocol OuterwearNeckSideRefining: Sendable {
+    func refineNeckSide(image: CGImage, context: NormalizedRect, crop: OuterwearComparisonCrop,
+                        side: OuterwearNeckSide, category: String,
+                        requestID: UUID) async throws -> OuterwearNeckRefinementResponse
+}
+
 nonisolated enum OuterwearLandmarkClientError: Error, Equatable, LocalizedError, Sendable,
     AutomaticMeasurementFailureClassifying {
     case notConfigured, serverNotConfigured, unauthorized, invalidImage, imageTooLarge
@@ -43,16 +54,18 @@ nonisolated enum OuterwearLandmarkClientError: Error, Equatable, LocalizedError,
 
 /// Reuses the existing Worker and installation authorization. No OpenAI
 /// credential, raw photo, or upstream diagnostic is logged by the client.
-actor OuterwearLandmarkClient: OuterwearLandmarkProviding, OuterwearCenterRefining {
+actor OuterwearLandmarkClient: OuterwearLandmarkProviding, OuterwearCenterRefining, OuterwearNeckRefining, OuterwearNeckSideRefining {
     typealias BearerTokenProvider = @Sendable () async throws -> String?
     typealias AppAuthorizationProvider = @Sendable () async throws -> DobbyAppAuthorization?
     static let endpoint = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v4/garments/landmarks")!
     static let refinementEndpoint = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v4/garments/landmark-refinement")!
     static let lengthRefinementEndpoint = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v4/garments/length-refinement")!
+    static let neckRefinementEndpoint = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v4/garments/neck-refinement")!
     static let requestTimeout: TimeInterval = 25
     private let endpoint: URL
     private let refinementEndpoint: URL
     private let lengthRefinementEndpoint: URL
+    private let neckRefinementEndpoint: URL
     private let session: URLSession
     private let timeout: TimeInterval
     private let authorizationProvider: @Sendable () async throws -> RequestAuthorization?
@@ -61,10 +74,12 @@ actor OuterwearLandmarkClient: OuterwearLandmarkProviding, OuterwearCenterRefini
          timeout: TimeInterval = OuterwearLandmarkClient.requestTimeout,
          refinementEndpoint: URL = OuterwearLandmarkClient.refinementEndpoint,
          lengthRefinementEndpoint: URL = OuterwearLandmarkClient.lengthRefinementEndpoint,
+         neckRefinementEndpoint: URL = OuterwearLandmarkClient.neckRefinementEndpoint,
          appAuthorizationProvider: @escaping AppAuthorizationProvider) {
         self.endpoint = endpoint
         self.refinementEndpoint = refinementEndpoint
         self.lengthRefinementEndpoint = lengthRefinementEndpoint
+        self.neckRefinementEndpoint = neckRefinementEndpoint
         self.session = session
         self.timeout = timeout.isFinite && timeout > 0 ? timeout : Self.requestTimeout
         self.authorizationProvider = {
@@ -77,10 +92,12 @@ actor OuterwearLandmarkClient: OuterwearLandmarkProviding, OuterwearCenterRefini
          timeout: TimeInterval = OuterwearLandmarkClient.requestTimeout,
          refinementEndpoint: URL = OuterwearLandmarkClient.refinementEndpoint,
          lengthRefinementEndpoint: URL = OuterwearLandmarkClient.lengthRefinementEndpoint,
+         neckRefinementEndpoint: URL = OuterwearLandmarkClient.neckRefinementEndpoint,
          bearerTokenProvider: @escaping BearerTokenProvider) {
         self.endpoint = endpoint
         self.refinementEndpoint = refinementEndpoint
         self.lengthRefinementEndpoint = lengthRefinementEndpoint
+        self.neckRefinementEndpoint = neckRefinementEndpoint
         self.session = session
         self.timeout = timeout.isFinite && timeout > 0 ? timeout : Self.requestTimeout
         self.authorizationProvider = {
@@ -157,6 +174,52 @@ actor OuterwearLandmarkClient: OuterwearLandmarkProviding, OuterwearCenterRefini
         }
     }
 
+    func refineNeck(image: CGImage, context: NormalizedRect, crop: OuterwearComparisonCrop,
+                    category: String, requestID: UUID) async throws -> OuterwearNeckRefinementResponse {
+        try await refineNeckDetail(image: image, context: context, crop: crop,
+                                   target: nil, category: category, requestID: requestID)
+    }
+
+    func refineNeckSide(image: CGImage, context: NormalizedRect, crop: OuterwearComparisonCrop,
+                        side: OuterwearNeckSide, category: String,
+                        requestID: UUID) async throws -> OuterwearNeckRefinementResponse {
+        try await refineNeckDetail(image: image, context: context, crop: crop,
+                                   target: side.landmarkID, category: category, requestID: requestID)
+    }
+
+    private func refineNeckDetail(image: CGImage, context: NormalizedRect, crop: OuterwearComparisonCrop,
+                                  target: String?, category: String,
+                                  requestID: UUID) async throws -> OuterwearNeckRefinementResponse {
+        guard crop.region == .upper else { throw OuterwearLandmarkClientError.invalidImage }
+        try Task.checkCancellation()
+        return try await withThrowingTaskGroup(of: OuterwearNeckRefinementResponse.self) { group in
+            group.addTask {
+                let encoded = try OuterwearLandmarkImageEncoder.encode(
+                    OuterwearLandmarkImageEncoder.croppedImage(image, rect: context), orientation: .up)
+                let region = OuterwearLandmarkImageEncoder.Region(id: "upper", image:
+                    try OuterwearLandmarkImageEncoder.encode(
+                        OuterwearLandmarkImageEncoder.croppedImage(image, rect: crop.rect), orientation: .up))
+                let data = try await self.sendRequest(image: encoded, regions: [region], category: category,
+                    requestID: requestID, neckOnly: true, neckTarget: target)
+                do {
+                    let result = try JSONDecoder().decode(OuterwearNeckRefinementResponse.self, from: data)
+                    try result.validate(expectedRequestID: requestID.uuidString)
+                    if let target, result.points.contains(where: { $0.key != target && $0.value.point != nil }) {
+                        throw OuterwearLandmarkClientError.invalidResponse
+                    }
+                    return result
+                } catch { throw OuterwearLandmarkClientError.invalidResponse }
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(min(target == nil ? 12 : 20, self.timeout)))
+                throw OuterwearLandmarkClientError.timeout
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw CancellationError() }
+            return result
+        }
+    }
+
     /// The comparison runner persists these exact encoded inputs for replay.
     /// Each stage has its own deadline; refinement never retries a failed call.
     func recognizeEncoded(image: OuterwearLandmarkImageEncoder.Image,
@@ -201,7 +264,8 @@ actor OuterwearLandmarkClient: OuterwearLandmarkProviding, OuterwearCenterRefini
 
     private func sendRequest(image: OuterwearLandmarkImageEncoder.Image,
                              regions: [OuterwearLandmarkImageEncoder.Region]? = nil, category: String,
-                             requestID: UUID, lengthOnly: Bool = false) async throws -> Data {
+                             requestID: UUID, lengthOnly: Bool = false, neckOnly: Bool = false,
+                             neckTarget: String? = nil) async throws -> Data {
         try Task.checkCancellation()
         let authorization: RequestAuthorization?
         do { authorization = try await authorizationProvider() }
@@ -223,17 +287,18 @@ actor OuterwearLandmarkClient: OuterwearLandmarkProviding, OuterwearCenterRefini
         try Task.checkCancellation()
         let body: Data
         if let regions {
-            let expected = lengthOnly ? ["upper", "hem"] : OuterwearComparisonRegion.allCases.filter { $0 != .garment }.map(\.rawValue)
+            let expected = neckOnly ? ["upper"] : lengthOnly ? ["upper", "hem"] : OuterwearComparisonRegion.allCases.filter { $0 != .garment }.map(\.rawValue)
             guard regions.count == expected.count, Set(regions.map(\.id)) == Set(expected) else {
                 throw OuterwearLandmarkClientError.invalidImage
             }
-            body = try JSONEncoder().encode(RefinementRequest(requestId: requestID.uuidString, image: image, category: category, regions: regions))
+            body = try JSONEncoder().encode(RefinementRequest(requestId: requestID.uuidString, image: image, category: category, regions: regions, target: neckTarget))
         } else {
             body = try JSONEncoder().encode(Request(requestId: requestID.uuidString, image: image, category: category))
         }
-        let url = lengthOnly ? lengthRefinementEndpoint : regions == nil ? endpoint : refinementEndpoint
+        let url = neckOnly ? neckRefinementEndpoint
+            : lengthOnly ? lengthRefinementEndpoint : regions == nil ? endpoint : refinementEndpoint
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData,
-                                 timeoutInterval: lengthOnly ? min(12, timeout) : timeout)
+                                 timeoutInterval: neckTarget != nil ? min(20, timeout) : (lengthOnly || neckOnly) ? min(12, timeout) : timeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + authorization.token, forHTTPHeaderField: "Authorization")
@@ -291,6 +356,7 @@ actor OuterwearLandmarkClient: OuterwearLandmarkProviding, OuterwearCenterRefini
         let image: OuterwearLandmarkImageEncoder.Image
         let category: String
         let regions: [OuterwearLandmarkImageEncoder.Region]
+        let target: String?
     }
     private struct RefinementEnvelope: Decodable {
         let refinementVersion: String

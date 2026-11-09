@@ -59,10 +59,6 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         XCTAssertTrue(selectPhotos.waitForExistence(timeout: 15))
         XCTAssertTrue(selectPhotos.wait(for: \.isHittable, toEqual: true, timeout: 5))
         selectPhotos.tap()
-        let completePhotos = app.buttons["camera.completePhotos"]
-        XCTAssertTrue(completePhotos.waitForExistence(timeout: 10))
-        disableProductAutofillIfPresent(in: app)
-        completePhotos.tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         let storedLength = app.textFields["product-info.measurement.totalLength"]
         for _ in 0..<6 where !storedLength.isHittable { app.swipeUp() }

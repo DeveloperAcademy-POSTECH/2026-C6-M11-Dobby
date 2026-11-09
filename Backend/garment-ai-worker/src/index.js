@@ -1,5 +1,7 @@
 import { buildOpenAIRequest, DraftResponseError, parseOpenAIResponse } from "./garment-draft.js";
+import { runProductAutofill } from "./garment-autofill.js";
 import { buildLandmarkOpenAIRequest, buildRefinementOpenAIRequest, OUTERWEAR_CATEGORIES,
+  buildNeckRefinementOpenAIRequest, parseNeckRefinementOpenAIResponse, NECK_REFINEMENT_REGIONS,
   buildLengthRefinementOpenAIRequest, parseLengthRefinementOpenAIResponse, LENGTH_REFINEMENT_REGIONS,
   parseLandmarkOpenAIResponse, REFINEMENT_REGIONS, REFINEMENT_VERSION, REFINEMENT_VERSION_V3, REFINEMENT_VERSION_V4 } from "./garment-landmarks.js";
 import { enforceAppUsageLimits, UsageProtectionFailure } from "./usage-protection.js";
@@ -231,9 +233,14 @@ function upstreamFailure(status) {
 }
 
 function validateRefinementRequest(body, allowedRegions = REFINEMENT_REGIONS) {
-  if (!isObject(body) || !hasOnlyKeys(body, ["requestId", "category", "image", "regions"])
+  const neck = allowedRegions === NECK_REFINEMENT_REGIONS;
+  const keys = neck ? ["requestId", "category", "image", "regions", "target"] : ["requestId", "category", "image", "regions"];
+  if (!isObject(body) || !hasOnlyKeys(body, keys)
       || !Array.isArray(body.regions) || body.regions.length !== Object.keys(allowedRegions).length) {
     throw new Failure(400, "invalid_request", "확대 비교 요청을 확인해 주세요.");
+  }
+  if (neck && body.target !== undefined && !["neck_left", "neck_right"].includes(body.target)) {
+    throw new Failure(400, "invalid_request", "목옆 확대 대상을 확인해 주세요.");
   }
   const input = validateLandmarkRequest({ requestId: body.requestId, category: body.category, image: body.image });
   let total = imageBytes(input.image.imageDataUrl);
@@ -249,7 +256,7 @@ function validateRefinementRequest(body, allowedRegions = REFINEMENT_REGIONS) {
     return { id: region.id, image: validated.image };
   });
   if (total > MAX_TOTAL_PHOTO_BYTES) throw new Failure(413, "photos_too_large", "사진 전체 용량은 8MiB 이하여야 합니다.");
-  return { ...input, regions };
+  return { ...input, regions, ...(neck && body.target !== undefined ? { target: body.target } : {}) };
 }
 
 async function generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion = 0, refinement = false) {
@@ -259,7 +266,8 @@ async function generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion = 0,
     const response = await fetchImpl(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify(refinement === "length" ? buildLengthRefinementOpenAIRequest(input)
+      body: JSON.stringify(refinement === "neck" ? buildNeckRefinementOpenAIRequest(input)
+        : refinement === "length" ? buildLengthRefinementOpenAIRequest(input)
         : refinement ? buildRefinementOpenAIRequest(input, { version: landmarkVersion })
         : landmarkVersion ? buildLandmarkOpenAIRequest(input, { version: landmarkVersion }) : buildOpenAIRequest(input)),
       signal: controller.signal,
@@ -275,6 +283,13 @@ async function generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion = 0,
       throw new Failure(502, "invalid_ai_response", "AI 응답 형식을 확인할 수 없습니다.");
     }
     try {
+      if (refinement === "neck") {
+        const result = parseNeckRefinementOpenAIResponse(payload, input.requestId);
+        if (input.target && Object.entries(result.points).some(([id, observation]) => id !== input.target && observation.point !== null)) {
+          throw new Failure(502, "invalid_ai_response", "목옆 확대 응답을 확인할 수 없습니다.");
+        }
+        return result;
+      }
       if (refinement === "length") return parseLengthRefinementOpenAIResponse(payload, input.requestId);
       if (refinement) return { refinementVersion: landmarkVersion === 4 ? REFINEMENT_VERSION_V4 : landmarkVersion === 3 ? REFINEMENT_VERSION_V3 : REFINEMENT_VERSION,
         localResponse: parseLandmarkOpenAIResponse(payload, input.requestId, { version: landmarkVersion }) };
@@ -300,8 +315,49 @@ async function generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion = 0,
   }
 }
 
-export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
-  if (typeof fetchImpl !== "function" || !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000) {
+async function generateProductAutofill(photos, env, fetchImpl, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const requestResponse = async body => {
+      if (controller.signal.aborted) throw new Failure(504, "ai_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.");
+      const response = await fetchImpl(OPENAI_RESPONSES_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body), signal: controller.signal,
+      });
+      if (!response.ok) {
+        try { await response.body?.cancel(); } catch { /* Never expose upstream bodies. */ }
+        throw upstreamFailure(response.status);
+      }
+      try { return await response.json(); }
+      catch {
+        if (controller.signal.aborted) throw new Failure(504, "ai_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.");
+        throw new Failure(502, "invalid_ai_response", "AI 응답 형식을 확인할 수 없습니다.");
+      }
+    };
+    return await runProductAutofill(photos, { requestResponse });
+  } catch (error) {
+    if (error instanceof Failure) throw error;
+    if (error instanceof DraftResponseError) {
+      if (error.code === "UNUSABLE_PHOTOS") {
+        throw new Failure(422, "photo_unusable", "사진에서 의류를 확인하기 어렵습니다. 제품 전체와 라벨이 선명한 사진을 추가해 주세요.");
+      }
+      throw new Failure(502, "invalid_ai_response", "AI 초안을 확인할 수 없습니다. 다시 시도해 주세요.");
+    }
+    if (controller.signal.aborted || error?.name === "AbortError" || error?.name === "TimeoutError") {
+      throw new Failure(504, "ai_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.");
+    }
+    throw new Failure(502, "ai_unavailable", "AI 서버에 연결하지 못했습니다. 다시 시도해 주세요.");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function createWorker({ fetchImpl = fetch, timeoutMs = 30000,
+  autofillTimeoutMs = timeoutMs === 30000 ? 45000 : timeoutMs } = {}) {
+  if (typeof fetchImpl !== "function" || !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000
+      || !Number.isInteger(autofillTimeoutMs) || autofillTimeoutMs < 1 || autofillTimeoutMs > 45000) {
     throw new TypeError("Invalid Worker dependencies.");
   }
   return {
@@ -312,7 +368,7 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
         if (path === "/health" && request.method === "GET") {
           return json({ service: "dobby-garment-ai", status: "ok" }, 200, requestId);
         }
-        if (!["/v1/garments/autofill", "/v1/garments/landmarks", "/v2/garments/landmarks", "/v2/garments/landmark-refinement", "/v3/garments/landmarks", "/v3/garments/landmark-refinement", "/v4/garments/landmarks", "/v4/garments/landmark-refinement", "/v4/garments/length-refinement", "/health"].includes(path)) {
+        if (!["/v1/garments/autofill", "/v1/garments/landmarks", "/v2/garments/landmarks", "/v2/garments/landmark-refinement", "/v3/garments/landmarks", "/v3/garments/landmark-refinement", "/v4/garments/landmarks", "/v4/garments/landmark-refinement", "/v4/garments/length-refinement", "/v4/garments/neck-refinement", "/health"].includes(path)) {
           throw new Failure(404, "not_found", "요청 경로를 확인해 주세요.");
         }
         const method = path === "/health" ? "GET" : "POST";
@@ -325,11 +381,19 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000 } = {}) {
           await enforceAppUsageLimits(env, authentication.installationID);
         }
         const body = await readJSON(request);
-        const refinement = path.endsWith("/length-refinement") ? "length" : path.endsWith("/landmark-refinement");
+        const refinement = path.endsWith("/neck-refinement") ? "neck" : path.endsWith("/length-refinement") ? "length" : path.endsWith("/landmark-refinement");
         const landmarkVersion = path.startsWith("/v4/") ? 4 : path.startsWith("/v3/") ? 3 : path.startsWith("/v2/") ? 2
           : path === "/v1/garments/landmarks" ? 1 : 0;
-        const input = refinement ? validateRefinementRequest(body, refinement === "length" ? LENGTH_REFINEMENT_REGIONS : REFINEMENT_REGIONS)
+        const input = refinement ? validateRefinementRequest(body, refinement === "neck" ? NECK_REFINEMENT_REGIONS : refinement === "length" ? LENGTH_REFINEMENT_REGIONS : REFINEMENT_REGIONS)
           : landmarkVersion ? validateLandmarkRequest(body) : validatePhotos(body);
+        if (!landmarkVersion) {
+          const { draft, searchCalls, searchAttempts, researchStatus } = await generateProductAutofill(input, env, fetchImpl, autofillTimeoutMs);
+          return json(draft, 200, requestId, {
+            "X-Dobby-AI-Search-Calls": String(searchCalls),
+            "X-Dobby-AI-Search-Attempts": String(searchAttempts),
+            "X-Dobby-AI-Research-Status": researchStatus,
+          });
+        }
         return json(await generateAI(input, env, fetchImpl, timeoutMs, landmarkVersion, refinement), 200, requestId);
       } catch (error) {
         // Never log credentials, image data, model output, or raw upstream errors.
