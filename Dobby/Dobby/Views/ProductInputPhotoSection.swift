@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ProductInputPhotoSection: View {
     let garment: Garment
@@ -14,11 +15,7 @@ struct ProductInputPhotoSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: allowsRemoval ? 4 : 8) {
             ProductFieldTitle(title: "제품 사진")
-            ScrollView(.horizontal, showsIndicators: false) {
-                photoRow.padding(.horizontal, 20)
-                    .padding(.top, allowsRemoval ? 4 : 0)
-            }
-            .padding(.horizontal, -20)
+            photoRow.padding(.horizontal, -20)
         }
         .fullScreenCover(item: $expandedPhoto) { photo in
             ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id,
@@ -38,23 +35,43 @@ struct ProductInputPhotoSection: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(height: ProductDetailPhotoPresentation.compact.size.height)
+                .padding(.horizontal, 20)
                 .accessibilityIdentifier("product-info.photos.empty")
         } else {
-            HStack(spacing: allowsEditing ? 16 : 8) {
-                ForEach(garment.productPhotos) { photo in
-                    if allowsRemoval {
-                        ProductInputEditablePhoto(photo: photo, onExpand: { expand(photo) },
-                                                  onDelete: { deletePhoto(photo.id) })
-                    } else {
-                        Button { expand(photo) } label: {
-                            ProductInputPhotoImage(photo: photo)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("제품 사진 확대")
-                        .accessibilityIdentifier("product-info.photo.\(photo.id)")
-                    }
-                }
+            ProductPhotoReorderStrip(photos: garment.productPhotos,
+                spacing: allowsEditing ? 16 : 8, topInset: allowsRemoval ? 4 : 0,
+                onReorder: { GarmentStore.reorderProductPhotos(ids: $0, in: garment) }) { photo in
+                photoCell(photo)
+                    .accessibilityHint("길게 누른 뒤 좌우로 드래그해 순서를 바꿀 수 있어요")
+                    .accessibilityAction(named: "앞으로 이동") { movePhoto(photo.id, offset: -1) }
+                    .accessibilityAction(named: "뒤로 이동") { movePhoto(photo.id, offset: 1) }
             }
+            .frame(height: ProductDetailPhotoPresentation.compact.size.height + (allowsRemoval ? 4 : 0))
+            .accessibilityIdentifier("product-info.photo-strip")
+        }
+    }
+
+    @ViewBuilder private func photoCell(_ photo: GarmentPhoto) -> some View {
+        if allowsRemoval {
+            ProductInputEditablePhoto(photo: photo, onExpand: { expand(photo) },
+                                      onDelete: { deletePhoto(photo.id) })
+        } else {
+            Button { expand(photo) } label: {
+                ProductInputPhotoImage(photo: photo)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("제품 사진 확대")
+            .accessibilityIdentifier("product-info.photo.\(photo.id)")
+        }
+    }
+
+    private func movePhoto(_ id: UUID, offset: Int) {
+        var ids = garment.productPhotos.map(\.id)
+        guard let index = ids.firstIndex(of: id), ids.indices.contains(index + offset) else { return }
+        let moved = ids.remove(at: index)
+        ids.insert(moved, at: index + offset)
+        if GarmentStore.reorderProductPhotos(ids: ids, in: garment) {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
 

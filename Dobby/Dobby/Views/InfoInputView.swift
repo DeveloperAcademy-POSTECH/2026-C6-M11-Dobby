@@ -240,7 +240,8 @@ struct InfoInputView: View {
         hasAttemptedCompletion = true
         guard GarmentInformationValidation.isValid(garment) else { return }
         do {
-            try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts) {
+            try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts,
+                                           isEditingExistingProduct: allowsPhotoEditing) {
                 try modelContext.save()
             }
             // End editing before navigation so returning from export doesn't
@@ -354,6 +355,7 @@ enum GarmentInputCompletion {
     /// Validate all visible fields before modifying any of them. A failed database save
     /// retains the edits in the context, so retrying does not lose typed values.
     static func save(garment: Garment, drafts: inout [UUID: String],
+                     isEditingExistingProduct: Bool = false,
                      persist: () throws -> Void) throws {
         // Hidden bilateral evidence stays untouched. An invalid hidden left
         // observation must not block editing and saving the usable right one.
@@ -379,7 +381,10 @@ enum GarmentInputCompletion {
         garment.syncFilterFields()
         let previousCompletion = garment.informationCompletedAt
         let previousDraft = garment.creationDraftData
-        garment.informationCompletedAt = .now
+        // Completing a resumed draft registers it now. Later edits preserve that
+        // first completion, including the creation-date fallback for legacy products.
+        garment.informationCompletedAt = previousCompletion
+            ?? (isEditingExistingProduct ? garment.createdAt : .now)
         garment.creationDraftData = nil
         do {
             try persist()
