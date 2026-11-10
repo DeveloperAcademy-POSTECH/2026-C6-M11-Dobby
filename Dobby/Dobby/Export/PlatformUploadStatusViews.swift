@@ -7,7 +7,7 @@ struct PlatformUploadingOverlay: View {
         ZStack {
             Color.black.opacity(0.6)
                 .ignoresSafeArea()
-            PlatformUploadingContent(platformName: platformName)
+            PlatformUploadingContent()
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(platformName)에 업로드 중입니다. 조금만 기다려 주세요.")
@@ -15,23 +15,29 @@ struct PlatformUploadingOverlay: View {
 }
 
 private struct PlatformUploadingContent: View {
-    let platformName: String
-
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             Text("업로드 중...")
                 .font(.custom("Pretendard-Bold", fixedSize: 20))
-            Spacer(minLength: 0)
-            UploadLoadingAnimation()
-            Spacer(minLength: 0)
-            Text("\(platformName)에 자동으로 업로드하고 있어요!\n조금만 기다려 주세요")
+                .foregroundStyle(.black)
+            UploadLoadingAnimation(width: 280, height: 280)
+            Text("자동으로 업로드하고 있어요!\n조금만 기다려 주세요")
                 .font(.custom("Pretendard-Regular", fixedSize: 16))
-                .multilineTextAlignment(.center)
+                .foregroundStyle(.black)
         }
-        .foregroundStyle(Color(.brandNeutral900))
-        .padding(.vertical, 24)
-        .frame(width: 360, height: 270)
-        .background(Color(.brandNeutralWhite), in: RoundedRectangle(cornerRadius: 16))
+        .multilineTextAlignment(.center)
+        .padding(.vertical, 12)
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.brandNeutralWhite))
+                .shadow(color: .black.opacity(0.25), radius: 2, x: 0, y: 0)
+        }
         .padding(.horizontal, 16)
     }
+}
+
+#Preview("업로드 중") {
+    Color.white.ignoresSafeArea()
+        .overlay { PlatformUploadingOverlay(platformName: "인스타그램") }
 }
