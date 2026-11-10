@@ -41,7 +41,7 @@ struct ExportProductItem<Thumbnail: View>: View {
             width: ExportProductItemLayout.cardWidth,
             alignment: .top
         )
-        .background(Color(.systemBackground))
+        .background(Color(.brandNeutral50))
         .clipShape(
             RoundedRectangle(cornerRadius: ExportProductItemLayout.cornerRadius)
         )
@@ -90,31 +90,32 @@ private struct ExportProductItemMetadata: View {
         VStack(alignment: .leading, spacing: 4) {
             if let brand {
                 Text(brand)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.headline.weight(.semibold))
                     .lineLimit(1)
             }
 
             Text(name)
-                .font(.system(size: 14))
+                .font(.subheadline.weight(.regular))
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let priceText {
                 Text(priceText)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(Color(.brandNeutral900))
             }
         }
+        .foregroundStyle(Color(.brandNeutralBlack))
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private enum ExportProductItemLayout {
-    static let cardWidth: CGFloat = 174
+    static let cardWidth: CGFloat = 175
     static let thumbnailWidth: CGFloat = 175
-    static let thumbnailHeight: CGFloat = 232
-    static let cornerRadius: CGFloat = 20
+    static let thumbnailHeight: CGFloat = 233
+    static let cornerRadius: CGFloat = 16
 }
 
 private extension String {
