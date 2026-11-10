@@ -13,6 +13,8 @@ struct GarmentMeasurementResultView: View {
     let allowsRetake: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var image: UIImage?
     @State private var showDetails = false
     @State private var showAuxiliaryDetails = false
@@ -29,6 +31,9 @@ struct GarmentMeasurementResultView: View {
     @State private var pendingRecordArchived = false
     @State private var showsPointTutorial = false
     @State private var hasFinishedPointTutorial = false
+    @State private var summaryHeight: CGFloat = 111
+    @State private var isResultSheetExpanded = true
+    @GestureState private var sheetDragTranslation: CGFloat = 0
     private let pipeline = MeasurementPipeline()
 
     init(model: AutomaticMeasurement, archive: MeasurementArchive,
@@ -80,7 +85,9 @@ struct GarmentMeasurementResultView: View {
     var body: some View {
         GeometryReader { geometry in
             if geometry.size.width <= geometry.size.height && !dynamicTypeSize.isAccessibilitySize {
-                portraitResult(in: geometry.size)
+                portraitResult(in: CGSize(width: geometry.size.width,
+                                          height: geometry.size.height + geometry.safeAreaInsets.bottom),
+                               bottomSafeArea: geometry.safeAreaInsets.bottom)
             } else {
                 accessibleResult
             }
@@ -88,36 +95,8 @@ struct GarmentMeasurementResultView: View {
         .disabled(awaitsPointTutorial)
         .background { Color.white.ignoresSafeArea() }
         .navigationTitle("실측 결과")
-        .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
-        .toolbarBackground(Color.white, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.light, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: retakeIfAllowed) { GarmentCaptureToolbarIcon(systemName: "chevron.left") }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("뒤로가기")
-                    .accessibilityHint("실측 촬영 화면으로 돌아갑니다")
-                    .accessibilityIdentifier(onConfirmedRecord == nil ? "retakeGarmentMeasurement" : "product-flow.back")
-                    .disabled(!allowsRetake || isSaving || isEditingPoint || model.needsRecalculation)
-            }.sharedBackgroundVisibility(.hidden)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ChakPrimaryButton(
-                title: isSaving ? "저장 중…" : model.needsRecalculation ? "다시 측정 중…" : "다음",
-                isLoading: isSaving || model.needsRecalculation
-            ) {
-                Task { await confirm() }
-            }
-            .disabled(isSaving || isEditingPoint || model.needsRecalculation || awaitsPointTutorial)
-            .accessibilityHint(onConfirmedRecord == nil
-                ? "사진과 확인한 측정 결과를 저장하고 촬영을 마칩니다"
-                : "사진과 확인한 측정 결과를 저장하고 제품 상세 촬영으로 이동합니다")
-            .accessibilityIdentifier("confirmGarmentMeasurement")
-            .padding(.leading, 32).padding(.trailing, 35).padding(.top, 28)
-            .background(Color.white)
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             if let decoded = await SnapshotPresentation.thumbnail(for: model.snapshot), !Task.isCancelled {
                 image = decoded
@@ -167,27 +146,42 @@ struct GarmentMeasurementResultView: View {
         .accessibilityIdentifier("garmentMeasurementResult")
     }
 
-    private func portraitResult(in size: CGSize) -> some View {
-        // Fit the actual capture inside the Hi-Fi photograph window. Points
-        // and depth coordinates must not follow the reference image's crop.
-        let topGap: CGFloat = 30
-        let viewportHeight = min(size.width * 536 / 402, max(1, size.height - topGap))
+    private var resultNavigation: some View {
+        VStack(spacing: 13) {
+            MeasurementResultProgress()
+            MeasurementResultNavigationBar(
+                canGoBack: allowsRetake && !isSaving && !isEditingPoint && !model.needsRecalculation && !awaitsPointTutorial,
+                canContinue: !isSaving && !isEditingPoint && !model.needsRecalculation && !awaitsPointTutorial,
+                isBusy: isSaving || model.needsRecalculation,
+                busyDescription: isSaving ? "저장 중" : "다시 측정 중",
+                backIdentifier: onConfirmedRecord == nil ? "retakeGarmentMeasurement" : "product-flow.back",
+                onBack: retakeIfAllowed, onContinue: { Task { await confirm() } })
+                .frame(height: 54)
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color.white)
+    }
+
+    private var captureUsesTallResult: Bool {
+        let crop = model.snapshot.capturePresentationCrop.flatMap { $0.isValid ? $0 : nil }
+            ?? model.snapshot.presentationCrop.flatMap { $0.isValid ? $0 : nil } ?? .full
+        let aspect = SnapshotPresentation.aspectRatio(for: model.snapshot) * CGFloat(crop.width / crop.height)
+        return MeasurementResultLayout.usesSheet(aspect: aspect)
+    }
+
+    private func portraitResult(in size: CGSize, bottomSafeArea: CGFloat) -> some View {
         let aspect = SnapshotPresentation.resultAspectRatio(for: model.snapshot)
-        let photoWidth = min(size.width, viewportHeight * aspect)
-        return VStack(alignment: .leading, spacing: 0) {
-            ZStack {
-                // A distinct backing element exposes the window's bounds
-                // without replacing the aspect-fit editor's accessibility ID.
-                Rectangle().fill(Color.white)
-                    .frame(width: size.width, height: viewportHeight)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("실측 사진 표시 영역")
-                    .accessibilityIdentifier("garmentResultPhotoViewport")
-                    .accessibilitySortPriority(-1)
-                    .allowsHitTesting(false)
-                photoEditor(showsEnlargeControl: false)
-                    .frame(width: photoWidth, height: photoWidth / aspect)
-            }.frame(width: size.width, height: viewportHeight)
+        let base = MeasurementResultLayout(size: size, bottomSafeArea: bottomSafeArea,
+                                           aspect: aspect, summaryHeight: summaryHeight, usesSheet: captureUsesTallResult)
+        let startingHeight = isResultSheetExpanded ? base.expandedSheetHeight : base.collapsedSheetHeight
+        let sheetHeight = min(base.expandedSheetHeight,
+                              max(base.collapsedSheetHeight, startingHeight - sheetDragTranslation))
+        let layout = MeasurementResultLayout(size: size, bottomSafeArea: bottomSafeArea,
+                                             aspect: aspect, summaryHeight: summaryHeight, usesSheet: captureUsesTallResult, sheetHeight: sheetHeight)
+        return ZStack(alignment: .topLeading) {
+            Color.white
+            photoEditor(showsEnlargeControl: false, magnifierBottomInset: layout.magnifierBottomInset)
+            .frame(width: layout.photo.width, height: layout.photo.height)
             .overlay(alignment: .topTrailing) {
                 VStack(alignment: .trailing, spacing: 6) {
                     if isSynthetic { syntheticBadge.allowsHitTesting(false) }
@@ -202,28 +196,118 @@ struct GarmentMeasurementResultView: View {
                     pointRecalculation.padding(12).allowsHitTesting(false)
                 }
             }
-            Spacer(minLength: 0)
+            .overlay {
+                Color.clear.accessibilityElement(children: .ignore)
+                    .accessibilityLabel("실측 사진 표시 영역")
+                    .accessibilityIdentifier("garmentResultPhotoViewport")
+                    .accessibilitySortPriority(-1).allowsHitTesting(false)
+            }
+            .position(x: layout.photo.midX, y: layout.photo.midY)
+
+            if let sheetTop = layout.sheetTop {
+                resultSheet(height: sheetHeight, expandedHeight: base.expandedSheetHeight,
+                            collapsedHeight: base.collapsedSheetHeight,
+                            overlaysPhoto: layout.photo.maxY >= sheetTop + 48)
+                    .frame(width: size.width, height: sheetHeight, alignment: .top)
+                    .position(x: size.width / 2, y: size.height - sheetHeight / 2)
+            } else {
+                resultSummary(overlaysPhoto: false)
+                    .frame(width: layout.summary.width)
+                    .position(x: layout.summary.midX, y: layout.summary.midY)
+            }
+            resultNavigation
         }
-        .padding(.top, topGap)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+    }
+
+    private func resultSummary(overlaysPhoto: Bool) -> some View {
+        MeasurementResultSummary(values: model.visibleValues, isRecalculating: model.needsRecalculation,
+                                 overlaysPhoto: overlaysPhoto)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: MeasurementResultSummaryHeightKey.self,
+                                           value: geometry.size.height)
+                }
+            }
+            .onPreferenceChange(MeasurementResultSummaryHeightKey.self) { height in
+                if height.isFinite && height > 0 && abs(summaryHeight - height) > 0.5 { summaryHeight = height }
+            }
+    }
+
+    private func resultSheet(height: CGFloat, expandedHeight: CGFloat, collapsedHeight: CGFloat,
+                             overlaysPhoto: Bool) -> some View {
+        ZStack(alignment: .top) {
+            MeasurementResultSheetBackdrop()
+            // A capture's display crop can widen to keep all measurement points
+            // visible. If the photo ends above the sheet, use dark guidance on
+            // its white backing instead of unreadable white-on-white text.
+            resultSummary(overlaysPhoto: overlaysPhoto)
+                .padding(.horizontal, model.visibleValues.count >= 5 ? 19 : 23)
+                .padding(.top, 28)
+                .opacity(height > collapsedHeight + 30 ? 1 : 0)
+                .accessibilityHidden(height <= collapsedHeight + 30)
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(overlaysPhoto && !reduceTransparency ? Color.white : Color("BrandNeutral800"))
+                .frame(width: 38, height: 3).padding(.top, 10.5)
+                .frame(maxWidth: .infinity, minHeight: 28, alignment: .top)
+                .contentShape(Rectangle())
+                .onTapGesture { toggleResultSheet() }
+                .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global)
+                    .updating($sheetDragTranslation) { value, translation, transaction in
+                        transaction.animation = nil
+                        translation = value.translation.height
+                    }
+                    .onEnded { value in
+                        let start = isResultSheetExpanded ? expandedHeight : collapsedHeight
+                        let target = start - value.predictedEndTranslation.height
+                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+                            isResultSheetExpanded = target > (expandedHeight + collapsedHeight) / 2
+                        }
+                    })
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("실측값 패널")
+                .accessibilityValue(isResultSheetExpanded ? "펼쳐짐" : "접힘")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { toggleResultSheet() }
+                .accessibilityAdjustableAction { direction in
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+                        isResultSheetExpanded = direction == .increment
+                    }
+                }
+                .accessibilityIdentifier("garmentResultSheetHandle")
+        }
+        .frame(height: height, alignment: .top)
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 32, topTrailingRadius: 32))
+        .contentShape(Rectangle())
+        .accessibilityIdentifier("garmentResultMeasurementSheet")
+    }
+
+    private func toggleResultSheet() {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+            isResultSheetExpanded.toggle()
+        }
     }
 
     private var accessibleResult: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                reviewNotice.padding(.horizontal, 20)
-                if isSynthetic { syntheticBadge.padding(.horizontal, 20) }
-                if model.snapshot.hasExpandedPhotoPresentation {
-                    expandedPhotoNotice.padding(.horizontal, 20)
-                }
-                photoEditor(showsEnlargeControl: true)
-                auxiliaryContent.padding(.horizontal, 20)
-            }.padding(.top, 16).padding(.bottom, 24)
-                .frame(maxWidth: 700).frame(maxWidth: .infinity)
+        VStack(spacing: 0) {
+            resultNavigation
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    reviewNotice.padding(.horizontal, 20)
+                    if isSynthetic { syntheticBadge.padding(.horizontal, 20) }
+                    if model.snapshot.hasExpandedPhotoPresentation {
+                        expandedPhotoNotice.padding(.horizontal, 20)
+                    }
+                    photoEditor(showsEnlargeControl: false)
+                    resultSummary(overlaysPhoto: false).padding(.horizontal, 20)
+                    auxiliaryContent.padding(.horizontal, 20)
+                }.padding(.top, 16).padding(.bottom, 24)
+                    .frame(maxWidth: 700).frame(maxWidth: .infinity)
+            }
         }
     }
 
-    private func photoEditor(showsEnlargeControl: Bool) -> some View {
+    private func photoEditor(showsEnlargeControl: Bool, magnifierBottomInset: CGFloat = 0) -> some View {
         let presentation = model.photoEditingPresentation
         return GarmentMeasurementPhotoEditor(image: image, snapshot: model.snapshot,
             editableLandmarks: presentation.landmarks,
@@ -233,6 +317,7 @@ struct GarmentMeasurementResultView: View {
             showsEnlargeControl: showsEnlargeControl,
             allowsViewportZoom: true,
             pendingPointIDs: presentation.pendingIDs,
+            magnifierBottomInset: magnifierBottomInset,
             onEnlarge: {}, onMove: { id, point in
                 guard !awaitsPointTutorial else { return }
                 _ = model.placePoint(originalPoint: point, id: id)
@@ -630,6 +715,11 @@ private struct MeasurementCaptureFailureGroup: Identifiable {
 
 /// Each result introduces point editing once before accepting any edits.
 /// The illustration is the original 76 × 111 Figma asset, not a symbol substitute.
+private struct MeasurementResultSummaryHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat { 111 }
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 private struct GarmentResultPointTutorial: View {
     let title: String
     let dismiss: () -> Void
