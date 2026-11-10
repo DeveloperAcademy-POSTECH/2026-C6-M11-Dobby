@@ -498,7 +498,7 @@ struct GarmentMeasurementPhotoEditor: View {
             context.stroke(cross, with: .color(.white), style: .init(lineWidth: lineWidth, lineCap: .butt))
         }.frame(width: loupeSize.width, height: loupeSize.height)
             .clipShape(RoundedRectangle(cornerRadius: 18.056))
-            .overlay(RoundedRectangle(cornerRadius: 18.056).stroke(.white, lineWidth: 1.5))
+            .overlay(RoundedRectangle(cornerRadius: 18.056).strokeBorder(.white, lineWidth: 1.5))
             .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
             // The image is deliberately three times larger than the viewport.
             // Expose only the bounded loupe, never the clipped image's AX frame.

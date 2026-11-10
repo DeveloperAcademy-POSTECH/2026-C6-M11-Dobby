@@ -5,18 +5,20 @@ import UIKit
 /// The window centre is expressed in the photo view's coordinate space, so a
 /// toolbar, split-screen window, crop, or display zoom cannot change the rule.
 nonisolated enum MeasurementMagnifierPlacement {
+    /// Figma specifies the outer frame, including its inside-drawn border.
+    /// Photo zoom and available space change placement, never this point size.
+    static let size = CGSize(width: 85, height: 120)
+
     static func rect(photoSize: CGSize, point: CGPoint, windowCenter: CGPoint) -> CGRect {
         guard [photoSize.width, photoSize.height, point.x, point.y,
                windowCenter.x, windowCenter.y].allSatisfy(\.isFinite),
               photoSize.width > 0, photoSize.height > 0 else { return .zero }
-        let insetX = min(20, max(0, photoSize.width - 1) / 2)
-        let insetY = min(20, max(0, photoSize.height - 1) / 2)
-        let scale = min(1, (photoSize.width - insetX * 2) / 85,
-                        (photoSize.height - insetY * 2) / 120)
-        let width = 85 * scale, height = 120 * scale
+        let width = size.width, height = size.height
+        let insetX = min(20, max(0, photoSize.width - width) / 2)
+        let insetY = min(20, max(0, photoSize.height - height) / 2)
         // Points exactly on an axis belong to its right/bottom half.
-        let x = point.x < windowCenter.x ? photoSize.width - insetX - width : insetX
-        let y = point.y < windowCenter.y ? photoSize.height - insetY - height : insetY
+        let x = point.x < windowCenter.x ? max(0, photoSize.width - insetX - width) : insetX
+        let y = point.y < windowCenter.y ? max(0, photoSize.height - insetY - height) : insetY
         return CGRect(x: x, y: y, width: width, height: height)
     }
 }
