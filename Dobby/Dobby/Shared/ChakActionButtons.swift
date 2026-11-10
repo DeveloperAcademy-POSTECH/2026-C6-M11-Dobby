@@ -80,3 +80,24 @@ private struct ChakActionButton: View {
         .accessibilityIdentifier(configuration.accessibilityIdentifier ?? "")
     }
 }
+
+#Preview("가로 액션 버튼") {
+    ChakHorizontalActionButtons(
+        secondary: .init(title: "취소하기", action: {}),
+        primary: .init(title: "다시 업로드하기", action: {})
+    )
+    .padding(17)
+    .frame(width: 360)
+    .background(Color(.brandNeutralWhite))
+}
+
+#Preview("세로 액션 버튼") {
+    ChakVerticalActionButtons(
+        secondary: .init(title: "보관함으로 가기", action: {}),
+        primary: .init(title: "인스타그램 열기", action: {})
+    )
+    .padding(.horizontal, 34)
+    .padding(.vertical, 16)
+    .frame(width: 402)
+    .background(Color(.brandNeutral50))
+}
