@@ -56,25 +56,30 @@ private struct InstagramConnectionActions: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(alignment: .leading, spacing: 18) {
             Button(action: onConnect) {
-                HStack(spacing: 10) {
+                HStack(alignment: .center, spacing: 12) {
                     if isLoading {
-                        ProgressView().tint(.white)
+                        ProgressView()
+                            .tint(Color(.brandNeutralWhite))
+                            .frame(width: 30, height: 30)
                     } else {
                         Image("InstagramLogo")
                             .resizable()
-                            .scaledToFit()
+                            .scaledToFill()
                             .frame(width: 30, height: 30)
+                            .clipShape(RoundedRectangle(cornerRadius: 15))
                     }
+
                     Text("인스타그램 계정 연결하기")
-                        .font(.body.weight(.semibold))
+                        .font(.callout.weight(.semibold))
                 }
-                .frame(maxWidth: .infinity, minHeight: 62)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: 62, maxHeight: 62)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .background(Color(.label), in: RoundedRectangle(cornerRadius: 60))
+            .foregroundStyle(Color(.brandNeutralWhite))
+            .background(Color(.brandNeutral950), in: RoundedRectangle(cornerRadius: 60))
             .disabled(isLoading)
 
             Button("프로페셔널 계정으로 어떻게 설정하나요?") {
@@ -83,11 +88,26 @@ private struct InstagramConnectionActions: View {
                 ) else { return }
                 openURL(url)
             }
-            .font(.caption)
+            .font(.caption.weight(.regular))
             .underline()
+            .multilineTextAlignment(.center)
             .foregroundStyle(Color(.brandNeutral700))
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
     }
+}
+
+#Preview("계정 연결 전") {
+    InstagramConnectionView(isLoading: false, errorMessage: nil, onConnect: {})
+}
+
+#Preview("계정 연결 중") {
+    InstagramConnectionView(isLoading: true, errorMessage: nil, onConnect: {})
+}
+
+#Preview("좁은 화면") {
+    InstagramConnectionView(isLoading: false, errorMessage: nil, onConnect: {})
+        .frame(width: 320, height: 568)
 }
