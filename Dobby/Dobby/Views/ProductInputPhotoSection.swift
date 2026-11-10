@@ -1,22 +1,21 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct ProductInputPhotoSection: View {
     let garment: Garment
     var allowsEditing = false
+    // Entry and archive editing both allow removal. The edit-mode flag only
+    // controls the existing spacing; it must not rename entry as editing.
     var allowsRemoval = true
     @Environment(\.modelContext) private var context
     @State private var expandedPhoto: GarmentPhoto?
     @State private var showsDeletionError = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: allowsEditing ? 4 : 8) {
+        VStack(alignment: .leading, spacing: allowsRemoval ? 4 : 8) {
             ProductFieldTitle(title: "제품 사진")
-            ScrollView(.horizontal, showsIndicators: false) {
-                photoRow.padding(.horizontal, 20)
-                    .padding(.top, allowsEditing ? 4 : 0)
-            }
-            .padding(.horizontal, -20)
+            photoRow.padding(.horizontal, -20)
         }
         .fullScreenCover(item: $expandedPhoto) { photo in
             ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id,
@@ -36,23 +35,43 @@ struct ProductInputPhotoSection: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(height: ProductDetailPhotoPresentation.compact.size.height)
+                .padding(.horizontal, 20)
                 .accessibilityIdentifier("product-info.photos.empty")
         } else {
-            HStack(spacing: allowsEditing ? 16 : 8) {
-                ForEach(garment.productPhotos) { photo in
-                    if allowsEditing {
-                        ProductInputEditablePhoto(photo: photo, onExpand: { expand(photo) },
-                                                  onDelete: { deletePhoto(photo.id) })
-                    } else {
-                        Button { expand(photo) } label: {
-                            ProductInputPhotoImage(photo: photo)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("제품 사진 확대")
-                        .accessibilityIdentifier("product-info.photo.\(photo.id)")
-                    }
-                }
+            ProductPhotoReorderStrip(photos: garment.productPhotos,
+                spacing: allowsEditing ? 16 : 8, topInset: allowsRemoval ? 4 : 0,
+                onReorder: { GarmentStore.reorderProductPhotos(ids: $0, in: garment) }) { photo in
+                photoCell(photo)
+                    .accessibilityHint("길게 누른 뒤 좌우로 드래그해 순서를 바꿀 수 있어요")
+                    .accessibilityAction(named: "앞으로 이동") { movePhoto(photo.id, offset: -1) }
+                    .accessibilityAction(named: "뒤로 이동") { movePhoto(photo.id, offset: 1) }
             }
+            .frame(height: ProductDetailPhotoPresentation.compact.size.height + (allowsRemoval ? 4 : 0))
+            .accessibilityIdentifier("product-info.photo-strip")
+        }
+    }
+
+    @ViewBuilder private func photoCell(_ photo: GarmentPhoto) -> some View {
+        if allowsRemoval {
+            ProductInputEditablePhoto(photo: photo, onExpand: { expand(photo) },
+                                      onDelete: { deletePhoto(photo.id) })
+        } else {
+            Button { expand(photo) } label: {
+                ProductInputPhotoImage(photo: photo)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("제품 사진 확대")
+            .accessibilityIdentifier("product-info.photo.\(photo.id)")
+        }
+    }
+
+    private func movePhoto(_ id: UUID, offset: Int) {
+        var ids = garment.productPhotos.map(\.id)
+        guard let index = ids.firstIndex(of: id), ids.indices.contains(index + offset) else { return }
+        let moved = ids.remove(at: index)
+        ids.insert(moved, at: index + offset)
+        if GarmentStore.reorderProductPhotos(ids: ids, in: garment) {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
 
@@ -90,18 +109,23 @@ private struct ProductInputEditablePhoto: View {
         .accessibilityIdentifier("product-info.photo.\(photo.id)")
         .overlay(alignment: .topTrailing) {
             Button(action: onDelete) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
-                    .background(Color("BrandNeutral700"), in: Circle())
-                    .padding(12)
-                    .contentShape(Rectangle())
+                ZStack(alignment: .topTrailing) {
+                    Color.clear
+                    Image(systemName: "minus")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 17, height: 17)
+                        .background(Color("BrandNeutral700"), in: Circle())
+                }
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("제품 사진 삭제")
             .accessibilityIdentifier("product-info.delete-photo.\(photo.id)")
-            .offset(x: 17.5, y: -16)
+            // The visible badge overhangs by four points, while the hit area
+            // stays out of the next thumbnail (including the eight-point gap).
+            .offset(x: 4, y: -3)
         }
     }
 }

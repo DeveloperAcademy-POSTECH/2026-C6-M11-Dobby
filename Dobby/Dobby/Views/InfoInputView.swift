@@ -66,7 +66,7 @@ struct InfoInputView: View {
                 }
                     .disabled(generationRequestID != nil)
                     .padding(.horizontal, 20)
-                    .padding(.top, allowsPhotoEditing ? 12 : 16)
+                    .padding(.top, 12)
                     .padding(.bottom, 16)
                     .background {
                         Color.clear
@@ -202,15 +202,18 @@ struct InfoInputView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(height: 20)
                 Text("AI로 제품 정보 생성하기")
                     .tracking(-0.14)
             }
             .font(.custom("Pretendard-Medium", size: 14, relativeTo: .subheadline))
             .foregroundStyle(Color("BrandNeutralWhite"))
-            .frame(maxWidth: .infinity, minHeight: 16)
+            .frame(maxWidth: .infinity, minHeight: 20)
             .padding(.horizontal, 8)
             .padding(.vertical, 15)
-            .background(ProductInformationStyle.accent, in: RoundedRectangle(cornerRadius: 16))
+            .background(Color("BrandMain500"), in: RoundedRectangle(cornerRadius: 16))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
         .disabled(generationRequestID != nil)
@@ -237,7 +240,8 @@ struct InfoInputView: View {
         hasAttemptedCompletion = true
         guard GarmentInformationValidation.isValid(garment) else { return }
         do {
-            try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts) {
+            try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts,
+                                           isEditingExistingProduct: allowsPhotoEditing) {
                 try modelContext.save()
             }
             // End editing before navigation so returning from export doesn't
@@ -351,6 +355,7 @@ enum GarmentInputCompletion {
     /// Validate all visible fields before modifying any of them. A failed database save
     /// retains the edits in the context, so retrying does not lose typed values.
     static func save(garment: Garment, drafts: inout [UUID: String],
+                     isEditingExistingProduct: Bool = false,
                      persist: () throws -> Void) throws {
         // Hidden bilateral evidence stays untouched. An invalid hidden left
         // observation must not block editing and saving the usable right one.
@@ -376,7 +381,10 @@ enum GarmentInputCompletion {
         garment.syncFilterFields()
         let previousCompletion = garment.informationCompletedAt
         let previousDraft = garment.creationDraftData
-        garment.informationCompletedAt = .now
+        // Completing a resumed draft registers it now. Later edits preserve that
+        // first completion, including the creation-date fallback for legacy products.
+        garment.informationCompletedAt = previousCompletion
+            ?? (isEditingExistingProduct ? garment.createdAt : .now)
         garment.creationDraftData = nil
         do {
             try persist()
