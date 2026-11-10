@@ -20,22 +20,18 @@ struct CameraShutterControl: View {
         } label: {
             ZStack {
                 Image("MeasurementShutterIdle")
-                    .resizable().scaledToFit().frame(width: 92, height: 92)
+                    .resizable().scaledToFit().frame(width: 98, height: 98)
                     .accessibilityHidden(true)
-                // Animate only the original asset's 25pt center. The ring and
-                // its 92pt touch region stay still while orange softly appears.
+                // Both Figma assets share the same ring. Crossfade the complete
+                // asset so the new outline stays intact in either readiness state.
                 Image("MeasurementShutterReady")
-                    .resizable().scaledToFit().frame(width: 92, height: 92)
-                    .mask { Circle().frame(width: 25, height: 25).offset(x: 0.5, y: 0.5) }
-                    .scaleEffect(isReady ? 1 : 0.65)
+                    .resizable().scaledToFit().frame(width: 98, height: 98)
                     .opacity(isReady ? 1 : 0)
                     .animation(usesReducedMotion || !isReady ? nil
-                        : .spring(response: 0.24, dampingFraction: 0.85), value: isReady)
+                        : .easeInOut(duration: 0.20), value: isReady)
                     .accessibilityHidden(true)
                 if isCapturing { ProgressView().tint(.white).transition(.opacity) }
-            }.frame(width: 92, height: 92)
-                .opacity(isEnabled || isCapturing ? 1 : 0.45)
-                .animation(usesReducedMotion || !isEnabled ? nil : .easeInOut(duration: 0.20), value: isEnabled)
+            }.frame(width: 98, height: 98)
                 .animation(usesReducedMotion ? nil : .easeOut(duration: 0.16), value: isCapturing)
                 .contentShape(Circle())
         }
