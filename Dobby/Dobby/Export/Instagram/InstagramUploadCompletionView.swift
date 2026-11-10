@@ -2,9 +2,17 @@ import SwiftUI
 
 struct InstagramUploadCompletionView: View {
     private enum Layout {
+        static let contentTopSpacing: CGFloat = 176
+        static let iconSize: CGFloat = 80
+        static let iconTextSpacing: CGFloat = 45
+        static let textSpacing: CGFloat = 16
+        static let contentBottomSpacing: CGFloat = 215
+        static let contentMaximumWidth: CGFloat = 362
+        static let titleLetterSpacing: CGFloat = 0.37
         static let buttonBarHorizontalPadding: CGFloat = 34
         static let buttonBarTopPadding: CGFloat = 16
-        static let buttonBarBottomPadding: CGFloat = 34
+        static let buttonBarBottomPadding: CGFloat = 82
+        static let buttonBarMaximumWidth: CGFloat = 402
     }
 
     let onOpenLibrary: () -> Void
@@ -12,30 +20,33 @@ struct InstagramUploadCompletionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 0) {
-                Image(systemName: "square.and.arrow.up.badge.checkmark")
-                    .font(.system(size: 62, weight: .medium))
-                    .foregroundStyle(Color(.brandNeutralBlack))
+            Spacer(minLength: 0)
+                .frame(maxHeight: Layout.contentTopSpacing)
+
+            VStack(spacing: Layout.iconTextSpacing) {
+                Image(.uploadCompletionIcon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Layout.iconSize, height: Layout.iconSize)
                     .accessibilityHidden(true)
 
-                Spacer()
-                    .frame(height: 54)
+                VStack(spacing: Layout.textSpacing) {
+                    Text("업로드 완료")
+                        .font(.custom("Pretendard-Bold", fixedSize: 30))
+                        .kerning(Layout.titleLetterSpacing)
+                        .foregroundStyle(Color(.brandNeutralBlack))
+                        .accessibilityAddTraits(.isHeader)
 
-                Text("업로드 완료")
-                    .font(.custom("Pretendard-Bold", fixedSize: 30))
-                    .accessibilityAddTraits(.isHeader)
-
-                Spacer()
-                    .frame(height: 20)
-
-                Text("연결된 계정에 자동으로 업로드했어요!")
-                    .font(.custom("Pretendard-Medium", fixedSize: 18))
+                    Text("연결된 계정에 자동으로 업로드했어요!")
+                        .font(.custom("Pretendard-SemiBold", fixedSize: 17))
+                        .foregroundStyle(Color(.brandNeutral600))
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: Layout.contentMaximumWidth, alignment: .top)
             }
-            .multilineTextAlignment(.center)
-            .foregroundStyle(Color(.brandNeutralBlack))
 
-            Spacer()
-                .frame(height: 242)
+            Spacer(minLength: 0)
+                .frame(maxHeight: Layout.contentBottomSpacing)
 
             ChakVerticalActionButtons(
                 secondary: .init(
@@ -52,8 +63,10 @@ struct InstagramUploadCompletionView: View {
             .padding(.horizontal, Layout.buttonBarHorizontalPadding)
             .padding(.top, Layout.buttonBarTopPadding)
             .padding(.bottom, Layout.buttonBarBottomPadding)
+            .frame(maxWidth: Layout.buttonBarMaximumWidth)
+            .background(Color(.brandNeutral50))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color(.brandNeutral50).ignoresSafeArea())
     }
 }
