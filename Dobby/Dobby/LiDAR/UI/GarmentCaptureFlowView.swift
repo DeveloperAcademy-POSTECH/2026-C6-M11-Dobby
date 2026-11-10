@@ -31,14 +31,12 @@ struct GarmentCaptureFlowView: View {
     @State private var captureTask: Task<Void, Never>?
     @State private var cameraRestartTask: Task<Void, Never>?
     @State private var runID: UUID?
-    @State private var errorMessage: String?
+    @State private var captureFailure: WorkflowFailureFeedback?
     @State private var recordingError: String?
     @State private var processingSnapshot: CaptureSnapshot?
     @State private var processingImage: UIImage?
     @State private var captureViewportSize: CGSize = .zero
     @State private var processingViewportSize: CGSize = .zero
-    @State private var errorTitle = "촬영을 완료하지 못했어요"
-    @State private var manualRecovery: ManualMeasurement?
     @State private var previewControls = CameraControlState(sessionID: UUID())
     @State private var previewFocusVisible = false
     @State private var syntheticOptions = SyntheticMeasurementCameraOptions()
@@ -105,6 +103,9 @@ struct GarmentCaptureFlowView: View {
                 else { Color.white.ignoresSafeArea() }
             }
         }
+        .disabled(captureFailure != nil)
+        .allowsHitTesting(captureFailure == nil)
+        .accessibilityHidden(captureFailure != nil)
         .tint(model == nil ? .white : .primary)
         .preferredColorScheme(model == nil ? .dark : .light)
         .task {
@@ -181,18 +182,11 @@ struct GarmentCaptureFlowView: View {
             guard !Task.isCancelled, processingSnapshot?.frame.frameID == snapshot.frame.frameID else { return }
             processingImage = image
         }
-        .sheet(item: $manualRecovery, onDismiss: {
-            if !isPreview, model == nil, scenePhase == .active { restartCamera() }
-        }) { measurement in
-            MeasurementDetailView(model: measurement, archive: archive)
-        }
-        .alert(errorTitle, isPresented: Binding(get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } })) {
-            if processingSnapshot != nil {
-                Button("사진에서 측정점 확인") { reviewCapturedPhoto() }
+        .overlay {
+            if captureFailure != nil {
+                MeasurementCaptureFailureOverlay(onConfirm: dismissCaptureFailure)
             }
-            Button("확인", role: .cancel) { errorMessage = nil }
-        } message: { Text(errorMessage ?? "") }
+        }
     }
 
     @ViewBuilder
@@ -386,14 +380,14 @@ struct GarmentCaptureFlowView: View {
     }
 
     private var cameraOptionsButton: some View {
-        CameraMoreButton(isEnabled: !isCapturing, action: openCameraOptions)
+        CameraMoreButton(isEnabled: captureFailure == nil && !isCapturing, action: openCameraOptions)
             .accessibilityLabel("촬영 옵션")
             .accessibilityIdentifier("garmentCaptureOptions")
             .accessibilityHidden(showsCameraOptions)
     }
 
     private func openCameraOptions() {
-        guard !isCapturing, model == nil else { return }
+        guard captureFailure == nil, !isCapturing, model == nil else { return }
         if isPreview { synchronizePreviewOptions() }
         else { captureSession.synchronizeCameraOptions() }
         clearPreviewFocus()
@@ -673,12 +667,12 @@ struct GarmentCaptureFlowView: View {
     /// Tapping to focus does not depend on garment recognition or the
     /// measurement service being ready. The camera owns autofocus support.
     private var canFocus: Bool {
-        guard !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
+        guard captureFailure == nil, !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
         if isPreview { return previewModel != nil }
         return camera.isRunning && camera.cameraCapabilities.focusSupported
     }
     private var canUseCameraControls: Bool {
-        guard !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
+        guard captureFailure == nil, !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
         if isPreview { return previewModel != nil }
         return camera.isRunning && camera.state == .ready
     }
@@ -722,7 +716,7 @@ struct GarmentCaptureFlowView: View {
         runID = token
         processingSnapshot = nil
         processingImage = nil
-        errorMessage = nil
+        captureFailure = nil
         isCapturing = true
         phase = .capturing
         captureTask = Task {
@@ -755,13 +749,7 @@ struct GarmentCaptureFlowView: View {
                 let result = AutomaticMeasurement(output: framedOutput, context: context)
                 try await finishCapture(result, token: token)
             } catch {
-                guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
-                phase = .failed
-                presentFailure(error)
-                runID = nil
-                isCapturing = false
-                captureTask = nil
-                restartCamera()
+                finishFailedCapture(error, token: token)
             }
             if runID == token { runID = nil; isCapturing = false; captureTask = nil }
         }
@@ -777,7 +765,7 @@ struct GarmentCaptureFlowView: View {
         runID = token
         processingSnapshot = preview.snapshot
         processingImage = nil
-        errorMessage = nil
+        captureFailure = nil
         isCapturing = true
         phase = .capturing
         captureTask = Task {
@@ -787,6 +775,10 @@ struct GarmentCaptureFlowView: View {
                 phase = .detectingLandmarks
                 try await previewStagePause(.seconds(2))
                 guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
+                if ProcessInfo.processInfo.arguments.contains("--garment-preview-capture-failure") {
+                    throw AutomaticMeasurementWorkflowFailure(stage: .landmarks, code: .providerFailure,
+                        message: "미리보기용 실측 실패입니다.", cause: .landmarksNotFound)
+                }
                 phase = .measuring
                 try await previewStagePause(.seconds(2))
                 guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
@@ -795,7 +787,7 @@ struct GarmentCaptureFlowView: View {
                 runID = nil
                 captureTask = nil
             } catch {
-                // The same cancel/retake path clears the owned fixture state.
+                finishFailedCapture(error, token: token)
             }
         }
     }
@@ -868,23 +860,34 @@ struct GarmentCaptureFlowView: View {
             hasCapturedPhoto: processingSnapshot != nil) else {
             // A provider can report a normal stop even when the owning task's
             // cancellation flag has not reached this actor yet.
-            errorMessage = nil
+            captureFailure = nil
             return
         }
-        errorTitle = feedback.title
-        errorMessage = feedback.message
+        // Keep the classified reason for diagnostics; the product alert uses
+        // the Figma copy consistently for every failed capture.
+        captureFailure = feedback
     }
 
-    private func reviewCapturedPhoto() {
-        guard let snapshot = processingSnapshot else { return }
-        errorMessage = nil
-        cameraRestartTask?.cancel()
-        cameraRestartTask = nil
-        camera.pauseForMeasurement()
-        // Failed inference has not supplied a validated kind for this frozen
-        // photo. Live preview evidence must not label a separate manual record.
-        manualRecovery = ManualMeasurement(snapshot: snapshot, definition: .testDistance,
-            testContext: .init(category: .other, deviceModel: SnapshotPresentation.deviceIdentifier))
+    private func finishFailedCapture(_ error: Error, token: UUID) {
+        guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
+        presentFailure(error)
+        runID = nil
+        isCapturing = false
+        phase = .idle
+        captureTask = nil
+        processingSnapshot = nil
+        processingImage = nil
+        processingViewportSize = .zero
+        recordingError = nil
+        closeCameraOptions()
+        clearPreviewFocus()
+        // Resume behind the modal so confirming it does not start another
+        // camera session or leave the previous analysis frame on screen.
+        restartCamera()
+    }
+
+    private func dismissCaptureFailure() {
+        captureFailure = nil
     }
 
     private func cancel() {
@@ -899,11 +902,11 @@ struct GarmentCaptureFlowView: View {
         processingSnapshot = nil
         processingImage = nil
         processingViewportSize = .zero
-        errorMessage = nil
+        captureFailure = nil
     }
 
     private func restartCamera() {
-        guard !isPreview, model == nil, manualRecovery == nil, scenePhase == .active else { return }
+        guard !isPreview, model == nil, scenePhase == .active else { return }
         cameraRestartTask?.cancel()
         cameraRestartTask = Task {
             guard !Task.isCancelled else { return }

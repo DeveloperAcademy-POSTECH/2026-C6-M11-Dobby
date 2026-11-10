@@ -4,8 +4,8 @@ import Foundation
 /// Fitting failure never falls back to local/median endpoint sampling. A bad
 /// endpoint or contour derivation affects only measurements that depend on it.
 nonisolated struct GarmentPlaneMeasurementEngine {
-    static let algorithmVersion = "garment-plane-neck-perpendicular-mask-2"
-    static let sideNeckAlgorithmVersion = "garment-plane-left-neck-vertical-hem-mask-1"
+    static let algorithmVersion = "garment-plane-neck-perpendicular-mask-4"
+    static let sideNeckAlgorithmVersion = "garment-plane-left-neck-vertical-hem-mask-3"
     private let options: MeasurementOptions
 
     init(options: MeasurementOptions = .init()) { self.options = options }
@@ -19,7 +19,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
             if let mask = landmarks.mask {
                 do {
                     plane = try GarmentPlaneGeometry.fitDetailed(frame: frame, mask: mask,
-                        uprightOrientation: landmarks.recognitionDiagnostics?.selectedPoseOrientation ?? frame.orientation)
+                        uprightOrientation: landmarks.recognitionDiagnostics?.selectedPoseOrientation ?? frame.orientation, landmarks: landmarks)
                 } catch let error as ContextualMeasurementError { globalError = error }
                 catch let failure as MeasurementFailure {
                     globalError = .init(failure: failure, context: .init(stage: .garmentPlane, reason: .unknown, scope: .capture))

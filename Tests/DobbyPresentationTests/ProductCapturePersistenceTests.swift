@@ -78,6 +78,59 @@ struct ProductCapturePersistenceTests {
         #expect(f.garment.capturePhotosAppliedAt == nil)
     }
 
+    @Test func galleryDeletionExcludesPreviouslyImportedPhotosAndPreservesSourcesOnRetry() async throws {
+        let f = try Fixture()
+        defer { f.remove() }
+        let first = try f.detail(), remaining = try f.detail()
+        try await f.apply([first, remaining])
+        let deleted: Set<UUID> = [f.input.measurement.id, try #require(f.input.measurementVisualization?.id), first.id]
+        let previous = f.garment.productPhotos.map(\.id)
+        let recordID = UUID()
+        f.garment.sourceMeasurementID = recordID
+        f.garment.measurementPhoto?.measurementSessionID = f.input.sessionID
+        let model = try ProductPhotoModel(input: f.input,
+            captureProvider: ProductPhotoFixtureCaptureProvider(seed: f.input.measurement.source),
+            initialDetailPhotos: [first, remaining])
+        try ProductDraftStore.save(garment: f.garment, step: .details, measurementRecordID: recordID,
+            photoModel: model, measurementInputData: nil, in: f.context)
+        let previousDraft = f.garment.creationDraftData
+        for id in deleted { try await model.deletePhoto(id) }
+        await #expect(throws: SaveFailure.self) {
+            try await f.apply([remaining], deleted: deleted, persist: { context in
+                try ProductDraftStore.save(garment: f.garment, step: .information, measurementRecordID: recordID,
+                    photoModel: model, measurementInputData: nil, in: context,
+                    persist: { _ in throw SaveFailure.failed })
+            })
+        }
+        #expect(f.garment.creationDraftData == previousDraft)
+        #expect(f.garment.productPhotos.map(\.id) == previous)
+        #expect(f.garment.thumbnail?.id == f.input.measurement.id)
+        try await f.apply([remaining], deleted: deleted, persist: { context in
+            try ProductDraftStore.save(garment: f.garment, step: .information, measurementRecordID: recordID,
+                photoModel: model, measurementInputData: nil, in: context)
+        })
+        #expect(f.garment.creationDraft?.photoState?.deletedPhotoIDs == deleted)
+        #expect(f.garment.productPhotos.map(\.id) == [remaining.id])
+        #expect(f.garment.thumbnail?.id == remaining.id)
+        #expect(f.garment.measurementPhoto?.id == f.input.measurement.id)
+        #expect(FileManager.default.fileExists(atPath: f.photos.appending(path: "original.jpg").path))
+        try await f.apply([remaining], deleted: deleted)
+        #expect(f.garment.productPhotos.map(\.id) == [remaining.id])
+        let reader = ModelContext(f.container)
+        let stored = try #require(reader.fetch(FetchDescriptor<Garment>()).first)
+        #expect(stored.productPhotos.map(\.id) == [remaining.id])
+    }
+
+    @Test func deletingMeasurementBeforeFirstHandoffKeepsOnlyRemainingDetail() async throws {
+        let f = try Fixture()
+        defer { f.remove() }
+        let detail = try f.detail()
+        try await f.apply([detail], deleted: Set(f.input.measurementPhotos.map(\.id)))
+        #expect(f.garment.productPhotos.map(\.id) == [detail.id])
+        #expect(f.garment.thumbnail?.id == detail.id)
+        #expect(f.garment.measurementPhoto != nil)
+    }
+
     private enum SaveFailure: Error { case failed }
     private struct Fixture {
         let directory = URL.temporaryDirectory.appending(path: "capture-handoff-\(UUID())")
@@ -119,9 +172,11 @@ struct ProductCapturePersistenceTests {
                 purpose: .detail, capturedAt: .now,
                 source: .localFile(url, metadata: try ProductPhotoHandoff.metadata(for: url)))
         }
-        func apply(_ details: [CapturedAsset], persist: @MainActor (ModelContext) throws -> Void = { try $0.save() }) async throws {
+        func apply(_ details: [CapturedAsset], deleted: Set<UUID> = [], persist: @MainActor (ModelContext) throws -> Void = { try $0.save() }) async throws {
+            let remaining = (input.measurementPhotos + details).filter { !deleted.contains($0.id) }
             let output = ProductPhotoOutput(sessionID: input.sessionID, garmentID: garment.id,
-                detailPhotos: details, selectedPhotos: input.measurementPhotos + details, representativePhotoID: input.measurement.id)
+                detailPhotos: details, selectedPhotos: remaining,
+                representativePhotoID: remaining.first?.id ?? input.measurement.id, deletedPhotoIDs: deleted)
             try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: input,
                 photosDirectory: photos, includesAllCapturedPhotos: true, persist: persist)
         }

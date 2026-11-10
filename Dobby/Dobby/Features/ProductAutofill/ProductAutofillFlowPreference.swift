@@ -5,7 +5,9 @@ enum ProductAutofillFlow: String {
     case information = "b"
 }
 
-/// The flow is selected in Settings, independently of a product's AI ON/OFF choice.
+/// Compatibility storage for the previous A/B experiment. Creation now always
+/// uses the information-screen button; saved values no longer select a route.
+/// Keep the legacy values readable without deleting people's stored settings.
 enum ProductAutofillFlowPreference {
     static let key = "productAutofill.flow"
     static let defaults = makeDefaults(fixtureDirectory: ProductAppStorage.fixtureDirectory)

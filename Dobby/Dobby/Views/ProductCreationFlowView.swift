@@ -36,7 +36,6 @@ struct ProductCreationFlowView: View {
     @State private var preservesDraftPhotos = false
     @State private var pendingExitAction: (() -> Void)?
     @State private var usesProductAutofill = true
-    @State private var autofillFlow: ProductAutofillFlow
     @State private var autofill = ProductAutofillSession()
     @State private var autofillReviewNotes: [String] = []
     @State private var autofillLoadingPresentation: ProductAutofillLoadingPresentation?
@@ -58,7 +57,6 @@ struct ProductCreationFlowView: View {
         self.onDraftSaved = onDraftSaved ?? onCancel
         self.onDraftDiscarded = onDraftDiscarded ?? onDraftSaved ?? onCancel
         self.resumeProductID = resumeProductID
-        _autofillFlow = State(initialValue: ProductAutofillFlowPreference.current)
         _isRestoring = State(initialValue: resumeProductID != nil)
         isFixture = ProductAppStorage.fixtureDirectory != nil
         archive = MeasurementArchive(folder: ProductAppStorage.fixtureDirectory?.appending(path: "measurements"))
@@ -154,6 +152,10 @@ struct ProductCreationFlowView: View {
             }
         }
         .task { if isRestoring { await restoreDraft() } }
+        .onChange(of: garment?.productPhotos.map(\.id)) { _, _ in
+            guard path.last == .information else { return }
+            synchronizeInformationPhotoSelection()
+        }
     }
 
     @ViewBuilder
@@ -168,10 +170,12 @@ struct ProductCreationFlowView: View {
                 case .information:
                     // Restored creation drafts continue input; they are not saved-product edits.
                     InfoInputView(garment: garment, measurementInput: $measurementInput,
-                        onExit: handleInformationBack, onGenerateAI: informationAICompletion,
+                        onExit: handleInformationBack, onGenerateAI: generateInformationFromButton,
                         onCancelGeneration: { autofill.cancel() },
                         onAIGenerationPresentationChange: { autofillLoadingPresentation = $0 }) {
-                        _ in path.append(.completed)
+                        _ in
+                        synchronizeInformationPhotoSelection()
+                        path.append(.completed)
                     }
                 case .completed:
                     ProductInputCompletionView(garment: garment,
@@ -184,10 +188,6 @@ struct ProductCreationFlowView: View {
         }
     }
 
-    private var informationAICompletion: (() async throws -> Void)? {
-        guard autofillFlow == .information else { return nil }
-        return generateInformationFromButton
-    }
 
     @ViewBuilder
     private var fixtureBanner: some View {
@@ -207,6 +207,7 @@ struct ProductCreationFlowView: View {
 
     private func handleInformationBack() {
         guard path.last == .information, !isFinishing, let garment else { return }
+        synchronizeInformationPhotoSelection()
         // Use the Done button's enabled condition, not full completion validation.
         if GarmentInformationValidation.hasAnyInformation(garment) {
             requestDraftExit()
@@ -215,6 +216,11 @@ struct ProductCreationFlowView: View {
             // Do not rebuild the model or pass through the retired selection screen.
             path = [.details]
         }
+    }
+
+    private func synchronizeInformationPhotoSelection() {
+        guard let garment, let photoModel else { return }
+        photoModel.synchronizeSelectedProductPhotos(garment.productPhotos.prefix(ProductPhotoModel.maximumSelectionCount).map(\.id))
     }
 
     private func receiveMeasurement(_ record: SavedMeasurement) async throws {
@@ -302,20 +308,23 @@ struct ProductCreationFlowView: View {
             model = try ProductPhotoModel(input: input,
                 captureProvider: ProductPhotoFixtureCaptureProvider(seed: input.measurement.source,
                     directory: ProductAppStorage.fixtureDirectory?.appending(path: "detail-captures")),
-                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
+                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record,
+                initialDeletedPhotoIDs: snapshot?.deletedPhotoIDs ?? [])
             permission = CameraPermission(authorizer: MockCameraAuthorization())
             camera = nil
         } else {
             let session = CameraPreviewSession()
             model = try ProductPhotoModel(input: input, captureProvider: session,
-                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
+                initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record,
+                initialDeletedPhotoIDs: snapshot?.deletedPhotoIDs ?? [])
             camera = session
             permission = CameraPermission(authorizer: SystemCameraAuthorization())
         }
 #else
         let session = CameraPreviewSession()
         model = try ProductPhotoModel(input: input, captureProvider: session,
-            initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record)
+            initialDetailPhotos: details, initialSelectedPhotoIDs: selected, measurementRecord: record,
+                initialDeletedPhotoIDs: snapshot?.deletedPhotoIDs ?? [])
         camera = session
         permission = CameraPermission(authorizer: SystemCameraAuthorization())
 #endif
@@ -329,17 +338,20 @@ struct ProductCreationFlowView: View {
         guard isPresented, path.last == .details, let garment, let photoModel else {
             throw CameraFailure.mismatchedCapture
         }
+        // 상품 반영과 삭제 내역이 담긴 초안을 한 번에 저장해 이전 사진이 복원되지 않게 한다.
         try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: photoModel.input,
-            includesAllCapturedPhotos: true)
+            includesAllCapturedPhotos: true, persist: { _ in
+                try persistDraft(garment, step: .information)
+            })
         try Task.checkCancellation()
         guard isPresented, path.last == .details else { throw CancellationError() }
-        try persistDraft(garment, step: .information)
         path.append(.information)
     }
 
     private func generateInformationFromButton() async throws {
+        synchronizeInformationPhotoSelection()
         guard let garment, let output = photoModel?.output,
-              autofillFlow == .information, path.last == .information else {
+              path.last == .information else {
             throw ProductAutofillError.invalidPhotos
         }
         // Retain the seller's latest input even if they cancel or close the app.
@@ -508,6 +520,7 @@ struct ProductCreationFlowView: View {
     }
 
     private func persistDraft(_ garment: Garment, step: ProductDraftStep) throws {
+        if step == .information { synchronizeInformationPhotoSelection() }
         // Revisiting capture after completion keeps this a saved product.
         if garment.informationCompletedAt != nil {
             try context.save()
