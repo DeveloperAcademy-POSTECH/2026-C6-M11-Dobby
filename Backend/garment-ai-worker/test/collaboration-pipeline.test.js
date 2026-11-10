@@ -55,6 +55,11 @@ function research({ collaboration = COLLABORATION, facts = [], nextQuery = "", s
 function harness(responses, options = {}) {
   const calls = [];
   const worker = createWorker({ ...options, fetchImpl: async (url, init) => {
+    // This suite isolates research/collaboration behavior; readback is covered
+    // separately with explicit competing-label responses in brand-discovery.
+    if (JSON.parse(init.body).text?.format?.name === "garment_brand_readback") {
+      return Response.json({ status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: JSON.stringify({ brand: null }) }] }] });
+    }
     calls.push({ url: String(url), body: JSON.parse(init.body) });
     const value = responses[calls.length - 1];
     assert.notEqual(value, undefined, "unexpected additional model request");

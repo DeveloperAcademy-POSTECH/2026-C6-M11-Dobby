@@ -143,7 +143,7 @@ function isObject(value) { return value !== null && typeof value === "object" &&
 function exactKeys(value, keys) {
   return isObject(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 }
-function text(value, maximum) {
+export function text(value, maximum) {
   if (typeof value !== "string" || /[\u0000-\u001f\u007f]/u.test(value)) return null;
   const result = value.normalize("NFKC").replace(/\s+/gu, " ").trim();
   return result.length > 0 && result.length <= maximum ? result : null;
@@ -152,7 +152,7 @@ function normalized(value) {
   return value.normalize("NFKC").toLowerCase().replace(/[‐‑‒–—−]/gu, "-").replace(/\s+/gu, " ").trim();
 }
 function same(left, right) { return normalized(left) === normalized(right); }
-function containsIdentifier(haystack, needle, { productCode = false } = {}) {
+export function containsIdentifier(haystack, needle, { productCode = false } = {}) {
   const source = normalized(haystack);
   const target = normalized(needle);
   for (let offset = source.indexOf(target); offset >= 0; offset = source.indexOf(target, offset + 1)) {
@@ -168,7 +168,7 @@ function containsIdentifier(haystack, needle, { productCode = false } = {}) {
 }
 function validYear(value) { return Number.isInteger(value) && value >= 1800 && value <= new Date().getUTCFullYear(); }
 
-function outputJSON(payload) {
+export function outputJSON(payload) {
   if (!payload || payload.status !== "completed" || payload.error || !Array.isArray(payload.output)) {
     throw new DraftResponseError("INCOMPLETE_MODEL_RESPONSE");
   }
@@ -277,7 +277,7 @@ export function buildHeritageSearchRequest({ identification, attempt = 1, previo
   };
 }
 
-function publicURL(value) {
+export function publicURL(value) {
   if (typeof value !== "string" || value.length > 2048 || /[\s\\]/u.test(value)) return null;
   let url;
   try { url = new URL(value); } catch { return null; }
@@ -377,13 +377,7 @@ function acceptedFact(fact, identification, sources) {
   return { ...fact, sentence: "", sourceUrl };
 }
 
-export function parseHeritageSearchResponse(payload, identification, collaborationCandidate = null) {
-  const { value } = outputJSON(payload);
-  if (!identification?.brand || (!exactKeys(value, ["facts", "nextQuery"])
-      && !exactKeys(value, ["facts", "nextQuery", "collaboration"]))
-    || !Array.isArray(value.facts) || value.facts.length > MAX_FACTS || typeof value.nextQuery !== "string") {
-    throw new DraftResponseError("INVALID_HERITAGE_RESPONSE");
-  }
+export function completedNativeSearch(payload) {
   const calls = payload.output.filter(item => item.type === "web_search_call");
   if (calls.length !== 1 || calls[0].status !== "completed" || calls[0].action?.type !== "search") {
     throw new DraftResponseError("INVALID_RESEARCH_SEARCH");
@@ -391,6 +385,17 @@ export function parseHeritageSearchResponse(payload, identification, collaborati
   if (payload.output.some(item => typeof item.type === "string" && item.type !== "web_search_call"
     && (item.type.endsWith("_call") || item.type.startsWith("mcp_")))) throw new DraftResponseError("INVALID_RESEARCH_SEARCH");
   const availableSources = nativeSources(payload, calls[0]);
+  return { call: calls[0], availableSources };
+}
+
+export function parseHeritageSearchResponse(payload, identification, collaborationCandidate = null) {
+  const { value } = outputJSON(payload);
+  if (!identification?.brand || (!exactKeys(value, ["facts", "nextQuery"])
+      && !exactKeys(value, ["facts", "nextQuery", "collaboration"]))
+    || !Array.isArray(value.facts) || value.facts.length > MAX_FACTS || typeof value.nextQuery !== "string") {
+    throw new DraftResponseError("INVALID_HERITAGE_RESPONSE");
+  }
+  const { call, availableSources } = completedNativeSearch(payload);
   const collaboration = parseCollaborationResolution(value.collaboration, { candidate: collaborationCandidate,
     identification, availableSources });
   const facts = [];
@@ -401,7 +406,7 @@ export function parseHeritageSearchResponse(payload, identification, collaborati
   }
   const sources = [...new Set([...(collaboration ? [collaboration.source.url] : []), ...facts.map(fact => fact.sourceUrl)])]
     .map(url => availableSources.get(url));
-  const action = calls[0].action;
+  const action = call.action;
   const query = text(action.query, 400) || (Array.isArray(action.queries) ? action.queries.map(item => text(item, 200)).filter(Boolean).join(" | ").slice(0, 400) : "");
   const candidateQuery = text(value.nextQuery, 300);
   const nextQuery = candidateQuery && containsIdentifier(candidateQuery, identification.brand)

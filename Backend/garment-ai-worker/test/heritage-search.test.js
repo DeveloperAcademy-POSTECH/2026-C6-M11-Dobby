@@ -1,3 +1,4 @@
+import { unmatchedDiscoveryResponse } from "./helpers/native-discovery.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createWorker } from "../src/index.js";
@@ -98,6 +99,9 @@ function workerHarness(responses, options = {}) {
   const calls = [];
   const worker = createWorker({ ...options, fetchImpl: async (url, init) => {
     const outgoing = { url: String(url), init, body: JSON.parse(init.body) };
+    if (outgoing.body.text?.format?.name === "garment_brand_readback") {
+      return Response.json({ status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: JSON.stringify({ brand: null }) }] }] });
+    }
     calls.push(outgoing);
     const next = responses[calls.length - 1];
     assert.notEqual(next, undefined, "unexpected extra upstream request");
@@ -134,7 +138,7 @@ test("confirmed label and product code enable research without changing existing
   assert.deepEqual(parsed.draft, PUBLIC_DRAFT);
 });
 
-test("unconfirmed brands preserve the photo draft and skip paid search", async t => {
+test("unconfirmed brands still perform search while preserving unverified photo fields", async t => {
   const cases = [
     ["no identity", null],
     ["no photographed brand", identification({ evidence: IDENTIFICATION.evidence.slice(1) })],
@@ -147,13 +151,14 @@ test("unconfirmed brands preserve the photo draft and skip paid search", async t
       const parsed = parseIdentificationResponse(baseline(value), PHOTOS);
       assert.equal(parsed.searchable, false);
       assert.deepEqual(parsed.draft, PUBLIC_DRAFT);
-      const h = workerHarness([baseline(value)]);
+      const h = workerHarness([baseline(value), unmatchedDiscoveryResponse()]);
       const response = await h.worker.fetch(photoRequest(), h.env);
       assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), PUBLIC_DRAFT);
-      assert.equal(response.headers.get("X-Dobby-AI-Search-Calls"), "0");
-      assert.equal(response.headers.get("X-Dobby-AI-Research-Status"), "skipped");
-      assert.equal(h.calls.length, 1);
+      assertPhotoOnly(await response.json(), /검색했지만 브랜드/);
+      assert.equal(response.headers.get("X-Dobby-AI-Search-Calls"), "1");
+      assert.equal(response.headers.get("X-Dobby-AI-Search-Attempts"), "1");
+      assert.equal(response.headers.get("X-Dobby-AI-Research-Status"), "no_match");
+      assert.equal(h.calls.length, 2);
     });
   }
 });
@@ -195,17 +200,17 @@ test("confirmed model text can identify a product without a product code", () =>
   assert.equal(parseIdentificationResponse(baseline(value), PHOTOS).searchable, true);
 });
 
-test("an unknown photographed brand never triggers research even when an identity is guessed", async () => {
-  const h = workerHarness([baseline(IDENTIFICATION, { ...DRAFT, brand: null })]);
+test("an unknown photographed brand always searches without accepting an unproven guessed identity", async () => {
+  const h = workerHarness([baseline(IDENTIFICATION, { ...DRAFT, brand: null }), unmatchedDiscoveryResponse()]);
   const response = await h.worker.fetch(photoRequest(), h.env);
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.brand, null);
   assert.equal(result.productName, DRAFT.productNameWithoutBrand);
   assert.equal(result.sources, undefined);
-  assert.equal(response.headers.get("X-Dobby-AI-Search-Calls"), "0");
-  assert.equal(response.headers.get("X-Dobby-AI-Research-Status"), "skipped");
-  assert.equal(h.calls.length, 1);
+  assert.equal(response.headers.get("X-Dobby-AI-Search-Calls"), "1");
+  assert.equal(response.headers.get("X-Dobby-AI-Research-Status"), "no_match");
+  assert.equal(h.calls.length, 2);
 });
 
 test("a search attempt requires one native search and requests source provenance", () => {

@@ -104,14 +104,16 @@ nonisolated enum ProductAutofillError: Error, Equatable, LocalizedError, Sendabl
 actor ProductAutofillClient: ProductAutofillGenerating {
     typealias BearerTokenProvider = @Sendable () async throws -> String?
     typealias AppAuthorizationProvider = @Sendable () async throws -> DobbyAppAuthorization?
-    static let endpoint = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v1/garments/autofill")!
+    static let endpoint = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v1/garments/autofill-labels")!
     private let endpoint: URL
     private let session: URLSession
+    private let diagnosticOrigin: String
     private let authorizationProvider: @Sendable () async throws -> RequestAuthorization?
 
     init(endpoint: URL = ProductAutofillClient.endpoint, session: URLSession = .shared,
-         bearerTokenProvider: @escaping BearerTokenProvider) {
+         diagnosticOrigin: String = "productFlow", bearerTokenProvider: @escaping BearerTokenProvider) {
         self.endpoint = endpoint
+        self.diagnosticOrigin = diagnosticOrigin
         self.session = session
         self.authorizationProvider = {
             guard let token = try await bearerTokenProvider() else { return nil }
@@ -120,8 +122,9 @@ actor ProductAutofillClient: ProductAutofillGenerating {
     }
 
     init(endpoint: URL = ProductAutofillClient.endpoint, session: URLSession = .shared,
-         appAuthorizationProvider: @escaping AppAuthorizationProvider) {
+         diagnosticOrigin: String = "productFlow", appAuthorizationProvider: @escaping AppAuthorizationProvider) {
         self.endpoint = endpoint
+        self.diagnosticOrigin = diagnosticOrigin
         self.session = session
         self.authorizationProvider = {
             guard let authorization = try await appAuthorizationProvider() else { return nil }
@@ -130,7 +133,7 @@ actor ProductAutofillClient: ProductAutofillGenerating {
     }
 
     @MainActor
-    static func makeDefault() -> any ProductAutofillGenerating {
+    static func makeDefault(diagnosticOrigin: String = "productFlow") -> any ProductAutofillGenerating {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
         if let mode = fixtureMode(environment: environment, isFixture: ProductAppStorage.fixtureDirectory != nil) {
@@ -138,18 +141,18 @@ actor ProductAutofillClient: ProductAutofillGenerating {
         }
         #endif
         if let appAPIKey = DobbyInstallationAuth.appAPIKey() {
-            return ProductAutofillClient(appAuthorizationProvider: {
+            return ProductAutofillClient(diagnosticOrigin: diagnosticOrigin, appAuthorizationProvider: {
                 try DobbyInstallationAuth.authorization(appAPIKey: appAPIKey)
             })
         }
         #if DEBUG
         // Compatibility for explicitly provisioned development installs only.
         // A configured common path never falls back or retries a failed AI request.
-        return ProductAutofillClient(bearerTokenProvider: {
+        return ProductAutofillClient(diagnosticOrigin: diagnosticOrigin, bearerTokenProvider: {
             try ProductAutofillDevelopmentAuth.token()
         })
         #else
-        return ProductAutofillClient(appAuthorizationProvider: { nil })
+        return ProductAutofillClient(diagnosticOrigin: diagnosticOrigin, appAuthorizationProvider: { nil })
         #endif
     }
 
@@ -166,7 +169,7 @@ actor ProductAutofillClient: ProductAutofillGenerating {
         return try await withThrowingTaskGroup(of: ProductAutofillDraft.self) { group in
             group.addTask { try await self.performRequest(photos: photos) }
             group.addTask {
-                try await Task.sleep(for: .seconds(60))
+                try await Task.sleep(for: .seconds(105))
                 throw ProductAutofillError.timeout
             }
             defer { group.cancelAll() }
@@ -176,6 +179,8 @@ actor ProductAutofillClient: ProductAutofillGenerating {
     }
 
     private func performRequest(photos: [CapturedAsset]) async throws -> ProductAutofillDraft {
+        let processStarted = Date()
+        var phaseTimes: [String: Double] = [:]
         try Task.checkCancellation()
         guard let authorization = try await authorizationProvider(), !authorization.token.isEmpty,
               authorization.token.count <= 1024, !authorization.token.contains(where: \.isWhitespace) else {
@@ -187,9 +192,30 @@ actor ProductAutofillClient: ProductAutofillGenerating {
                 throw ProductAutofillError.notConfigured
             }
         }
-        let encodedPhotos = try ProductAutofillPhotoEncoder.encode(photos)
+        let usesLabelProcess = endpoint.path == "/v1/garments/autofill-labels"
+        let encodingStarted = Date()
+        let encodedPhotos = try ProductAutofillPhotoEncoder.encode(photos,
+            totalBudget: usesLabelProcess ? 6 * 1024 * 1024 : ProductAutofillPhotoEncoder.maximumTotalBytes)
         try Task.checkCancellation()
-        let body = try JSONEncoder().encode(Request(photos: encodedPhotos))
+        phaseTimes["encodingMs"] = Date().timeIntervalSince(encodingStarted) * 1000
+        var labelCrops: [ProductAutofillLabelReader.Crop]? = nil
+        if usesLabelProcess {
+            let labelStarted = Date()
+            do {
+                let prepared = try await prepareLabelCrops(encodedPhotos, authorization: authorization)
+                labelCrops = prepared.crops
+                phaseTimes["labelDetectionMs"] = prepared.detectionMs
+                phaseTimes["cropOCRMs"] = prepared.ocrMs
+            }
+            catch {
+                if Task.isCancelled || error is CancellationError { throw CancellationError() }
+                // Photo descriptions can still be generated, with an empty brand.
+                labelCrops = []
+            }
+            phaseTimes["labelPreparationMs"] = Date().timeIntervalSince(labelStarted) * 1000
+        }
+        try Task.checkCancellation()
+        let body = try JSONEncoder().encode(Request(photos: encodedPhotos, labelCrops: labelCrops))
         guard body.count <= 12 * 1024 * 1024 else { throw ProductAutofillError.photoTooLarge }
         var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
         request.httpMethod = "POST"
@@ -200,10 +226,30 @@ actor ProductAutofillClient: ProductAutofillGenerating {
         }
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.httpBody = body
+        let finalRequestStarted = Date()
+        #if DEBUG
+        let diagnostic = ProductAutofillDiagnostics.begin(origin: diagnosticOrigin, endpoint: endpoint,
+            encoded: encodedPhotos, assets: photos, labelCrops: labelCrops)
+        var diagnosticOutcome = "interrupted"
+        var diagnosticStatus: Int?
+        var diagnosticDraft: ProductAutofillDraft?
+        var diagnosticSearch: ProductAutofillDiagnostics.SearchActivity?
+        defer {
+            phaseTimes["finalRequestMs"] = Date().timeIntervalSince(finalRequestStarted) * 1000
+            phaseTimes["totalMs"] = Date().timeIntervalSince(processStarted) * 1000
+            ProductAutofillDiagnostics.finish(diagnostic, outcome: diagnosticOutcome, statusCode: diagnosticStatus,
+                draft: diagnosticDraft, search: diagnosticSearch, timings: phaseTimes)
+        }
+        #endif
         do {
             let (data, response) = try await session.data(for: request)
             try Task.checkCancellation()
             guard let response = response as? HTTPURLResponse else { throw ProductAutofillError.invalidResponse }
+            #if DEBUG
+            diagnosticStatus = response.statusCode
+            diagnosticSearch = .read(response)
+            diagnosticOutcome = response.statusCode == 200 ? "invalidResponse" : "httpFailure"
+            #endif
             guard data.count <= 64 * 1024 else { throw ProductAutofillError.invalidResponse }
             guard response.statusCode == 200 else {
                 throw Self.failure(status: response.statusCode, data: data)
@@ -211,6 +257,9 @@ actor ProductAutofillClient: ProductAutofillGenerating {
             guard let draft = try? JSONDecoder().decode(ProductAutofillDraft.self, from: data), draft.isValid else {
                 throw ProductAutofillError.invalidResponse
             }
+            #if DEBUG
+            diagnosticOutcome = "success"; diagnosticDraft = draft
+            #endif
             return draft
         } catch let error as URLError {
             if Task.isCancelled || error.code == .cancelled { throw CancellationError() }
@@ -244,7 +293,31 @@ actor ProductAutofillClient: ProductAutofillGenerating {
         }
     }
 
-    private struct Request: Encodable, Sendable { let photos: [ProductAutofillPhotoEncoder.Photo] }
+    private func prepareLabelCrops(_ photos: [ProductAutofillPhotoEncoder.Photo], authorization: RequestAuthorization) async throws -> (crops: [ProductAutofillLabelReader.Crop], detectionMs: Double, ocrMs: Double) {
+        let detectionStarted = Date()
+        let url = endpoint.deletingLastPathComponent().appendingPathComponent("brand-label-regions")
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer " + authorization.token, forHTTPHeaderField: "Authorization")
+        if let key = authorization.appAPIKey { request.setValue(key, forHTTPHeaderField: "X-Dobby-App-Key") }
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.httpBody = try JSONEncoder().encode(Request(photos: photos, labelCrops: nil))
+        let (data, response) = try await session.data(for: request)
+        try Task.checkCancellation()
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200,
+              data.count <= 64 * 1024 else { throw ProductAutofillError.invalidResponse }
+        let regions = try JSONDecoder().decode(ProductAutofillLabelReader.Regions.self, from: data)
+        let detectionMs = Date().timeIntervalSince(detectionStarted) * 1000
+        let ocrStarted = Date()
+        let crops = try await ProductAutofillLabelReader.prepare(photos: photos, regions: regions.regions)
+        return (crops, detectionMs, Date().timeIntervalSince(ocrStarted) * 1000)
+    }
+
+    private struct Request: Encodable, Sendable {
+        let photos: [ProductAutofillPhotoEncoder.Photo]
+        let labelCrops: [ProductAutofillLabelReader.Crop]?
+    }
     private struct RequestAuthorization: Sendable { let token: String; let appAPIKey: String? }
     private struct FailureEnvelope: Decodable { let error: FailureCode }
     private struct FailureCode: Decodable { let code: String }

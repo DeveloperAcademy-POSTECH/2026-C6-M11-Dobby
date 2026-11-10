@@ -6,6 +6,47 @@ import XCTest
 
 @MainActor
 final class ProductAutofillClientTests: XCTestCase {
+    func testLabelProcessUsesSameAuthorizationAndContinuesWithEmptyBrandEvidenceWhenNoRegionExists() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = URL(string: "https://autofill-test.invalid/v1/garments/autofill-labels")!
+        let locationURL = endpoint.deletingLastPathComponent().appendingPathComponent("brand-label-regions")
+        let location = AutofillHTTPStub(status: 200, body: Data("{\"regions\":[]}".utf8), endpoint: locationURL)
+        let draft = ProductAutofillDraft(productName: "테스트 상의", brand: nil, description: "- 긴소매 상의", reviewNotes: [])
+        let final = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft), endpoint: endpoint)
+        defer { location.remove(); final.remove() }
+        let client = ProductAutofillClient(endpoint: endpoint, session: final.session, bearerTokenProvider: { "fixture-token" })
+        let result = try await client.generate(photos: makePhotos(count: 1, directory: directory))
+        XCTAssertEqual(result, draft)
+        XCTAssertEqual(location.requestCount, 1)
+        XCTAssertEqual(final.requestCount, 1)
+        XCTAssertEqual(location.request?.value(forHTTPHeaderField: "Authorization"), "Bearer fixture-token")
+        let body = try XCTUnwrap(final.request?.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual((json["labelCrops"] as? [Any])?.count, 0)
+    }
+
+    func testBrandDecisionAndOverlappingServerStageTimesAreRecordedFromAllowlistedHeaders() throws {
+        let url = URL(string: "https://autofill-test.invalid/diagnostic")!
+        let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
+            "X-Dobby-AI-Identification-Ms": "8000", "X-Dobby-AI-Label-Read-Ms": "6000",
+            "X-Dobby-AI-Search-Ms": "9000", "X-Dobby-AI-Server-Ms": "17500",
+            "X-Dobby-AI-Brand-Status": "unverified", "X-Dobby-AI-Brand-Reason": "ocr_mismatch",
+        ]))
+        let activity = try XCTUnwrap(ProductAutofillDiagnostics.SearchActivity.read(response))
+        XCTAssertEqual(activity.serverTimings?["Label-Read"], 6000)
+        XCTAssertEqual(activity.serverTimings?["Server"], 17500)
+        XCTAssertEqual(activity.brandStatus, "unverified")
+        XCTAssertEqual(activity.brandReason, "ocr_mismatch")
+        let malformed = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
+            "X-Dobby-AI-Search-Calls": "1", "X-Dobby-AI-Label-Read-Ms": "nan",
+            "X-Dobby-AI-Brand-Status": "unverified", "X-Dobby-AI-Brand-Reason": "arbitrary upstream message",
+        ]))
+        let filtered = try XCTUnwrap(ProductAutofillDiagnostics.SearchActivity.read(malformed))
+        XCTAssertNil(filtered.serverTimings)
+        XCTAssertNil(filtered.brandReason)
+    }
+
     func testMissingAuthorizationStopsBeforeReadingPhotosOrSendingRequest() async throws {
         let stub = AutofillHTTPStub(status: 200, body: Data())
         defer { stub.remove() }
@@ -280,6 +321,46 @@ final class ProductAutofillClientTests: XCTestCase {
         XCTAssertThrowsError(try ProductAutofillPhotoEncoder.encode([missing]))
     }
 
+    func testDebugDiagnosticMatchesUploadedBytesAndPreservesReturnedBrand() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let photos = try makePhotos(count: 2, directory: directory)
+        let draft = ProductAutofillDraft(productName: "브랜드 응답 진단", brand: nil,
+            description: "라벨 확인용 설명입니다.", reviewNotes: ["브랜드 미확인"])
+        let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft), headers: [
+            "X-Dobby-AI-Search-Calls": "0", "X-Dobby-AI-Search-Attempts": "0", "X-Dobby-AI-Research-Status": "skipped"
+        ])
+        defer { stub.remove() }
+        let client = ProductAutofillClient(endpoint: stub.endpoint, session: stub.session,
+            diagnosticOrigin: "imageTest", bearerTokenProvider: { "diagnostic-test-secret-never-record" })
+        let actual = try await client.generate(photos: photos)
+        XCTAssertEqual(actual, draft)
+        let entry = try XCTUnwrap(ProductAutofillDiagnostics.latest().first { $0.record.origin == "imageTest" })
+        defer { try? FileManager.default.removeItem(at: entry.directory) }
+        XCTAssertEqual(entry.record.draft, draft)
+        XCTAssertEqual(entry.record.statusCode, 200)
+        XCTAssertEqual(entry.record.outcome, "success")
+        XCTAssertEqual(entry.record.search?.attempts, 0)
+        XCTAssertEqual(entry.record.search?.completedCalls, 0)
+        XCTAssertEqual(entry.record.search?.status, "skipped")
+        let missingHeaders = try XCTUnwrap(HTTPURLResponse(url: stub.endpoint, statusCode: 200, httpVersion: nil, headerFields: [:]))
+        XCTAssertNil(ProductAutofillDiagnostics.SearchActivity.read(missingHeaders))
+        XCTAssertEqual(entry.record.photos.map(\.id), photos.map { $0.id.uuidString })
+        let request = try XCTUnwrap(stub.request)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+        let sent = try XCTUnwrap(object["photos"] as? [[String: String]])
+        for (index, photo) in entry.record.photos.enumerated() {
+            let encoded = try XCTUnwrap(sent[index]["imageDataUrl"]?.split(separator: ",").last)
+            let expected = try XCTUnwrap(Data(base64Encoded: String(encoded)))
+            XCTAssertEqual(try Data(contentsOf: entry.directory.appending(path: photo.filename)), expected)
+            XCTAssertEqual(photo.bytes, expected.count)
+            XCTAssertEqual(photo.sha256.count, 64)
+        }
+        let manifest = try String(contentsOf: entry.directory.appending(path: "manifest.json"), encoding: .utf8)
+        XCTAssertFalse(manifest.contains("diagnostic-test-secret-never-record"))
+        XCTAssertFalse(manifest.contains("Authorization"))
+    }
+
     private func makeDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -339,7 +420,7 @@ final class ProductAutofillClientTests: XCTestCase {
 }
 
 private nonisolated final class AutofillHTTPStub: @unchecked Sendable {
-    let endpoint = URL(string: "https://autofill-test.invalid/" + UUID().uuidString)!
+    let endpoint: URL
     let status: Int
     let body: Data
     let headers: [String: String]
@@ -352,7 +433,8 @@ private nonisolated final class AutofillHTTPStub: @unchecked Sendable {
         configuration.protocolClasses = [AutofillURLProtocol.self]
         return URLSession(configuration: configuration)
     }
-    init(status: Int, body: Data, headers: [String: String] = [:]) {
+    init(status: Int, body: Data, headers: [String: String] = [:], endpoint: URL? = nil) {
+        self.endpoint = endpoint ?? URL(string: "https://autofill-test.invalid/" + UUID().uuidString)!
         self.status = status
         self.body = body
         self.headers = headers

@@ -8,8 +8,8 @@ final class ProductAutofillSession {
     private var requestID: UUID?
     private let generator: any ProductAutofillGenerating
 
-    init(generator: (any ProductAutofillGenerating)? = nil) {
-        self.generator = generator ?? ProductAutofillClient.makeDefault()
+    init(generator: (any ProductAutofillGenerating)? = nil, diagnosticOrigin: String = "productFlow") {
+        self.generator = generator ?? ProductAutofillClient.makeDefault(diagnosticOrigin: diagnosticOrigin)
     }
 
     func generate(photos: [CapturedAsset]) async throws -> ProductAutofillDraft {
