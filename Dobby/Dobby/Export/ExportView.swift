@@ -24,13 +24,10 @@ struct ExportView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    ExportProductItem(product: product)
-                    ExportChannelListView(completedChannels: completedChannels,
-                                          onSelectChannel: didSelectChannel)
-                }.padding(.horizontal, 33).padding(.bottom, 32)
+                ExportContentView(product: product, completedChannels: completedChannels,
+                                  onSelectChannel: didSelectChannel)
             }
-            .background(Color(.brandNeutral50))
+            .background(Color(.brandNeutralWhite))
             .navigationTitle("플랫폼 업로드하기")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -116,6 +113,24 @@ struct ExportView: View {
             selectionSaveError = "플랫폼 선택 기록을 저장하지 못했어요. 잠시 후 다시 시도해 주세요."
             return false
         }
+    }
+}
+
+private struct ExportContentView: View {
+    let product: ExportProduct
+    let completedChannels: Set<ExportChannel>
+    let onSelectChannel: (ExportChannel) -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            ExportProductItem(product: product)
+            ExportChannelListView(completedChannels: completedChannels,
+                                  onSelectChannel: onSelectChannel)
+        }
+        .frame(maxWidth: 337)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 32)
+        .frame(maxWidth: .infinity)
     }
 }
 
