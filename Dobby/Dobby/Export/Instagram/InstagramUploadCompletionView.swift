@@ -37,18 +37,17 @@ struct InstagramUploadCompletionView: View {
             Spacer()
                 .frame(height: 242)
 
-            PairedActionButtons(
+            ChakVerticalActionButtons(
                 secondary: .init(
                     title: "보관함으로 가기",
                     accessibilityIdentifier: "export.instagram.library",
-                    handler: onOpenLibrary
+                    action: onOpenLibrary
                 ),
                 primary: .init(
                     title: "인스타그램 열기",
                     accessibilityIdentifier: "export.instagram.open",
-                    handler: onOpenInstagram
-                ),
-                minimumHeight: 62
+                    action: onOpenInstagram
+                )
             )
             .padding(.horizontal, Layout.buttonBarHorizontalPadding)
             .padding(.top, Layout.buttonBarTopPadding)

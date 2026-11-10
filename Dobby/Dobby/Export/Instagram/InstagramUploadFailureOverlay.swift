@@ -55,9 +55,9 @@ private struct InstagramUploadFailureActions: View {
     let onRetry: () -> Void
 
     var body: some View {
-        PairedActionButtons(
-            secondary: .init(title: "취소하기", handler: onCancel),
-            primary: .init(title: "다시 업로드하기", handler: onRetry)
+        ChakHorizontalActionButtons(
+            secondary: .init(title: "취소하기", action: onCancel),
+            primary: .init(title: "다시 업로드하기", action: onRetry)
         )
     }
 }
