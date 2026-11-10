@@ -37,7 +37,7 @@ struct ChakVerticalActionButtons: View {
     let primary: ChakButtonAction
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             ChakActionButton(
                 configuration: secondary,
                 fontName: "Pretendard-SemiBold",
