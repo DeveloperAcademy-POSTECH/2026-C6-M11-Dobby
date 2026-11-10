@@ -60,7 +60,7 @@ struct InstagramExportView: View {
                 )
             }
         }
-        .navigationTitle("인스타그램으로 내보내기")
+        .navigationTitle("인스타그램에 업로드하기")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
         .toolbar(uploadState.isCompleted ? .hidden : .visible, for: .navigationBar)
