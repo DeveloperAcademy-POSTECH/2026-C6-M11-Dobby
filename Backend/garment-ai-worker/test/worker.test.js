@@ -1,3 +1,4 @@
+import { unmatchedDiscoveryResponse } from "./helpers/native-discovery.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createWorker } from "../src/index.js";
@@ -41,7 +42,7 @@ function upstream(draft = DRAFT, overrides = {}) {
     status: "completed",
     output: [{
       type: "message", role: "assistant",
-      content: [{ type: "output_text", text: JSON.stringify(draft) }],
+      content: [{ type: "output_text", text: JSON.stringify({ ...draft, identification: null }) }],
     }],
     ...overrides,
   };
@@ -52,7 +53,8 @@ function harness(response = upstream(), status = 200) {
   const worker = createWorker({
     fetchImpl: async (url, init) => {
       calls.push({ url: String(url), init });
-      return Response.json(response, { status });
+      return Response.json(status === 200 && JSON.parse(init.body).text?.format?.name === "garment_brand_discovery"
+        ? unmatchedDiscoveryResponse() : response, { status });
     },
   });
   return { worker, calls };
@@ -130,7 +132,7 @@ test("a valid photo produces a draft using fixed server-owned OpenAI settings", 
   assert.equal(text.includes(TEST_KEY), false);
   assert.equal(text.includes(TEST_TOKEN), false);
   assert.equal(text.includes(PNG), false);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].url, "https://api.openai.com/v1/responses");
   assert.equal(calls[0].init.method, "POST");
   const headers = new Headers(calls[0].init.headers);
@@ -153,7 +155,7 @@ test("an omitted photo role is accepted as detail", async () => {
   const { role, ...withoutRole } = photo();
   const response = await worker.fetch(request(body([withoutRole])), ENV);
   assert.equal(response.status, 200);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("description paragraphs survive the API response while other fields stay on one line", async () => {
@@ -185,11 +187,26 @@ test("description formatting removes excess spacing without losing paragraph bou
   assert.equal(data.description, "블랙 바탕에 레드 배색이 보입니다.\n\n소매에 작은 자국이 보입니다.");
 });
 
-test("paragraph descriptions retain empty, length, and control-character validation", async (t) => {
+test("short feature-list descriptions keep each hyphen entry on its own line", async () => {
+  const { worker } = harness(upstream({
+    ...DRAFT,
+    description: "\r\n  - 블랙\t 바탕  \r\n  배색 집업 디자인\r\n - 곡선형 레드  배색\r\n\r\n - 왼쪽  소매 작은 자국\r\n",
+  }));
+  const response = await worker.fetch(request(), ENV);
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.description, "- 블랙 바탕 배색 집업 디자인\n- 곡선형 레드 배색\n- 왼쪽 소매 작은 자국");
+  assert.equal(data.productName, "나이키 블랙·레드 배색 집업 재킷");
+  assert.equal(data.brand, "NIKE (나이키)");
+});
+
+test("paragraph and feature-list descriptions retain empty, length, and control-character validation", async (t) => {
   for (const [name, description] of [
     ["blank paragraphs", " \r\n\r\n\t "],
     ["too long", `${"가".repeat(600)}\n\n${"나".repeat(600)}`],
     ["control character", "제품 특징입니다.\n\n확인\u0000필요합니다."],
+    ["too long feature list", `- ${"가".repeat(600)}\n- ${"나".repeat(600)}`],
+    ["feature list control character", "- 제품 특징\n- 확인\u0000필요"],
   ]) {
     await t.test(name, async () => {
       const { worker } = harness(upstream({ ...DRAFT, description }));
@@ -324,7 +341,7 @@ test("photos at the decoded per-photo and combined limit are accepted", async ()
     id: `limit-${i}`, imageDataUrl: dataUrl,
   })))), ENV);
   assert.equal(response.status, 200);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("a decoded photo exceeding its limit is rejected before OpenAI", async () => {

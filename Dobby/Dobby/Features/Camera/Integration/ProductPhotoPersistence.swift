@@ -31,8 +31,9 @@ enum ProductPhotoHandoff {
         try Task.checkCancellation()
         try validate(output, input: input, garment: garment, photosDirectory: photosDirectory)
         if includesAllCapturedPhotos {
-            guard output.selectedPhotos == input.measurementPhotos + output.detailPhotos,
-                  output.representativePhotoID == input.measurement.id else {
+            let remaining = (input.measurementPhotos + output.detailPhotos).filter { !output.deletedPhotoIDs.contains($0.id) }
+            guard output.selectedPhotos == remaining,
+                  output.representativePhotoID == remaining.first?.id else {
                 throw HandoffError.invalidOutput
             }
         }
@@ -80,6 +81,14 @@ enum ProductPhotoHandoff {
                 let retained = garment.orderedPhotos.filter { !selectedIDs.contains($0.id) }
                 GarmentStore.reorder(selected + retained, in: garment)
             }
+            // 입력 화면에서 이미 정한 순서는 유지하되, 촬영 갤러리에서 삭제한 사진은 되살리지 않는다.
+            for photo in garment.photos where output.deletedPhotoIDs.contains(photo.id) {
+                photo.isSelectedForProduct = false
+                photo.role = .detail
+            }
+            if !garment.productPhotos.contains(where: { $0.role == .thumbnail }) {
+                garment.productPhotos.first?.role = .thumbnail
+            }
             if includesAllCapturedPhotos { garment.capturePhotosAppliedAt = previousAppliedAt ?? .now }
             try persist(context)
         } catch {
@@ -106,6 +115,8 @@ enum ProductPhotoHandoff {
               measurement.measurementSessionID == nil || measurement.measurementSessionID == input.sessionID,
               case let .localFile(measurementURL, _) = input.measurement.source,
               measurementURL.standardizedFileURL == photosDirectory.appending(path: measurement.fileName).standardizedFileURL,
+              output.deletedPhotoIDs.isDisjoint(with: output.selectedPhotos.map(\.id)),
+              output.deletedPhotoIDs.isDisjoint(with: output.detailPhotos.map(\.id)),
               !output.selectedPhotos.isEmpty,
               Set(output.selectedPhotos.map(\.id)).count == output.selectedPhotos.count,
               Set(output.detailPhotos.map(\.id)).count == output.detailPhotos.count,

@@ -36,7 +36,7 @@ struct ProductPhotoDeletionTests {
         #expect(try Data(contentsOf: seedURL) == data)
     }
 
-    @Test func deletionProtectsMeasurementAndPreservesRemainingOrder() async throws {
+    @Test func detailOnlyDeletionRejectsMeasurementAndPreservesRemainingOrder() async throws {
         let (model, provider) = try fixture()
         for _ in 0..<3 { try await model.captureDetail() }
         let ids = model.detailPhotos.map(\.id)
@@ -67,13 +67,15 @@ struct ProductPhotoDeletionTests {
         model.toggleSelection(id)
         let before = model.photos
         provider.shouldFail = true
-        await #expect(throws: CameraFailure.saveFailed) { try await model.deleteDetail(id) }
+        await #expect(throws: CameraFailure.saveFailed) { try await model.deletePhoto(id) }
         #expect(model.photos == before)
+        #expect(model.allPhotosOutput?.selectedPhotos.map(\.id) == before.map(\.id))
+        #expect(model.allPhotosOutput?.deletedPhotoIDs.isEmpty == true)
         #expect(model.selectedPhotoIDs == [id])
         #expect(model.output?.representativePhotoID == id)
         #expect(!model.isDeleting)
         provider.shouldFail = false
-        try await model.deleteDetail(id)
+        try await model.deletePhoto(id)
         #expect(model.detailPhotos.isEmpty && model.selectedPhotoIDs.isEmpty)
     }
 
@@ -83,11 +85,11 @@ struct ProductPhotoDeletionTests {
         let id = try #require(model.detailPhotos.first?.id)
         model.toggleSelection(id)
         provider.suspend = true
-        let deletion = Task { try await model.deleteDetail(id) }
+        let deletion = Task { try await model.deletePhoto(id) }
         await provider.waitUntilStarted()
-        #expect(model.isDeleting && model.output == nil)
+        #expect(model.isDeleting && model.output == nil && model.allPhotosOutput == nil)
         #expect(model.detailPhotos.count == 1)
-        await #expect(throws: CameraFailure.operationInProgress) { try await model.deleteDetail(id) }
+        await #expect(throws: CameraFailure.operationInProgress) { try await model.deletePhoto(id) }
         await #expect(throws: CameraFailure.operationInProgress) { try await model.captureDetail() }
         model.toggleSelection(id)
         #expect(model.selectedPhotoIDs == [id])
@@ -100,6 +102,48 @@ struct ProductPhotoDeletionTests {
         #expect(provider.discarded == [id])
         #expect(model.photos == [model.input.measurement])
         #expect(model.selectedPhotoIDs.isEmpty && !model.isDeleting)
+    }
+
+    @Test func allPhotoKindsCanBeDeletedAndEmptyDraftRestoresWithoutResurrection() async throws {
+        let (seed, provider) = try fixture()
+        var input = seed.input
+        let visual = CapturedAsset(id: UUID(), sessionID: input.sessionID, garmentID: input.garmentID,
+            purpose: .measurementVisualization, capturedAt: .now,
+            source: .localFile(URL(fileURLWithPath: "/tmp/measurement-visual.png"), metadata: .init(
+                pixelWidth: 10, pixelHeight: 10, contentType: "public.png", orientation: .up)))
+        input.measurementVisualization = visual
+        let model = try ProductPhotoModel(input: input, captureProvider: provider)
+        try await model.captureDetail()
+        let detail = try #require(model.detailPhotos.first)
+        try await model.deletePhoto(input.measurement.id)
+        #expect(model.allPhotosOutput?.selectedPhotos.map(\.id) == [visual.id, detail.id])
+        #expect(model.allPhotosOutput?.representativePhotoID == visual.id)
+        try await model.deletePhoto(visual.id)
+        #expect(model.allPhotosOutput?.representativePhotoID == detail.id)
+        #expect(provider.discarded.isEmpty) // 실측 보정용 원자료는 촬영 provider가 삭제하지 않는다.
+        try await model.deletePhoto(detail.id)
+        #expect(model.allPhotosOutput == nil)
+        #expect(model.selectablePhotos.isEmpty)
+        let snapshot = try model.makeDraftSnapshot()
+        let restored = try JSONDecoder().decode(ProductPhotoDraftSnapshot.self,
+            from: JSONEncoder().encode(snapshot))
+        let resumed = try ProductPhotoModel(input: input, captureProvider: provider,
+            initialDetailPhotos: restored.restoredDetailPhotos(for: input),
+            initialSelectedPhotoIDs: restored.selectedPhotoIDs,
+            initialDeletedPhotoIDs: restored.deletedPhotoIDs ?? [])
+        #expect(resumed.selectablePhotos.isEmpty)
+        #expect(resumed.allPhotosOutput == nil)
+        try await resumed.captureDetail()
+        #expect(resumed.allPhotosOutput?.selectedPhotos.count == 1)
+        #expect(resumed.allPhotosOutput?.deletedPhotoIDs == [input.measurement.id, visual.id, detail.id])
+        await #expect(throws: CameraFailure.missingCapture) { try await resumed.deletePhoto(visual.id) }
+
+        // 기존 초안에는 삭제 필드가 없어도 디코딩된다.
+        var legacy = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as? [String: Any])
+        legacy.removeValue(forKey: "deletedPhotoIDs")
+        let old = try JSONDecoder().decode(ProductPhotoDraftSnapshot.self,
+            from: JSONSerialization.data(withJSONObject: legacy))
+        #expect(old.deletedPhotoIDs == nil)
     }
 
     private func fixture() throws -> (ProductPhotoModel, DeleteProvider) {
