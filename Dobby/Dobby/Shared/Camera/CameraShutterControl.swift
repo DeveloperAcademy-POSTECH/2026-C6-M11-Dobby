@@ -19,16 +19,10 @@ struct CameraShutterControl: View {
             action()
         } label: {
             ZStack {
-                Image("MeasurementShutterIdle")
+                // Render exactly one asset: layering their translucent outlines
+                // would brighten the ring when the shutter becomes ready.
+                Image(isReady ? "MeasurementShutterReady" : "MeasurementShutterIdle")
                     .resizable().scaledToFit().frame(width: 98, height: 98)
-                    .accessibilityHidden(true)
-                // Both Figma assets share the same ring. Crossfade the complete
-                // asset so the new outline stays intact in either readiness state.
-                Image("MeasurementShutterReady")
-                    .resizable().scaledToFit().frame(width: 98, height: 98)
-                    .opacity(isReady ? 1 : 0)
-                    .animation(usesReducedMotion || !isReady ? nil
-                        : .easeInOut(duration: 0.20), value: isReady)
                     .accessibilityHidden(true)
                 if isCapturing { ProgressView().tint(.white).transition(.opacity) }
             }.frame(width: 98, height: 98)

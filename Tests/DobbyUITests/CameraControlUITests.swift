@@ -13,6 +13,9 @@ final class CameraControlUITests: XCTestCase {
         XCTAssertFalse(focus.exists)
         assertRecognitionGate(in: app, ready: false)
         assertOnlyCompactZoomIsPersistent(app)
+        let idleShutterFrame = shutter.frame
+        XCTAssertEqual(idleShutterFrame.width, 98, accuracy: 1)
+        XCTAssertEqual(idleShutterFrame.height, 98, accuracy: 1)
 
         for site in [CGVector(dx: 0.25, dy: 0.35), CGVector(dx: 0.72, dy: 0.65), CGVector(dx: 0.72, dy: 0.65)] {
             viewport.coordinate(withNormalizedOffset: site).tap()
@@ -35,8 +38,17 @@ final class CameraControlUITests: XCTestCase {
                 && abs(focus.frame.midY - (viewport.frame.minY + viewport.frame.height * 0.3)) <= 2
         }
         attachScreenshot(name: "synthetic-camera-immediate-focus-exposure")
+        let ringPoint = CGPoint(x: shutter.frame.midX, y: shutter.frame.minY + 1.5)
+        let idleRing = try pixel(at: ringPoint, in: XCUIScreen.main.screenshot())
         app.buttons["previewRecognizeGarment"].tap()
         assertRecognitionGate(in: app, ready: true)
+        XCTAssertEqual(shutter.frame, idleShutterFrame)
+        let readyRing = try pixel(at: ringPoint, in: XCUIScreen.main.screenshot())
+        for (idle, ready) in zip(idleRing, readyRing) {
+            XCTAssertLessThanOrEqual(abs(Int(idle) - Int(ready)), 4,
+                "Readiness must not double-composite the translucent outer ring.")
+        }
+        attachScreenshot(name: "camera-shutter-ready-98pt")
         shutter.tap()
         let retake = app.buttons["retakeGarmentMeasurement"]
         XCTAssertTrue(retake.waitForExistence(timeout: 10))
@@ -45,6 +57,22 @@ final class CameraControlUITests: XCTestCase {
         assertRecognitionGate(in: app, ready: false)
         XCTAssertFalse(focus.exists)
         assertOnlyCompactZoomIsPersistent(app)
+    }
+
+    private func pixel(at point: CGPoint, in screenshot: XCUIScreenshot) throws -> [UInt8] {
+        let image = screenshot.image
+        let source = try XCTUnwrap(image.cgImage)
+        let crop = CGRect(x: floor(point.x * image.scale), y: floor(point.y * image.scale),
+                          width: 1, height: 1)
+        let sample = try XCTUnwrap(source.cropping(to: crop))
+        var bytes = [UInt8](repeating: 0, count: 4)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: 1, height: 1,
+                bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(sample, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        return bytes
     }
 
     @MainActor

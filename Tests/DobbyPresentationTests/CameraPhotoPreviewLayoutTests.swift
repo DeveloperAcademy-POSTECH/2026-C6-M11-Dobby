@@ -4,6 +4,45 @@ import XCTest
 @testable import Dobby
 
 final class CameraPhotoPreviewLayoutTests: XCTestCase {
+    func testUpdatedShutterFitsSafeAreaAndDoesNotOverlapOtherControls() throws {
+        for size in [CGSize(width: 320, height: 568), CGSize(width: 375, height: 667),
+                     CGSize(width: 402, height: 874), CGSize(width: 440, height: 956),
+                     CGSize(width: 874, height: 402)] {
+            for inset in [CGFloat(0), 34] {
+                for ratio in DetailPhotoAspectRatio.allCases {
+                    let layout = DetailCameraPreviewLayout(containerSize: size,
+                        aspectRatio: ratio, prefersBottomAlignedPortrait: true)
+                    let controls = try XCTUnwrap(layout.controls(in: size, bottomSafeAreaInset: inset))
+                    let frames = [controls.shutter, controls.more, controls.accessory].map {
+                        CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
+                    }
+                    XCTAssertEqual(frames[0].size, CGSize(width: 98, height: 98))
+                    XCTAssertEqual(frames[1].size, CGSize(width: 48, height: 48))
+                    XCTAssertEqual(frames[2].size, CGSize(width: 48, height: 48))
+                    let safeBounds = CGRect(x: 0, y: 0, width: size.width, height: size.height - inset)
+                    for frame in frames { XCTAssertTrue(safeBounds.contains(frame)) }
+                    for i in frames.indices {
+                        for j in frames.indices where j > i {
+                            XCTAssertFalse(frames[i].intersects(frames[j]))
+                        }
+                    }
+                    let photo = layout.photoFrame
+                    let chrome = try XCTUnwrap(MeasurementCameraChromeLayout.layout(
+                        containerWidth: size.width, containerHeight: size.height,
+                        photo: .init(x: photo.minX, y: photo.minY, width: photo.width, height: photo.height),
+                        shutter: controls.shutter))
+                    let zoom = chrome.zoomFrame
+                    let zoomRect = CGRect(x: zoom.x, y: zoom.y, width: zoom.width, height: zoom.height)
+                    for frame in frames { XCTAssertFalse(zoomRect.intersects(frame)) }
+                    if size.width <= size.height {
+                        XCTAssertEqual(frames[0].midY, frames[1].midY, accuracy: 0.001)
+                        XCTAssertEqual(frames[0].midY, frames[2].midY, accuracy: 0.001)
+                    }
+                }
+            }
+        }
+    }
+
     func testMeasurementSourceCropAndDetailSharePhotoAndControlPlacement() throws {
         for size in [CGSize(width: 375, height: 667), CGSize(width: 390, height: 844),
                      CGSize(width: 402, height: 874), CGSize(width: 440, height: 956),
