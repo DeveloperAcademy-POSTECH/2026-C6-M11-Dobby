@@ -36,6 +36,7 @@ nonisolated struct CameraPhotoPreviewLayout {
             photo: .init(x: photoFrame.minX, y: photoFrame.minY,
                          width: photoFrame.width, height: photoFrame.height),
             bottomSafeAreaInset: Double(bottomSafeAreaInset),
+            diameter: 98, // Matches the shared shutter's Figma asset and touch surface.
             edgeClearance: isBottomAligned ? 32 : 16)
     }
 }
