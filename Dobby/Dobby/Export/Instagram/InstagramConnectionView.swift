@@ -106,8 +106,3 @@ private struct InstagramConnectionActions: View {
 #Preview("계정 연결 중") {
     InstagramConnectionView(isLoading: true, errorMessage: nil, onConnect: {})
 }
-
-#Preview("좁은 화면") {
-    InstagramConnectionView(isLoading: false, errorMessage: nil, onConnect: {})
-        .frame(width: 320, height: 568)
-}
