@@ -331,3 +331,21 @@ struct ExportLoadingOverlay: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+#Preview("계정 메뉴 · 버튼을 눌러 열기") {
+    NavigationStack {
+        Color(.brandNeutralWhite)
+            .navigationTitle("인스타그램에 업로드하기")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ExportAccountMenu(
+                        accessibilityLabel: "Instagram 계정 메뉴",
+                        onReconnect: {},
+                        onDisconnect: {}
+                    )
+                    .buttonBorderShape(.capsule)
+                }
+            }
+    }
+}
