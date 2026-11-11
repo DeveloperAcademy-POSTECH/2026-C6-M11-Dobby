@@ -105,9 +105,8 @@ struct InstagramExportView: View {
                 ) {
                     Task { await publish() }
                 }
-                .padding(.horizontal, ExportScreenStyle.horizontalPadding)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
+                .padding(.horizontal, 33)
+                .padding(.top, 16)
                 .background(Color(.brandNeutralWhite))
             }
         }
