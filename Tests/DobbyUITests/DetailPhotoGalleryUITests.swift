@@ -132,15 +132,32 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         assertFocused(app, index: 3, total: 4)
         let before = XCTAttachment(screenshot: app.screenshot())
         before.name = "gallery-trash-layout"; before.lifetime = .keepAlways; add(before)
+        let trashFrame = app.buttons["camera.galleryDelete"].frame
         app.buttons["camera.galleryDelete"].tap()
         let delete = app.buttons["camera.galleryConfirmDelete"]
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        // 유리 배경은 접근성 프레임에 포함되지 않으므로 버튼과 내부 여백 14pt로 검증한다.
+        XCTAssertEqual(delete.frame.width + 28, 300, accuracy: 1)
+        XCTAssertEqual(app.frame.maxX - delete.frame.maxX - 14, 20, accuracy: 1)
+        let gapAboveTrash = trashFrame.minY - delete.frame.maxY - 14
+        // 시스템 글라스 버튼의 접근성 경계는 보이는 원보다 작을 수 있다.
+        XCTAssertGreaterThanOrEqual(gapAboveTrash, 0, "확인창과 휴지통이 겹치면 안 된다")
+        XCTAssertLessThanOrEqual(gapAboveTrash, 32, "확인창은 하단 조작 영역 바로 위에 있어야 한다")
+        // 확인창 내부의 설명을 탭해도 취소나 삭제가 발생하지 않는다.
+        app.staticTexts["삭제된 사진은 복구할 수 없어요"].tap()
+        XCTAssertTrue(delete.exists)
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = "gallery-delete-confirmation"; shot.lifetime = .keepAlways; add(shot)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
         XCTAssertTrue(delete.wait(for: \.exists, toEqual: false, timeout: 5))
         assertFocused(app, index: 3, total: 4)
         XCTAssertTrue(app.buttons["camera.galleryDelete"].isHittable)
+        // 하단 버튼 영역도 확인창 외부다. 취소만 하고 사진은 유지한다.
+        app.buttons["camera.galleryDelete"].tap()
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: trashFrame.midX, dy: trashFrame.midY)).tap()
+        XCTAssertTrue(delete.wait(for: \.exists, toEqual: false, timeout: 5))
+        assertFocused(app, index: 3, total: 4)
         app.buttons["camera.galleryDelete"].tap(); delete.tap()
         assertFocused(app, index: 2, total: 3)
         app.buttons["camera.galleryThumbnail.0"].tap()
