@@ -57,6 +57,7 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
         var isActive = true
         private var parent: ProductPhotoReorderStrip
         private var photos: [GarmentPhoto]
+        private var photoURLs: [UUID: URL]
         private var isEnabled = true
         private let feedback = UIImpactFeedbackGenerator(style: .light)
         private var activeDragID: UUID?
@@ -65,16 +66,19 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
         init(parent: ProductPhotoReorderStrip) {
             self.parent = parent
             self.photos = parent.photos
+            self.photoURLs = Dictionary(uniqueKeysWithValues: parent.photos.map { ($0.id, GarmentStore.url(for: $0)) })
         }
 
         fileprivate func update(parent: ProductPhotoReorderStrip, isEnabled: Bool) {
             self.parent = parent
             self.isEnabled = isEnabled
-            if photos.map(\.id) != parent.photos.map(\.id) {
+            let updatedURLs = Dictionary(uniqueKeysWithValues: parent.photos.map { ($0.id, GarmentStore.url(for: $0)) })
+            if photos.map(\.id) != parent.photos.map(\.id) || photoURLs != updatedURLs {
                 activeDragID = nil
                 photos = parent.photos
                 let ids = Set(photos.map(\.id))
-                dragImages = dragImages.filter { ids.contains($0.key) }
+                dragImages = dragImages.filter { ids.contains($0.key) && photoURLs[$0.key] == updatedURLs[$0.key] }
+                photoURLs = updatedURLs
                 collectionView?.reloadData()
             }
             if !isEnabled { activeDragID = nil }
@@ -91,6 +95,7 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
             Task { @MainActor [weak self] in
                 let decoded = await ProductThumbnailLoader.shared.image(for: request)
                 guard let self, self.isActive, self.photos.contains(where: { $0.id == id }),
+                      self.photoURLs[id] == request.url,
                       let decoded else { return }
                 self.dragImages[id] = UIImage(cgImage: decoded.image)
             }
