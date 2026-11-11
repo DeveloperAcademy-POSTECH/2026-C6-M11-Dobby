@@ -44,6 +44,7 @@ struct ProductAutofillInputSnapshot: Equatable {
     let brand: String
     let detail: String
     let aiSourcesData: Data?
+    let aiInformationGeneratedAt: Date?
 
     init(garment: Garment) {
         garmentID = garment.id
@@ -51,6 +52,7 @@ struct ProductAutofillInputSnapshot: Equatable {
         brand = garment.brand
         detail = garment.detail
         aiSourcesData = garment.aiSourcesData
+        aiInformationGeneratedAt = garment.aiInformationGeneratedAt
     }
 
     var hasInformation: Bool {
@@ -65,6 +67,7 @@ struct ProductAutofillInputSnapshot: Equatable {
         garment.brand = brand
         garment.detail = detail
         garment.aiSourcesData = aiSourcesData
+        garment.aiInformationGeneratedAt = aiInformationGeneratedAt
     }
 
     func apply(_ draft: ProductAutofillDraft, to garment: Garment) throws {
@@ -73,6 +76,7 @@ struct ProductAutofillInputSnapshot: Equatable {
         garment.brand = draft.brand ?? ""
         garment.detail = draft.description
         garment.aiSources = draft.sources
+        garment.aiInformationGeneratedAt = .now
     }
 }
 

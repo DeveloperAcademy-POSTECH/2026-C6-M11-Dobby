@@ -58,11 +58,20 @@ struct InfoInputView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if onGenerateAI != nil { generateInformationButton }
-                    ProductInformationFields(garment: garment, measurementInput: measurementInput,
-                        focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
-                        allowsPhotoEditing: allowsPhotoEditing)
+                ZStack(alignment: .topLeading) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        if onGenerateAI != nil { generateInformationButton }
+                        ProductInformationFields(garment: garment, measurementInput: measurementInput,
+                            focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
+                            allowsPhotoEditing: allowsPhotoEditing)
+                    }
+                    .opacity(generationRequestID == nil ? 1 : 0)
+                    .accessibilityHidden(generationRequestID != nil)
+
+                    if generationRequestID != nil {
+                        ProductInformationSkeletonView(photoCount: garment.productPhotos.count,
+                            measurementColumnCount: garment.visibleMeasurements.count)
+                    }
                 }
                     .disabled(generationRequestID != nil)
                     .padding(.horizontal, 20)
@@ -204,7 +213,8 @@ struct InfoInputView: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 16, weight: .medium))
                     .frame(height: 20)
-                Text("AI로 제품 정보 생성하기")
+                Text(garment.aiInformationGeneratedAt == nil
+                    ? "AI로 제품 정보 생성하기" : "다시 정보 생성하기")
                     .tracking(-0.14)
             }
             .font(.custom("Pretendard-Medium", size: 14, relativeTo: .subheadline))
