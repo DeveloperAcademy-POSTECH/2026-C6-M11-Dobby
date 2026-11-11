@@ -69,6 +69,8 @@ struct InstagramExportView: View {
         .navigationTitle("인스타그램에 업로드하기")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
+        .toolbarBackground(Color(.brandNeutralWhite), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(showsCompletion ? .hidden : .visible, for: .navigationBar)
         .toolbar {
             if !uploadState.isUploading && !showsCompletion {
