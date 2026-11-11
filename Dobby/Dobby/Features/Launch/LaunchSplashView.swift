@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Figma 5561:28941 → 5561:28976. Only the two clothing rows move;
 /// the original vector logo stays still. The designer supplied the two states
-/// without timing data; the requested movement duration is 700 milliseconds,
+/// without timing data; the requested movement duration is 1500 milliseconds,
 /// rather than a timing value exported from Figma.
 struct LaunchSplashView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -11,7 +11,7 @@ struct LaunchSplashView: View {
     let onCompletion: () -> Void
 
     private static let referenceSize = CGSize(width: 402, height: 874)
-    private static let movementDuration: TimeInterval = 0.7
+    private static let movementDuration: TimeInterval = 1.5
 
     private static let upperItems: [(asset: String, x: CGFloat)] = [
         ("LaunchSplashRustPants", -48),
