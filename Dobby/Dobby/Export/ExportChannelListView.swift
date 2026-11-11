@@ -5,7 +5,7 @@ struct ExportChannelListView: View {
     let onSelectChannel: (ExportChannel) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 12) {
             ExportChannelSection(title: "자동 업로드", channels: [.instagram, .cafe24],
                                  completedChannels: completedChannels, onSelectChannel: onSelectChannel)
             ExportChannelSection(title: "복사해서 옮기기", channels: [.fruitsFamily],
@@ -21,13 +21,16 @@ private struct ExportChannelSection: View {
     let onSelectChannel: (ExportChannel) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color(.brandNeutral600))
-            ForEach(channels) { channel in
-                ExportChannelButton(channel: channel, isComplete: completedChannels.contains(channel)) {
-                    onSelectChannel(channel)
+
+            VStack(spacing: 10) {
+                ForEach(channels) { channel in
+                    ExportChannelButton(channel: channel, isComplete: completedChannels.contains(channel)) {
+                        onSelectChannel(channel)
+                    }
                 }
             }
         }
