@@ -58,15 +58,18 @@ struct InfoInputView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if onGenerateAI != nil { generateInformationButton }
+                VStack(alignment: .leading, spacing: 40) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing)
+                        if onGenerateAI != nil { generateInformationButton }
+                    }
                     ProductInformationFields(garment: garment, measurementInput: measurementInput,
                         focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
-                        allowsPhotoEditing: allowsPhotoEditing)
+                        allowsPhotoEditing: allowsPhotoEditing, showsPhotoSection: false)
                 }
                     .disabled(generationRequestID != nil)
                     .padding(.horizontal, 20)
-                    .padding(.top, 12)
+                    .padding(.top, 26)
                     .padding(.bottom, 16)
                     .background {
                         Color.clear
@@ -119,7 +122,7 @@ struct InfoInputView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: complete) {
                     Text("완료")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(.headline, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(width: 61, height: 44)
                         .background(GarmentInformationValidation.isValid(garment)
@@ -205,14 +208,14 @@ struct InfoInputView: View {
                     .font(.system(size: 16, weight: .medium))
                     .frame(height: 20)
                 Text("AI로 제품 정보 생성하기")
-                    .tracking(-0.14)
+                    .tracking(-0.31)
             }
-            .font(.custom("Pretendard-Medium", size: 14, relativeTo: .subheadline))
-            .foregroundStyle(Color("BrandNeutralWhite"))
+            .font(.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout))
+            .foregroundStyle(Color("BrandMain500"))
             .frame(maxWidth: .infinity, minHeight: 20)
             .padding(.horizontal, 8)
             .padding(.vertical, 15)
-            .background(Color("BrandMain500"), in: RoundedRectangle(cornerRadius: 16))
+            .background(Color("BrandMain50"), in: RoundedRectangle(cornerRadius: 16))
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
