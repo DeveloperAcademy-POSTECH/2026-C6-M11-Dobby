@@ -34,6 +34,36 @@ enum ProductAppStorage {
         } else {
             configuration = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
         }
-        return try ModelContainer(for: schema, configurations: configuration)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        try normalizeStoredMeasurements(in: container)
+        return container
+    }
+
+    /// 기존 상품의 소수 실측값을 정수로 맞추고 원본 자동 측정값과 상품 수정일은 보존한다.
+    static func normalizeStoredMeasurements(in container: ModelContainer) throws {
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let garments = try context.fetch(FetchDescriptor<Garment>())
+        var hasChanges = false
+
+        for garment in garments {
+            let measurements = garment.measurements.filter { measurement in
+                measurement.valueCm.isFinite
+                    && measurement.valueCm != StoredMeasurementValue.centimeters(measurement.valueCm)
+            }
+            guard !measurements.isEmpty else { continue }
+
+            let previousUpdatedAt = garment.updatedAt
+            for measurement in measurements {
+                measurement.valueCm = StoredMeasurementValue.centimeters(measurement.valueCm)
+            }
+            garment.syncFilterFields()
+            garment.updatedAt = previousUpdatedAt
+            hasChanges = true
+        }
+
+        if hasChanges {
+            try context.save()
+        }
     }
 }
