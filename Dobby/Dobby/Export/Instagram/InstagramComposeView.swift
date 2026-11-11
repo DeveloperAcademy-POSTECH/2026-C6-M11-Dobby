@@ -16,7 +16,7 @@ struct InstagramComposeView: View {
             }
             .frame(maxWidth: 363, alignment: .topTrailing)
             .padding(.top, 20)
-            .padding(.bottom, 116)
+            .padding(.bottom, 44)
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
