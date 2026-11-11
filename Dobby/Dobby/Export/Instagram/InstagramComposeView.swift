@@ -59,25 +59,19 @@ private struct InstagramPhotoEditor: View {
                 .foregroundStyle(Color(.brandNeutral950))
                 .frame(maxWidth: 363, alignment: .topLeading)
                 .frame(maxWidth: .infinity)
-            if photos.isEmpty {
-                ContentUnavailableView("업로드할 사진이 없어요", systemImage: "photo.badge.exclamationmark")
-                    .frame(maxWidth: 363, minHeight: 180)
-                    .frame(maxWidth: .infinity)
-            } else {
-                GeometryReader { geometry in
-                    let horizontalInset = max(0, (geometry.size.width - 363) / 2)
+            GeometryReader { geometry in
+                let horizontalInset = max(0, (geometry.size.width - 363) / 2)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 8) {
-                            ForEach(photos) { photo in
-                                InstagramDraftPhotoCell(photo: photo)
-                            }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(photos) { photo in
+                            InstagramDraftPhotoCell(photo: photo)
                         }
                     }
-                    .contentMargins(.horizontal, horizontalInset, for: .scrollContent)
                 }
-                .frame(height: 212)
+                .contentMargins(.horizontal, horizontalInset, for: .scrollContent)
             }
+            .frame(height: 212)
         }
     }
 }
