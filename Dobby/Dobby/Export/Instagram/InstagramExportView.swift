@@ -32,11 +32,14 @@ struct InstagramExportView: View {
     @State private var message: String?
     @State private var requestID = UUID().uuidString
 
-    init(product: ExportProduct, onRequestExit: @escaping (ExportReturnDestination) -> Void,
+    init(product: ExportProduct, initialAccount: InstagramAccount? = nil,
+         onRequestExit: @escaping (ExportReturnDestination) -> Void,
          onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
         self.product = product
         self.onRequestExit = onRequestExit
         self.onPublished = onPublished
+        _account = State(initialValue: initialAccount)
+        _isLoadingAccount = State(initialValue: initialAccount == nil)
         _draft = State(initialValue: InstagramExportDraft(product: product))
     }
 
@@ -126,7 +129,10 @@ struct InstagramExportView: View {
             }
         }
         .interactiveDismissDisabled(uploadState.isUploading)
-        .task { await loadAccount() }
+        .task {
+            guard account == nil else { return }
+            await loadAccount()
+        }
         .alert("Instagram 안내", isPresented: Binding(
             get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("확인", role: .cancel) {}
@@ -220,5 +226,15 @@ struct InstagramExportView: View {
     private func republish() async {
         requestID = UUID().uuidString
         await publish()
+    }
+}
+
+#Preview("계정 연결 후 · 업로드 화면") {
+    NavigationStack {
+        InstagramExportView(
+            product: .instagramPreview,
+            initialAccount: .preview,
+            onRequestExit: { _ in }
+        )
     }
 }
