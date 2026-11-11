@@ -7,6 +7,65 @@ import UIKit
 /// presses a copy control, or opens a marketplace link.
 final class ProductCreationFlowTests: XCTestCase {
     @MainActor
+    func testFourStageProgressFollowsProductCreation() {
+        continueAfterFailure = false
+        let app = fixtureApp(token: UUID().uuidString, top: true)
+        app.launch()
+        defer { app.terminate() }
+        openCapture(in: app)
+        assertCreationProgress(stage: 1, title: "실측", app: app)
+        attachScreenshot(app, name: "progress-stage-1-measurement")
+
+        recognizeAndCapture(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        assertCreationProgress(stage: 2, title: "실측 결과", app: app)
+        attachScreenshot(app, name: "progress-stage-2-result")
+        app.buttons["confirmGarmentMeasurement"].tap()
+        acknowledgeDetailCaptureGuide(in: app)
+        assertCreationProgress(stage: 3, title: "제품 상세 촬영", app: app)
+        attachScreenshot(app, name: "progress-stage-3-details")
+
+        let capture = app.buttons["camera.captureDetail"]
+        waitEnabled(capture)
+        capture.tap()
+        let next = app.buttons["camera.selectPhotos"]
+        waitEnabled(next)
+        next.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        assertCreationProgress(stage: 4, title: "정보 입력", app: app)
+        attachScreenshot(app, name: "progress-stage-4-information")
+
+        app.buttons["product-flow.back"].tap()
+        assertCreationProgress(stage: 3, title: "제품 상세 촬영", app: app)
+        app.buttons["product-flow.back"].tap()
+        assertCreationProgress(stage: 2, title: "실측 결과", app: app)
+        app.buttons["product-flow.back"].tap()
+        assertCreationProgress(stage: 1, title: "실측", app: app)
+        app.buttons["closeGarmentCapture"].tap()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.descendants(matching: .any)["product-flow.progress"].exists)
+    }
+
+    @MainActor
+    private func assertCreationProgress(stage: Int, title: String, app: XCUIApplication) {
+        let identifier = stage == 2 ? "garmentResultProgress" : "product-flow.progress"
+        let progress = app.descendants(matching: .any)[identifier].firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 10))
+        XCTAssertEqual(progress.value as? String, "4단계 중 \(stage)단계, \(title)")
+        XCTAssertEqual(progress.frame.height, 3, accuracy: 0.5)
+        XCTAssertEqual(progress.frame.width, app.frame.width, accuracy: 1)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: identifier).count, 1)
+        let backIdentifier = stage == 1 ? "closeGarmentCapture" : "product-flow.back"
+        let back = app.buttons[backIdentifier].firstMatch
+        XCTAssertTrue(back.exists)
+        let toolbarGap = back.frame.minY - progress.frame.maxY
+        XCTAssertGreaterThanOrEqual(toolbarGap, 12, "프로그레스바와 툴바 사이에 피그마의 여백을 유지한다")
+        XCTAssertLessThanOrEqual(toolbarGap, 18, "화면 이동으로 상단 여백이 중복 적용되지 않는다")
+        let otherIdentifier = stage == 2 ? "product-flow.progress" : "garmentResultProgress"
+        XCTAssertFalse(app.descendants(matching: .any)[otherIdentifier].exists)
+    }
+
+    @MainActor
     func testTopAndBottomResultsShowFourShortCompactMeasurementLabels() throws {
         continueAfterFailure = false
         let fixtures: [(top: Bool, labels: [(id: String, title: String, previousTitle: String)])] = [

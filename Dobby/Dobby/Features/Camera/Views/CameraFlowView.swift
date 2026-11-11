@@ -65,6 +65,7 @@ struct CameraFlowView: View {
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
+        .productCreationProgress(isCompletingCapture ? nil : .details)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil || isCompletingCapture)
         .toolbarBackground(.hidden, for: .navigationBar)
