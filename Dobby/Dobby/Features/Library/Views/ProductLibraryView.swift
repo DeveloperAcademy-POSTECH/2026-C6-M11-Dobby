@@ -44,11 +44,16 @@ struct ProductLibraryView: View {
     }
 
     private var filteredDraftGarments: [Garment] {
-        filteredGarments.filter(\.isCreationDraft)
+        draftGarments.filter { draft in filteredGarments.contains { $0.id == draft.id } }
     }
 
     private var draftGarments: [Garment] {
-        garments.filter(\.isCreationDraft)
+        garments.filter(\.isCreationDraft).sorted {
+            let firstSavedAt = $0.creationDraft?.savedAt ?? $0.updatedAt
+            let secondSavedAt = $1.creationDraft?.savedAt ?? $1.updatedAt
+            if firstSavedAt != secondSavedAt { return firstSavedAt > secondSavedAt }
+            return $0.id.uuidString < $1.id.uuidString
+        }
     }
 
     private var filteredSavedGarments: [Garment] {
@@ -59,40 +64,39 @@ struct ProductLibraryView: View {
         VStack(spacing: 0) {
             Group {
                 if garments.isEmpty {
-                    emptyLibrary
+                    Group {
+                        if showsOnlyDrafts { emptyDrafts } else { emptyLibrary }
+                    }
+                        .overlay(alignment: .topLeading) { draftFilter.padding(.horizontal, 20) }
                         .padding(.top, headerMetrics.statusBarHeight + headerMetrics.height + 16)
                         .padding(.bottom, headerMetrics.bottomBarHeight)
                 } else if filteredGarments.isEmpty && !showsOnlyDrafts {
                     ContentUnavailableView.search(text: searchText.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .overlay(alignment: .topLeading) { draftFilter.padding(.horizontal, 20) }
                         .padding(.top, headerMetrics.statusBarHeight + headerMetrics.height + 16)
                         .padding(.bottom, headerMetrics.bottomBarHeight)
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            if !isEditing {
-                                ForEach(filteredDraftGarments) { garment in
-                                    draftCell(garment)
-                                }
+                            if let latestDraft = draftGarments.first,
+                               filteredDraftGarments.contains(where: { $0.id == latestDraft.id }) {
+                                draftCell(latestDraft)
                             }
 
-                            if !draftGarments.isEmpty {
-                                ProductDraftCountBadge(
-                                    count: draftGarments.count,
-                                    isSelected: showsOnlyDrafts
-                                ) {
-                                    isSearchFocused = false
-                                    withAnimation(.easeInOut(duration: 0.18)) {
-                                        showsOnlyDrafts.toggle()
-                                    }
-                                }
-                            }
+                            draftFilter
+                                .padding(.top, draftGarments.isEmpty ? 0 : 6)
+                                .padding(.bottom, 5)
 
                             if showsOnlyDrafts {
                                 if filteredDraftGarments.isEmpty {
-                                    ContentUnavailableView.search(
-                                        text: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    )
-                                    .frame(maxWidth: .infinity)
+                                    if draftGarments.isEmpty {
+                                        emptyDrafts
+                                    } else {
+                                        ContentUnavailableView.search(
+                                            text: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        )
+                                        .frame(maxWidth: .infinity)
+                                    }
                                 } else {
                                     LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                                         ForEach(filteredDraftGarments) { garment in
@@ -201,6 +205,20 @@ struct ProductLibraryView: View {
         }
     }
 
+    private var draftFilter: some View {
+        ProductDraftCountBadge(count: draftGarments.count, isSelected: showsOnlyDrafts) {
+            isSearchFocused = false
+            withAnimation(.easeInOut(duration: 0.18)) { showsOnlyDrafts.toggle() }
+        }
+    }
+
+    private var emptyDrafts: some View {
+        ContentUnavailableView("임시저장한 작업이 없어요", systemImage: "tray",
+                               description: Text("진행 중인 작업을 임시저장하면 여기에 표시돼요."))
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("library.drafts.empty")
+    }
+
     private var emptyLibrary: some View {
         GeometryReader { geometry in
             let contentHeight = emptyTitleLineHeight + emptyDescriptionLineHeight + emptyButtonHeight + 32
@@ -270,16 +288,26 @@ struct ProductLibraryView: View {
     @ViewBuilder
     private func draftCell(_ garment: Garment) -> some View {
         if let draft = garment.creationDraft {
-            Button {
-                isSearchFocused = false
-                onResumeDraft(garment.id)
-            } label: {
+            if isEditing {
                 ProductLibraryDraftCard(garment: garment, draft: draft)
+                    .overlay(alignment: .topLeading) {
+                        deleteButton(for: garment, identifierPrefix: "library.resume-delete")
+                    }
+                    .modifier(LibraryCardJiggle(id: garment.id))
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("library.draft-banner.\(garment.id.uuidString)")
+            } else {
+                Button {
+                    isSearchFocused = false
+                    onResumeDraft(garment.id)
+                } label: {
+                    ProductLibraryDraftCard(garment: garment, draft: draft)
+                }
+                .buttonStyle(.plain)
+                .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
+                .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
+                .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다. 길게 누르면 보관함을 수정합니다.")
             }
-            .buttonStyle(.plain)
-            .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
-            .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
-            .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다. 길게 누르면 보관함을 수정합니다.")
         }
     }
 
@@ -301,7 +329,7 @@ struct ProductLibraryView: View {
             }
             .buttonStyle(.plain)
             .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
-            .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
+            .accessibilityIdentifier("library.draft-product.\(garment.id.uuidString)")
             .accessibilityHint("임시저장한 상품 작업을 이어갑니다.")
         }
     }
@@ -316,7 +344,7 @@ struct ProductLibraryView: View {
         }
     }
 
-    private func deleteButton(for garment: Garment) -> some View {
+    private func deleteButton(for garment: Garment, identifierPrefix: String = "library.delete") -> some View {
         Button(role: .destructive) {
             pendingDeletion = garment.id
         } label: {
@@ -346,7 +374,7 @@ struct ProductLibraryView: View {
         .buttonStyle(.plain)
         .offset(x: -17.5, y: -19.5)
         .accessibilityLabel("\(garment.name.isEmpty ? "상품" : garment.name) 삭제")
-        .accessibilityIdentifier("library.delete.\(garment.id.uuidString)")
+        .accessibilityIdentifier("\(identifierPrefix).\(garment.id.uuidString)")
     }
 
     private func deleteProduct(id: UUID) {

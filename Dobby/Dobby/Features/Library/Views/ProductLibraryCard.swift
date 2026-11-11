@@ -5,16 +5,11 @@ import UIKit
 struct ProductLibraryCard: View {
     let garment: Garment
     let showsDraftPlaceholders: Bool
-    @ScaledMetric(relativeTo: .subheadline) private var titleLineHeight: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) private var titleLineHeight: CGFloat = 20
     @ScaledMetric(relativeTo: .callout) private var brandLineHeight: CGFloat = 20
     @ScaledMetric(relativeTo: .subheadline) private var priceLineHeight: CGFloat = 16
-    @ScaledMetric(relativeTo: .subheadline) private var registrationLineHeight: CGFloat = 16
-
-    private var informationHeight: CGFloat {
-        brandLineHeight + titleLineHeight * 2 + priceLineHeight + 30 + 3 * 8 + 2 * 10
-            + (garment.registeredAt == nil ? 0 : registrationLineHeight + 8)
-    }
-
+    @ScaledMetric(relativeTo: .footnote) private var registrationLineHeight: CGFloat = 18
+    @ScaledMetric(relativeTo: .body) private var informationHeight: CGFloat = 167
     init(garment: Garment, showsDraftPlaceholders: Bool = false) {
         self.garment = garment
         self.showsDraftPlaceholders = showsDraftPlaceholders
@@ -25,12 +20,17 @@ struct ProductLibraryCard: View {
             thumbnail
 
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(displayBrand)
-                        .modifier(LibraryCardTextStyle(size: 16, lineHeight: 20, relativeTo: .callout))
+                        .modifier(LibraryCardTextStyle(
+                            size: garment.brand.isBlank ? 17 : 16,
+                            lineHeight: garment.brand.isBlank ? 22 : 20,
+                            relativeTo: .callout,
+                            fontName: garment.brand.isBlank ? "Pretendard-SemiBold" : "Pretendard-Medium"
+                        ))
                         .foregroundStyle(garment.brand.isBlank ? Color("BrandNeutral500") : LibraryCardStyle.brand)
-                        .lineLimit(1)
-                        .frame(height: brandLineHeight, alignment: .topLeading)
+                        .lineLimit(showsDraftPlaceholders ? 2 : 1)
+                        .frame(minHeight: brandLineHeight, alignment: .topLeading)
 
                     LibraryCardTitle(text: displayName)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -42,13 +42,13 @@ struct ProductLibraryCard: View {
                         .lineLimit(1)
                         .frame(height: priceLineHeight, alignment: .topLeading)
 
-                    platformBadges
+                    if !showsDraftPlaceholders { platformBadges }
                 }
 
                 if let registrationDateText {
                     Spacer(minLength: 8)
                     Text(registrationDateText)
-                        .modifier(LibraryCardTextStyle(size: 14, lineHeight: 16, relativeTo: .subheadline))
+                        .modifier(LibraryCardTextStyle(size: 13, lineHeight: 18, relativeTo: .footnote, fontName: "Pretendard-Regular"))
                         .foregroundStyle(Color("BrandNeutral400"))
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
@@ -60,7 +60,7 @@ struct ProductLibraryCard: View {
             .frame(height: informationHeight, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .background(Color("BrandNeutralWhite"), in: RoundedRectangle(cornerRadius: 16))
         .contentShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(cardAccessibilityLabel)
@@ -79,7 +79,7 @@ struct ProductLibraryCard: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
         }
-        .aspectRatio(123.0 / 164.0, contentMode: .fit)
+        .aspectRatio(175.0 / 233.0, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityHidden(true)
     }
@@ -111,13 +111,14 @@ struct ProductLibraryCard: View {
             values.append("선택한 내보내기 플랫폼: " + garment.selectedExportChannels.map(\.title).joined(separator: ", "))
         }
         if let registrationDateText {
-            values.append("최초 등록일: " + registrationDateText)
+            values.append((showsDraftPlaceholders ? "임시저장일: " : "최초 등록일: ") + registrationDateText)
         }
         return values.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
     private var registrationDateText: String? {
-        garment.registeredAt.map { LibraryCardStyle.registrationDateFormatter.string(from: $0) }
+        let date = showsDraftPlaceholders ? garment.creationDraft?.savedAt : garment.registeredAt
+        return date.map { LibraryCardStyle.registrationDateFormatter.string(from: $0) }
     }
 
     private var displayBrand: String {
@@ -159,20 +160,20 @@ private enum LibraryCardStyle {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = .autoupdatingCurrent
-        formatter.dateFormat = "yyyy.MM.dd"
+        formatter.dateFormat = "yyyy.M.d"
         return formatter
     }()
     static let fontName = "Pretendard-Medium"
-    static let title = UIColor(red: 16.0 / 255, green: 16.0 / 255, blue: 15.0 / 255, alpha: 1)
-    static let brand = Color(red: 32.0 / 255, green: 30.0 / 255, blue: 27.0 / 255)
-    static let price = Color(red: 66.0 / 255, green: 62.0 / 255, blue: 58.0 / 255)
+    static let title = UIColor(Color("BrandNeutralBlack"))
+    static let brand = Color("BrandNeutralBlack")
+    static let price = Color("BrandNeutral900")
 }
 
 /// Disables the label's Korean orphan prevention so wrapping uses the full card text width.
 private struct LibraryCardTitle: UIViewRepresentable {
     let text: String
-    @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .subheadline) private var lineHeight: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .subheadline) private var lineHeight: CGFloat = 20
 
     func makeUIView(context: Context) -> UILabel {
         let label = UILabel()
@@ -186,8 +187,8 @@ private struct LibraryCardTitle: UIViewRepresentable {
     }
 
     func updateUIView(_ label: UILabel, context: Context) {
-        let font = UIFont(name: LibraryCardStyle.fontName, size: fontSize)
-            ?? UIFont.systemFont(ofSize: fontSize, weight: .medium)
+        let font = UIFont(name: "Pretendard-Regular", size: fontSize)
+            ?? UIFont.systemFont(ofSize: fontSize)
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = lineHeight
         paragraph.maximumLineHeight = lineHeight
@@ -199,7 +200,7 @@ private struct LibraryCardTitle: UIViewRepresentable {
         label.attributedText = NSAttributedString(string: text, attributes: [
             .font: font,
             .foregroundColor: LibraryCardStyle.title,
-            .kern: -fontSize * 0.01,
+            .kern: -0.23 * fontSize / 15,
             .paragraphStyle: paragraph
         ])
     }
@@ -215,7 +216,7 @@ private struct LibraryCardTitle: UIViewRepresentable {
             forBounds: CGRect(x: 0, y: 0, width: width, height: lineHeight * 2),
             limitedToNumberOfLines: 1
         ).height
-        // UILabel rounds glyph bounds, so dividing its height by the 16pt design line height
+        // UILabel rounds glyph bounds, so dividing its height by the design line height
         // can incorrectly count one line as two. Compare against the same label's one-line bounds.
         let numberOfLines: CGFloat = measuredHeight > singleLineHeight + 0.5 ? 2 : 1
         return CGSize(width: width, height: lineHeight * numberOfLines)
@@ -224,21 +225,23 @@ private struct LibraryCardTitle: UIViewRepresentable {
 
 /// Uses Figma's line height while allowing the type to scale with accessibility settings.
 private struct LibraryCardTextStyle: ViewModifier {
+    let fontName: String
     @ScaledMetric private var size: CGFloat
     @ScaledMetric private var lineHeight: CGFloat
 
-    init(size: CGFloat, lineHeight: CGFloat, relativeTo textStyle: Font.TextStyle) {
+    init(size: CGFloat, lineHeight: CGFloat, relativeTo textStyle: Font.TextStyle, fontName: String = LibraryCardStyle.fontName) {
+        self.fontName = fontName
         _size = ScaledMetric(wrappedValue: size, relativeTo: textStyle)
         _lineHeight = ScaledMetric(wrappedValue: lineHeight, relativeTo: textStyle)
     }
 
     func body(content: Content) -> some View {
-        let font = UIFont(name: LibraryCardStyle.fontName, size: size)
+        let font = UIFont(name: fontName, size: size)
             ?? UIFont.systemFont(ofSize: size, weight: .medium)
         let lineHeightAdjustment = lineHeight - font.lineHeight
 
         content
-            .font(.custom(LibraryCardStyle.fontName, fixedSize: size))
+            .font(.custom(fontName, fixedSize: size))
             .tracking(-size * 0.01)
             .lineSpacing(lineHeightAdjustment)
             .padding(.vertical, lineHeightAdjustment / 2)

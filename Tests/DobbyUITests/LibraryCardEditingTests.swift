@@ -2,6 +2,24 @@ import XCTest
 
 @MainActor
 final class LibraryCardEditingTests: XCTestCase {
+    func testEmptyDraftFilterRemainsAvailableWithZeroCount() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
+        app.launch()
+        defer { app.terminate() }
+        app.tabBars.buttons["보관함"].tap()
+        let badge = app.buttons["library.draft-count"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 10))
+        XCTAssertEqual(badge.label, "임시저장 0개")
+        badge.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["library.drafts.empty"].waitForExistence(timeout: 5))
+        XCTAssertEqual(badge.value as? String, "선택됨")
+        badge.tap()
+        XCTAssertTrue(app.staticTexts["library.empty.title"].waitForExistence(timeout: 5))
+        XCTAssertTrue(badge.exists)
+    }
+
     func testSearchQuerySurvivesKeyboardDismissalAndDetailNavigation() {
         continueAfterFailure = false
         let app = XCUIApplication()
