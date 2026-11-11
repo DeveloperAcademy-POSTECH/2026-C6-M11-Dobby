@@ -32,10 +32,12 @@ struct ProductInformationFields: View {
     let focus: FocusState<UUID?>.Binding
     let showsValidationErrors: Bool
     var allowsPhotoEditing = false
+    var onPhotoImportingChange: ((Bool) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing)
+            ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing,
+                                     onImportingChange: onPhotoImportingChange)
             ProductInputField(title: "제품명", text: $garment.name,
                 placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name", isRequired: true,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isNameValid(garment)

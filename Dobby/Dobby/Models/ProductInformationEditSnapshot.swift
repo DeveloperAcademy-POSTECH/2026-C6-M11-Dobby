@@ -68,6 +68,9 @@ struct ProductInformationEditSnapshot: Equatable {
         garment.waistCm = waistCm
 
         let photoStates = Dictionary(uniqueKeysWithValues: photos.map { ($0.id, $0) })
+        // Additions are relationship edits too. Do not leave a detached, rolled-
+        // back imported photo visible after restoring the original snapshot.
+        garment.photos = garment.photos.filter { photoStates[$0.id] != nil }
         for photo in garment.photos {
             guard let state = photoStates[photo.id] else { continue }
             photo.isSelectedForProduct = state.isSelectedForProduct

@@ -28,6 +28,7 @@ struct InfoInputView: View {
     @State private var saveError: String?
     @State private var hasAttemptedCompletion = false
     @State private var returnsHomeAfterExport = false
+    @State private var isImportingPhotos = false
     @State private var generationRequestID: UUID?
     @State private var generationError: String?
     @State private var showsReplacementConfirmation = false
@@ -62,9 +63,10 @@ struct InfoInputView: View {
                     if onGenerateAI != nil { generateInformationButton }
                     ProductInformationFields(garment: garment, measurementInput: measurementInput,
                         focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
-                        allowsPhotoEditing: allowsPhotoEditing)
+                        allowsPhotoEditing: allowsPhotoEditing,
+                        onPhotoImportingChange: { isImportingPhotos = $0 })
                 }
-                    .disabled(generationRequestID != nil)
+                    .disabled(generationRequestID != nil || isImportingPhotos)
                     .padding(.horizontal, 20)
                     .padding(.top, 12)
                     .padding(.bottom, 16)
@@ -111,7 +113,7 @@ struct InfoInputView: View {
                             .foregroundStyle(.black)
                     }
                     .tint(.black)
-                    .disabled(generationRequestID != nil)
+                    .disabled(generationRequestID != nil || isImportingPhotos)
                     .accessibilityLabel("뒤로가기")
                     .accessibilityIdentifier("product-flow.back")
                 }
@@ -126,7 +128,7 @@ struct InfoInputView: View {
                             ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
                             in: Capsule())
                 }
-                .disabled(generationRequestID != nil || !GarmentInformationValidation.hasAnyInformation(garment))
+                .disabled(generationRequestID != nil || isImportingPhotos || !GarmentInformationValidation.hasAnyInformation(garment))
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }
@@ -216,13 +218,13 @@ struct InfoInputView: View {
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-        .disabled(generationRequestID != nil)
+        .disabled(generationRequestID != nil || isImportingPhotos)
         .accessibilityHint("선택한 제품 사진으로 제품명, 설명, 브랜드를 생성합니다")
         .accessibilityIdentifier("product-ai.generate")
     }
 
     private func requestGeneration() {
-        guard generationRequestID == nil, onGenerateAI != nil else { return }
+        guard generationRequestID == nil, !isImportingPhotos, onGenerateAI != nil else { return }
         dismissKeyboard()
         generationError = nil
         generationRequestID = UUID()
@@ -236,7 +238,7 @@ struct InfoInputView: View {
     }
 
     private func complete() {
-        guard generationRequestID == nil else { return }
+        guard generationRequestID == nil, !isImportingPhotos else { return }
         hasAttemptedCompletion = true
         guard GarmentInformationValidation.isValid(garment) else { return }
         do {
