@@ -6,13 +6,13 @@ import UIKit
 
 @MainActor
 struct ProductCapturePersistenceTests {
-    @Test func allPhotosPersistInCaptureOrderWithoutSelectionLimitOrDuplicateCopies() async throws {
+    @Test func allOriginalsPersistWhileRegistrationIsLimitedToTenWithoutDuplicateCopies() async throws {
         let f = try Fixture()
         defer { f.remove() }
         let details = try (0..<11).map { _ in try f.detail() }
         try await f.apply(details)
         let expected = f.input.measurementPhotos.map(\.id) + details.map(\.id)
-        #expect(f.garment.productPhotos.map(\.id) == expected)
+        #expect(f.garment.productPhotos.map(\.id) == Array(expected.prefix(10)))
         #expect(f.garment.thumbnail?.id == f.input.measurement.id)
         let firstAppliedAt = try #require(f.garment.capturePhotosAppliedAt)
         try await f.apply(details)
@@ -21,7 +21,7 @@ struct ProductCapturePersistenceTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: f.photos.path).count == 13)
         let reader = ModelContext(f.container)
         let stored = try #require(reader.fetch(FetchDescriptor<Garment>()).first)
-        #expect(stored.productPhotos.map(\.id) == expected)
+        #expect(stored.productPhotos.map(\.id) == Array(expected.prefix(10)))
         #expect(stored.capturePhotosAppliedAt == firstAppliedAt)
         for detail in details {
             let saved = try #require(stored.photos.first { $0.id == detail.id })
@@ -129,6 +129,37 @@ struct ProductCapturePersistenceTests {
         #expect(f.garment.productPhotos.map(\.id) == [detail.id])
         #expect(f.garment.thumbnail?.id == detail.id)
         #expect(f.garment.measurementPhoto != nil)
+    }
+
+    @Test func overflowHandoffRollsBackAllCopiesAndSelectionBeforeRetry() async throws {
+        let f = try Fixture()
+        defer { f.remove() }
+        let details = try (0..<11).map { _ in try f.detail() }
+        let originalIDs = f.garment.photos.map(\.id)
+        await #expect(throws: SaveFailure.self) {
+            try await f.apply(details, persist: { _ in throw SaveFailure.failed })
+        }
+        #expect(f.garment.photos.map(\.id) == originalIDs)
+        #expect(f.garment.capturePhotosAppliedAt == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.photos.path).count == 2)
+        try await f.apply(details)
+        #expect(f.garment.photos.count == 13 && f.garment.productPhotos.count == 10)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.photos.path).count == 13)
+    }
+
+    @Test func duplicatePhotoIDsAreRejectedBeforeAnyCopyOrMutation() async throws {
+        let f = try Fixture()
+        defer { f.remove() }
+        let first = try f.detail(), second = try f.detail()
+        let duplicate = CapturedAsset(id: first.id, sessionID: second.sessionID,
+            garmentID: second.garmentID, purpose: .detail, capturedAt: second.capturedAt, source: second.source)
+        let originalIDs = f.garment.photos.map(\.id)
+        await #expect(throws: ProductPhotoHandoff.HandoffError.self) {
+            try await f.apply([first, duplicate])
+        }
+        #expect(f.garment.photos.map(\.id) == originalIDs)
+        #expect(f.garment.capturePhotosAppliedAt == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.photos.path).count == 2)
     }
 
     private enum SaveFailure: Error { case failed }

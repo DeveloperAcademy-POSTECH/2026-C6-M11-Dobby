@@ -12,7 +12,7 @@ import Observation
 @MainActor
 @Observable
 final class ProductPhotoModel {
-    static let maximumSelectionCount = 10
+    static let maximumSelectionCount = ProductPhotoLimit.maximumCount
     enum SelectionResult: Equatable { case updated, limitReached, ignored }
 
     private(set) var input: ProductPhotoInput

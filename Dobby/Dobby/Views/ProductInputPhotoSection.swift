@@ -14,7 +14,19 @@ struct ProductInputPhotoSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: allowsRemoval ? 4 : 8) {
-            ProductFieldTitle(title: "제품 사진")
+            HStack {
+                ProductFieldTitle(title: "제품 사진", isRequired: true)
+                Spacer()
+                HStack(spacing: 0) {
+                    Text("\(garment.productPhotos.count)")
+                        .foregroundStyle(garment.productPhotos.count > ProductPhotoLimit.maximumCount
+                            ? ProductInformationStyle.error : Color("BrandNeutral800"))
+                    Text("/\(ProductPhotoLimit.maximumCount)").foregroundStyle(Color("BrandNeutral500"))
+                }
+                .font(.custom("Pretendard-Regular", size: 14))
+                .accessibilityLabel("제품 사진 \(garment.productPhotos.count)장, 최대 \(ProductPhotoLimit.maximumCount)장")
+                .accessibilityIdentifier("product-info.photo-count")
+            }
             photoRow.padding(.horizontal, -20)
         }
         .fullScreenCover(item: $expandedPhoto) { photo in

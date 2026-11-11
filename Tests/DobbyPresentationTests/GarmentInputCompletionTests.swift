@@ -21,6 +21,7 @@ struct GarmentInputCompletionTests {
 
     private func product() -> (Garment, MeasuredValue, MeasuredValue) {
         let garment = Garment(category: "Jacket", group: .top, name: "직접 입력한 자켓", detail: "제품 설명", price: 40000)
+        garment.photos = [GarmentPhoto(fileName: "completion-fixture.jpg", role: .thumbnail, order: 0)]
         let length = MeasuredValue(key: "totalLength", label: "총장", displayOrder: 1,
                                    valueCm: 68.12345, autoValueCm: 68.12345)
         let chest = MeasuredValue(key: "chestWidth", label: "가슴", displayOrder: 0,
@@ -362,6 +363,7 @@ struct GarmentInputCompletionTests {
         let context = ModelContext(container)
         context.autosaveEnabled = false
         let garment = Garment(category: "Jacket", group: .top, name: "자켓", detail: "제품 설명", price: 40000)
+        garment.photos = [GarmentPhoto(fileName: "completion-fixture.jpg", role: .thumbnail, order: 0)]
         let left = MeasuredValue(key: "sleeveLengthLeft", label: "왼쪽 소매", displayOrder: 0,
                                  valueCm: 0, autoValueCm: 61.125)
         let right = MeasuredValue(key: "sleeveLengthRight", label: "오른쪽 소매", displayOrder: 1,
@@ -393,6 +395,7 @@ struct GarmentInputCompletionTests {
 
     @Test func usableLeftCanCompleteWhileInvalidRightOriginalRemainsStored() throws {
         let garment = Garment(category: "Jeans", group: .pants, name: "바지", detail: "제품 설명", price: 40000)
+        garment.photos = [GarmentPhoto(fileName: "completion-fixture.jpg", role: .thumbnail, order: 0)]
         let left = MeasuredValue(key: "totalLengthLeft", label: "왼쪽 총장", displayOrder: 0,
                                  valueCm: 101.25123, autoValueCm: 101.5)
         let right = MeasuredValue(key: "totalLengthRight", label: "오른쪽 총장", displayOrder: 1,
@@ -410,6 +413,7 @@ struct GarmentInputCompletionTests {
 
     @Test func whenNeitherSideIsUsableDisplayedLeftStillRequiresCorrection() {
         let garment = Garment(category: "Jacket", group: .top, name: "자켓", detail: "제품 설명", price: 40000)
+        garment.photos = [GarmentPhoto(fileName: "completion-fixture.jpg", role: .thumbnail, order: 0)]
         let left = MeasuredValue(key: "sleeveLengthLeft", label: "왼쪽 소매", displayOrder: 0,
                                  valueCm: 0, autoValueCm: 61)
         let right = MeasuredValue(key: "sleeveLengthRight", label: "오른쪽 소매", displayOrder: 1,
