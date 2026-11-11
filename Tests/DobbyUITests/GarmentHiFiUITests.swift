@@ -107,27 +107,32 @@ final class GarmentHiFiUITests: XCTestCase {
     }
 
     @MainActor
-    func testResultTutorialDismissalRestoresPointEditingAndDoesNotReturnAfterDragging() throws {
+    func testResultPointsAreImmediatelyEditableAndGuideDoesNotAppearAfterDragging() throws {
         continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
         let app = openPreview(arguments: ["--garment-preview-top", "--garment-preview-result-tutorial"])
         recognizeGarment(in: app)
         app.buttons["captureGarment"].tap()
         let dismissTutorial = app.buttons["dismissGarmentResultTutorial"]
-        XCTAssertTrue(dismissTutorial.waitForExistence(timeout: 10))
-        XCTAssertTrue(dismissTutorial.label.contains("측정점"))
-        screenshot("hifi96-result-tutorial")
-        dismissTutorial.tap()
-        waitUntil { !dismissTutorial.exists }
         let confirm = app.buttons["confirmGarmentMeasurement"]
         let point = app.buttons["garmentMeasurementPoint_shoulder_left"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        XCTAssertFalse(dismissTutorial.exists, "Result entry must allow editing without dismissing a guide")
         XCTAssertTrue(confirm.isHittable && confirm.isEnabled)
-        XCTAssertTrue(point.isHittable)
+        XCTAssertTrue(point.waitForExistence(timeout: 5),
+                      "Missing result point: \(point.debugDescription)\nButtons: \(app.buttons.debugDescription)")
+        XCTAssertTrue(point.isEnabled)
+        let pointState = XCTAttachment(string:
+            "frame: \(point.frame), hittable: \(point.isHittable), enabled: \(point.isEnabled)")
+        pointState.name = "result-point-before-drag"
+        pointState.lifetime = .keepAlways
+        add(pointState)
+        screenshot("hifi96-result-immediate-point-editing")
         let original = try XCTUnwrap(point.value as? String)
         let start = point.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 8, dy: 5)))
         waitUntil { point.value as? String != original && confirm.isEnabled }
         XCTAssertFalse(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
-        XCTAssertFalse(dismissTutorial.exists)
         XCTAssertFalse(app.buttons["garmentResultActions"].exists)
         XCTAssertTrue(confirm.isHittable)
         XCTAssertFalse(dismissTutorial.exists, "Finishing a point drag must not replay the result guide")
