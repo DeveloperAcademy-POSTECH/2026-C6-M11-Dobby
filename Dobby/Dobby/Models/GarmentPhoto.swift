@@ -19,6 +19,8 @@ final class GarmentPhoto {
     /// 사용자가 끌어서 바꾼 순서. 관계 배열이 순서를 지켜주지 않아 직접 들고 있어야 한다.
     var order: Int
     var isSelectedForProduct: Bool? = nil
+    /// Product presentation only. Measurement RGB, landmarks and depth stay in their original coordinates.
+    var productRotationQuarterTurns: Int? = nil
     var capturedAt: Date
 
     // MARK: 실측에 쓴 사진에만 채우는 값

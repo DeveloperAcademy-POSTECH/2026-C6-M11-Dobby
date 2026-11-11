@@ -29,7 +29,8 @@ enum ProductPhotoHandoff {
                       persist: @MainActor (ModelContext) throws -> Void = { try $0.save() }) async throws {
         let photosDirectory = photosDirectory ?? GarmentStore.photosDirectory
         try Task.checkCancellation()
-        try validate(output, input: input, garment: garment, photosDirectory: photosDirectory)
+        try validate(output, input: input, garment: garment, photosDirectory: photosDirectory,
+                     includesAllCapturedPhotos: includesAllCapturedPhotos)
         if includesAllCapturedPhotos {
             let remaining = (input.measurementPhotos + output.detailPhotos).filter { !output.deletedPhotoIDs.contains($0.id) }
             guard output.selectedPhotos == remaining,
@@ -69,10 +70,18 @@ enum ProductPhotoHandoff {
                 || garment.informationCompletedAt != nil || garment.creationDraft?.step == .information)
             if preservesEdits {
                 // 입력 화면의 순서·제외·대표 사진은 유지하고 새 촬영만 끝에 추가한다.
-                for photo in added { photo.isSelectedForProduct = true }
+                let addedIDs = Set(added.map(\.id))
+                let registrationIDs = Set(ProductPhotoLimit.registrationIDs(
+                    existing: garment.productPhotos.filter { !addedIDs.contains($0.id) }.map(\.id),
+                    incoming: added.map(\.id)))
+                for photo in added { photo.isSelectedForProduct = registrationIDs.contains(photo.id) }
                 GarmentStore.reorder(previousPhotos.sorted { $0.order < $1.order } + added, in: garment)
             } else {
-                let selectedIDs = output.selectedPhotos.map(\.id)
+                // Copy every captured picture above, but register at most ten.
+                // Unselected evidence remains in this product and in Photos.
+                let selectedIDs = includesAllCapturedPhotos
+                    ? Array(output.selectedPhotos.prefix(ProductPhotoLimit.maximumCount).map(\.id))
+                    : output.selectedPhotos.map(\.id)
                 for photo in garment.photos {
                     photo.isSelectedForProduct = selectedIDs.contains(photo.id)
                     photo.role = photo.id == output.representativePhotoID ? .thumbnail : .detail
@@ -104,7 +113,10 @@ enum ProductPhotoHandoff {
     }
 
     private static func validate(_ output: ProductPhotoOutput, input: ProductPhotoInput,
-                                 garment: Garment, photosDirectory: URL) throws {
+                                 garment: Garment, photosDirectory: URL, includesAllCapturedPhotos: Bool) throws {
+        if !includesAllCapturedPhotos, output.selectedPhotos.count > ProductPhotoLimit.maximumCount {
+            throw ProductPhotoLimit.ValidationError.tooManyPhotos
+        }
         guard input.garmentID == garment.id, output.garmentID == garment.id,
               output.sessionID == input.sessionID,
               input.measurement.sessionID == input.sessionID,

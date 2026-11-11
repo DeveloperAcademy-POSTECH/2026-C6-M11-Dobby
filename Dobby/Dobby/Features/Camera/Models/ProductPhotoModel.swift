@@ -12,7 +12,7 @@ import Observation
 @MainActor
 @Observable
 final class ProductPhotoModel {
-    static let maximumSelectionCount = 10
+    static let maximumSelectionCount = ProductPhotoLimit.maximumCount
     enum SelectionResult: Equatable { case updated, limitReached, ignored }
 
     private(set) var input: ProductPhotoInput
@@ -177,6 +177,10 @@ final class ProductPhotoModel {
         committedCleanupTask = Task { [weak self, captureProvider] in
             await previousCleanup?.value
             for photo in retired {
+                if self?.isProductStoredPhoto(photo) == true {
+                    self?.deferredDetailDeletions.removeAll { $0.id == photo.id }
+                    continue
+                }
                 do {
                     try await captureProvider.discardUncommitted(photo)
                     self?.deferredDetailDeletions.removeAll { $0.id == photo.id }
@@ -201,6 +205,27 @@ final class ProductPhotoModel {
               Set(orderedIDs).isSubset(of: Set(selectablePhotos.map(\.id))) else { return false }
         selectedPhotoIDs = orderedIDs
         return true
+    }
+
+    /// Product-input additions already live in the product store. Register
+    /// their IDs for AI selection and draft restoration without camera ownership.
+    func synchronizeStoredProductPhotos(_ photos: [GarmentPhoto]) throws {
+        guard !isCapturing, !isDeleting, !isDiscardingDetails else { throw CameraFailure.operationInProgress }
+        let known = Set(input.measurementPhotos.map(\.id) + detailPhotos.map(\.id))
+        var added: [CapturedAsset] = []
+        for photo in photos where !known.contains(photo.id) && !deletedPhotoIDs.contains(photo.id) {
+            let url = GarmentStore.url(for: photo)
+            let metadata = try ProductPhotoHandoff.metadata(for: url)
+            added.append(CapturedAsset(id: photo.id, sessionID: input.sessionID, garmentID: input.garmentID,
+                purpose: .detail, capturedAt: photo.capturedAt, source: .localFile(url, metadata: metadata)))
+        }
+        detailPhotos.append(contentsOf: added)
+        persistedDetailPhotoIDs.formUnion(added.map(\.id))
+    }
+
+    private func isProductStoredPhoto(_ photo: CapturedAsset) -> Bool {
+        guard case let .localFile(url, _) = photo.source else { return false }
+        return url.deletingLastPathComponent().standardizedFileURL == GarmentStore.photosDirectory.standardizedFileURL
     }
 
     func captureDetail() async throws {
@@ -311,6 +336,8 @@ final class ProductPhotoModel {
         selectedPhotoIDs.removeAll { id in discarded.contains { $0.id == id } }
         var firstError: (any Error)?
         for photo in discarded {
+            // Product files are cleaned by the product store, never its camera provider.
+            if isProductStoredPhoto(photo) { continue }
             do { try await captureProvider.discardUncommitted(photo) }
             catch {
                 // 정리 실패한 파일은 다음 정리 요청에서 다시 시도할 수 있게 보존한다.

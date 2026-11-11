@@ -22,9 +22,16 @@ enum GarmentInformationValidation {
 
     static func isValid(_ garment: Garment) -> Bool {
         isNameValid(garment) && isDetailValid(garment) && isPriceValid(garment)
+            && ProductPhotoLimit.canRegister(count: garment.productPhotos.count)
     }
 
     static func validate(_ garment: Garment) throws {
+        guard !garment.productPhotos.isEmpty else {
+            throw GarmentInputCompletion.ValidationError.missingInformation("제품 사진")
+        }
+        guard garment.productPhotos.count <= ProductPhotoLimit.maximumCount else {
+            throw ProductPhotoLimit.ValidationError.tooManyPhotos
+        }
         for (label, text) in [("제품명", garment.name), ("설명", garment.detail)] {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw GarmentInputCompletion.ValidationError.missingInformation(label)

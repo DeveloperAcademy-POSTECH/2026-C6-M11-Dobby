@@ -218,9 +218,15 @@ struct ProductCreationFlowView: View {
         }
     }
 
-    private func synchronizeInformationPhotoSelection() {
-        guard let garment, let photoModel else { return }
-        photoModel.synchronizeSelectedProductPhotos(garment.productPhotos.prefix(ProductPhotoModel.maximumSelectionCount).map(\.id))
+    @discardableResult
+    private func synchronizeInformationPhotoSelection() -> Bool {
+        guard let garment, let photoModel else { return false }
+        do {
+            try photoModel.synchronizeStoredProductPhotos(garment.productPhotos)
+            return photoModel.synchronizeSelectedProductPhotos(garment.productPhotos.prefix(ProductPhotoModel.maximumSelectionCount).map(\.id))
+        } catch {
+            return false
+        }
     }
 
     private func receiveMeasurement(_ record: SavedMeasurement) async throws {
@@ -349,7 +355,7 @@ struct ProductCreationFlowView: View {
     }
 
     private func generateInformationFromButton() async throws {
-        synchronizeInformationPhotoSelection()
+        guard synchronizeInformationPhotoSelection() else { throw ProductAutofillError.invalidPhotos }
         guard let garment, let output = photoModel?.output,
               path.last == .information else {
             throw ProductAutofillError.invalidPhotos
@@ -505,8 +511,12 @@ struct ProductCreationFlowView: View {
                     cleanupError = "등록을 마친 상품은 보관함에서 삭제해 주세요."
                     return
                 }
-                // Commit this draft's deletion before releasing any retained originals.
+                // Collect this flow's unsaved imports before the separate
+                // deletion context invalidates the durable draft. A failed
+                // deletion keeps those user edits and their files available.
+                let uncommittedFiles = ProductPhotoImportStore.uncommittedFileURLs(for: garment, in: context)
                 try GarmentStore.deleteSavedGarment(id: garment.id, in: context.container)
+                ProductPhotoImportStore.removeUncommittedFiles(uncommittedFiles)
             }
         } catch {
             cleanupError = error.localizedDescription
@@ -520,7 +530,7 @@ struct ProductCreationFlowView: View {
     }
 
     private func persistDraft(_ garment: Garment, step: ProductDraftStep) throws {
-        if step == .information { synchronizeInformationPhotoSelection() }
+        if step == .information, !synchronizeInformationPhotoSelection() { throw ProductDraftStore.DraftError.invalidPhotos }
         // Revisiting capture after completion keeps this a saved product.
         if garment.informationCompletedAt != nil {
             try context.save()

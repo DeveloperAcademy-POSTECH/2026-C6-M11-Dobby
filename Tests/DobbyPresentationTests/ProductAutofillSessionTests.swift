@@ -89,8 +89,10 @@ struct ProductAutofillSessionTests {
         let before = ProductAutofillInputSnapshot(garment: garment)
         let previousDate = garment.updatedAt
         let generated = draft(brand: nil)
+        #expect(garment.aiInformationGeneratedAt == nil)
         try before.apply(generated, to: garment)
 
+        #expect(garment.aiInformationGeneratedAt != nil, "Only an applied AI result enables regeneration")
         #expect(garment.name == generated.productName)
         #expect(garment.brand.isEmpty, "A null brand clears the field instead of displaying null or an old brand")
         #expect(garment.detail == "첫 번째 문단입니다.\n\n두 번째 문단입니다.")
@@ -110,6 +112,7 @@ struct ProductAutofillSessionTests {
         #expect(measurement.isEdited)
 
         before.restore(to: garment)
+        #expect(garment.aiInformationGeneratedAt == nil, "A failed save restores the pre-generation state")
         #expect(before.matches(garment))
         #expect(garment.price == 48_000)
         #expect(measurement.valueCm == 55.25)
@@ -129,6 +132,19 @@ struct ProductAutofillSessionTests {
         #expect(garment.name == "기존 제품명")
         #expect(garment.brand == "기존 브랜드")
         #expect(garment.detail == "사용자가 새로 작성한 설명")
+        #expect(garment.aiInformationGeneratedAt == nil, "Rejected results must not mark a generation as successful")
+    }
+
+    @Test func failedRegenerationRestoresThePreviousSuccessfulState() throws {
+        let garment = makeGarment()
+        let initialGeneration = Date(timeIntervalSinceReferenceDate: 123)
+        garment.aiInformationGeneratedAt = initialGeneration
+        let before = ProductAutofillInputSnapshot(garment: garment)
+        try before.apply(draft(name: "다시 생성한 정보"), to: garment)
+        #expect(garment.aiInformationGeneratedAt != initialGeneration)
+        before.restore(to: garment)
+        #expect(garment.aiInformationGeneratedAt == initialGeneration)
+        #expect(garment.name == "기존 제품명")
     }
 
     @Test func aSnapshotCannotApplyOrRestoreIntoAnotherProduct() throws {
