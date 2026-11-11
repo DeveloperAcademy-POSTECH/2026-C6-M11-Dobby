@@ -9,20 +9,19 @@ struct ProductDraftCountBadge: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Text("임시저장")
-                    .font(.custom("Pretendard-Medium", fixedSize: 14))
+                    .font(.custom("Pretendard-Regular", size: 14, relativeTo: .subheadline))
                 Text(count.formatted())
-                    .font(.custom("Pretendard-Bold", fixedSize: 14))
+                    .font(.custom("Pretendard-SemiBold", size: 14, relativeTo: .subheadline))
             }
-            .tracking(-0.14)
-            .foregroundStyle(isSelected ? Color("BrandNeutral50") : Color("BrandNeutral500"))
-            .frame(minHeight: 16)
+            .tracking(-0.23)
+            .foregroundStyle(isSelected ? Color("BrandNeutral50") : Color(count == 0 ? "BrandNeutral500" : "BrandNeutral900"))
+            .frame(minHeight: 20)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(isSelected ? Color("BrandNeutral950") : Color("BrandNeutral100"), in: Capsule())
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel("임시저장 \(count)개")
         .accessibilityValue(isSelected ? "선택됨" : "선택 안 됨")
         .accessibilityIdentifier("library.draft-count")

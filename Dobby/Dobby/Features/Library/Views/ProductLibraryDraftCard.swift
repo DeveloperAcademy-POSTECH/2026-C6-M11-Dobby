@@ -10,7 +10,8 @@ struct ProductLibraryDraftCard: View {
 
     var body: some View {
         ProductDraftCard(step: draft.step, relativeSaveTime: relativeSaveTime,
-                         stageAccessibilityIdentifier: "library.draft.stage.\(garment.id.uuidString)") {
+                         stageAccessibilityIdentifier: "library.draft.stage.\(garment.id.uuidString)",
+                         usesLibraryTypography: true) {
             thumbnail
         }
     }
