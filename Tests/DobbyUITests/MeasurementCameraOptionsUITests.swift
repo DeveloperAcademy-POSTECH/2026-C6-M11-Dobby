@@ -225,6 +225,14 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         XCTAssertTrue(sheet.exists && handle.exists)
         let originalPhotoFrame = photo.frame
         let originalPointValue = app.buttons["garmentMeasurementPoint_shoulder_left"].value as? String
+        let originalHandleFrame = handle.frame
+        // A short pan returns to the same detent. It must leave no transient
+        // translation behind to jump on the next drag or handle tap.
+        let shortStart = sheet.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.5))
+        shortStart.press(forDuration: 0.05, thenDragTo: shortStart.withOffset(CGVector(dx: 0, dy: 12)),
+                         withVelocity: XCUIGestureVelocity(rawValue: 20), thenHoldForDuration: 0.25)
+        XCTAssertEqual(handle.value as? String, "펼쳐짐")
+        waitUntil { Self.framesMatch(handle.frame, originalHandleFrame) }
         // Start on a card, outside the 28pt grabber, to cover scrolling the
         // panel body rather than only dragging its narrow handle.
         let panelStart = sheet.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.5))
@@ -240,6 +248,13 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         let sideways = sheet.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
         sideways.press(forDuration: 0.05, thenDragTo: sideways.withOffset(CGVector(dx: 100, dy: 0)))
         XCTAssertEqual(handle.value as? String, "펼쳐짐", "Horizontal scrolling must not collapse the panel")
+        handle.tap()
+        waitUntil { handle.value as? String == "접힘" }
+        handle.tap()
+        waitUntil { Self.framesMatch(handle.frame, originalHandleFrame) }
+        XCTAssertEqual(handle.value as? String, "펼쳐짐")
+        assertFrame(photo.frame, equals: originalPhotoFrame)
+        XCTAssertEqual(app.buttons["garmentMeasurementPoint_shoulder_left"].value as? String, originalPointValue)
         attach(name: "measurement-result-panel-body-scroll-restored")
     }
 

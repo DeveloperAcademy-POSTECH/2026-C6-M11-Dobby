@@ -33,9 +33,6 @@ struct GarmentMeasurementResultView: View {
     @State private var hasFinishedPointTutorial = false
     @State private var summaryHeight: CGFloat = 111
     @State private var isResultSheetExpanded = true
-    @GestureState(resetTransaction: Transaction(animation: .snappy(duration: 0.28)))
-    private var sheetDrag = ResultSheetDrag()
-    @State private var isVerticalSheetDrag = false
     private let pipeline = MeasurementPipeline()
 
     init(model: AutomaticMeasurement, archive: MeasurementArchive,
@@ -175,9 +172,9 @@ struct GarmentMeasurementResultView: View {
         let aspect = SnapshotPresentation.resultAspectRatio(for: model.snapshot)
         let base = MeasurementResultLayout(size: size, bottomSafeArea: bottomSafeArea,
                                            aspect: aspect, summaryHeight: summaryHeight, usesSheet: captureUsesTallResult)
-        let startingHeight = isResultSheetExpanded ? base.expandedSheetHeight : base.collapsedSheetHeight
-        let sheetHeight = min(base.expandedSheetHeight,
-                              max(base.collapsedSheetHeight, startingHeight - sheetDrag.translation))
+        // The photo editor only needs the settled detent for magnifier and
+        // touch exclusion. Per-frame sheet motion is owned by the sheet below.
+        let sheetHeight = isResultSheetExpanded ? base.expandedSheetHeight : base.collapsedSheetHeight
         let layout = MeasurementResultLayout(size: size, bottomSafeArea: bottomSafeArea,
                                              aspect: aspect, summaryHeight: summaryHeight, usesSheet: captureUsesTallResult, sheetHeight: sheetHeight)
         return ZStack(alignment: .topLeading) {
@@ -203,12 +200,14 @@ struct GarmentMeasurementResultView: View {
             }
             .position(x: layout.photo.midX, y: layout.photo.midY)
 
-            if let sheetTop = layout.sheetTop {
-                resultSheet(height: sheetHeight, expandedHeight: base.expandedSheetHeight,
-                            collapsedHeight: base.collapsedSheetHeight,
-                            overlaysPhoto: layout.photo.maxY >= sheetTop + 48)
-                    .frame(width: size.width, height: sheetHeight, alignment: .top)
-                    .position(x: size.width / 2, y: size.height - sheetHeight / 2)
+            if layout.sheetTop != nil {
+                MeasurementResultSheet(values: model.visibleValues, isRecalculating: model.needsRecalculation,
+                    isExpanded: $isResultSheetExpanded,
+                    expandedHeight: base.expandedSheetHeight, collapsedHeight: base.collapsedSheetHeight,
+                    canvasHeight: size.height, photoBottom: layout.photo.maxY,
+                    onSummaryHeightChange: updateSummaryHeight)
+                    .frame(width: size.width, height: base.expandedSheetHeight, alignment: .top)
+                    .position(x: size.width / 2, y: size.height - base.expandedSheetHeight / 2)
             } else {
                 resultSummary(overlaysPhoto: false)
                     .frame(width: layout.summary.width)
@@ -231,88 +230,11 @@ struct GarmentMeasurementResultView: View {
                                            value: geometry.size.height)
                 }
             }
-            .onPreferenceChange(MeasurementResultSummaryHeightKey.self) { height in
-                if height.isFinite && height > 0 && abs(summaryHeight - height) > 0.5 { summaryHeight = height }
-            }
+            .onPreferenceChange(MeasurementResultSummaryHeightKey.self, perform: updateSummaryHeight)
     }
 
-    private func resultSheet(height: CGFloat, expandedHeight: CGFloat, collapsedHeight: CGFloat,
-                             overlaysPhoto: Bool) -> some View {
-        ZStack(alignment: .top) {
-            MeasurementResultSheetBackdrop()
-            // A capture's display crop can widen to keep all measurement points
-            // visible. If the photo ends above the sheet, use dark guidance on
-            // its white backing instead of unreadable white-on-white text.
-            resultSummary(overlaysPhoto: overlaysPhoto)
-                .padding(.horizontal, model.visibleValues.count >= 5 ? 19 : 23)
-                .padding(.top, 28)
-                .opacity(height > collapsedHeight + 30 ? 1 : 0)
-                .accessibilityHidden(height <= collapsedHeight + 30)
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(overlaysPhoto && !reduceTransparency ? Color.white : Color("BrandNeutral800"))
-                .frame(width: 38, height: 3).padding(.top, 10.5)
-                .frame(maxWidth: .infinity, minHeight: 28, alignment: .top)
-                .contentShape(Rectangle())
-                .onTapGesture { toggleResultSheet() }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("실측값 패널")
-                .accessibilityValue(isResultSheetExpanded ? "펼쳐짐" : "접힘")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { toggleResultSheet() }
-                .accessibilityAdjustableAction { direction in
-                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
-                        isResultSheetExpanded = direction == .increment
-                    }
-                }
-                .accessibilityIdentifier("garmentResultSheetHandle")
-        }
-        .frame(height: height, alignment: .top)
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 32, topTrailingRadius: 32))
-        .contentShape(Rectangle())
-        // Drag anywhere on the panel, while leaving horizontal measurement-card
-        // scrolling independent. The photo itself keeps its own editing gestures.
-        .simultaneousGesture(resultSheetDrag(expandedHeight: expandedHeight, collapsedHeight: collapsedHeight))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("garmentResultMeasurementSheet")
-    }
-
-    private struct ResultSheetDrag {
-        var isVertical: Bool?
-        var translation: CGFloat = 0
-    }
-
-    private func resultSheetDrag(expandedHeight: CGFloat, collapsedHeight: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 6, coordinateSpace: .global)
-            .updating($sheetDrag) { value, state, transaction in
-                if state.isVertical == nil {
-                    state.isVertical = abs(value.translation.height) > abs(value.translation.width)
-                }
-                guard state.isVertical == true else { return }
-                transaction.animation = nil
-                state.translation = value.translation.height
-            }
-            .onChanged { value in
-                // GestureState can reset before onEnded. Retain only the
-                // chosen axis so the release still commits the user's swipe.
-                let vertical = sheetDrag.isVertical
-                    ?? (abs(value.translation.height) > abs(value.translation.width))
-                if isVerticalSheetDrag != vertical { isVerticalSheetDrag = vertical }
-            }
-            .onEnded { value in
-                guard isVerticalSheetDrag else { return }
-                isVerticalSheetDrag = false
-                let start = isResultSheetExpanded ? expandedHeight : collapsedHeight
-                let projectedHeight = start - value.predictedEndTranslation.height
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
-                    isResultSheetExpanded = projectedHeight > (expandedHeight + collapsedHeight) / 2
-                }
-            }
-    }
-
-    private func toggleResultSheet() {
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
-            isResultSheetExpanded.toggle()
-        }
+    private func updateSummaryHeight(_ height: CGFloat) {
+        if height.isFinite && height > 0 && abs(summaryHeight - height) > 0.5 { summaryHeight = height }
     }
 
     private var accessibleResult: some View {
@@ -728,7 +650,7 @@ private struct MeasurementCaptureFailureGroup: Identifiable {
 
 /// Each result introduces point editing once before accepting any edits.
 /// The illustration is the original 76 × 111 Figma asset, not a symbol substitute.
-private struct MeasurementResultSummaryHeightKey: PreferenceKey {
+struct MeasurementResultSummaryHeightKey: PreferenceKey {
     static var defaultValue: CGFloat { 111 }
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

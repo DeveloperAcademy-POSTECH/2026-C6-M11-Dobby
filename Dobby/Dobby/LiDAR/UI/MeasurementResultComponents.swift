@@ -157,6 +157,134 @@ struct MeasurementResultProgress: View {
     }
 }
 
+/// Own the high-frequency pan state here, outside the photograph and its
+/// coordinate/landmark calculations. The frosted surface keeps one fixed size
+/// and moves as a unit instead of relaying out and resizing its blur each frame.
+struct MeasurementResultSheet: View {
+    let values: [MeasurementValue]
+    let isRecalculating: Bool
+    @Binding var isExpanded: Bool
+    let expandedHeight: CGFloat
+    let collapsedHeight: CGFloat
+    let canvasHeight: CGFloat
+    let photoBottom: CGFloat
+    let onSummaryHeightChange: (CGFloat) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.scenePhase) private var scenePhase
+    @GestureState private var gestureIsActive = false
+    @State private var drag = SheetDrag()
+
+    private struct SheetDrag {
+        let sessionID = UUID()
+        var isVertical: Bool?
+        var translation: CGFloat = 0
+    }
+
+    private var travel: CGFloat { max(0, expandedHeight - collapsedHeight) }
+    private var restOffset: CGFloat { isExpanded ? 0 : travel }
+    private var visibleOffset: CGFloat { min(travel, max(0, restOffset + drag.translation)) }
+    private var visibleHeight: CGFloat { expandedHeight - visibleOffset }
+    private var overlaysPhoto: Bool { photoBottom >= canvasHeight - visibleHeight + 48 }
+    private var settleAnimation: Animation? { reduceMotion ? nil : .snappy(duration: 0.28) }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            MeasurementResultSheetBackdrop()
+            MeasurementResultSummary(values: values, isRecalculating: isRecalculating,
+                                     overlaysPhoto: overlaysPhoto)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: MeasurementResultSummaryHeightKey.self,
+                                               value: geometry.size.height)
+                    }
+                }
+                .onPreferenceChange(MeasurementResultSummaryHeightKey.self, perform: onSummaryHeightChange)
+                .padding(.horizontal, values.count >= 5 ? 19 : 23)
+                .padding(.top, 28)
+                .opacity(min(1, max(0, (visibleHeight - collapsedHeight) / 30)))
+                .accessibilityHidden(visibleHeight <= collapsedHeight + 30)
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(overlaysPhoto && !reduceTransparency ? Color.white : Color("BrandNeutral800"))
+                .frame(width: 38, height: 3).padding(.top, 10.5)
+                .frame(maxWidth: .infinity, minHeight: 28, alignment: .top)
+                .contentShape(Rectangle())
+                .onTapGesture { settle(expanded: !isExpanded) }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("실측값 패널")
+                .accessibilityValue(isExpanded ? "펼쳐짐" : "접힘")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { settle(expanded: !isExpanded) }
+                .accessibilityAdjustableAction { settle(expanded: $0 == .increment) }
+                .accessibilityIdentifier("garmentResultSheetHandle")
+        }
+        .frame(height: expandedHeight, alignment: .top)
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 32, topTrailingRadius: 32))
+        .contentShape(Rectangle())
+        .simultaneousGesture(sheetPan)
+        .offset(y: visibleOffset)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("garmentResultMeasurementSheet")
+        .onChange(of: gestureIsActive) { _, active in
+            guard !active, drag.isVertical != nil else { return }
+            let session = drag.sessionID
+            // A normal onEnded commits first. If the system cancelled the
+            // gesture instead, return from the last rendered position without
+            // a GestureState reset racing a separate release animation.
+            Task { @MainActor in
+                guard !gestureIsActive, drag.sessionID == session,
+                      drag.isVertical != nil else { return }
+                settle(expanded: isExpanded)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { settle(expanded: isExpanded, animated: false) }
+        }
+        .onChange(of: expandedHeight) { _, _ in settle(expanded: isExpanded, animated: false) }
+        .onDisappear { settle(expanded: isExpanded, animated: false) }
+    }
+
+    private var sheetPan: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .updating($gestureIsActive) { _, active, transaction in
+                transaction.animation = nil
+                active = true
+            }
+            .onChanged { value in
+                var next = drag
+                if next.isVertical == nil {
+                    next.isVertical = abs(value.translation.height) > abs(value.translation.width)
+                }
+                guard next.isVertical == true else {
+                    if drag.isVertical == nil { drag = next }
+                    return
+                }
+                next.translation = min(travel - restOffset, max(-restOffset, value.translation.height))
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { drag = next }
+            }
+            .onEnded { value in
+                guard drag.isVertical == true else {
+                    drag = SheetDrag()
+                    return
+                }
+                let projectedOffset = restOffset + value.predictedEndTranslation.height
+                settle(expanded: projectedOffset < travel / 2)
+            }
+    }
+
+    private func settle(expanded: Bool, animated: Bool = true) {
+        // Update the rest position and transient translation in one transaction.
+        // Neither the original photograph nor its points are moved or rescaled.
+        withAnimation(animated ? settleAnimation : nil) {
+            if isExpanded != expanded { isExpanded = expanded }
+            drag = SheetDrag()
+        }
+    }
+}
+
 /// A frosted sheet, not Liquid Glass: the photo stays under a single blur layer.
 struct MeasurementResultSheetBackdrop: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
