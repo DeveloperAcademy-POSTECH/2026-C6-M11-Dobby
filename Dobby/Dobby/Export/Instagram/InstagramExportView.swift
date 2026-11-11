@@ -79,6 +79,7 @@ struct InstagramExportView: View {
                     ) {
                         dismiss()
                     }
+                    .buttonBorderShape(.circle)
                 }
             }
             if account != nil && !uploadState.isUploading && !showsCompletion {
@@ -88,6 +89,7 @@ struct InstagramExportView: View {
                         onReconnect: { Task { await connect() } },
                         onDisconnect: { Task { await disconnect() } }
                     )
+                    .buttonBorderShape(.capsule)
                 }
             }
         }
