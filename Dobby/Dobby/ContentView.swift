@@ -22,8 +22,8 @@ struct ContentView: View {
     @State private var controller = CopyActivityController()
     @State private var linkError: String?
     @State private var routeTask: Task<Void, Never>?
-    @State private var returnsHomeAfterExport = false
-    @State private var exportHomeNavigationID = UUID()
+    @State private var pendingExportDestination: ExportReturnDestination?
+    @State private var exportReturnNavigationID = UUID()
 
 #if DEBUG
     init(previewLibrary: Bool = false, previewEditing: Bool = false) {
@@ -115,10 +115,10 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
-            ExportView(product: product, showFruits: $showFruits) {
+            ExportView(product: product, showFruits: $showFruits) { destination in
                 routeTask?.cancel()
                 routeTask = nil
-                returnsHomeAfterExport = true
+                pendingExportDestination = destination
                 showFruits = false
                 exportProduct = nil
             }
@@ -130,19 +130,19 @@ struct ContentView: View {
             } message: { Text(linkError ?? "") }
         .onOpenURL(perform: handleURL)
         .tint(Color("HomeAccent"))
-        .environment(\.returnHomeFromExport,
-            ExportHomeNavigationAction(id: exportHomeNavigationID, action: { @MainActor in
-                returnHomeFromExport()
+        .environment(\.returnFromExport,
+            ExportReturnNavigationAction(id: exportReturnNavigationID, action: { @MainActor destination in
+                returnFromExport(to: destination)
             }))
     }
 
     private func finishExportDismissal() {
-        guard returnsHomeAfterExport else { return }
-        returnsHomeAfterExport = false
-        returnHomeFromExport()
+        guard let destination = pendingExportDestination else { return }
+        pendingExportDestination = nil
+        returnFromExport(to: destination)
     }
 
-    private func returnHomeFromExport() {
+    private func returnFromExport(to destination: ExportReturnDestination) {
         routeTask?.cancel()
         routeTask = nil
         creationCopyHomeProduct = nil
@@ -153,7 +153,7 @@ struct ContentView: View {
         creationRequest = nil
         libraryPath.removeAll()
         libraryIsEditing = false
-        tab = .capture
+        tab = destination == .library ? .library : .capture
     }
 
     private func returnHomeFromCreation() {
@@ -231,7 +231,7 @@ struct ContentView: View {
 
 struct ProductSavedDetailView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.returnHomeFromExport) private var returnHomeFromExport
+    @Environment(\.returnFromExport) private var returnFromExport
     @Bindable var garment: Garment
     let controller: CopyActivityController
     let onExitToLibrary: () -> Void
@@ -240,7 +240,7 @@ struct ProductSavedDetailView: View {
     @State private var editError: String?
     @State private var exportProduct: ExportProduct?
     @State private var showFruits = false
-    @State private var returnsHomeAfterExport = false
+    @State private var pendingExportDestination: ExportReturnDestination?
 
     var body: some View {
         ScrollView {
@@ -298,8 +298,8 @@ struct ProductSavedDetailView: View {
             Text(editError ?? "")
         }
         .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
-            ExportView(product: product, showFruits: $showFruits) {
-                returnsHomeAfterExport = true
+            ExportView(product: product, showFruits: $showFruits) { destination in
+                pendingExportDestination = destination
                 showFruits = false
                 exportProduct = nil
             }
@@ -312,7 +312,7 @@ struct ProductSavedDetailView: View {
     }
 
     private func openExport() {
-        returnsHomeAfterExport = false
+        pendingExportDestination = nil
         showFruits = false
         exportProduct = ExportProduct(garment: garment)
     }
@@ -328,9 +328,9 @@ struct ProductSavedDetailView: View {
     }
 
     private func finishExportDismissal() {
-        guard returnsHomeAfterExport else { return }
-        returnsHomeAfterExport = false
-        returnHomeFromExport?()
+        guard let destination = pendingExportDestination else { return }
+        pendingExportDestination = nil
+        returnFromExport?(to: destination)
     }
 }
 
