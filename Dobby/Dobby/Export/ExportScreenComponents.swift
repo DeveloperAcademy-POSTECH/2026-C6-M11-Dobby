@@ -233,12 +233,11 @@ struct ExportAccountMenu: View {
                 ExportAccountMenuButton(
                     title: "연결 해제하기",
                     systemImage: "personalhotspot.slash",
-                    tint: .red,
+                    tint: Color(.accentsRed),
                     action: performDisconnect
                 )
             }
             .padding(12)
-            .frame(width: 240)
             .presentationCompactAdaptation(.popover)
         }
     }
@@ -262,19 +261,19 @@ private struct ExportAccountMenuButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .center, spacing: 6) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 17, weight: .medium))
-                    .frame(width: 24, height: 24, alignment: .center)
+                    .font(.body)
+                    .frame(width: 28, alignment: .center)
 
                 Text(title)
-                    .font(.system(size: 17, weight: .regular))
-
-                Spacer(minLength: 0)
+                    .font(.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .contentShape(Rectangle())
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
+            .padding(.leading, 6)
+            .padding(.trailing, 8)
+            .frame(width: 206, alignment: .leading)
         }
         .buttonStyle(.plain)
         .foregroundStyle(tint)
