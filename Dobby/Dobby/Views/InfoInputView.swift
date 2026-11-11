@@ -28,6 +28,7 @@ struct InfoInputView: View {
     @State private var saveError: String?
     @State private var hasAttemptedCompletion = false
     @State private var pendingExportDestination: ExportReturnDestination?
+    @State private var isImportingPhotos = false
     @State private var generationRequestID: UUID?
     @State private var generationError: String?
     @State private var showsReplacementConfirmation = false
@@ -58,15 +59,30 @@ struct InfoInputView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if onGenerateAI != nil { generateInformationButton }
-                    ProductInformationFields(garment: garment, measurementInput: measurementInput,
-                        focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
-                        allowsPhotoEditing: allowsPhotoEditing)
+                ZStack(alignment: .topLeading) {
+                    VStack(alignment: .leading, spacing: 40) {
+                        VStack(alignment: .leading, spacing: 24) {
+                            ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing,
+                                onImportingChange: { isImportingPhotos = $0 })
+                            if onGenerateAI != nil { generateInformationButton }
+                        }
+                        ProductInformationFields(garment: garment, measurementInput: measurementInput,
+                            focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
+                            allowsPhotoEditing: allowsPhotoEditing, showsPhotoSection: false,
+                            onPhotoImportingChange: { isImportingPhotos = $0 })
+                    }
+                    .opacity(generationRequestID == nil ? 1 : 0)
+                    .accessibilityHidden(generationRequestID != nil)
+
+                    if generationRequestID != nil {
+                        ProductInformationSkeletonView(photoCount: garment.productPhotos.count,
+                            measurementColumnCount: garment.visibleMeasurements.count)
+                    }
+
                 }
-                    .disabled(generationRequestID != nil)
+                    .disabled(generationRequestID != nil || isImportingPhotos)
                     .padding(.horizontal, 20)
-                    .padding(.top, 12)
+                    .padding(.top, 26)
                     .padding(.bottom, 16)
                     .background {
                         Color.clear
@@ -111,7 +127,7 @@ struct InfoInputView: View {
                             .foregroundStyle(.black)
                     }
                     .tint(.black)
-                    .disabled(generationRequestID != nil)
+                    .disabled(generationRequestID != nil || isImportingPhotos)
                     .accessibilityLabel("뒤로가기")
                     .accessibilityIdentifier("product-flow.back")
                 }
@@ -119,14 +135,14 @@ struct InfoInputView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: complete) {
                     Text("완료")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(.headline, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(width: 61, height: 44)
                         .background(GarmentInformationValidation.isValid(garment)
                             ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
                             in: Capsule())
                 }
-                .disabled(generationRequestID != nil || !GarmentInformationValidation.hasAnyInformation(garment))
+                .disabled(generationRequestID != nil || isImportingPhotos || !GarmentInformationValidation.hasAnyInformation(garment))
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }
@@ -204,25 +220,27 @@ struct InfoInputView: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 16, weight: .medium))
                     .frame(height: 20)
-                Text("AI로 제품 정보 생성하기")
-                    .tracking(-0.14)
+                Text(garment.aiInformationGeneratedAt == nil
+                    ? "AI로 제품 정보 생성하기" : "다시 정보 생성하기")
+                    .tracking(-0.31)
+
             }
-            .font(.custom("Pretendard-Medium", size: 14, relativeTo: .subheadline))
-            .foregroundStyle(Color("BrandNeutralWhite"))
+            .font(.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout))
+            .foregroundStyle(Color("BrandMain500"))
             .frame(maxWidth: .infinity, minHeight: 20)
             .padding(.horizontal, 8)
             .padding(.vertical, 15)
-            .background(Color("BrandMain500"), in: RoundedRectangle(cornerRadius: 16))
+            .background(Color("BrandMain50"), in: RoundedRectangle(cornerRadius: 16))
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-        .disabled(generationRequestID != nil)
+        .disabled(generationRequestID != nil || isImportingPhotos)
         .accessibilityHint("선택한 제품 사진으로 제품명, 설명, 브랜드를 생성합니다")
         .accessibilityIdentifier("product-ai.generate")
     }
 
     private func requestGeneration() {
-        guard generationRequestID == nil, onGenerateAI != nil else { return }
+        guard generationRequestID == nil, !isImportingPhotos, onGenerateAI != nil else { return }
         dismissKeyboard()
         generationError = nil
         generationRequestID = UUID()
@@ -236,7 +254,7 @@ struct InfoInputView: View {
     }
 
     private func complete() {
-        guard generationRequestID == nil else { return }
+        guard generationRequestID == nil, !isImportingPhotos else { return }
         hasAttemptedCompletion = true
         guard GarmentInformationValidation.isValid(garment) else { return }
         do {

@@ -7,6 +7,7 @@ struct ProductInformationEditSnapshot: Equatable {
         let isSelectedForProduct: Bool?
         let roleRaw: String
         let order: Int
+        let productRotationQuarterTurns: Int?
     }
 
     private struct MeasurementState: Equatable {
@@ -43,7 +44,7 @@ struct ProductInformationEditSnapshot: Equatable {
         sleeveCm = garment.sleeveCm
         waistCm = garment.waistCm
         photos = garment.photos.map {
-            PhotoState(id: $0.id, isSelectedForProduct: $0.isSelectedForProduct, roleRaw: $0.roleRaw, order: $0.order)
+            PhotoState(id: $0.id, isSelectedForProduct: $0.isSelectedForProduct, roleRaw: $0.roleRaw, order: $0.order, productRotationQuarterTurns: $0.productRotationQuarterTurns)
         }.sorted { $0.id.uuidString < $1.id.uuidString }
         measurements = garment.measurements.map {
             MeasurementState(id: $0.id, valueBitPattern: $0.valueCm.bitPattern, isEdited: $0.isEdited)
@@ -68,11 +69,15 @@ struct ProductInformationEditSnapshot: Equatable {
         garment.waistCm = waistCm
 
         let photoStates = Dictionary(uniqueKeysWithValues: photos.map { ($0.id, $0) })
+        // Additions are relationship edits too. Do not leave a detached, rolled-
+        // back imported photo visible after restoring the original snapshot.
+        garment.photos = garment.photos.filter { photoStates[$0.id] != nil }
         for photo in garment.photos {
             guard let state = photoStates[photo.id] else { continue }
             photo.isSelectedForProduct = state.isSelectedForProduct
             photo.roleRaw = state.roleRaw
             photo.order = state.order
+            photo.productRotationQuarterTurns = state.productRotationQuarterTurns
         }
 
         let measurementStates = Dictionary(uniqueKeysWithValues: measurements.map { ($0.id, $0) })

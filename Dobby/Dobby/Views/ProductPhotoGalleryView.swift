@@ -6,21 +6,26 @@ struct ProductPhotoGalleryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedIndex: Int
     @State private var isPaging = false
+    @State private var isRotating = false
+    @State private var rotationError: String?
     @State private var showsDeletionError = false
     @State private var pendingDeletionID: UUID?
     @State private var dismissalOffset: CGFloat = 0
     @State private var isClosing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let onRotate: ((UUID) async throws -> Bool)?
     private let onDelete: ((UUID) throws -> Bool)?
 
     private let controlBackground = Color.black.opacity(0.2)
     private let controlFont = Font.system(size: 17, weight: .semibold)
 
     init(photos: [GarmentPhoto], initialPhotoID: UUID,
-         onDelete: ((UUID) throws -> Bool)? = nil) {
+         onDelete: ((UUID) throws -> Bool)? = nil,
+         onRotate: ((UUID) async throws -> Bool)? = nil) {
         _photos = State(initialValue: photos)
         _selectedIndex = State(initialValue: photos.firstIndex { $0.id == initialPhotoID } ?? 0)
         self.onDelete = onDelete
+        self.onRotate = onRotate
     }
 
     private var pageSelection: Binding<Int> {
@@ -47,7 +52,7 @@ struct ProductPhotoGalleryView: View {
                 photoSurface(in: geometry.size, height: photoHeight)
                     .scaleEffect(1 - dragProgress * 0.12)
                     .offset(y: dismissalOffset)
-                    .allowsHitTesting(pendingDeletionID == nil && !isClosing)
+                    .allowsHitTesting(pendingDeletionID == nil && !isClosing && !isRotating)
                     .accessibilityHidden(pendingDeletionID != nil)
 
                 if pendingDeletionID != nil {
@@ -75,6 +80,10 @@ struct ProductPhotoGalleryView: View {
             if pendingDeletionID != nil { pendingDeletionID = nil } else { close() }
         }
         .onDisappear { isClosing = false }
+        .alert("사진을 회전하지 못했어요", isPresented: Binding(
+            get: { rotationError != nil }, set: { if !$0 { rotationError = nil } })) {
+            Button("확인", role: .cancel) { rotationError = nil }
+        } message: { Text(rotationError ?? "사진은 그대로 남아 있어요. 다시 시도해 주세요.") }
         .alert("사진을 삭제하지 못했어요", isPresented: $showsDeletionError) {
             Button("확인", role: .cancel) { }
         } message: {
@@ -85,13 +94,13 @@ struct ProductPhotoGalleryView: View {
     private func photoSurface(in size: CGSize, height: CGFloat) -> some View {
         ProductPhotoPager(photos: photos, selectedIndex: $selectedIndex,
                           onTransitionChange: { isPaging = $0 },
-                          allowsDismissGesture: pendingDeletionID == nil && !showsDeletionError && !isClosing,
+                          allowsDismissGesture: pendingDeletionID == nil && !showsDeletionError && !isClosing && !isRotating,
                           onDismissDragChanged: updateDismissal,
                           onDismissDragEnded: { distance, velocity, cancelled in
                               endDismissal(distance: distance, velocity: velocity, cancelled: cancelled,
                                            containerHeight: size.height)
                           })
-        .id(photos.map(\.id))
+        .id(photos.map { "\($0.id)-\($0.productRotationQuarterTurns ?? 0)" })
         .frame(width: size.width, height: height)
         .clipped()
         .accessibilityIdentifier("product-gallery.pager")
@@ -101,16 +110,28 @@ struct ProductPhotoGalleryView: View {
             Button("닫기", systemImage: "xmark", action: close)
                 .labelStyle(.iconOnly)
                 .font(controlFont)
-                .foregroundStyle(.white)
+                .foregroundStyle(.black)
                 .frame(width: 48, height: 48)
-                .background(controlBackground, in: Circle())
+                .glassEffect(.regular, in: Circle())
                 .contentShape(Circle())
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-gallery.close")
                 .padding(10)
         }
         .overlay(alignment: .topTrailing) {
-            if onDelete != nil {
+            if onRotate != nil {
+                Button("사진 회전", systemImage: "rotate.right") { Task { await rotateSelectedPhoto() } }
+                    .labelStyle(.iconOnly)
+                    .font(controlFont)
+                    .foregroundStyle(.black)
+                    .frame(width: 56, height: 48)
+                    .glassEffect(.regular, in: Capsule())
+                    .contentShape(Capsule())
+                    .buttonStyle(.plain)
+                    .disabled(photos.isEmpty || isPaging || isRotating || dismissalOffset > 0)
+                    .accessibilityIdentifier("product-gallery.rotate")
+                    .padding(10)
+            } else if onDelete != nil {
                 Button("제품 사진 삭제", systemImage: "trash", action: requestDeletion)
                     .labelStyle(.iconOnly)
                     .font(controlFont)
@@ -134,6 +155,22 @@ struct ProductPhotoGalleryView: View {
                     .padding(.bottom, 20)
                     .disabled(isClosing || dismissalOffset > 0)
             }
+        }
+    }
+
+    private func rotateSelectedPhoto() async {
+        guard !isPaging, !isClosing, !isRotating, dismissalOffset == 0,
+              let onRotate, photos.indices.contains(selectedIndex) else { return }
+        let identifier = photos[selectedIndex].id
+        isRotating = true
+        defer { isRotating = false }
+        do {
+            guard try await onRotate(identifier) else {
+                rotationError = "이 사진을 찾을 수 없어요. 화면을 다시 열어 주세요."
+                return
+            }
+        } catch {
+            rotationError = "사진은 그대로 남아 있어요. 다시 시도해 주세요."
         }
     }
 
