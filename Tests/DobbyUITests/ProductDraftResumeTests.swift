@@ -4,6 +4,28 @@ import XCTest
 /// Relaunches prove that a new flow restores saved state rather than live view state.
 @MainActor
 final class ProductDraftResumeTests: XCTestCase {
+    func testLongPressDraftSelectsDraftGridWithoutResuming() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openMeasurementResult(in: app)
+        let id = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
+        let draft = app.buttons.matching(identifier: "library.draft.\(id)").firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.press(forDuration: 0.8)
+        let remove = app.buttons["library.delete.\(id)"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["library.edit-mode"].label, "완료")
+        XCTAssertFalse(app.navigationBars["제품 상세 촬영"].exists)
+        XCTAssertFalse(app.buttons["library.draft.\(id)"].exists,
+                       "Resume banners are hidden while editing the draft grid")
+        attachScreenshot(app, name: "library-draft-long-press-editing")
+        app.buttons["library.edit-mode"].tap()
+        XCTAssertTrue(remove.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(draft.waitForExistence(timeout: 5))
+    }
+
     func testInformationBackUsesDoneStateBeforeAndAfterHomeResume() {
         continueAfterFailure = false
         let app = fixtureApp()
