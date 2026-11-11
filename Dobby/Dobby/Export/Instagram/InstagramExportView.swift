@@ -24,6 +24,7 @@ struct InstagramExportView: View {
     @State private var account: InstagramAccount?
     @State private var isLoadingAccount = true
     @State private var accountLoadError: String?
+    @State private var showsConnectionCompletion = false
     @State private var draft: InstagramExportDraft
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
@@ -46,6 +47,11 @@ struct InstagramExportView: View {
                     onOpenLibrary: requestLibraryExit,
                     onOpenInstagram: openInstagram
                 )
+            } else if showsConnectionCompletion {
+                InstagramConnectionCompletionView(
+                    onOpenLibrary: requestLibraryExit,
+                    onContinueToUpload: { showsConnectionCompletion = false }
+                )
             } else if let account {
                 InstagramComposeView(
                     account: account,
@@ -63,9 +69,9 @@ struct InstagramExportView: View {
         .navigationTitle("인스타그램에 업로드하기")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
-        .toolbar(uploadState.isCompleted ? .hidden : .visible, for: .navigationBar)
+        .toolbar(showsCompletion ? .hidden : .visible, for: .navigationBar)
         .toolbar {
-            if !uploadState.isUploading {
+            if !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(
                         systemImage: "chevron.left",
@@ -75,7 +81,7 @@ struct InstagramExportView: View {
                     }
                 }
             }
-            if account != nil && !uploadState.isUploading && !uploadState.isCompleted {
+            if account != nil && !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarTrailing) {
                     ExportAccountMenu(
                         accessibilityLabel: "Instagram 계정 메뉴",
@@ -86,7 +92,7 @@ struct InstagramExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if account != nil && !uploadState.isCompleted {
+            if account != nil && !showsCompletion {
                 ExportBottomActionBar {
                     ExportBottomAction(
                         title: "업로드하기",
@@ -122,6 +128,10 @@ struct InstagramExportView: View {
             } message: {
                 Text(message ?? "")
             }
+    }
+
+    private var showsCompletion: Bool {
+        showsConnectionCompletion || uploadState.isCompleted
     }
 
     private var canPublish: Bool {
@@ -161,6 +171,7 @@ struct InstagramExportView: View {
             account = try await client.connect()
             accountLoadError = nil
             requestID = UUID().uuidString
+            showsConnectionCompletion = true
         } catch {
             accountLoadError = error.localizedDescription
         }
