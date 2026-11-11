@@ -7,19 +7,20 @@ struct InstagramComposeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .trailing, spacing: 24) {
                 InstagramAccountCard(account: account)
                 InstagramPhotoEditor(photos: draft.photos)
                     .disabled(isDisabled)
                 InstagramCaptionEditor(draft: $draft)
                     .disabled(isDisabled)
             }
-            .padding(.horizontal, 20)
+            .frame(maxWidth: 363, alignment: .topTrailing)
             .padding(.top, 20)
             .padding(.bottom, 116)
+            .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color(.brandNeutral50).ignoresSafeArea())
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
     }
 }
 
@@ -51,7 +52,9 @@ private struct InstagramPhotoEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("업로드할 사진")
-                .font(.body.weight(.medium))
+                .font(.custom("Pretendard-SemiBold", fixedSize: 17))
+                .foregroundStyle(Color(.brandNeutral950))
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             if photos.isEmpty {
                 ContentUnavailableView("업로드할 사진이 없어요", systemImage: "photo.badge.exclamationmark")
                     .frame(maxWidth: .infinity, minHeight: 180)
@@ -90,24 +93,9 @@ private struct InstagramCaptionEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("캡션").font(.body.weight(.medium))
-                    Text("눌러서 직접 글을 수정할 수 있어요")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                InstagramResetButton(action: { draft.resetCaption() })
-            }
-            TextEditor(text: $draft.caption)
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .frame(minHeight: 260)
-                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 14))
-                .accessibilityValue("\(draft.caption.utf16.count) / 2,200자")
+            InstagramCaptionHeader(onReset: { draft.resetCaption() })
+            InstagramCaptionInput(text: $draft.caption)
+
             if let validationMessage = draft.validationMessage,
                draft.photos.isEmpty == false {
                 Text(validationMessage)
@@ -118,13 +106,55 @@ private struct InstagramCaptionEditor: View {
     }
 }
 
+private struct InstagramCaptionHeader: View {
+    let onReset: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("캡션")
+                    .font(.custom("Pretendard-SemiBold", fixedSize: 17))
+                    .foregroundStyle(Color(.brandNeutral950))
+                Text("눌러서 직접 글을 수정할 수 있어요")
+                    .font(.custom("Pretendard-Regular", fixedSize: 14))
+                    .foregroundStyle(Color(.brandNeutral700))
+            }
+            Spacer()
+            InstagramResetButton(action: onReset)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+}
+
+private struct InstagramCaptionInput: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            TextField("", text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.custom("Pretendard-Regular", fixedSize: 17))
+                .foregroundStyle(Color(.label))
+                .lineLimit(1...)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
 private struct InstagramResetButton: View {
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Label("초기화", systemImage: "arrow.clockwise")
-                .font(.subheadline)
+            HStack(alignment: .center, spacing: 4) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .medium))
+                Text("초기화")
+                    .font(.custom("Pretendard-Regular", fixedSize: 14))
+            }
                 .foregroundStyle(Color(.brandNeutral800))
         }
         .buttonStyle(.plain)
