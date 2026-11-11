@@ -93,16 +93,18 @@ struct InstagramExportView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if account != nil && !showsCompletion {
-                ExportBottomActionBar {
-                    ExportBottomAction(
-                        title: "업로드하기",
-                        isWorking: uploadState.isUploading,
-                        isComplete: false,
-                        isEnabled: canPublish
-                    ) {
-                        Task { await publish() }
-                    }
+                ExportBottomAction(
+                    title: "업로드하기",
+                    isWorking: uploadState.isUploading,
+                    isComplete: false,
+                    isEnabled: canPublish
+                ) {
+                    Task { await publish() }
                 }
+                .padding(.horizontal, ExportScreenStyle.horizontalPadding)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .background(Color(.brandNeutralWhite))
             }
         }
         .overlay {

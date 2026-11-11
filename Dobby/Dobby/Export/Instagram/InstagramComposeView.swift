@@ -41,8 +41,8 @@ private struct InstagramAccountCard: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
