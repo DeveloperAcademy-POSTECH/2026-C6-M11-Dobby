@@ -167,8 +167,8 @@ struct MeasurementResultSheetBackdrop: View {
                 Color("BrandNeutral100")
             } else {
                 MeasurementResultBlur()
-                LinearGradient(colors: [.white.opacity(0.3), .white.opacity(0.4)],
-                               startPoint: .top, endPoint: .bottom)
+                Color(.sRGB, red: 148.0 / 255, green: 148.0 / 255,
+                      blue: 148.0 / 255, opacity: 0.6)
             }
         }
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 32, topTrailingRadius: 32))
