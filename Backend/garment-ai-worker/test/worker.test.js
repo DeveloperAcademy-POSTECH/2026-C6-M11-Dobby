@@ -1,3 +1,4 @@
+import { unmatchedDiscoveryResponse } from "./helpers/native-discovery.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createWorker } from "../src/index.js";
@@ -52,7 +53,8 @@ function harness(response = upstream(), status = 200) {
   const worker = createWorker({
     fetchImpl: async (url, init) => {
       calls.push({ url: String(url), init });
-      return Response.json(response, { status });
+      return Response.json(status === 200 && JSON.parse(init.body).text?.format?.name === "garment_brand_discovery"
+        ? unmatchedDiscoveryResponse() : response, { status });
     },
   });
   return { worker, calls };
@@ -130,7 +132,7 @@ test("a valid photo produces a draft using fixed server-owned OpenAI settings", 
   assert.equal(text.includes(TEST_KEY), false);
   assert.equal(text.includes(TEST_TOKEN), false);
   assert.equal(text.includes(PNG), false);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].url, "https://api.openai.com/v1/responses");
   assert.equal(calls[0].init.method, "POST");
   const headers = new Headers(calls[0].init.headers);
@@ -153,7 +155,7 @@ test("an omitted photo role is accepted as detail", async () => {
   const { role, ...withoutRole } = photo();
   const response = await worker.fetch(request(body([withoutRole])), ENV);
   assert.equal(response.status, 200);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("description paragraphs survive the API response while other fields stay on one line", async () => {
@@ -339,7 +341,7 @@ test("photos at the decoded per-photo and combined limit are accepted", async ()
     id: `limit-${i}`, imageDataUrl: dataUrl,
   })))), ENV);
   assert.equal(response.status, 200);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("a decoded photo exceeding its limit is rejected before OpenAI", async () => {

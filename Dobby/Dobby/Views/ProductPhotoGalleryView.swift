@@ -7,6 +7,10 @@ struct ProductPhotoGalleryView: View {
     @State private var selectedIndex: Int
     @State private var isPaging = false
     @State private var showsDeletionError = false
+    @State private var pendingDeletionID: UUID?
+    @State private var dismissalOffset: CGFloat = 0
+    @State private var isClosing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let onDelete: ((UUID) throws -> Bool)?
 
     private let controlBackground = Color.black.opacity(0.2)
@@ -30,68 +34,47 @@ struct ProductPhotoGalleryView: View {
     var body: some View {
         GeometryReader { geometry in
             let photoHeight = min(geometry.size.width * 4 / 3, geometry.size.height)
-            ProductPhotoPager(photos: photos, selectedIndex: $selectedIndex,
-                              onTransitionChange: { isPaging = $0 })
-            .id(photos.map(\.id))
-            .frame(width: geometry.size.width, height: photoHeight)
-            .clipped()
-            .accessibilityIdentifier("product-gallery.pager")
-            .accessibilityValue("\(selectedIndex + 1) / \(photos.count)")
-            .background(.black)
-            .overlay(alignment: .topLeading) {
-                Button("닫기", systemImage: "chevron.backward", action: close)
-                    .labelStyle(.iconOnly)
-                    .font(controlFont)
-                    .foregroundStyle(.white)
-                    .frame(width: 48, height: 48)
-                    .background(controlBackground, in: Circle())
-                    .contentShape(Rectangle())
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("product-gallery.close")
-                    .padding(10)
-            }
-            .overlay(alignment: .topTrailing) {
-                if onDelete != nil {
-                    Button("제품 사진 삭제", systemImage: "trash.fill", role: .destructive,
-                           action: deleteCurrentPhoto)
-                        .labelStyle(.iconOnly)
-                        .font(controlFont)
-                        .foregroundStyle(.white)
-                        .frame(width: 48, height: 48)
-                        .background(controlBackground, in: Circle())
-                        .contentShape(Rectangle())
-                        .buttonStyle(.plain)
-                        .disabled(photos.isEmpty || isPaging)
-                        .accessibilityIdentifier("product-gallery.delete")
-                        .padding(10)
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if photos.count > 1 {
-                    ProductPhotoPageControl(count: photos.count, selection: pageSelection)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .frame(height: 44)
-                        .padding(.horizontal, 10)
-                        .background {
-                            Capsule().fill(.ultraThinMaterial).frame(height: 24)
-                        }
-                        .padding(.bottom, 20)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background {
-                Color.black.opacity(0.8)
+            let dragProgress = min(1, dismissalOffset / max(1, geometry.size.height * 0.6))
+            ZStack {
+                Color.black.opacity(0.8 * (1 - dragProgress))
                     .contentShape(Rectangle())
                     .onTapGesture { location in
+                        guard pendingDeletionID == nil, !isClosing else { return }
                         let photoTop = (geometry.size.height - photoHeight) / 2
-                        if location.y < photoTop || location.y > photoTop + photoHeight {
-                            close()
-                        }
+                        if location.y < photoTop || location.y > photoTop + photoHeight { close() }
                     }
+
+                photoSurface(in: geometry.size, height: photoHeight)
+                    .scaleEffect(1 - dragProgress * 0.12)
+                    .offset(y: dismissalOffset)
+                    .allowsHitTesting(pendingDeletionID == nil && !isClosing)
+                    .accessibilityHidden(pendingDeletionID != nil)
+
+                if pendingDeletionID != nil {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { pendingDeletionID = nil }
+                        .accessibilityHidden(true)
+
+                    ProductPhotoDeletionConfirmation(onDelete: confirmDeletion,
+                                                     onCancel: { pendingDeletionID = nil })
+                        .padding(.horizontal, 10)
+                        .padding(.top, max(0, (geometry.size.height - photoHeight) / 2) + 10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                }
+            }
+            .onChange(of: geometry.size) { _, _ in resetDismissal() }
+            .onChange(of: selectedIndex) { _, _ in
+                pendingDeletionID = nil
+                resetDismissal()
             }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
+        .accessibilityAction(.escape) {
+            if pendingDeletionID != nil { pendingDeletionID = nil } else { close() }
+        }
+        .onDisappear { isClosing = false }
         .alert("사진을 삭제하지 못했어요", isPresented: $showsDeletionError) {
             Button("확인", role: .cancel) { }
         } message: {
@@ -99,20 +82,121 @@ struct ProductPhotoGalleryView: View {
         }
     }
 
-    private func deleteCurrentPhoto() {
-        guard !isPaging, let onDelete, photos.indices.contains(selectedIndex) else { return }
-        let photoID = photos[selectedIndex].id
+    private func photoSurface(in size: CGSize, height: CGFloat) -> some View {
+        ProductPhotoPager(photos: photos, selectedIndex: $selectedIndex,
+                          onTransitionChange: { isPaging = $0 },
+                          allowsDismissGesture: pendingDeletionID == nil && !showsDeletionError && !isClosing,
+                          onDismissDragChanged: updateDismissal,
+                          onDismissDragEnded: { distance, velocity, cancelled in
+                              endDismissal(distance: distance, velocity: velocity, cancelled: cancelled,
+                                           containerHeight: size.height)
+                          })
+        .id(photos.map(\.id))
+        .frame(width: size.width, height: height)
+        .clipped()
+        .accessibilityIdentifier("product-gallery.pager")
+        .accessibilityValue("\(photos.isEmpty ? 0 : selectedIndex + 1) / \(photos.count)")
+        .background(.black)
+        .overlay(alignment: .topLeading) {
+            Button("닫기", systemImage: "xmark", action: close)
+                .labelStyle(.iconOnly)
+                .font(controlFont)
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(controlBackground, in: Circle())
+                .contentShape(Circle())
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("product-gallery.close")
+                .padding(10)
+        }
+        .overlay(alignment: .topTrailing) {
+            if onDelete != nil {
+                Button("제품 사진 삭제", systemImage: "trash", action: requestDeletion)
+                    .labelStyle(.iconOnly)
+                    .font(controlFont)
+                    .foregroundStyle(.white)
+                    .frame(width: 48, height: 48)
+                    .background(controlBackground, in: Circle())
+                    .contentShape(Circle())
+                    .buttonStyle(.plain)
+                    .disabled(photos.isEmpty || isPaging || dismissalOffset > 0)
+                    .accessibilityIdentifier("product-gallery.delete")
+                    .padding(10)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if photos.count > 1 {
+                ProductPhotoPageControl(count: photos.count, selection: pageSelection)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(height: 44)
+                    .padding(.horizontal, 10)
+                    .background { Capsule().fill(.ultraThinMaterial).frame(height: 24) }
+                    .padding(.bottom, 20)
+                    .disabled(isClosing || dismissalOffset > 0)
+            }
+        }
+    }
+
+    private func requestDeletion() {
+        guard !isPaging, !isClosing, onDelete != nil, photos.indices.contains(selectedIndex) else { return }
+        pendingDeletionID = photos[selectedIndex].id
+    }
+
+    private func confirmDeletion() {
+        guard !isPaging, let onDelete, let photoID = pendingDeletionID else { return }
+        pendingDeletionID = nil
         do {
-            guard try onDelete(photoID) else { return }
+            guard try onDelete(photoID) else { showsDeletionError = true; return }
             photos.removeAll { $0.id == photoID }
             selectedIndex = min(selectedIndex, max(0, photos.count - 1))
+            isPaging = false
             if photos.isEmpty { close() }
         } catch {
             showsDeletionError = true
         }
     }
 
+    private func updateDismissal(_ distance: CGFloat) {
+        guard pendingDeletionID == nil, !isClosing else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { dismissalOffset = max(0, distance) }
+    }
+
+    private func endDismissal(distance: CGFloat, velocity: CGFloat, cancelled: Bool,
+                              containerHeight: CGFloat) {
+        guard !isClosing else { return }
+        let crossedThreshold = distance >= min(140, containerHeight * 0.22)
+        let fastSwipe = distance > 30 && velocity > 900
+        guard !cancelled, pendingDeletionID == nil, crossedThreshold || fastSwipe else {
+            resetDismissal()
+            return
+        }
+        if reduceMotion { close(); return }
+        isClosing = true
+        withAnimation(.easeOut(duration: 0.18), completionCriteria: .logicallyComplete) {
+            dismissalOffset = max(distance, containerHeight)
+        } completion: {
+            guard isClosing else { return }
+            dismissImmediately()
+        }
+    }
+
+    private func resetDismissal() {
+        guard !isClosing else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86)) {
+            dismissalOffset = 0
+        }
+    }
+
     private func close() {
+        guard !isClosing else { return }
+        isClosing = true
+        dismissImmediately()
+    }
+
+    private func dismissImmediately() {
+        pendingDeletionID = nil
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) { dismiss() }

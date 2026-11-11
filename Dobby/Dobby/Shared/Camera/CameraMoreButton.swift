@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// One 48pt asset/touch surface for the detail and measurement camera menus.
-/// The original asset already contains its disc and dots; never template-tint it.
+/// Shared 48pt menu button using the Figma symbol and brand surface color.
 struct CameraMoreButton: View {
     var isEnabled = true
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image("DetailCaptureMore").renderingMode(.original)
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
                 .frame(width: 48, height: 48)
-                .background(Color(white: 0.094), in: Circle())
+                .background(Color("BrandNeutral900"), in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

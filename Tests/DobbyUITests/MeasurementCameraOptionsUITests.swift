@@ -184,7 +184,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 10))
         let notice = app.descendants(matching: .any)["garmentExpandedPhotoNotice"].firstMatch
-        XCTAssertTrue(notice.exists, "Normal sleeve endpoints outside 9:16 must remain available")
+        XCTAssertFalse(notice.exists, "The expanded photo must not introduce an unsolicited notice")
         XCTAssertFalse(app.descendants(matching: .any)["garmentUnavailableNotice"].firstMatch.exists,
                        "Expanding presentation to retain points is not a measurement failure")
         let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
@@ -199,8 +199,48 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 12, dy: 12)))
         waitUntil { shoulder.value as? String != original && confirm.isEnabled }
         XCTAssertFalse(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
-        XCTAssertTrue(notice.exists)
+        XCTAssertFalse(notice.exists)
         attach(name: "measurement-ratio-expanded-result-points-remain-editable")
+    }
+
+    @MainActor
+    func testResultPanelBodyDragAndHandleRestoreKeepPhotoAndPointsUnchanged() throws {
+        continueAfterFailure = false
+        let app = openPreview(arguments: ["--garment-preview-top", "--garment-preview-no-outline",
+                                           "--garment-preview-matched-framing"])
+        openOptions(in: app)
+        app.buttons["camera.aspectRatioOption"].tap()
+        app.buttons["camera.aspectRatio.16:9"].tap()
+        XCTAssertEqual(app.staticTexts["camera.aspectRatioValue"].label, "16:9")
+        app.buttons["camera.aspectRatioBack"].tap()
+        app.buttons["camera.closeOptions"].tap()
+        armSyntheticGarmentCapture(in: app)
+        app.buttons["captureGarment"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.descendants(matching: .any)["garmentExpandedPhotoNotice"].firstMatch.exists)
+        let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
+        let sheet = app.descendants(matching: .any)["garmentResultMeasurementSheet"].firstMatch
+        let handle = app.descendants(matching: .any)["garmentResultSheetHandle"].firstMatch
+        attach(name: "measurement-result-panel-before-body-scroll")
+        XCTAssertTrue(sheet.exists && handle.exists)
+        let originalPhotoFrame = photo.frame
+        let originalPointValue = app.buttons["garmentMeasurementPoint_shoulder_left"].value as? String
+        // Start on a card, outside the 28pt grabber, to cover scrolling the
+        // panel body rather than only dragging its narrow handle.
+        let panelStart = sheet.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.5))
+        panelStart.press(forDuration: 0.05, thenDragTo: panelStart.withOffset(CGVector(dx: 0, dy: 150)),
+                         withVelocity: .slow, thenHoldForDuration: 0)
+        waitUntil { handle.value as? String == "접힘" }
+        let handleStart = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        handleStart.press(forDuration: 0.05, thenDragTo: handleStart.withOffset(CGVector(dx: 0, dy: -150)),
+                          withVelocity: .slow, thenHoldForDuration: 0)
+        waitUntil { handle.value as? String == "펼쳐짐" }
+        assertFrame(photo.frame, equals: originalPhotoFrame)
+        XCTAssertEqual(app.buttons["garmentMeasurementPoint_shoulder_left"].value as? String, originalPointValue)
+        let sideways = sheet.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
+        sideways.press(forDuration: 0.05, thenDragTo: sideways.withOffset(CGVector(dx: 100, dy: 0)))
+        XCTAssertEqual(handle.value as? String, "펼쳐짐", "Horizontal scrolling must not collapse the panel")
+        attach(name: "measurement-result-panel-body-scroll-restored")
     }
 
     @MainActor

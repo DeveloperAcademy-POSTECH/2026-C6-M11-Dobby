@@ -33,7 +33,9 @@ struct GarmentMeasurementResultView: View {
     @State private var hasFinishedPointTutorial = false
     @State private var summaryHeight: CGFloat = 111
     @State private var isResultSheetExpanded = true
-    @GestureState private var sheetDragTranslation: CGFloat = 0
+    @GestureState(resetTransaction: Transaction(animation: .snappy(duration: 0.28)))
+    private var sheetDrag = ResultSheetDrag()
+    @State private var isVerticalSheetDrag = false
     private let pipeline = MeasurementPipeline()
 
     init(model: AutomaticMeasurement, archive: MeasurementArchive,
@@ -175,7 +177,7 @@ struct GarmentMeasurementResultView: View {
                                            aspect: aspect, summaryHeight: summaryHeight, usesSheet: captureUsesTallResult)
         let startingHeight = isResultSheetExpanded ? base.expandedSheetHeight : base.collapsedSheetHeight
         let sheetHeight = min(base.expandedSheetHeight,
-                              max(base.collapsedSheetHeight, startingHeight - sheetDragTranslation))
+                              max(base.collapsedSheetHeight, startingHeight - sheetDrag.translation))
         let layout = MeasurementResultLayout(size: size, bottomSafeArea: bottomSafeArea,
                                              aspect: aspect, summaryHeight: summaryHeight, usesSheet: captureUsesTallResult, sheetHeight: sheetHeight)
         return ZStack(alignment: .topLeading) {
@@ -185,9 +187,6 @@ struct GarmentMeasurementResultView: View {
             .overlay(alignment: .topTrailing) {
                 VStack(alignment: .trailing, spacing: 6) {
                     if isSynthetic { syntheticBadge.allowsHitTesting(false) }
-                    if model.snapshot.hasExpandedPhotoPresentation {
-                        expandedPhotoNotice.allowsHitTesting(false)
-                    }
                     reviewNotice
                 }.padding(12)
             }
@@ -218,6 +217,9 @@ struct GarmentMeasurementResultView: View {
             resultNavigation
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .transaction { transaction in
+            if reduceMotion { transaction.disablesAnimations = true }
+        }
     }
 
     private func resultSummary(overlaysPhoto: Bool) -> some View {
@@ -252,18 +254,6 @@ struct GarmentMeasurementResultView: View {
                 .frame(maxWidth: .infinity, minHeight: 28, alignment: .top)
                 .contentShape(Rectangle())
                 .onTapGesture { toggleResultSheet() }
-                .gesture(DragGesture(minimumDistance: 3, coordinateSpace: .global)
-                    .updating($sheetDragTranslation) { value, translation, transaction in
-                        transaction.animation = nil
-                        translation = value.translation.height
-                    }
-                    .onEnded { value in
-                        let start = isResultSheetExpanded ? expandedHeight : collapsedHeight
-                        let target = start - value.predictedEndTranslation.height
-                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
-                            isResultSheetExpanded = target > (expandedHeight + collapsedHeight) / 2
-                        }
-                    })
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("실측값 패널")
                 .accessibilityValue(isResultSheetExpanded ? "펼쳐짐" : "접힘")
@@ -279,7 +269,44 @@ struct GarmentMeasurementResultView: View {
         .frame(height: height, alignment: .top)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 32, topTrailingRadius: 32))
         .contentShape(Rectangle())
+        // Drag anywhere on the panel, while leaving horizontal measurement-card
+        // scrolling independent. The photo itself keeps its own editing gestures.
+        .simultaneousGesture(resultSheetDrag(expandedHeight: expandedHeight, collapsedHeight: collapsedHeight))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("garmentResultMeasurementSheet")
+    }
+
+    private struct ResultSheetDrag {
+        var isVertical: Bool?
+        var translation: CGFloat = 0
+    }
+
+    private func resultSheetDrag(expandedHeight: CGFloat, collapsedHeight: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .updating($sheetDrag) { value, state, transaction in
+                if state.isVertical == nil {
+                    state.isVertical = abs(value.translation.height) > abs(value.translation.width)
+                }
+                guard state.isVertical == true else { return }
+                transaction.animation = nil
+                state.translation = value.translation.height
+            }
+            .onChanged { value in
+                // GestureState can reset before onEnded. Retain only the
+                // chosen axis so the release still commits the user's swipe.
+                let vertical = sheetDrag.isVertical
+                    ?? (abs(value.translation.height) > abs(value.translation.width))
+                if isVerticalSheetDrag != vertical { isVerticalSheetDrag = vertical }
+            }
+            .onEnded { value in
+                guard isVerticalSheetDrag else { return }
+                isVerticalSheetDrag = false
+                let start = isResultSheetExpanded ? expandedHeight : collapsedHeight
+                let projectedHeight = start - value.predictedEndTranslation.height
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+                    isResultSheetExpanded = projectedHeight > (expandedHeight + collapsedHeight) / 2
+                }
+            }
     }
 
     private func toggleResultSheet() {
@@ -295,9 +322,6 @@ struct GarmentMeasurementResultView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     reviewNotice.padding(.horizontal, 20)
                     if isSynthetic { syntheticBadge.padding(.horizontal, 20) }
-                    if model.snapshot.hasExpandedPhotoPresentation {
-                        expandedPhotoNotice.padding(.horizontal, 20)
-                    }
                     photoEditor(showsEnlargeControl: false)
                     resultSummary(overlaysPhoto: false).padding(.horizontal, 20)
                     auxiliaryContent.padding(.horizontal, 20)
@@ -361,17 +385,6 @@ struct GarmentMeasurementResultView: View {
                     : "실패한 항목과 원인, 다시 촬영하거나 측정점을 수정하는 방법을 확인합니다")
                 .accessibilityIdentifier("garmentUnavailableNotice")
         }
-    }
-
-    private var expandedPhotoNotice: some View {
-        Text("측정점을 모두 볼 수 있도록 사진 영역을 넓혔어요")
-            .font(.caption2).foregroundStyle(.white)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .frame(maxWidth: 270, alignment: .leading)
-            .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 10))
-            .accessibilityIdentifier("garmentExpandedPhotoNotice")
     }
 
     private var syntheticBadge: some View {

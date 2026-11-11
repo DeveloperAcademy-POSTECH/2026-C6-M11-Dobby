@@ -18,8 +18,8 @@ struct CameraLivePreviewView: View {
     @State private var isVisible = false
 
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: aspectRatio) { _ in
-            CameraPreviewSurface(session: camera.session,
+        DetailAspectRatioPreview(aspectRatio: aspectRatio, prefersBottomAlignedPortrait: true) { photoRect in
+            CameraPreviewSurface(session: camera.session, photoRect: photoRect,
                 onRotationChange: { camera.rotationAngle = $0 },
                 onFramingReady: { camera.previewCrop = $0 },
                 interactionEnabled: interactionEnabled && scenePhase == .active && camera.canAdjustPreview,
