@@ -1,6 +1,13 @@
 // Created by mason on 10/20/26.
 import SwiftUI
 
+private struct GalleryDeleteBarBounds: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 /// 촬영 순서대로 열람한다. 탐색은 판매용 사진 선택·대표 사진을 변경하지 않는다.
 struct DetailPhotoGalleryView: View {
     let model: ProductPhotoModel
@@ -65,6 +72,7 @@ struct DetailPhotoGalleryView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // 사진 탐색 영역과 하단 동작 영역을 분리한다.
             Color.clear.frame(height: 52)
+                .anchorPreference(key: GalleryDeleteBarBounds.self, value: .bounds) { $0 }
                 .overlay(alignment: .top) {
                     Rectangle().fill(Color(.separator)).frame(height: 1 / displayScale)
                 }
@@ -86,11 +94,15 @@ struct DetailPhotoGalleryView: View {
                 }
         }
         .background(Color(.systemBackground).ignoresSafeArea())
-        .overlay {
-            if deletionTarget != nil {
-                DetailPhotoDeleteConfirmation(isDeleting: isDeletingPhoto,
-                    onCancel: { deletionTarget = nil }, onDelete: deletePhoto)
-                    .ignoresSafeArea(edges: .bottom)
+        .overlayPreferenceValue(GalleryDeleteBarBounds.self) { bounds in
+            if deletionTarget != nil, let bounds {
+                GeometryReader { geometry in
+                    // 확인창 하단을 구분선에 맞추고 취소 영역은 하단 버튼까지 덮는다.
+                    DetailPhotoDeleteConfirmation(isDeleting: isDeletingPhoto,
+                        bottomInset: max(0, geometry.size.height - geometry[bounds].minY),
+                        onCancel: { deletionTarget = nil }, onDelete: deletePhoto)
+                }
+                .ignoresSafeArea(edges: .bottom)
             }
         }
         .preferredColorScheme(.light)
