@@ -191,3 +191,13 @@ struct InstagramProfileImage: View {
         .accessibilityHidden(true)
     }
 }
+
+#Preview("사진 3장 · 캡션 편집") {
+    @Previewable @State var draft = InstagramExportDraft(product: .instagramPreview)
+
+    InstagramComposeView(
+        account: .preview,
+        draft: $draft,
+        isDisabled: false
+    )
+}
