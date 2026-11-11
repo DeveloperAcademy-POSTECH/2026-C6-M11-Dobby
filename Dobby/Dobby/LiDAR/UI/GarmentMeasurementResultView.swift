@@ -12,7 +12,6 @@ struct GarmentMeasurementResultView: View {
     let onConfirmedRecord: ((SavedMeasurement) async throws -> Void)?
     let allowsRetake: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var image: UIImage?
@@ -29,8 +28,6 @@ struct GarmentMeasurementResultView: View {
     @State private var pendingRecord: SavedMeasurement?
     @State private var pendingRecordRevision: UUID?
     @State private var pendingRecordArchived = false
-    @State private var showsPointTutorial = false
-    @State private var hasFinishedPointTutorial = false
     @State private var summaryHeight: CGFloat = 111
     @State private var isResultSheetExpanded = true
     private let pipeline = MeasurementPipeline()
@@ -58,18 +55,6 @@ struct GarmentMeasurementResultView: View {
     private var hasPhotoEditingPoints: Bool {
         model.photoEditingPresentation.landmarks.points.contains { $0.isVisible && $0.point.isValid }
     }
-    private var shouldOfferPointTutorial: Bool {
-        guard hasPhotoEditingPoints else { return false }
-        if isSynthetic {
-            #if DEBUG
-            return ProcessInfo.processInfo.arguments.contains("--garment-preview-result-tutorial")
-            #else
-            return false
-            #endif
-        }
-        return true
-    }
-    private var awaitsPointTutorial: Bool { shouldOfferPointTutorial && !hasFinishedPointTutorial }
     private var failedValues: [MeasurementValue] {
         model.needsRecalculation ? [] : model.visibleValues.filter { !$0.hasUsableMeasurement }
     }
@@ -91,7 +76,6 @@ struct GarmentMeasurementResultView: View {
                 accessibleResult
             }
         }
-        .disabled(awaitsPointTutorial)
         .background { Color.white.ignoresSafeArea() }
         .navigationTitle("실측 결과")
         .navigationBarBackButtonHidden()
@@ -101,19 +85,9 @@ struct GarmentMeasurementResultView: View {
                 image = decoded
             }
             guard !Task.isCancelled else { return }
-            // A missing photo cannot show a useful editing guide. Keep the
-            // existing recovery controls available instead of trapping entry.
-            if image == nil { hasFinishedPointTutorial = true }
             if dynamicTypeSize.isAccessibilitySize { showDetails = true }
-            presentPointTutorialIfNeeded()
         }
         .onChange(of: dynamicTypeSize) { _, size in if size.isAccessibilitySize { showDetails = true } }
-        .onChange(of: model.needsRecalculation) { _, pending in
-            if !pending { presentPointTutorialIfNeeded() }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { presentPointTutorialIfNeeded() }
-        }
         .task(id: model.calculationRevision) { await recalculate() }
         .sheet(item: $manualReview) { measurement in
             MeasurementDetailView(model: measurement, archive: archive)
@@ -122,21 +96,6 @@ struct GarmentMeasurementResultView: View {
             totalLengthCorrectionSheet(measurement)
         }
         .sheet(isPresented: $showAuxiliaryDetails) { auxiliaryDetailsSheet }
-        .fullScreenCover(isPresented: $showsPointTutorial) {
-            GarmentResultPointTutorial(title: incompleteCount == 0 ? "자동 실측 완료!" : "측정점을 확인해 주세요") {
-                // This full-screen button consumes the complete first touch;
-                // editing is enabled only after the user acknowledges it.
-                // Dismiss in place, without the system cover sliding down.
-                var transaction = Transaction(animation: nil)
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    hasFinishedPointTutorial = true
-                    showsPointTutorial = false
-                }
-            }
-            .presentationBackground(.clear)
-            .interactiveDismissDisabled()
-        }
         .alert("저장하지 못했어요", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button("확인", role: .cancel) { saveError = nil }
         } message: { Text(saveError ?? "") }
@@ -149,8 +108,8 @@ struct GarmentMeasurementResultView: View {
         VStack(spacing: 13) {
             MeasurementResultProgress()
             MeasurementResultNavigationBar(
-                canGoBack: allowsRetake && !isSaving && !isEditingPoint && !model.needsRecalculation && !awaitsPointTutorial,
-                canContinue: !isSaving && !isEditingPoint && !model.needsRecalculation && !awaitsPointTutorial,
+                canGoBack: allowsRetake && !isSaving && !isEditingPoint && !model.needsRecalculation,
+                canContinue: !isSaving && !isEditingPoint && !model.needsRecalculation,
                 isBusy: isSaving || model.needsRecalculation,
                 busyDescription: isSaving ? "저장 중" : "다시 측정 중",
                 backIdentifier: onConfirmedRecord == nil ? "retakeGarmentMeasurement" : "product-flow.back",
@@ -259,24 +218,14 @@ struct GarmentMeasurementResultView: View {
             editableLandmarks: presentation.landmarks,
             definitions: model.visibleDefinitions,
             values: model.visibleValues, showLabels: !dynamicTypeSize.isAccessibilitySize,
-            isEnabled: !isSaving && !awaitsPointTutorial, isRecalculating: model.needsRecalculation,
+            isEnabled: !isSaving, isRecalculating: model.needsRecalculation,
             showsEnlargeControl: showsEnlargeControl,
             allowsViewportZoom: true,
             pendingPointIDs: presentation.pendingIDs,
             magnifierBottomInset: magnifierBottomInset,
             onEnlarge: {}, onMove: { id, point in
-                guard !awaitsPointTutorial else { return }
                 _ = model.placePoint(originalPoint: point, id: id)
             }, onEditingChanged: { isEditingPoint = $0 })
-    }
-
-    private func presentPointTutorialIfNeeded() {
-        guard scenePhase == .active, shouldOfferPointTutorial, !hasFinishedPointTutorial,
-              !showsPointTutorial, image != nil,
-              !model.needsRecalculation, !isSaving, !isEditingPoint,
-              manualReview == nil, totalLengthCorrection == nil,
-              !showAuxiliaryDetails else { return }
-        showsPointTutorial = true
     }
 
     @ViewBuilder
@@ -326,7 +275,6 @@ struct GarmentMeasurementResultView: View {
     }
 
     private func openAuxiliaryDetails() {
-        guard !awaitsPointTutorial else { return }
         showDetails = true
         showAuxiliaryDetails = true
     }
@@ -427,7 +375,6 @@ struct GarmentMeasurementResultView: View {
     }
 
     private func openManualReview(for definitionID: String) {
-        guard !awaitsPointTutorial else { return }
         let measurement = model.manualMeasurement(for: definitionID)
         if definitionID == model.lengthDefinition?.id, model.canCorrectTotalLength {
             if showAuxiliaryDetails { detailTotalLengthCorrection = measurement }
@@ -648,60 +595,9 @@ private struct MeasurementCaptureFailureGroup: Identifiable {
     let feedback: MeasurementFailureFeedback
 }
 
-/// Each result introduces point editing once before accepting any edits.
-/// The illustration is the original 76 × 111 Figma asset, not a symbol substitute.
 struct MeasurementResultSummaryHeightKey: PreferenceKey {
     static var defaultValue: CGFloat { 111 }
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
-}
-
-private struct GarmentResultPointTutorial: View {
-    let title: String
-    let dismiss: () -> Void
-    @ScaledMetric(relativeTo: .headline) private var titleSize: CGFloat = 18
-
-    var body: some View {
-        GeometryReader { geometry in
-            Button(action: dismiss) {
-                ZStack {
-                    Color.black.opacity(0.57)
-                    ViewThatFits(in: .vertical) {
-                        content
-                        ScrollView { content.padding(.vertical, 24) }
-                    }
-                    .padding(.horizontal, 24).padding(.vertical, 44)
-                    .offset(y: -26)
-                }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(title) 직접 측정점을 움직일 수 있어요. 안내 닫기")
-            .accessibilityHint("화면을 탭하면 측정점과 길이를 확인하고 수정할 수 있어요")
-            .accessibilityIdentifier("dismissGarmentResultTutorial")
-        }
-        .ignoresSafeArea()
-        .preferredColorScheme(.light)
-    }
-
-    private var content: some View {
-        VStack(spacing: 22) {
-            Text(title)
-                .font(.system(size: titleSize, weight: .bold))
-                .frame(minHeight: 26)
-            Image("MeasurementPointTutorial")
-                .resizable().scaledToFit().frame(width: 76, height: 111)
-            VStack(spacing: 0) {
-                Text("직접 측정점을 움직일 수 있어요")
-                    .font(.callout.bold()).frame(minHeight: 26)
-                Text("화면을 터치해서 확인해주세요!")
-                    .font(.subheadline).frame(minHeight: 26)
-            }
-        }
-        .foregroundStyle(.white).multilineTextAlignment(.center)
-        .shadow(color: .black.opacity(0.25), radius: 2, y: 4)
-        .accessibilityHidden(true)
-    }
 }
 
 enum GarmentMeasurementText {
