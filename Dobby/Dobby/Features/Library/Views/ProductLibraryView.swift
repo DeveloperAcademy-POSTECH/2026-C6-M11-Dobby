@@ -9,9 +9,11 @@ struct ProductLibraryView: View {
     let onResumeDraft: (UUID) -> Void
     @State private var searchText = ""
     @State private var showsOnlyDrafts: Bool
-    @FocusState private var isSearchFocused: Bool
+    @State private var isSearchFocused = false
     @State private var pendingDeletion: UUID?
     @State private var deletionFailed = false
+    @State private var searchRevealID = 0
+    @State private var headerMetrics = LibraryHeaderMetrics()
     @ScaledMetric(relativeTo: .title2) private var titleLineHeight: CGFloat = 33
     @ScaledMetric(relativeTo: .title2) private var emptyTitleLineHeight: CGFloat = 28
     @ScaledMetric(relativeTo: .body) private var emptyDescriptionLineHeight: CGFloat = 22
@@ -55,20 +57,22 @@ struct ProductLibraryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            searchBar
-                .padding(.horizontal, 20)
-                .padding(.top, 5)
-
             Group {
                 if garments.isEmpty {
                     emptyLibrary
+                        .padding(.top, headerMetrics.statusBarHeight + headerMetrics.height + 16)
+                        .padding(.bottom, headerMetrics.bottomBarHeight)
                 } else if filteredGarments.isEmpty && !showsOnlyDrafts {
                     ContentUnavailableView.search(text: searchText.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .padding(.top, headerMetrics.statusBarHeight + headerMetrics.height + 16)
+                        .padding(.bottom, headerMetrics.bottomBarHeight)
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(filteredDraftGarments) { garment in
-                                draftCell(garment)
+                            if !isEditing {
+                                ForEach(filteredDraftGarments) { garment in
+                                    draftCell(garment)
+                                }
                             }
 
                             if !draftGarments.isEmpty {
@@ -104,23 +108,27 @@ struct ProductLibraryView: View {
                                 }
                             }
                         }
-                        .padding(.top, isEditing ? 16 : 0)
+                        .padding(.top, headerMetrics.statusBarHeight + headerMetrics.height + 16)
                         .padding(.horizontal, 20)
-                        .padding(.bottom, 24)
+                        .padding(.bottom, headerMetrics.bottomBarHeight + 24)
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .scrollEdgeEffectHidden(true, for: .top)
                     .accessibilityIdentifier("library.products")
                 }
             }
-            .padding(.top, isEditing ? 0 : 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .contentShape(Rectangle())
             .simultaneousGesture(TapGesture().onEnded { isSearchFocused = false })
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .opacity(headerMetrics.height > 0 ? 1 : 0)
+        .ignoresSafeArea(.container, edges: .top)
         .background(LibraryStyle.background.ignoresSafeArea())
         .navigationTitle("보관함")
         .toolbarTitleDisplayMode(.inline)
+        .toolbarBackground(LibraryStyle.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Text("보관함")
@@ -141,22 +149,37 @@ struct ProductLibraryView: View {
             }
 
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    isSearchFocused = false
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isEditing.toggle()
+                if isEditing {
+                    Button("완료") {
+                        setEditing(false)
                     }
-                } label: {
-                    Text(isEditing ? "완료" : "수정")
-                        .frame(minWidth: garments.isEmpty ? 37 : nil)
-                }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
                     .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(garments.isEmpty ? .white : LibraryStyle.primary)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 44)
+                    .background(LibraryStyle.editAccent, in: Capsule())
+                    .accessibilityIdentifier("library.edit-mode")
+                } else {
+                    Button("수정") {
+                        setEditing(true)
+                    }
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(LibraryStyle.primary)
                     .disabled(garments.isEmpty)
                     .accessibilityIdentifier("library.edit-mode")
+                }
             }
+            .sharedBackgroundVisibility(isEditing ? .hidden : .automatic)
         }
         .background {
+            LibraryNavigationSearch(
+                text: $searchText,
+                isFocused: Binding(get: { isSearchFocused }, set: { isSearchFocused = $0 }),
+                allowsHiding: !garments.isEmpty,
+                revealID: searchRevealID,
+                metrics: $headerMetrics
+            )
             LibraryDeletionConfirmation(productID: $pendingDeletion, onDelete: deleteProduct)
         }
         .alert("상품을 삭제하지 못했어요", isPresented: $deletionFailed) {
@@ -167,6 +190,7 @@ struct ProductLibraryView: View {
         .onChange(of: garments.isEmpty, initial: true) { _, isEmpty in
             if isEmpty { isEditing = false }
         }
+        .onChange(of: isEditing) { _, _ in searchRevealID += 1 }
         .onChange(of: draftGarments.isEmpty) { _, draftsAreEmpty in
             if draftsAreEmpty { showsOnlyDrafts = false }
         }
@@ -231,12 +255,14 @@ struct ProductLibraryView: View {
                 .overlay(alignment: .topLeading) {
                     deleteButton(for: garment)
                 }
+                .modifier(LibraryCardJiggle(id: garment.id))
                 .accessibilityElement(children: .contain)
         } else {
             NavigationLink(value: garment.id) {
                 ProductLibraryCard(garment: garment)
             }
             .buttonStyle(.plain)
+            .modifier(LibraryCardEditGesture(onEdit: { setEditing(true) }))
             .accessibilityIdentifier("library.product.\(garment.id.uuidString)")
         }
     }
@@ -244,23 +270,16 @@ struct ProductLibraryView: View {
     @ViewBuilder
     private func draftCell(_ garment: Garment) -> some View {
         if let draft = garment.creationDraft {
-            if isEditing {
+            Button {
+                isSearchFocused = false
+                onResumeDraft(garment.id)
+            } label: {
                 ProductLibraryDraftCard(garment: garment, draft: draft)
-                    .overlay(alignment: .topLeading) {
-                        deleteButton(for: garment)
-                    }
-                    .accessibilityElement(children: .contain)
-            } else {
-                Button {
-                    isSearchFocused = false
-                    onResumeDraft(garment.id)
-                } label: {
-                    ProductLibraryDraftCard(garment: garment, draft: draft)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
-                .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다.")
             }
+            .buttonStyle(.plain)
+            .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
+            .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
+            .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다. 길게 누르면 보관함을 수정합니다.")
         }
     }
 
@@ -271,6 +290,7 @@ struct ProductLibraryView: View {
                 .overlay(alignment: .topLeading) {
                     deleteButton(for: garment)
                 }
+                .modifier(LibraryCardJiggle(id: garment.id))
                 .accessibilityElement(children: .contain)
         } else {
             Button {
@@ -280,8 +300,19 @@ struct ProductLibraryView: View {
                 ProductLibraryCard(garment: garment, showsDraftPlaceholders: true)
             }
             .buttonStyle(.plain)
+            .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
             .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
             .accessibilityHint("임시저장한 상품 작업을 이어갑니다.")
+        }
+    }
+
+    private func setEditing(_ editing: Bool, selectingDrafts: Bool = false) {
+        isSearchFocused = false
+        withAnimation(.easeInOut(duration: 0.18)) {
+            if editing && (selectingDrafts || filteredSavedGarments.isEmpty) && !draftGarments.isEmpty {
+                showsOnlyDrafts = true
+            }
+            isEditing = editing
         }
     }
 
@@ -290,15 +321,30 @@ struct ProductLibraryView: View {
             pendingDeletion = garment.id
         } label: {
             Image(systemName: "minus")
-                .font(.system(size: 9.589, weight: .semibold))
+                .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(LibraryStyle.primary)
-                .frame(width: 25, height: 25)
-                .glassEffect(.regular.interactive(), in: Circle())
+                .frame(width: 25, height: 25, alignment: .center)
+                .background {
+                    Circle()
+                        .fill(.regularMaterial)
+                        .overlay {
+                            Circle()
+                                .fill(LinearGradient(
+                                    colors: [Color(white: 0.93).opacity(0.92), .white.opacity(0.96)],
+                                    startPoint: .top, endPoint: .bottom
+                                ))
+                        }
+                        .overlay {
+                            Circle().strokeBorder(.white.opacity(0.9), lineWidth: 0.5)
+                        }
+                        .shadow(color: .black.opacity(0.02), radius: 8.46, y: 4.51)
+                }
+                .compositingGroup()
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .offset(x: -17.5, y: -16.5)
+        .offset(x: -17.5, y: -19.5)
         .accessibilityLabel("\(garment.name.isEmpty ? "상품" : garment.name) 삭제")
         .accessibilityIdentifier("library.delete.\(garment.id.uuidString)")
     }
@@ -312,46 +358,70 @@ struct ProductLibraryView: View {
         }
     }
 
-    private var searchBar: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 20))
-                .frame(width: 21)
-                .foregroundStyle(LibraryStyle.primary)
-                .accessibilityHidden(true)
+}
 
-            TextField(text: $searchText, prompt: Text("Search")
-                .foregroundStyle(Color(red: 191.0 / 255, green: 191.0 / 255, blue: 191.0 / 255))) {
-                Text("보관함 검색")
-            }
-                .font(.system(size: 17))
-                .foregroundStyle(LibraryStyle.primary)
-                .tint(.blue)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($isSearchFocused)
-                .submitLabel(.search)
-                .onSubmit { isSearchFocused = false }
-                .accessibilityLabel("보관함 검색")
-                .accessibilityHint("제품명이나 브랜드로 검색합니다.")
-                .accessibilityIdentifier("library.search")
+/// A successful hold consumes the touch so it cannot also open the product or draft.
+private struct LibraryCardEditGesture: ViewModifier {
+    let onEdit: () -> Void
 
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
+    func body(content: Content) -> some View {
+        content
+            .highPriorityGesture(
+                LongPressGesture(minimumDuration: 0.5, maximumDistance: 10)
+                    .onEnded { _ in onEdit() }
+            )
+            .accessibilityAction(named: Text("보관함 수정"), onEdit)
+            .accessibilityHint("길게 누르면 삭제할 수 있는 수정 모드로 전환합니다.")
+    }
+}
+
+/// Continuous rotation and sub-point movement, with a slightly different rhythm per card.
+private struct LibraryCardJiggle: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    let id: UUID
+
+    private var direction: Double { id.uuid.0.isMultiple(of: 2) ? 1 : -1 }
+    // A slightly calmer rhythm than the reference Home Screen recording.
+    private var duration: Double { 0.30 + Double(id.uuid.1 % 5) * 0.00625 }
+    private var rotation: Double { 1.0 * direction }
+
+    func body(content: Content) -> some View {
+        if reduceMotion || scenePhase != .active {
+            content
+        } else {
+            content.keyframeAnimator(initialValue: LibraryCardMotion(
+                rotation: -rotation, x: -0.4 * direction, y: -0.4
+            )) { card, motion in
+                card
+                    .rotationEffect(.degrees(motion.rotation))
+                    .offset(x: motion.x, y: motion.y)
+            } keyframes: { _ in
+                KeyframeTrack(\.rotation) {
+                    LinearKeyframe(rotation, duration: duration / 2)
+                    LinearKeyframe(-rotation, duration: duration / 2)
                 }
-                .accessibilityLabel("검색어 지우기")
+                KeyframeTrack(\.x) {
+                    LinearKeyframe(0.4 * direction, duration: duration / 4)
+                    LinearKeyframe(-0.4 * direction, duration: duration / 4)
+                    LinearKeyframe(0.4 * direction, duration: duration / 4)
+                    LinearKeyframe(-0.4 * direction, duration: duration / 4)
+                }
+                KeyframeTrack(\.y) {
+                    LinearKeyframe(0.4, duration: duration / 4)
+                    LinearKeyframe(0.4, duration: duration / 4)
+                    LinearKeyframe(-0.4, duration: duration / 4)
+                    LinearKeyframe(-0.4, duration: duration / 4)
+                }
             }
         }
-        .padding(.leading, 12)
-        .padding(.trailing, searchText.isEmpty ? 16 : 2)
-        .frame(minHeight: 48)
-        .background(.white, in: Capsule())
     }
+}
+
+private struct LibraryCardMotion {
+    var rotation: Double
+    var x: Double
+    var y: Double
 }
 
 #if DEBUG
