@@ -57,8 +57,6 @@ struct SettingsView: View {
 }
 
 private struct SettingsContent: View {
-    @AppStorage(ProductAutofillFlowPreference.key, store: ProductAutofillFlowPreference.defaults)
-    private var autofillFlow = ProductAutofillFlow.photoSelection.rawValue
     let onPrivacyPolicy: () -> Void
     let onSupportMail: () -> Void
 
@@ -72,24 +70,6 @@ private struct SettingsContent: View {
                 }
                 .buttonStyle(.plain)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("AI 생성 방식")
-                        .font(SettingsTypography.labelMedium)
-                        .tracking(SettingsTypography.labelMediumTracking)
-                        .foregroundStyle(SettingsStyle.primaryText)
-                        .accessibilityAddTraits(.isHeader)
-
-                    SettingsSelectionRow(title: "A안(사진 선택 뷰 토글)", isSelected: !usesInformationFlow) {
-                        autofillFlow = ProductAutofillFlow.photoSelection.rawValue
-                    }
-                    .accessibilityIdentifier("settings.aiFlow.a")
-
-                    SettingsSelectionRow(title: "B안(제품 정보 입력 뷰)", isSelected: usesInformationFlow) {
-                        autofillFlow = ProductAutofillFlow.information.rawValue
-                    }
-                    .accessibilityIdentifier("settings.aiFlow.b")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             SettingsSectionSeparator()
@@ -122,9 +102,6 @@ private struct SettingsContent: View {
         }
     }
 
-    private var usesInformationFlow: Bool {
-        ProductAutofillFlowPreference.resolve(rawValue: autofillFlow) == .information
-    }
 }
 
 #Preview {

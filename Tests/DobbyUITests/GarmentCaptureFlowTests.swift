@@ -187,6 +187,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
                        "This processing-only fixture hides the advisory tint so source pixels can be compared")
         let viewport = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
         let liveBounds = viewport.frame
+        let shutterBounds = shutter.frame
         let screenBounds = app.frame
         let liveScreenshot = XCUIScreen.main.screenshot()
         attachFrame(liveScreenshot, name: "garment-top-live-framing-before-capture")
@@ -196,7 +197,11 @@ final class GarmentCaptureFlowTests: XCTestCase {
         let frozenPhoto = app.descendants(matching: .any)["garmentProcessingPhoto"].firstMatch
         XCTAssertTrue(frozenPhoto.waitForExistence(timeout: 5),
                       "Capture must keep the frozen photo visible while finding points and measuring")
-        XCTAssertEqual(shutter.value as? String, "촬영 중")
+        let progress = app.descendants(matching: .any)["measurementProcessingIndicator"].firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 5))
+        XCTAssertFalse(shutter.exists, "Processing replaces the shutter so a second capture cannot be requested")
+        XCTAssertEqual(progress.frame.midX, shutterBounds.midX, accuracy: 1)
+        XCTAssertEqual(progress.frame.midY, shutterBounds.midY, accuracy: 1)
         // Take the frame immediately, before the intentionally short analysis
         // fixture advances. Progress/provenance and controls occupy other areas.
         let frozenBounds = frozenPhoto.frame
@@ -224,20 +229,17 @@ final class GarmentCaptureFlowTests: XCTestCase {
         }
         XCTAssertGreaterThan(abs(liveColors[0][0] - liveColors[1][0]), 40,
             "Probe both the colored garment and its background so a blank frozen frame cannot pass")
-        let progress = app.descendants(matching: .any)["garmentMeasurementProgress"].firstMatch
         XCTAssertTrue(progress.exists)
         let capturedProgress = NSPredicate { _, _ in
-            guard let value = progress.value as? String else { return false }
-            return value.contains("사진 완료") && value.contains("측정점") && value.contains("길이")
+            ["측정점 확인 중", "길이 계산 중"].contains(progress.label)
         }
         expectation(for: capturedProgress, evaluatedWith: progress)
         waitForExpectations(timeout: 5)
-        let stage = progress.value as? String ?? ""
-        XCTAssertTrue(stage.contains("사진 완료"))
-        XCTAssertTrue(stage.contains("측정점") && stage.contains("길이"),
-                      "Progress must explain the remaining work instead of asking for live recognition")
-        XCTAssertTrue(shutter.exists)
-        XCTAssertFalse(shutter.isEnabled, "A frozen capture must not accept a second shutter request")
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementProgress"].firstMatch.exists,
+                       "The previous stage capsule must not remain alongside the new ring")
+        XCTAssertFalse(app.descendants(matching: .any)["captureGuidance"].firstMatch.exists)
+        XCTAssertEqual(app.progressIndicators.count, 0, "Processing uses one custom ring without system spinners")
+        XCTAssertFalse(shutter.exists, "A frozen capture must not accept a second shutter request")
         XCTAssertFalse(app.buttons["confirmGarmentMeasurement"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["garmentSilhouette"].firstMatch.exists,
                        "An advisory live contour must not overlay a different captured photo")
@@ -417,7 +419,7 @@ final class GarmentCaptureFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testMissingMeasurementCanBeReviewedWithoutExpandingMeasurementRows() throws {
+    func testMissingMeasurementKeepsEditablePointsWithoutFailureBanner() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--garment-preview-both-sides-partial"]
@@ -431,35 +433,14 @@ final class GarmentCaptureFlowTests: XCTestCase {
         recognize.tap()
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
-        openFailureDetails(in: app)
-        let unavailable = app.descendants(matching: .any)["garmentUnavailableSummary"].firstMatch
-        reveal(unavailable, in: app)
-        XCTAssertTrue(unavailable.label.contains("2개 항목"),
-                      "Missing both sides must report only the two displayed measurements")
-        let missing = app.descendants(matching: .any)["garmentMeasurementValue_bottom.hem_left_inner.hem_left_outer"].firstMatch
-        reveal(missing, in: app)
-        XCTAssertTrue(missing.label.contains("측정 불가"))
-        XCTAssertFalse(missing.label.contains("cm"))
-        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementValue_bottom.crotch.hem_right_inner"].firstMatch.exists)
-        let review = app.buttons["reviewGarmentMeasurement_bottom.hem_left_inner.hem_left_outer"]
-        reveal(review, in: app)
-        XCTAssertTrue(review.exists)
-        XCTAssertTrue(review.isEnabled, "Review must be enabled after the captured result finishes calculating")
-        XCTAssertTrue(review.isHittable, "The clipped photo or loupe must not obstruct the review button")
-        review.tap()
-        XCTAssertTrue(app.navigationBars["측정 테스트"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["A 위치 지정"].exists)
-        XCTAssertTrue(app.buttons["B 지정됨"].exists)
-        let save = app.buttons["saveMeasurement"]
-        reveal(save, in: app)
-        XCTAssertTrue(save.exists)
-        XCTAssertFalse(app.staticTexts["measurementSaved"].exists)
-        attachScreenshot(app, name: "garment-missing-measurement-direct-review")
-        app.buttons["완료"].tap()
-        closeResultDetails(in: app)
-        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["garmentUnavailableNotice"].exists)
+        let point = app.buttons["garmentMeasurementPoint_hem_left_inner"]
+        XCTAssertTrue(point.exists)
+        XCTAssertTrue(point.isHittable)
         XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_bottom.hem_left_inner.hem_left_outer"].exists,
-                       "Opening manual review must not replace an unavailable automatic value")
+                       "A pending handle must not create an unmeasured length")
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].isEnabled)
+        attachScreenshot(app, name: "garment-missing-measurement-visible-points-without-banner")
     }
 
     @MainActor
@@ -780,36 +761,6 @@ final class GarmentCaptureFlowTests: XCTestCase {
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
-    }
-
-    @MainActor
-    private func openFailureDetails(in app: XCUIApplication) {
-        let notice = app.buttons["garmentUnavailableNotice"]
-        XCTAssertTrue(notice.waitForExistence(timeout: 5))
-        XCTAssertTrue(notice.isHittable)
-        notice.tap()
-        let close = app.buttons["closeGarmentMeasurementDetails"]
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
-        expectation(for: NSPredicate { _, _ in close.isHittable }, evaluatedWith: close)
-        waitForExpectations(timeout: 5)
-        XCTAssertTrue(close.isHittable)
-    }
-
-    @MainActor
-    private func closeResultDetails(in app: XCUIApplication) {
-        let close = app.buttons["closeGarmentMeasurementDetails"]
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
-        expectation(for: NSPredicate { _, _ in close.isHittable }, evaluatedWith: close)
-        waitForExpectations(timeout: 5)
-        XCTAssertTrue(close.isHittable)
-        close.tap()
-        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: close)
-        waitForExpectations(timeout: 5)
-        let confirm = app.buttons["confirmGarmentMeasurement"]
-        expectation(for: NSPredicate { _, _ in confirm.isHittable }, evaluatedWith: confirm)
-        waitForExpectations(timeout: 5)
-        XCTAssertTrue(confirm.isHittable,
-                      "Closing details must return to the editable result and its confirmation action")
     }
 
     @MainActor

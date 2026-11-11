@@ -1,17 +1,19 @@
 // Created by mason on 10/24/26.
 import SwiftUI
 
-/// Fit the camera itself to the photo window so fullscreen aspect-fill cannot add a hidden zoom.
+/// One video surface with opaque surroundings shared with measurement capture.
+/// Passes the actual photograph rectangle in surface-local coordinates.
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
+    var prefersBottomAlignedPortrait = false
     @ViewBuilder var content: (CGRect) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
-            let layout = DetailAspectRatioPreviewLayout(containerSize: geometry.size,
-                aspectRatio: aspectRatio)
-            DetailPreviewViewport(rect: layout.frame, content: content)
+            let layout = DetailCameraPreviewLayout(containerSize: geometry.size,
+                aspectRatio: aspectRatio, prefersBottomAlignedPortrait: prefersBottomAlignedPortrait)
+            DetailPreviewViewport(rect: layout.photoFrame, content: content)
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
                 .animation(nil, value: geometry.size)
@@ -38,7 +40,7 @@ private struct DetailPreviewViewport<Content: View>: View, Animatable {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            content(rect)
+            content(CGRect(origin: .zero, size: rect.size))
                 .frame(width: rect.width, height: rect.height)
                 .clipped()
                 .position(x: rect.midX, y: rect.midY)
@@ -69,11 +71,6 @@ nonisolated struct DetailAspectRatioPreviewLayout {
     let frame: CGRect
 
     init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio) {
-        let ratio = aspectRatio.previewRatio(isLandscape: containerSize.width > containerSize.height)
-        if let viewport = MeasurementCameraChromeLayout.photoViewport(
-            containerWidth: Double(containerSize.width), containerHeight: Double(containerSize.height),
-            photoAspectRatio: ratio) {
-            frame = CGRect(x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height)
-        } else { frame = .zero }
+        frame = DetailCameraPreviewLayout(containerSize: containerSize, aspectRatio: aspectRatio).photoFrame
     }
 }

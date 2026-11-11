@@ -5,6 +5,7 @@ nonisolated enum AutomaticMeasurementFailureCause: String, Codable, Sendable, Eq
     case cameraPermissionDenied, cameraUnavailable, cameraNotReady, captureBusy
     case invalidCaptureDepth, invalidCaptureImage, invalidCaptureCalibration, cameraSessionFailure
     case garmentNotRecognized, ambiguousGarment, unsupportedGarment, landmarksNotFound
+    case garmentOrientationUnverified
     case multipleGarments, foregroundNotFound, foregroundMismatch, garmentStructureUnverified
     case invalidModelInput, invalidModelConfiguration, invalidRecognitionResult
 }
@@ -104,6 +105,8 @@ nonisolated struct WorkflowFailureFeedback: Sendable, Equatable {
             ("옷 종류를 구분하지 못했어요", "촬영한 사진을 상의 또는 하의로 구분하지 못했어요.", "옷 한 벌 전체가 보이도록 다시 촬영해 주세요.")
         case .ambiguousGarment:
             ("옷 종류를 구분하기 어려워요", "상의와 하의 중 어떤 측정 모델을 사용할지 결정하지 못했어요.", "소매 또는 바짓단이 모두 보이도록 한 벌만 펼쳐 주세요.")
+        case .garmentOrientationUnverified:
+            ("옷 방향을 확인하지 못했어요", "회전 보정 후에도 옷의 정방향을 확인하지 못해 종류 분류를 진행하지 않았어요.", "사진에서 측정점 위치를 직접 확인하거나 다시 시도해 주세요.")
         case .unsupportedGarment:
             ("자동 실측을 지원하지 않는 옷이에요", "인식된 옷 종류에 사용할 자동 측정 모델이 없어요.", "상의·바지·반바지를 촬영하거나 사진에서 점을 직접 지정해 주세요.")
         case .landmarksNotFound:
@@ -156,4 +159,8 @@ extension GarmentOrientationError: AutomaticMeasurementFailureCauseProviding {
         case .modelMissing, .invalidModelInput, .invalidProbabilities: .invalidModelConfiguration
         }
     }
+}
+
+extension GarmentOrientationResolutionError: AutomaticMeasurementFailureCauseProviding {
+    var automaticMeasurementFailureCause: AutomaticMeasurementFailureCause? { .garmentOrientationUnverified }
 }

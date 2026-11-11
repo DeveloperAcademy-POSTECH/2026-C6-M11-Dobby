@@ -16,7 +16,8 @@ nonisolated extension GarmentLandmarkSet {
                 completed.insert(id)
                 return affected.contains(id)
             }
-            guard (2...64).contains(sources.count), Set(sources).count == sources.count else { return false }
+            let minimum = output.points[index].contourRule == nil ? 2 : 1
+            guard (minimum...64).contains(sources.count), Set(sources).count == sources.count else { return false }
             visiting.insert(id)
             var changed = false
             for source in sources { changed = refresh(source, visiting: &visiting) || changed }

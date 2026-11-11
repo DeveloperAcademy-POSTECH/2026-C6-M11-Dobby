@@ -20,12 +20,14 @@ struct ProductPhotoInput: Equatable, Sendable {
     }
 }
 
-/// 사진 선택의 완료 결과. ProductPhotoHandoff가 선택 사진을 같은 상품의 저장소로 복사한다.
+/// 상품으로 전달할 사진 결과. 선택 화면을 생략하는 흐름에서는 전체 촬영 사진을 담는다.
 struct ProductPhotoOutput: Equatable, Sendable {
     let sessionID: UUID
     let garmentID: UUID
     let detailPhotos: [CapturedAsset]
-    /// 선택 순서대로 전달한다. 미선택 상세 사진도 detailPhotos에는 남는다.
+    /// 기존 선택 흐름은 선택 순서, 전체 전달 흐름은 실측 원본·표시본·상세 촬영 순서다.
     let selectedPhotos: [CapturedAsset]
     let representativePhotoID: UUID
+    /// 촬영 갤러리에서 삭제한 사진. 사진 앱 원본 삭제 요청이 아니다.
+    var deletedPhotoIDs: Set<UUID> = []
 }

@@ -4,6 +4,128 @@ import XCTest
 
 /// Analytic camera geometry only: these checks cannot establish iPhone/tape accuracy.
 final class GarmentPlaneIntegrationTests: XCTestCase {
+    func testDiagnosticReplayKeepsAcceptedPlaneAndInputsIdentical() throws {
+        let scene = scene(normal: unit(.init(x: 0.2, y: -0.1, z: 1)), modify: { x, y, z in
+            if x == 70 && y == 61 { return 0 }
+            return z
+        }, confidence: { x, y in x == 73 && y == 61 ? 0 : 2 })
+        let before = try JSONEncoder().encode(scene.frame)
+        let expected = try fit(scene)
+        let report = GarmentPlaneDiagnostics.analyze(frame: scene.frame, mask: try XCTUnwrap(scene.landmarks.mask), orientation: .up)
+        XCTAssertTrue(report.accepted)
+        XCTAssertEqual(report.stage, .accepted)
+        XCTAssertEqual(report.quality, expected.quality)
+        XCTAssertEqual(report.inlierCount, expected.quality.inlierCount)
+        XCTAssertEqual(report.validCount, expected.quality.candidateCount)
+        XCTAssertEqual(report.count(.invalidDepth), 1)
+        XCTAssertEqual(report.count(.lowConfidence), 1)
+        XCTAssertEqual(try JSONDecoder().decode(MeasurementFrame.self, from: before).depth.values, scene.frame.depth.values)
+        let decoded = try JSONDecoder().decode(GarmentPlaneDiagnosticReport.self, from: JSONEncoder().encode(report))
+        XCTAssertEqual(decoded.inlierCount, report.inlierCount)
+        XCTAssertTrue(decoded.samples.filter { $0.status == .inlier }.allSatisfy { abs($0.signedResidualMeters!) <= 0.010 })
+    }
+
+    func testDiagnosticIdentifiesFirstRANSACFailureAndShowsRejectedCandidate() throws {
+        let scene = scene(modify: { x, _, _ in x < 80 ? 1.0 : 1.15 })
+        let report = GarmentPlaneDiagnostics.analyze(frame: scene.frame, mask: try XCTUnwrap(scene.landmarks.mask), orientation: .up)
+        XCTAssertFalse(report.accepted)
+        XCTAssertEqual(report.stage, .ransacSupport)
+        XCTAssertEqual(report.context?.reason, .planeInsufficientInliers)
+        XCTAssertNotNil(report.candidateNormal)
+        XCTAssertEqual(Double(report.inlierCount), report.context?.evidence?["inliers"])
+        XCTAssertEqual(Double(report.requiredCount), report.context?.evidence?["required"])
+        XCTAssertGreaterThan(report.count(.outlier), 0)
+        XCTAssertNil(report.quality)
+        XCTAssertThrowsError(try fit(scene)) { XCTAssertEqual($0 as? MeasurementFailure, report.failure) }
+    }
+
+    func testDiagnosticDistinguishesBadDepthLowConfidenceAndMalformedInput() throws {
+        for low in [false, true] {
+            let scene = scene(modify: { _, _, z in low ? z : .nan }, confidence: { _, _ in low ? 0 : 2 })
+            let report = GarmentPlaneDiagnostics.analyze(frame: scene.frame, mask: try XCTUnwrap(scene.landmarks.mask), orientation: .up)
+            XCTAssertFalse(report.accepted)
+            XCTAssertEqual(report.stage, .sampling)
+            XCTAssertNil(report.candidateNormal)
+            XCTAssertEqual(report.validCount, 0)
+            XCTAssertEqual(report.count(low ? .lowConfidence : .invalidDepth), report.samples.count)
+            XCTAssertEqual(report.context?.reason, low ? .lowSensorConfidence : .planeTooFewSamples)
+            XCTAssertNoThrow(try JSONEncoder().encode(report))
+        }
+        var bad = scene(); bad.frame.depth.values.removeLast()
+        let report = GarmentPlaneDiagnostics.analyze(frame: bad.frame, mask: try XCTUnwrap(bad.landmarks.mask), orientation: .up)
+        XCTAssertEqual(report.stage, .input)
+        XCTAssertEqual(report.context?.reason, .malformedDepth)
+        XCTAssertTrue(report.samples.isEmpty)
+    }
+
+    private func torsoLandmarks(_ scene: Scene) -> GarmentLandmarkSet {
+        var landmarks = scene.landmarks
+        landmarks.garmentKind = .top
+        landmarks.points += [
+            .init(id: "armpit_left", point: .init(x: 0.3, y: 0.35), confidence: 0.9),
+            .init(id: "armpit_right", point: .init(x: 0.7, y: 0.35), confidence: 0.9),
+            .init(id: "hem_left", point: .init(x: 0.3, y: 0.8), confidence: 0.9),
+            .init(id: "hem_right", point: .init(x: 0.7, y: 0.8), confidence: 0.9)
+        ]
+        return landmarks
+    }
+
+    func testTorsoCenterRejectsRaisedSurroundingsAndMatchesMeasurementReplay() throws {
+        let scene = scene(modify: { x, y, z in
+            let u = Double(x) / 160, v = Double(y) / 120
+            return u < 0.33 || u > 0.67 || v < 0.4 || v > 0.75 ? 1.35 : z
+        })
+        let landmarks = torsoLandmarks(scene)
+        let full = GarmentPlaneDiagnostics.analyze(frame: scene.frame, mask: landmarks.mask!, orientation: .up)
+        XCTAssertFalse(full.accepted)
+        let report = GarmentPlaneDiagnostics.analyze(frame: scene.frame, mask: landmarks.mask!,
+            orientation: .up, landmarks: landmarks)
+        XCTAssertTrue(report.accepted)
+        XCTAssertEqual(report.samplingRegion, "torsoCenter")
+        XCTAssertTrue(report.samples.allSatisfy { $0.point.x >= 0.34 && $0.point.x <= 0.66 && $0.point.y >= 0.4175 && $0.point.y <= 0.7325 })
+        let plane = try XCTUnwrap(report.quality)
+        XCTAssertEqual(plane.inlierCount, plane.candidateCount)
+        let result = GarmentPlaneMeasurementEngine().measure(frame: scene.frame, landmarks: landmarks, definitions: [.testDistance])
+        let value = try XCTUnwrap(result.values.first)
+        XCTAssertTrue(value.hasUsableMeasurement)
+        XCTAssertEqual(value.points.first?.quality.garmentPlaneQuality, plane)
+    }
+
+    func testTorsoCenterDoesNotFallbackToSurroundingsWhenDepthIsMissing() {
+        let scene = scene(confidence: { x, y in
+            let u = Double(x) / 160, v = Double(y) / 120
+            return u >= 0.33 && u <= 0.67 && v >= 0.4 && v <= 0.75 ? 0 : 2
+        })
+        let landmarks = torsoLandmarks(scene)
+        let report = GarmentPlaneDiagnostics.analyze(frame: scene.frame, mask: landmarks.mask!,
+            orientation: .up, landmarks: landmarks)
+        XCTAssertFalse(report.accepted)
+        XCTAssertEqual(report.context?.reason, .lowSensorConfidence)
+        XCTAssertEqual(report.validCount, 0)
+    }
+
+    func testTorsoRegionRotatesWithLandmarksAndRejectsCrossedCorners() throws {
+        let scene = scene()
+        var landmarks = torsoLandmarks(scene)
+        let region = try XCTUnwrap(GarmentPlaneGeometry.bodyRegion(landmarks: landmarks))
+        XCTAssertTrue(region.contains(.init(x: 0.5, y: 0.6)))
+        XCTAssertFalse(region.contains(.init(x: 0.5, y: 0.3)))
+        for i in landmarks.points.indices {
+            let p = landmarks.points[i].point
+            landmarks.points[i].point = .init(x: 1 - p.y, y: p.x)
+        }
+        let rotated = try XCTUnwrap(GarmentPlaneGeometry.bodyRegion(landmarks: landmarks))
+        XCTAssertTrue(rotated.contains(.init(x: 0.4, y: 0.5)))
+        XCTAssertFalse(rotated.contains(.init(x: 0.7, y: 0.5)))
+        let left = landmarks.points.firstIndex { $0.id == "hem_left" }!
+        let right = landmarks.points.firstIndex { $0.id == "hem_right" }!
+        let swap = landmarks.points[left].point
+        landmarks.points[left].point = landmarks.points[right].point
+        landmarks.points[right].point = swap
+        XCTAssertThrowsError(try GarmentPlaneGeometry.bodyRegion(landmarks: landmarks))
+        XCTAssertNil(try GarmentPlaneGeometry.bodyRegion(landmarks: scene.landmarks))
+    }
+
     private struct Scene { var frame: MeasurementFrame; var landmarks: GarmentLandmarkSet }
     private func unit(_ p: Point3D) -> Point3D {
         let l = hypot(hypot(p.x, p.y), p.z)
@@ -96,6 +218,29 @@ final class GarmentPlaneIntegrationTests: XCTestCase {
         XCTAssertLessThan(plane.quality.inlierCount, plane.quality.candidateCount)
         XCTAssertEqual(abs(dot(normal, plane.normal)), 1, accuracy: 0.00001)
         XCTAssertLessThan(plane.quality.orthogonalRMSMeters, 0.002)
+    }
+
+    func testRefinementPreservesSupportedPlaneNearInlierThreshold() throws {
+        // A synthetic 1.2 m plane with deterministic noise and minority outliers.
+        // Blindly accepting each refit loses the required 75% support on this
+        // fixture even though the preceding fit has 679 of 896 inliers.
+        let scene = scene(modify: { x, y, depth in
+            var hash = UInt64(x * 73856093 + y * 19349663 + 233 * 83492791)
+            hash = (hash ^ (hash >> 13)) &* 1274126177
+            if hash % 100 < 20 { return depth + 0.05 }
+            let noise = Double(hash % 10001) / 5000 - 1
+            return depth + Float(noise * 0.010)
+        })
+        let plane = try fit(scene), measured = try value(scene)
+        XCTAssertGreaterThanOrEqual(plane.quality.inlierCount,
+                                   Int(ceil(Double(plane.quality.candidateCount) * 0.75)))
+        XCTAssertLessThanOrEqual(plane.quality.orthogonalRMSMeters, 0.008)
+        XCTAssertGreaterThanOrEqual(plane.quality.horizontalCoverage, 0.6)
+        XCTAssertGreaterThanOrEqual(plane.quality.verticalCoverage, 0.6)
+        XCTAssertEqual(plane.offset, -1.2, accuracy: 0.002)
+        XCTAssertEqual(measured.status, .valid)
+        XCTAssertEqual(try XCTUnwrap(measured.meters), hypot(0.48, 0.24), accuracy: 0.002)
+        XCTAssertTrue(measured.points.allSatisfy { $0.quality.garmentPlaneQuality == plane.quality })
     }
 
     func testRawAsymmetricMaskSelectsGarmentRatherThanRotatedBackground() throws {

@@ -31,14 +31,12 @@ struct GarmentCaptureFlowView: View {
     @State private var captureTask: Task<Void, Never>?
     @State private var cameraRestartTask: Task<Void, Never>?
     @State private var runID: UUID?
-    @State private var errorMessage: String?
+    @State private var captureFailure: WorkflowFailureFeedback?
     @State private var recordingError: String?
     @State private var processingSnapshot: CaptureSnapshot?
     @State private var processingImage: UIImage?
     @State private var captureViewportSize: CGSize = .zero
     @State private var processingViewportSize: CGSize = .zero
-    @State private var errorTitle = "촬영을 완료하지 못했어요"
-    @State private var manualRecovery: ManualMeasurement?
     @State private var previewControls = CameraControlState(sessionID: UUID())
     @State private var previewFocusVisible = false
     @State private var syntheticOptions = SyntheticMeasurementCameraOptions()
@@ -105,6 +103,9 @@ struct GarmentCaptureFlowView: View {
                 else { Color.white.ignoresSafeArea() }
             }
         }
+        .disabled(captureFailure != nil)
+        .allowsHitTesting(captureFailure == nil)
+        .accessibilityHidden(captureFailure != nil)
         .tint(model == nil ? .white : .primary)
         .preferredColorScheme(model == nil ? .dark : .light)
         .task {
@@ -181,18 +182,11 @@ struct GarmentCaptureFlowView: View {
             guard !Task.isCancelled, processingSnapshot?.frame.frameID == snapshot.frame.frameID else { return }
             processingImage = image
         }
-        .sheet(item: $manualRecovery, onDismiss: {
-            if !isPreview, model == nil, scenePhase == .active { restartCamera() }
-        }) { measurement in
-            MeasurementDetailView(model: measurement, archive: archive)
-        }
-        .alert(errorTitle, isPresented: Binding(get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } })) {
-            if processingSnapshot != nil {
-                Button("사진에서 측정점 확인") { reviewCapturedPhoto() }
+        .overlay {
+            if captureFailure != nil {
+                MeasurementCaptureFailureOverlay(onConfirm: dismissCaptureFailure)
             }
-            Button("확인", role: .cancel) { errorMessage = nil }
-        } message: { Text(errorMessage ?? "") }
+        }
     }
 
     @ViewBuilder
@@ -220,8 +214,8 @@ struct GarmentCaptureFlowView: View {
             let photoRect = photoViewport(in: geometry.size)
             ZStack {
                 Color.black
-                // A photo's 1x is its complete sensor field of view. Filling the
-                // entire tall phone first would add an unlabelled ~1.63x crop.
+                // Size video to the selected photograph, not the entire screen.
+                // The shared placement moves chrome without adding a sensor crop.
                 cameraImage
                     .modifier(MeasurementPhotoViewportModifier(rect: photoRect))
                     .accessibilityHidden(showsPlacementTutorial)
@@ -323,17 +317,22 @@ struct GarmentCaptureFlowView: View {
         }
     }
 
+    private func cameraPreviewLayout(in size: CGSize) -> CameraPhotoPreviewLayout {
+        // Keep the source-derived ratio, including frozen processing snapshots.
+        // Only presentation placement is shared; RGB/depth and calibration stay intact.
+        CameraPhotoPreviewLayout(containerSize: size, photoAspectRatio: Double(cameraPhotoAspectRatio),
+            prefersBottomAlignedPortrait: displayedAspectRatio == .sixteenNine)
+    }
+
     private func photoViewport(in size: CGSize) -> CGRect {
-        guard let window = MeasurementCameraChromeLayout.photoViewport(containerWidth: Double(size.width),
-            containerHeight: Double(size.height), photoAspectRatio: Double(cameraPhotoAspectRatio)) else { return .zero }
-        return CGRect(x: window.x, y: window.y, width: window.width, height: window.height)
+        cameraPreviewLayout(in: size).photoFrame
     }
 
     @ViewBuilder
     private func responsiveCameraChrome(in size: CGSize, photoRect: CGRect, bottomSafeAreaInset: CGFloat) -> some View {
         let photo = CameraPhotoViewport(x: Double(photoRect.minX), y: Double(photoRect.minY),
             width: Double(photoRect.width), height: Double(photoRect.height))
-        let labelWidth = max(44, min(380, photoRect.width - 32) - 32 - (isCapturing ? 26 : 0))
+        let labelWidth = max(44, min(380, photoRect.width - 32) - 32)
         let textHeight = (guidance as NSString).boundingRect(
             with: CGSize(width: labelWidth, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
@@ -342,7 +341,7 @@ struct GarmentCaptureFlowView: View {
         if let chrome = MeasurementCameraChromeLayout.layout(containerWidth: Double(size.width),
             containerHeight: Double(size.height), photo: photo, guidanceHeight: Double(labelHeight),
             shutter: shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset)) {
-            if let frame = chrome.guidanceFrame {
+            if !isCapturing, let frame = chrome.guidanceFrame {
                 recognitionGuidance
                     .frame(width: frame.width, height: frame.height)
                     .position(x: frame.x + frame.width / 2, y: frame.y + frame.height / 2)
@@ -365,7 +364,7 @@ struct GarmentCaptureFlowView: View {
         Button { selectZoom(nextZoom) } label: {
             Text(selectedZoom == .standard ? "1x" : "2x")
                 .font(.system(size: guidanceFontSize, weight: .semibold))
-                .foregroundStyle(.white).frame(width: 48, height: 48)
+                .foregroundStyle(CameraZoomStyle.selectedText).frame(width: 48, height: 48)
                 .glassEffect(.regular.tint(.black.opacity(0.18)).interactive(), in: Circle())
                 .contentShape(Circle())
         }
@@ -386,14 +385,14 @@ struct GarmentCaptureFlowView: View {
     }
 
     private var cameraOptionsButton: some View {
-        CameraMoreButton(isEnabled: !isCapturing, action: openCameraOptions)
+        CameraMoreButton(isEnabled: captureFailure == nil && !isCapturing, action: openCameraOptions)
             .accessibilityLabel("촬영 옵션")
             .accessibilityIdentifier("garmentCaptureOptions")
             .accessibilityHidden(showsCameraOptions)
     }
 
     private func openCameraOptions() {
-        guard !isCapturing, model == nil else { return }
+        guard captureFailure == nil, !isCapturing, model == nil else { return }
         if isPreview { synchronizePreviewOptions() }
         else { captureSession.synchronizeCameraOptions() }
         clearPreviewFocus()
@@ -450,7 +449,7 @@ struct GarmentCaptureFlowView: View {
                         .accessibilityLabel("촬영한 사진의 측정점을 확인 중")
                         .accessibilityIdentifier("garmentProcessingPhoto")
                     }
-                } else { ProgressView("촬영한 사진 준비 중").tint(.white) }
+                }
             } else if isPreview, let previewModel, let image = SnapshotPresentation.image(for: previewModel.snapshot) {
                 GeometryReader { geometry in
                     let aspect = SnapshotPresentation.aspectRatio(for: previewModel.snapshot)
@@ -513,16 +512,14 @@ struct GarmentCaptureFlowView: View {
             .accessibilityIdentifier("garmentCameraViewport")
     }
 
-    /// Progress belongs to the screen chrome, not the sensor-to-photo transform.
+    /// Synthetic previews retain their provenance label. Processing feedback
+    /// belongs only to the shutter, outside the sensor-to-photo transform.
     private var cameraFeedback: some View {
         VStack(spacing: 0) {
-            if isCapturing {
-                processingProgress.padding(.top, 154)
-            }
             if isPreview {
                 Text("화면 미리보기 · 합성 카메라 조절 · 실제 측정 아님")
                     .font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(.black.opacity(0.65), in: Capsule()).padding(.top, isCapturing ? 8 : 154)
+                    .background(.black.opacity(0.65), in: Capsule()).padding(.top, 154)
                     .opacity(showsPlacementTutorial ? 0 : 1)
                     .accessibilityIdentifier("garmentPreviewProvenance")
             }
@@ -545,12 +542,8 @@ struct GarmentCaptureFlowView: View {
     /// The same outline state drives the guide, orange center and shutter gate.
     /// Foreground detection does not certify the later garment measurements.
     private var recognitionGuidance: some View {
-        HStack(spacing: 8) {
-            if isCapturing {
-                ProgressView().controlSize(.small).tint(.white).frame(width: 18)
-            }
-            Text(guidance).multilineTextAlignment(.center)
-        }.font(.system(size: guidanceFontSize, weight: .semibold)).foregroundStyle(.white)
+        Text(guidance).multilineTextAlignment(.center)
+            .font(.system(size: guidanceFontSize, weight: .semibold)).foregroundStyle(.white)
             .frame(minHeight: 20)
             .padding(.horizontal, 16).padding(.vertical, 10)
             .transaction { $0.animation = nil }
@@ -574,12 +567,7 @@ struct GarmentCaptureFlowView: View {
     }
 
     private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
-        let rect = photoViewport(in: size)
-        return MeasurementCameraChromeLayout.controls(containerWidth: Double(size.width),
-            containerHeight: Double(size.height),
-            photo: .init(x: Double(rect.minX), y: Double(rect.minY),
-                width: Double(rect.width), height: Double(rect.height)),
-            bottomSafeAreaInset: Double(bottomSafeAreaInset))
+        cameraPreviewLayout(in: size).controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset)
     }
 
     private func shutterFrame(in size: CGSize, bottomSafeAreaInset: CGFloat) -> CameraPhotoViewport? {
@@ -612,13 +600,19 @@ struct GarmentCaptureFlowView: View {
     }
 
     private var measurementShutter: some View {
-        GarmentShutterButton(isEnabled: canTakePhoto, isCapturing: isCapturing,
-            showsRecognizedState: canTakePhoto, action: takePhoto, forceReduceMotion: presentationReduceMotion)
-            .accessibilityHint(isCapturing ? "촬영한 사진의 측정점과 길이를 계산하고 있습니다"
-                : isPreview && previewControls.selectedZoom == .double
-                ? "합성 촬영 결과는 1배에서 확인해요. 1배로 돌아와 옷 윤곽을 다시 인식해 주세요"
-                : "옷 윤곽이 인식되어 주황색 점이 나타나면 촬영할 수 있습니다")
-            .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)
+        Group {
+            if isCapturing {
+                MeasurementProcessingIndicator(phase: phase, forceReduceMotion: presentationReduceMotion)
+                    .id(runID)
+            } else {
+                GarmentShutterButton(isEnabled: canTakePhoto, isCapturing: false,
+                    showsRecognizedState: canTakePhoto, action: takePhoto, forceReduceMotion: presentationReduceMotion)
+                    .accessibilityHint(isPreview && previewControls.selectedZoom == .double
+                        ? "합성 촬영 결과는 1배에서 확인해요. 1배로 돌아와 옷 윤곽을 다시 인식해 주세요"
+                        : "옷 윤곽이 인식되어 주황색 점이 나타나면 촬영할 수 있습니다")
+            }
+        }
+        .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)
     }
 
     private var controlCapabilities: CameraControlCapabilities {
@@ -673,12 +667,12 @@ struct GarmentCaptureFlowView: View {
     /// Tapping to focus does not depend on garment recognition or the
     /// measurement service being ready. The camera owns autofocus support.
     private var canFocus: Bool {
-        guard !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
+        guard captureFailure == nil, !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
         if isPreview { return previewModel != nil }
         return camera.isRunning && camera.cameraCapabilities.focusSupported
     }
     private var canUseCameraControls: Bool {
-        guard !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
+        guard captureFailure == nil, !isCapturing, !showsCameraOptions, !isChangingAspectRatio else { return false }
         if isPreview { return previewModel != nil }
         return camera.isRunning && camera.state == .ready
     }
@@ -692,13 +686,6 @@ struct GarmentCaptureFlowView: View {
         return "이 기기에서는 LiDAR 실측 촬영을 사용할 수 없어요.\nLiDAR가 있는 iPhone에서 실행해 주세요."
     }
     private var guidance: String {
-        if isCapturing {
-            switch phase {
-            case .detectingLandmarks: return "촬영한 옷의 측정점을 찾고 있어요"
-            case .measuring, .completed: return "실제 길이를 계산하고 있어요"
-            default: return "사진과 깊이를 확보하고 있어요. 잠시만 멈춰주세요"
-            }
-        }
         if isPreview, previewControls.selectedZoom == .double { return "2× 조절 미리보기 · 합성 촬영은 1×에서 확인해요" }
         if captureOptions.isApplying { return "노출 설정을 적용하고 있어요" }
         if !isPreview {
@@ -718,36 +705,6 @@ struct GarmentCaptureFlowView: View {
         return "카메라를 준비하고 있어요"
     }
 
-    private var processingProgress: some View {
-        HStack(spacing: 14) {
-            progressStep("사진", complete: processingSnapshot != nil, active: phase == .capturing)
-            progressStep("측정점", complete: phase == .measuring || phase == .completed,
-                active: phase == .detectingLandmarks)
-            progressStep("길이", complete: phase == .completed, active: phase == .measuring)
-        }.font(.caption.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 10)
-            .background(.black.opacity(0.75), in: Capsule())
-            .accessibilityElement(children: .combine)
-            .accessibilityValue(processingProgressDescription)
-            .accessibilityIdentifier("garmentMeasurementProgress")
-    }
-
-    private var processingProgressDescription: String {
-        switch phase {
-        case .detectingLandmarks: "사진 완료 · 측정점 확인 중 · 길이 대기"
-        case .measuring: "사진 완료 · 측정점 완료 · 길이 계산 중"
-        case .completed: "사진 완료 · 측정점 완료 · 길이 완료"
-        default: "사진과 깊이 확보 중 · 측정점 대기 · 길이 대기"
-        }
-    }
-
-    private func progressStep(_ title: String, complete: Bool, active: Bool) -> some View {
-        HStack(spacing: 5) {
-            if active { ProgressView().controlSize(.mini).tint(.white) }
-            else { Image(systemName: complete ? "checkmark.circle.fill" : "circle") }
-            Text(title)
-        }.foregroundStyle(complete || active ? .white : .white.opacity(0.45))
-    }
-
     private func takePhoto() {
         guard canTakePhoto, !isCapturing else { return }
         clearPreviewFocus()
@@ -759,7 +716,7 @@ struct GarmentCaptureFlowView: View {
         runID = token
         processingSnapshot = nil
         processingImage = nil
-        errorMessage = nil
+        captureFailure = nil
         isCapturing = true
         phase = .capturing
         captureTask = Task {
@@ -767,7 +724,9 @@ struct GarmentCaptureFlowView: View {
                 let output = try await service.run(orientation: orientation, purpose: .automaticModel,
                     isSynthetic: false, deviceContext: SnapshotPresentation.deviceIdentifier,
                     onPhaseChange: { value in
-                        guard runID == token else { return }
+                        // The workflow completes before its attempt is saved.
+                        // Only the prepared result below may finish the ring.
+                        guard runID == token, value != .completed else { return }
                         phase = value
                     }, onSnapshot: { snapshot in
                         guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
@@ -787,21 +746,18 @@ struct GarmentCaptureFlowView: View {
                 framedOutput.snapshot = framedSnapshot(framedOutput.snapshot, viewport: viewport,
                     including: measured.landmarks.points + measured.visibleEditableLandmarks.points,
                     endpoints: measured.visibleValues.filter(\.hasUsableMeasurement).flatMap { $0.points.map(\.imagePoint) })
-                model = AutomaticMeasurement(output: framedOutput, context: context)
+                let result = AutomaticMeasurement(output: framedOutput, context: context)
+                try await finishCapture(result, token: token)
             } catch {
-                guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
-                presentFailure(error)
-                runID = nil
-                isCapturing = false
-                captureTask = nil
-                restartCamera()
+                finishFailedCapture(error, token: token)
             }
             if runID == token { runID = nil; isCapturing = false; captureTask = nil }
         }
     }
 
     /// Rehearses the same frozen-photo stages with explicitly synthetic data.
-    /// Observation delays exist only in the dedicated UI test fixture.
+    /// Stage delays exist only in the dedicated UI test fixture; completion
+    /// uses the same short presentation transition as a physical capture.
     private func takePreviewPhoto(_ preview: AutomaticMeasurement) {
         let preview = framedPreview(preview, viewport: captureViewportSize)
         processingViewportSize = captureViewportSize
@@ -809,7 +765,7 @@ struct GarmentCaptureFlowView: View {
         runID = token
         processingSnapshot = preview.snapshot
         processingImage = nil
-        errorMessage = nil
+        captureFailure = nil
         isCapturing = true
         phase = .capturing
         captureTask = Task {
@@ -819,18 +775,34 @@ struct GarmentCaptureFlowView: View {
                 phase = .detectingLandmarks
                 try await previewStagePause(.seconds(2))
                 guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
+                if ProcessInfo.processInfo.arguments.contains("--garment-preview-capture-failure") {
+                    throw AutomaticMeasurementWorkflowFailure(stage: .landmarks, code: .providerFailure,
+                        message: "미리보기용 실측 실패입니다.", cause: .landmarksNotFound)
+                }
                 phase = .measuring
                 try await previewStagePause(.seconds(2))
                 guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
-                phase = .completed
-                model = preview
+                try await finishCapture(preview, token: token)
                 isCapturing = false
                 runID = nil
                 captureTask = nil
             } catch {
-                // The same cancel/retake path clears the owned fixture state.
+                finishFailedCapture(error, token: token)
             }
         }
+    }
+
+    /// A full ring means processing finished, not that every measurement is
+    /// available. Preserve partial results and any recording warning as-is.
+    /// Keeping this transition in the owned capture task makes it cancellable.
+    private func finishCapture(_ result: AutomaticMeasurement, token: UUID) async throws {
+        guard runID == token, !Task.isCancelled, scenePhase == .active else { throw CancellationError() }
+        phase = .completed
+        if !presentationReduceMotion {
+            try await Task.sleep(for: .milliseconds(320))
+        }
+        guard runID == token, !Task.isCancelled, scenePhase == .active else { throw CancellationError() }
+        model = result
     }
 
     /// The actual preview bounds now fit the entire oriented sensor image.
@@ -888,23 +860,34 @@ struct GarmentCaptureFlowView: View {
             hasCapturedPhoto: processingSnapshot != nil) else {
             // A provider can report a normal stop even when the owning task's
             // cancellation flag has not reached this actor yet.
-            errorMessage = nil
+            captureFailure = nil
             return
         }
-        errorTitle = feedback.title
-        errorMessage = feedback.message
+        // Keep the classified reason for diagnostics; the product alert uses
+        // the Figma copy consistently for every failed capture.
+        captureFailure = feedback
     }
 
-    private func reviewCapturedPhoto() {
-        guard let snapshot = processingSnapshot else { return }
-        errorMessage = nil
-        cameraRestartTask?.cancel()
-        cameraRestartTask = nil
-        camera.pauseForMeasurement()
-        // Failed inference has not supplied a validated kind for this frozen
-        // photo. Live preview evidence must not label a separate manual record.
-        manualRecovery = ManualMeasurement(snapshot: snapshot, definition: .testDistance,
-            testContext: .init(category: .other, deviceModel: SnapshotPresentation.deviceIdentifier))
+    private func finishFailedCapture(_ error: Error, token: UUID) {
+        guard runID == token, !Task.isCancelled, scenePhase == .active else { return }
+        presentFailure(error)
+        runID = nil
+        isCapturing = false
+        phase = .idle
+        captureTask = nil
+        processingSnapshot = nil
+        processingImage = nil
+        processingViewportSize = .zero
+        recordingError = nil
+        closeCameraOptions()
+        clearPreviewFocus()
+        // Resume behind the modal so confirming it does not start another
+        // camera session or leave the previous analysis frame on screen.
+        restartCamera()
+    }
+
+    private func dismissCaptureFailure() {
+        captureFailure = nil
     }
 
     private func cancel() {
@@ -915,14 +898,15 @@ struct GarmentCaptureFlowView: View {
         cameraRestartTask = nil
         service?.cancel()
         isCapturing = false
+        phase = .idle
         processingSnapshot = nil
         processingImage = nil
         processingViewportSize = .zero
-        errorMessage = nil
+        captureFailure = nil
     }
 
     private func restartCamera() {
-        guard !isPreview, model == nil, manualRecovery == nil, scenePhase == .active else { return }
+        guard !isPreview, model == nil, scenePhase == .active else { return }
         cameraRestartTask?.cancel()
         cameraRestartTask = Task {
             guard !Task.isCancelled else { return }

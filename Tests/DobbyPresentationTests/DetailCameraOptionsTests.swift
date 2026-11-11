@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class DetailCameraOptionsTests: XCTestCase {
+    func testAspectRatioChangesPreserveAppliedHalfStandardAndDoubleZoom() async {
+        let driver = DeferredDetailControls()
+        let model = DetailCameraOptions(controller: driver)
+        await model.refreshCapabilities()
+        for zoom in [0.5, 1, 2] {
+            let task = Task { await model.apply(.zoom(zoom)) }
+            await driver.waitForRequest()
+            await driver.complete(zoom)
+            await task.value
+            for ratio in DetailPhotoAspectRatio.allCases {
+                model.photoAspectRatio = ratio
+                await Task.yield()
+                let request = await driver.received
+                XCTAssertEqual(request, .zoom(zoom))
+                XCTAssertEqual(model.appliedZoom, zoom)
+                XCTAssertFalse(model.isApplying)
+                XCTAssertNil(model.failure)
+            }
+        }
+    }
+
     func testZoomStopsBounceAndSkipUnsupportedUltraWide() {
         for (minimum, expected) in [(0.5, [2.0, 1, 0.5, 1, 2]), (1.0, [2.0, 1, 2, 1, 2])] {
             var stops = DetailZoomStops()

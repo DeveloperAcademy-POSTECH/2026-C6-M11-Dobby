@@ -1,3 +1,4 @@
+import { unmatchedDiscoveryResponse } from "./helpers/native-discovery.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createWorker } from "../src/index.js";
@@ -15,6 +16,7 @@ const UPSTREAM_RESPONSE = {
     productNameWithoutBrand: "네이비 후드 집업",
     description: "네이비 색상의 후드 집업입니다.",
     reviewNotes: [],
+    identification: null,
   }) }] }],
 };
 
@@ -51,7 +53,8 @@ function harness(overrides = {}) {
   };
   const worker = createWorker({ fetchImpl: async (url, init) => {
     upstreamCalls.push({ url: String(url), init });
-    return Response.json(UPSTREAM_RESPONSE);
+    return Response.json(JSON.parse(init.body).text?.format?.name === "garment_brand_discovery"
+      ? unmatchedDiscoveryResponse() : UPSTREAM_RESPONSE);
   } });
   return { worker, env, installation, shared, upstreamCalls };
 }
@@ -80,7 +83,7 @@ test("common app credentials call OpenAI after both server checks without a lega
   assert.equal((await response.json()).productName, "네이비 후드 집업");
   assert.deepEqual(h.installation.keys, [`garment-autofill:installation:${INSTALLATION_ID}`]);
   assert.deepEqual(h.shared.keys, ["garment-autofill:app"]);
-  assert.equal(h.upstreamCalls.length, 1);
+  assert.equal(h.upstreamCalls.length, 2);
   const outgoing = new Headers(h.upstreamCalls[0].init.headers);
   assert.equal(outgoing.get("Authorization"), `Bearer ${OPENAI_KEY}`);
   assert.equal(outgoing.has("X-Dobby-App-Key"), false);
@@ -132,7 +135,7 @@ test("legacy clients remain supported without app secrets or usage bindings", as
   });
   const response = await h.worker.fetch(request({ appKey: null, authorization: `Bearer ${LEGACY_TOKEN}` }), h.env);
   assert.equal(response.status, 200);
-  assert.equal(h.upstreamCalls.length, 1);
+  assert.equal(h.upstreamCalls.length, 2);
   assert.deepEqual(h.installation.keys, []);
   assert.deepEqual(h.shared.keys, []);
 });
@@ -205,7 +208,7 @@ test("rotating installation IDs still uses one shared server quota key", async (
   assert.equal((await response.json()).error.code, "rate_limited");
   assert.equal(response.headers.get("Retry-After"), "60");
   assert.equal(rejected.bodyUsed, false);
-  assert.equal(h.upstreamCalls.length, 2);
+  assert.equal(h.upstreamCalls.length, 4);
   assert.equal(new Set(shared.keys).size, 1);
   assert.equal(new Set(h.installation.keys).size, 3);
 });

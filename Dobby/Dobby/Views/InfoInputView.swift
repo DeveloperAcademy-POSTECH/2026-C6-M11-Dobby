@@ -19,6 +19,7 @@ struct InfoInputView: View {
     private let onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)?
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.returnFromExport) private var returnFromExport
 
     @State private var exportProduct: ExportProduct?
     @State private var showFruits = false
@@ -26,6 +27,7 @@ struct InfoInputView: View {
     private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
     @State private var saveError: String?
     @State private var hasAttemptedCompletion = false
+    @State private var pendingExportDestination: ExportReturnDestination?
     @State private var generationRequestID: UUID?
     @State private var generationError: String?
     @State private var showsReplacementConfirmation = false
@@ -64,7 +66,7 @@ struct InfoInputView: View {
                 }
                     .disabled(generationRequestID != nil)
                     .padding(.horizontal, 20)
-                    .padding(.top, allowsPhotoEditing ? 12 : 16)
+                    .padding(.top, 12)
                     .padding(.bottom, 16)
                     .background {
                         Color.clear
@@ -131,8 +133,13 @@ struct InfoInputView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
-        .sheet(item: $exportProduct) { product in
-            ExportView(product: product, showFruits: $showFruits)
+        .sheet(item: $exportProduct, onDismiss: finishExportDismissal) { product in
+            ExportView(product: product, showFruits: $showFruits) { destination in
+                try modelContext.save()
+                pendingExportDestination = destination
+                showFruits = false
+                exportProduct = nil
+            }
         }
         .alert("제품 정보를 저장하지 못했어요", isPresented: Binding(
             get: { saveError != nil }, set: { if !$0 { saveError = nil } }
@@ -195,15 +202,18 @@ struct InfoInputView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(height: 20)
                 Text("AI로 제품 정보 생성하기")
                     .tracking(-0.14)
             }
             .font(.custom("Pretendard-Medium", size: 14, relativeTo: .subheadline))
             .foregroundStyle(Color("BrandNeutralWhite"))
-            .frame(maxWidth: .infinity, minHeight: 16)
+            .frame(maxWidth: .infinity, minHeight: 20)
             .padding(.horizontal, 8)
             .padding(.vertical, 15)
-            .background(ProductInformationStyle.accent, in: RoundedRectangle(cornerRadius: 16))
+            .background(Color("BrandMain500"), in: RoundedRectangle(cornerRadius: 16))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
         .disabled(generationRequestID != nil)
@@ -230,7 +240,8 @@ struct InfoInputView: View {
         hasAttemptedCompletion = true
         guard GarmentInformationValidation.isValid(garment) else { return }
         do {
-            try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts) {
+            try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts,
+                                           isEditingExistingProduct: allowsPhotoEditing) {
                 try modelContext.save()
             }
             // End editing before navigation so returning from export doesn't
@@ -239,6 +250,7 @@ struct InfoInputView: View {
             if let onComplete {
                 onComplete(garment)
             } else {
+                pendingExportDestination = nil
                 showFruits = false
                 exportProduct = ExportProduct(garment: garment)
             }
@@ -249,6 +261,12 @@ struct InfoInputView: View {
                 saveError = "입력한 정보는 화면에 남아 있어요. 잠시 후 다시 저장해 주세요."
             }
         }
+    }
+
+    private func finishExportDismissal() {
+        guard let destination = pendingExportDestination else { return }
+        pendingExportDestination = nil
+        returnFromExport?(to: destination)
     }
 
     private func revealMeasurements(using proxy: ScrollViewProxy) {
@@ -337,6 +355,7 @@ enum GarmentInputCompletion {
     /// Validate all visible fields before modifying any of them. A failed database save
     /// retains the edits in the context, so retrying does not lose typed values.
     static func save(garment: Garment, drafts: inout [UUID: String],
+                     isEditingExistingProduct: Bool = false,
                      persist: () throws -> Void) throws {
         // Hidden bilateral evidence stays untouched. An invalid hidden left
         // observation must not block editing and saving the usable right one.
@@ -362,7 +381,10 @@ enum GarmentInputCompletion {
         garment.syncFilterFields()
         let previousCompletion = garment.informationCompletedAt
         let previousDraft = garment.creationDraftData
-        garment.informationCompletedAt = .now
+        // Completing a resumed draft registers it now. Later edits preserve that
+        // first completion, including the creation-date fallback for legacy products.
+        garment.informationCompletedAt = previousCompletion
+            ?? (isEditingExistingProduct ? garment.createdAt : .now)
         garment.creationDraftData = nil
         do {
             try persist()

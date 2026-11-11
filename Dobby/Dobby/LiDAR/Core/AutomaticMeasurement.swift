@@ -84,7 +84,7 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     mutating func apply(_ updated: GarmentMeasurementResult, for revision: UUID) -> Bool {
         guard revision == calculationRevision,
               options.effectiveCalculationMode != .garmentPlane
-                || updated.algorithmVersion == MeasurementCalculator.algorithmVersion(for: options),
+                || updated.algorithmVersion == MeasurementCalculator.algorithmVersion(for: options, landmarks: calculationLandmarks),
               updated.sessionID == snapshot.frame.sessionID,
               updated.frameID == snapshot.frame.frameID,
               updated.source == snapshot.frame.source,
@@ -165,13 +165,27 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
                 // A contour placeholder uses the hem as a non-measuring hint.
                 // It must never appear there as a successfully found top point.
                 center.isVisible = false
+            } else if GarmentLandmarkModelContract.isLunaOuterwear(version: current.modelVersion, kind: .top) {
+                // A null remote seam is an unavailable observation, not the
+                // valid-position hint used for manual two-point placement.
+                center.isVisible = center.isVisible && center.point.isValid
             } else {
                 center.isVisible = center.point.isValid
             }
-            visible.points.removeAll { ["neck_left", "neck_right", "neck_center", "top_length_start"].contains($0.id) }
+            visible.points.removeAll { ["neck_left", "neck_right", "neck_center", "top_length_start", "front_length_start"].contains($0.id) }
             visible.points.append(center)
         }
         return visible
+    }
+
+    var photoEditingPresentation: GarmentEditingPointPresentation {
+        var displayed = visibleEditableLandmarks
+        if canCorrectTotalLength, let definition = lengthDefinition {
+            for id in definition.landmarkIDs where !displayed.points.contains(where: { $0.id == id }) {
+                displayed.points.append(.init(id: id, point: .init(x: 0.5, y: 0.5), confidence: nil, isVisible: false))
+            }
+        }
+        return .make(displayed: displayed, source: calculationLandmarks, snapshot: snapshot)
     }
 
     /// Direct points retain their original coordinates. The right thigh contour
@@ -183,7 +197,9 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
         editable.points = editable.points.filter {
             current.effectiveDerivedSourceIDs(for: $0.id) == nil
                 && ($0.contourRule == nil || ($0.id == editableThighPointID
-                    && $0.contourRule == .waistParallelRightThighMaskV1))
+                    && $0.contourRule == .waistParallelRightThighMaskV1)
+                    || (usesSideNeckTotalLength && $0.id == TopSideNeckLength.hemID
+                        && $0.contourRule == .leftNeckVerticalHemMaskV1))
         }
         return editable
     }
@@ -193,7 +209,7 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     }
 
     private var editableTotalLengthStartID: String? {
-        canCorrectTotalLength ? definitions.first(where: { $0.id == "top.totalLength" })?.landmarkIDs.first : nil
+        canCorrectTotalLength ? lengthDefinition?.landmarkIDs.first : nil
     }
 
     private var editableThighPointID: String? {
@@ -221,25 +237,37 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     /// Only the current straight total length can accept two manually confirmed
     /// endpoints. Older projected records still require their original axis.
     var canCorrectTotalLength: Bool {
-        let matches = definitions.filter { $0.id == "top.totalLength" }
+        let matches = definitions.filter { ["top.totalLength", "top.frontLength"].contains($0.id) }
         return matches.count == 1
-            && [["neck_center", "hem_center"], ["top_length_start", "hem_center"]].contains(matches[0].landmarkIDs)
+            && (matches[0].id == "top.frontLength" ? matches[0].landmarkIDs == ["front_length_start", "hem_center"]
+                : [["neck_center", "hem_center"], ["top_length_start", "hem_center"]].contains(matches[0].landmarkIDs)
+                    || (usesSideNeckTotalLength && matches[0].landmarkIDs == ["neck_left", TopSideNeckLength.hemID]))
             && matches[0].projection == nil
     }
 
+    var usesSideNeckTotalLength: Bool {
+        GarmentLandmarkModelContract.usesSideNeckLength(calculationLandmarks)
+    }
+
+    var lengthDefinition: MeasurementDefinition? {
+        let matches = definitions.filter { ["top.totalLength", "top.frontLength"].contains($0.id) }
+        return matches.count == 1 ? matches.first : nil
+    }
+
     /// Apply both explicitly placed endpoints together to this frozen capture.
-    /// Missing total-length points may be restored here; ordinary point dragging
-    /// cannot create arbitrary model points or promote an unconfirmed prediction.
+    /// Missing total-length points can also be restored by explicit dragging.
+    /// Displaying a provisional handle never confirms an observation.
     /// The manual result is not copied: all measurements recalculate from the
     /// original depth, mask, options and unaffected model observations.
     @discardableResult
     mutating func applyTotalLengthCorrection(from manual: ManualMeasurement) -> Bool {
         guard canCorrectTotalLength,
-              let ids = definitions.first(where: { $0.id == "top.totalLength" })?.landmarkIDs else { return false }
+              let definition = lengthDefinition else { return false }
+        let ids = definition.landmarkIDs
         let frame = snapshot.frame
         let correctedFrame = manual.snapshot.frame
         guard canCorrectTotalLength,
-              manual.definition.id == "top.totalLength",
+              manual.definition.id == definition.id,
               manual.definition.landmarkIDs == ids, manual.definition.projection == nil,
               correctedFrame.sessionID == frame.sessionID, correctedFrame.frameID == frame.frameID,
               correctedFrame.source == frame.source, correctedFrame.orientation == frame.orientation,
@@ -286,6 +314,10 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
     mutating func placePoint(originalPoint: ImagePoint, id: String) -> Bool {
         var updated = calculationLandmarks
         let ids = updated.points.map(\.id)
+        if !ids.contains(id), canCorrectTotalLength, lengthDefinition?.landmarkIDs.contains(id) == true,
+           updated.points.count < 200 {
+            updated.points.append(.init(id: id, point: originalPoint, confidence: nil, isVisible: false))
+        }
         guard originalPoint.isValid, updated.points.count <= 200,
               Set(ids).count == ids.count, ids.allSatisfy({ !$0.isEmpty }),
               updated.sessionID == snapshot.frame.sessionID,
@@ -293,12 +325,15 @@ nonisolated struct AutomaticMeasurement: Identifiable, Sendable {
               let index = updated.points.firstIndex(where: { $0.id == id }),
               (updated.effectiveDerivedSourceIDs(for: id) == nil && updated.points[index].contourRule == nil)
                 || id == editableTotalLengthStartID
+                || (usesSideNeckTotalLength && id == TopSideNeckLength.hemID
+                    && updated.points[index].contourRule == .leftNeckVerticalHemMaskV1)
                 || (id == editableThighPointID && updated.points[index].contourRule == .waistParallelRightThighMaskV1)
               else { return false }
         if updated.points[index].origin == .manual, updated.points[index].point == originalPoint { return false }
         // An explicitly placed contour endpoint becomes a direct manual ray on
         // the same garment plane. Later parent edits must not move it again.
-        if id == editableTotalLengthStartID || id == editableThighPointID {
+        if id == editableTotalLengthStartID || id == editableThighPointID
+            || (usesSideNeckTotalLength && id == TopSideNeckLength.hemID) {
             updated.points[index].derivedFrom = nil
             updated.points[index].contourRule = nil
         }

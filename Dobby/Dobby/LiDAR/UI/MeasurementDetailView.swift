@@ -273,6 +273,7 @@ struct MeasurementImageView: View {
     let image: UIImage?
     let activePointIndex: Int
     let placePoint: (ImagePoint, Int) -> Void
+    var pendingPointIDs: Set<String> = []
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -282,7 +283,7 @@ struct MeasurementImageView: View {
                     placePoint(normalized(event.location, size: geometry.size), activePointIndex)
                 })
                 Canvas { context, size in
-                    let visible = landmarks.points.filter(\.isVisible)
+                    let visible = landmarks.points.filter { $0.isVisible && !pendingPointIDs.contains($0.id) }
                     if visible.count == 2 {
                         let a = screen(visible[0].point, size: size), b = screen(visible[1].point, size: size)
                         var path = Path(); path.move(to: a); path.addLine(to: b)
@@ -293,13 +294,17 @@ struct MeasurementImageView: View {
                 ForEach(Array(landmarks.points.enumerated()), id: \.offset) { index, point in
                     if point.isVisible {
                         Text(index == 0 ? "A" : "B").font(.caption.bold()).foregroundStyle(.black)
-                            .frame(width: 32, height: 32).background(.yellow, in: Circle()).overlay(Circle().stroke(.white, lineWidth: 2))
+                            .frame(width: 32, height: 32)
+                            .background(pendingPointIDs.contains(point.id) ? GarmentCaptureStyle.accent : .yellow, in: Circle())
+                            .overlay(Circle().stroke(.white, lineWidth: 2))
                             .shadow(radius: 3).padding(8).contentShape(Circle())
                             .position(screen(point.point, size: geometry.size))
                             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("measurementImage")).onChanged { value in
                                 placePoint(normalized(value.location, size: geometry.size), index)
                             })
                             .accessibilityLabel("측정점 \(index == 0 ? "A" : "B")")
+                            .accessibilityValue(pendingPointIDs.contains(point.id) ? "위치 확인 필요" : "표시 중")
+                            .accessibilityIdentifier("measurementEditorPoint_\(point.id)")
                     }
                 }
             }.coordinateSpace(name: "measurementImage").clipped()

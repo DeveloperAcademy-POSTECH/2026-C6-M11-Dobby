@@ -3,7 +3,7 @@ import XCTest
 
 final class DetailPhotoGalleryUITests: XCTestCase {
     @MainActor
-    func testBrowsingWithoutDeletionAndReturnToCapture() {
+    func testBrowsingAndReturnToCapture() {
         continueAfterFailure = false
         let app = XCUIApplication()
         let confirmedLabels = enterDetailCapture(app)
@@ -32,10 +32,10 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         assertFocused(app, index: 2, total: 4)
         app.buttons["camera.galleryThumbnail.0"].tap()
         assertPage(pager, "1 / 4")
-        XCTAssertFalse(app.buttons["camera.galleryDelete.0"].exists)
+        XCTAssertTrue(app.buttons["camera.galleryDelete"].isEnabled)
         app.buttons["camera.galleryThumbnail.1"].tap()
         assertPage(pager, "2 / 4")
-        XCTAssertFalse(app.buttons["camera.galleryDelete.1"].exists)
+        XCTAssertTrue(app.buttons["camera.galleryDelete"].isEnabled)
         let annotated = app.descendants(matching: .any)["camera.galleryMeasurement"].firstMatch
         XCTAssertTrue(annotated.waitForExistence(timeout: 5))
         XCTAssertTrue((annotated.value as? String)?.contains("cm") == true)
@@ -55,8 +55,7 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         XCTAssertGreaterThan(frames[3].minX - frames[2].maxX, compactGap)
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = "detail-photo-gallery"; shot.lifetime = .keepAlways; add(shot)
-        XCTAssertFalse(app.buttons["camera.galleryDelete.2"].exists)
-        XCTAssertFalse(app.buttons["camera.galleryDelete.3"].exists)
+        XCTAssertTrue(app.buttons["camera.galleryDelete"].isEnabled)
         XCTAssertEqual(pager.value as? String, "3 / 4")
         app.buttons["촬영으로 돌아가기"].tap()
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 10))
@@ -64,9 +63,9 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         capture.tap()
         let next = app.buttons["camera.selectPhotos"]
         XCTAssertTrue(next.wait(for: \.isEnabled, toEqual: true, timeout: 10)); next.tap()
-        XCTAssertTrue(app.buttons["camera.thumbnail.3"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["camera.thumbnail.4"].exists)
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-info.photo.")).count, 5)
     }
 
     @MainActor
@@ -82,8 +81,7 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         app.buttons["camera.galleryThumbnail.0"].tap()
         assertFocused(app, index: 0, total: 2)
         XCTAssertFalse(app.buttons["camera.galleryThumbnail.2"].exists)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format:
-            "identifier BEGINSWITH %@", "camera.galleryDelete.")).count, 0)
+        XCTAssertTrue(app.buttons["camera.galleryDelete"].isEnabled)
     }
 
     @MainActor
@@ -117,6 +115,117 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         app.buttons["촬영으로 돌아가기"].tap()
         XCTAssertTrue(gallery.wait(for: \.isHittable, toEqual: true, timeout: 10)); gallery.tap()
         assertFocused(app, index: 17, total: 18)
+    }
+
+    @MainActor
+    func testDeletionCancelAllTypesAndRecapture() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        _ = enterDetailCapture(app)
+        defer { app.terminate() }
+        let capture = app.buttons["camera.captureDetail"]
+        for _ in 0..<2 {
+            XCTAssertTrue(capture.wait(for: \.isEnabled, toEqual: true, timeout: 10)); capture.tap()
+        }
+        let gallery = app.buttons["camera.openGallery"]
+        XCTAssertTrue(gallery.wait(for: \.isEnabled, toEqual: true, timeout: 10)); gallery.tap()
+        assertFocused(app, index: 3, total: 4)
+        let before = XCTAttachment(screenshot: app.screenshot())
+        before.name = "gallery-trash-layout"; before.lifetime = .keepAlways; add(before)
+        let trashFrame = app.buttons["camera.galleryDelete"].frame
+        app.buttons["camera.galleryDelete"].tap()
+        let delete = app.buttons["camera.galleryConfirmDelete"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        // 유리 배경은 접근성 프레임에 포함되지 않으므로 버튼과 내부 여백 14pt로 검증한다.
+        XCTAssertEqual(delete.frame.width + 28, 300, accuracy: 1)
+        XCTAssertEqual(app.frame.maxX - delete.frame.maxX - 14, 20, accuracy: 1)
+        let gapAboveTrash = trashFrame.minY - delete.frame.maxY - 14
+        // 시스템 글라스 버튼의 접근성 경계는 보이는 원보다 작을 수 있다.
+        XCTAssertGreaterThanOrEqual(gapAboveTrash, 0, "확인창과 휴지통이 겹치면 안 된다")
+        XCTAssertLessThanOrEqual(gapAboveTrash, 32, "확인창은 하단 조작 영역 바로 위에 있어야 한다")
+        // 확인창 내부의 설명을 탭해도 취소나 삭제가 발생하지 않는다.
+        app.staticTexts["삭제된 사진은 복구할 수 없어요"].tap()
+        XCTAssertTrue(delete.exists)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "gallery-delete-confirmation"; shot.lifetime = .keepAlways; add(shot)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
+        XCTAssertTrue(delete.wait(for: \.exists, toEqual: false, timeout: 5))
+        assertFocused(app, index: 3, total: 4)
+        XCTAssertTrue(app.buttons["camera.galleryDelete"].isHittable)
+        // 하단 버튼 영역도 확인창 외부다. 취소만 하고 사진은 유지한다.
+        app.buttons["camera.galleryDelete"].tap()
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: trashFrame.midX, dy: trashFrame.midY)).tap()
+        XCTAssertTrue(delete.wait(for: \.exists, toEqual: false, timeout: 5))
+        assertFocused(app, index: 3, total: 4)
+        app.buttons["camera.galleryDelete"].tap(); delete.tap()
+        assertFocused(app, index: 2, total: 3)
+        app.buttons["camera.galleryThumbnail.0"].tap()
+        assertFocused(app, index: 0, total: 3)
+        app.buttons["camera.galleryDelete"].tap(); delete.tap()
+        assertFocused(app, index: 0, total: 2)
+        app.buttons["camera.galleryDelete"].tap(); delete.tap()
+        assertFocused(app, index: 0, total: 1)
+        app.buttons["camera.galleryDelete"].tap(); delete.tap()
+        XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        XCTAssertFalse(gallery.isEnabled)
+        let next = app.buttons["camera.selectPhotos"]
+        XCTAssertFalse(next.isEnabled)
+        capture.tap()
+        XCTAssertTrue(next.wait(for: \.isEnabled, toEqual: true, timeout: 10)); next.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-info.photo.")).count, 1)
+    }
+    @MainActor
+    func testDeletedPhotosStayExcludedAfterInformationHandoffAndRelaunch() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        _ = enterDetailCapture(app)
+        defer { app.terminate() }
+        tapReady(app, "camera.captureDetail")
+        tapReady(app, "camera.captureDetail")
+        tapReady(app, "camera.selectPhotos")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        let originalIDs = informationPhotoIDs(app)
+        XCTAssertEqual(originalIDs.count, 4)
+        tapReady(app, "product-flow.back")
+        tapReady(app, "camera.openGallery")
+        tapReady(app, "camera.galleryThumbnail.1")
+        assertFocused(app, index: 1, total: 4)
+        tapReady(app, "camera.galleryDelete")
+        tapReady(app, "camera.galleryConfirmDelete") // 저장된 실측 표시본 제외
+        assertFocused(app, index: 1, total: 3)
+        tapReady(app, "camera.galleryDelete")
+        tapReady(app, "camera.galleryConfirmDelete") // 그 다음 상세 컷 제외
+        assertFocused(app, index: 1, total: 2)
+        tapReady(app, "촬영으로 돌아가기")
+        tapReady(app, "camera.selectPhotos")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        let remainingIDs = [originalIDs[0], originalIDs[3]]
+        XCTAssertEqual(informationPhotoIDs(app), remainingIDs)
+        app.terminate()
+        app.launch()
+        tapReady(app, "home.resume")
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        XCTAssertEqual(informationPhotoIDs(app), remainingIDs, "삭제된 사진이 초안 복원으로 되살아나면 안 된다")
+        tapReady(app, "product-flow.back")
+        tapReady(app, "camera.openGallery")
+        assertFocused(app, index: 1, total: 2)
+    }
+
+    @MainActor
+    private func tapReady(_ app: XCUIApplication, _ identifier: String) {
+        let button = app.buttons[identifier]
+        XCTAssertTrue(button.waitForExistence(timeout: 20), identifier)
+        XCTAssertTrue(button.wait(for: \.isEnabled, toEqual: true, timeout: 15), identifier)
+        button.tap()
+    }
+
+    @MainActor
+    private func informationPhotoIDs(_ app: XCUIApplication) -> [String] {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo."))
+            .allElementsBoundByIndex.map(\.identifier)
     }
 
     @MainActor

@@ -13,6 +13,7 @@ nonisolated enum MeasurementFailureReason: String, Codable, Sendable {
     case frameIdentityMismatch, invalidCalibration, malformedDepth, missingDepthConfidence, malformedConfidence
     case malformedMask, missingMask, maskCoverage, maskClipped, maskHasNoInterior, invalidOptions
     case missingPoint, hiddenPoint, pointOutsideImage, lowModelConfidence, duplicatePoint
+    case landmarkOutsideGarment, landmarkGeometryRejected, landmarkUncertain
     case invalidDefinition, dependencyCycle, dependencyLimit, invalidDerivation, duplicateDefinition
     case noDepthSamples, depthOutsideSupportedRange, lowSensorConfidence, tooFewDepthSamples
     case noSupportedDepthCluster, depthOutlierRejection, depthSupportTooFar, excessiveDepthSpread
@@ -165,6 +166,9 @@ nonisolated extension MeasurementFailureReason {
         case .invalidOptions: "길이 계산 설정이 지원 범위를 벗어났어요."
         case .missingPoint: "이 길이에 필요한 측정점을 찾지 못했어요."
         case .hiddenPoint: "필요한 측정점이 보이지 않는 상태로 인식됐어요."
+        case .landmarkOutsideGarment: "AI가 찾은 점이 옷 윤곽 밖에 있어 측정에서 제외했어요."
+        case .landmarkGeometryRejected: "AI가 찾은 점이 해당 부위의 위치 조건과 맞지 않아 측정에서 제외했어요."
+        case .landmarkUncertain: "AI가 이 측정점의 위치를 확정하지 못했어요."
         case .pointOutsideImage: "필요한 측정점의 좌표가 사진 범위를 벗어났어요."
         case .lowModelConfidence: "필요한 측정점의 인식 신뢰도가 계산 기준에 미치지 못했어요."
         case .duplicatePoint: "같은 이름의 측정점이 중복되어 사용할 점을 결정하지 못했어요."

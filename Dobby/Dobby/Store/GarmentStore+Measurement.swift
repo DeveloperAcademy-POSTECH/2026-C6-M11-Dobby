@@ -257,6 +257,8 @@ extension GarmentStore {
         point.isVisible = current.isVisible
         point.derivedFrom = record.landmarks.effectiveDerivedSourceIDs(for: current.id)
         if let rawOriginal = originalLandmarks.points.first(where: { $0.id == current.id }),
+           (!GarmentLandmarkModelContract.isLunaOuterwear(version: originalLandmarks.modelVersion, kind: .top)
+                || rawOriginal.isVisible || rawOriginal.contourRule != nil),
            rawOriginal.contourRule == nil || productPoint(rawOriginal, displayed: displayedAutomatic).isVisible {
             let original = productPoint(rawOriginal, displayed: displayedAutomatic)
             point.hasAutomaticObservation = true
@@ -314,6 +316,7 @@ extension GarmentStore {
         "top.sleeveLengthLeft": "sleeveLengthLeft",
         "top.sleeveLengthRight": "sleeveLengthRight",
         "top.totalLength": "totalLength",
+        "top.frontLength": "frontLength",
         "bottom.waist_left.waist_right": "waistWidth",
         "bottom.crotch.waist_center": "frontRise",
         "bottom.crotch.waist_front_center": "frontRise",
@@ -344,11 +347,27 @@ extension GarmentStore {
         let isSyntheticPreview = allowsSynthetic && frame.source == .synthetic
             && record.landmarks.origin == .synthetic && record.landmarks.modelVersion == expectedPreviewVersion
         let isCurrentModel = record.landmarks.modelVersion == kind.modelVersion
+        let isRemoteOuterwear = GarmentLandmarkModelContract.isLunaOuterwear(version: record.landmarks.modelVersion, kind: kind)
+        let isViewLengthOuterwear = GarmentLandmarkModelContract.isViewLengthOuterwear(version: record.landmarks.modelVersion, kind: kind)
+        let isFrontLengthOuterwear = GarmentLandmarkModelContract.isFrontLengthOuterwear(version: record.landmarks.modelVersion, kind: kind)
+        let usesSideNeckLength = GarmentLandmarkModelContract.usesSideNeckLength(record.landmarks)
+        let remoteView = record.landmarks.recognitionDiagnostics?.remoteView
+        if isViewLengthOuterwear || isFrontLengthOuterwear {
+            let convention = usesSideNeckLength ? GarmentLandmarkModelContract.sideNeckConvention
+                : record.landmarks.modelVersion == GarmentLandmarkModelContract.lunaGapLengthVersion
+                ? GarmentLandmarkModelContract.frontGapConvention
+                : isFrontLengthOuterwear || remoteView == "front" ? GarmentLandmarkModelContract.frontNeckSeamConvention
+                : GarmentLandmarkModelContract.backNeckSeamConvention
+            guard ["front", "back", "unknown"].contains(remoteView ?? ""),
+                  record.landmarks.recognitionDiagnostics?.totalLengthConvention == convention else {
+                throw MeasurementImportError.invalidRecord
+            }
+        }
         let isLegacyModel = record.landmarks.modelVersion == kind.legacyModelVersion
         let isLegacyBottom8 = kind == .bottoms
             && record.landmarks.modelVersion == AutomaticGarmentKind.legacyBottom8ModelVersion
         guard isSyntheticPreview || (record.landmarks.origin == .model
-            && (isCurrentModel || isLegacyModel || isLegacyBottom8)) else {
+            && (isCurrentModel || isRemoteOuterwear || isLegacyModel || isLegacyBottom8)) else {
             throw MeasurementImportError.invalidRecord
         }
         let expected: [MeasurementDefinition]
@@ -362,14 +381,20 @@ extension GarmentStore {
             // Preview records predate the contour contract. They do not grant
             // arbitrary production model/definition combinations.
             usesContourLength = isCurrentModel && !isSyntheticPreview
-            if usesContourLength {
+            if usesSideNeckLength {
+                expected = TopLandmarkSchema.sideNeckMeasurementDefinitions
+            } else if isViewLengthOuterwear {
+                expected = TopLandmarkSchema.viewLengthMeasurementDefinitions(for: remoteView)
+            } else if usesContourLength || isRemoteOuterwear {
                 expected = TopLandmarkSchema.canonicalMeasurementDefinitions
             } else if record.definitions.first(where: { $0.id == "top.totalLength" })?.projection != nil {
                 expected = TopLandmarkSchema.legacyProjectedMeasurementDefinitions
             } else {
                 expected = TopLandmarkSchema.legacyMeasurementDefinitions
             }
-            physicalPointNames = TopLandmarkSchema.expectedKeypoints + (usesContourLength ? ["top_length_start"] : [])
+            physicalPointNames = TopLandmarkSchema.expectedKeypoints + ((usesContourLength || isRemoteOuterwear) ? ["top_length_start"] : [])
+                + (isViewLengthOuterwear ? ["front_length_start"] : [])
+                + (usesSideNeckLength ? [TopSideNeckLength.hemID] : [])
             derived = ["neck_center": ["neck_left", "neck_right"]]
         case .bottoms:
             usesContourLength = false
@@ -391,7 +416,9 @@ extension GarmentStore {
 
         func validContourRule(_ point: GarmentLandmark) -> Bool {
             let expectedRule: GarmentContourRule?
-            if usesContourLength && point.id == "top_length_start" {
+            if usesSideNeckLength && point.id == TopSideNeckLength.hemID {
+                expectedRule = .leftNeckVerticalHemMaskV1
+            } else if usesContourLength && point.id == "top_length_start" {
                 expectedRule = .neckPerpendicularMaskV1
             } else if usesContourThigh && point.id == "thigh_right" {
                 expectedRule = .waistParallelRightThighMaskV1
@@ -419,6 +446,8 @@ extension GarmentStore {
             return set.sessionID == frame.sessionID && set.frameID == frame.frameID
                 && set.origin == record.landmarks.origin && set.garmentKind == kind
                 && set.modelVersion == record.landmarks.modelVersion
+                && (!(isViewLengthOuterwear || isFrontLengthOuterwear) || (set.recognitionDiagnostics?.remoteView == remoteView
+                    && set.recognitionDiagnostics?.totalLengthConvention == record.landmarks.recognitionDiagnostics?.totalLengthConvention))
                 && !ids.isEmpty && ids.count <= 200 && Set(ids).count == ids.count
                 && Set(ids).isSubset(of: known)
                 && set.points.allSatisfy { point in
@@ -439,8 +468,11 @@ extension GarmentStore {
             let endpoints: [String]
             let definitionID: String
             if kind == .top {
-                endpoints = usesContourLength ? ["top_length_start", "hem_center"] : ["neck_center", "hem_center"]
-                definitionID = "top.totalLength"
+                let usesFrontLength = isViewLengthOuterwear && remoteView == "front"
+                endpoints = usesSideNeckLength ? ["neck_left", TopSideNeckLength.hemID]
+                    : usesFrontLength ? ["front_length_start", "hem_center"]
+                    : (usesContourLength || isRemoteOuterwear) ? ["top_length_start", "hem_center"] : ["neck_center", "hem_center"]
+                definitionID = usesFrontLength ? "top.frontLength" : "top.totalLength"
             } else if usesContourThigh {
                 endpoints = BottomLandmarkSchema.thighWidthRightDefinition.landmarkIDs
                 definitionID = BottomLandmarkSchema.thighWidthRightDefinition.id
@@ -450,8 +482,11 @@ extension GarmentStore {
             guard addedIDs.isSubset(of: Set(endpoints)),
                   let definition = record.definitions.first(where: { $0.id == definitionID }),
                   definition.landmarkIDs == endpoints, definition.projection == nil else { return false }
-            // Restoring even one missing endpoint requires confirming both.
-            return endpoints.allSatisfy { id in
+            // A top endpoint can be restored by directly dragging its pending
+            // handle. Require explicit manual placement for every added point,
+            // while preserving the other endpoint's existing observation.
+            let requiredManualIDs = kind == .top ? addedIDs : Set(endpoints)
+            return requiredManualIDs.allSatisfy { id in
                 record.landmarks.points.contains { point in
                     point.id == id && point.origin == .manual && point.isVisible
                         && point.point.isValid && point.confidence == nil && point.derivedFrom == nil

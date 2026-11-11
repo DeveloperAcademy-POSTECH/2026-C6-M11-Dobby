@@ -85,6 +85,575 @@ final class MeasurementGarmentHandoffTests: XCTestCase {
         return record
     }
 
+    private func sideNeckFixture() throws -> SavedMeasurement {
+        var record = try remoteOuterwearFixture(seamVisible: false)
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaGapLengthVersion
+        record.landmarks.recognitionDiagnostics?.remoteSchemaVersion = "outerwear-landmarks-v4"
+        let neck = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "neck_left" })
+        record.landmarks.points[neck].point = .init(x: 0.35, y: 0.25)
+        let hem = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "hem_center" })
+        record.landmarks.points[hem].isVisible = false
+        record.landmarks.recognitionDiagnostics?.rawPoints = record.landmarks.points
+        record.landmarks = TopSideNeckLength.applying(to: record.landmarks)
+        record.definitions = TopLandmarkSchema.sideNeckMeasurementDefinitions
+        record.result = GarmentPlaneMeasurementEngine(options: record.options).measure(
+            frame: record.snapshot.frame, landmarks: record.landmarks, definitions: record.definitions)
+        return record
+    }
+
+    func testSideNeckLengthArchiveAndProductImportPreserveConventionAndContour() async throws {
+        let record = try sideNeckFixture()
+        XCTAssertNotNil(record.result.values.last?.meters)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = MeasurementArchive(folder: directory.appendingPathComponent("archive"))
+        _ = try await archive.save(record)
+        let restored = try await archive.load(record.id)
+        let stored = try GarmentStore.importMeasurement(restored, in: ModelContext(makeContainer()),
+            photosDirectory: directory.appendingPathComponent("photos"), allowsSynthetic: true)
+        XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+        XCTAssertEqual(restored.landmarks.recognitionDiagnostics?.totalLengthConvention,
+                       GarmentLandmarkModelContract.sideNeckConvention)
+        let resolved = try XCTUnwrap(restored.result.values.last?.points.last)
+        let endpoint = try XCTUnwrap(stored.measurementPhoto?.landmark(TopSideNeckLength.hemID))
+        XCTAssertEqual(endpoint.x, resolved.imagePoint.x)
+        XCTAssertEqual(endpoint.y, resolved.imagePoint.y)
+        XCTAssertEqual(endpoint.hasAutomaticObservation, true)
+        XCTAssertFalse(try XCTUnwrap(restored.landmarks.points.first { $0.id == "hem_center" }).isVisible)
+        var wrongConvention = restored
+        wrongConvention.landmarks.recognitionDiagnostics?.totalLengthConvention = GarmentLandmarkModelContract.frontGapConvention
+        XCTAssertThrowsError(try GarmentStore.importMeasurement(wrongConvention, in: ModelContext(makeContainer()),
+            photosDirectory: directory.appendingPathComponent("invalid"), allowsSynthetic: true))
+    }
+
+    func testSideNeckManualCorrectionCanBeImportedAndResetToOriginalContour() throws {
+        let record = try sideNeckFixture()
+        var model = AutomaticMeasurement(record: record)
+        XCTAssertTrue(model.canCorrectTotalLength)
+        var manual = try XCTUnwrap(model.manualMeasurement(for: "top.totalLength"))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.4, y: 0.25), index: 0))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.4, y: 0.85), index: 1))
+        XCTAssertTrue(model.applyTotalLengthCorrection(from: manual))
+        let result = GarmentPlaneMeasurementEngine(options: model.options).measure(
+            frame: model.snapshot.frame, landmarks: model.calculationLandmarks, definitions: model.definitions)
+        XCTAssertTrue(model.apply(result, for: model.calculationRevision))
+        let corrected = try model.makeRecord()
+        XCTAssertNil(corrected.landmarks.points.first { $0.id == TopSideNeckLength.hemID }?.contourRule)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(corrected, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        XCTAssertEqual(stored.measurementPhoto?.landmark("neck_left")?.originRaw, "manual")
+        var reopened = AutomaticMeasurement(record: corrected)
+        reopened.resetPointAdjustments()
+        XCTAssertEqual(reopened.calculationLandmarks.points.first { $0.id == TopSideNeckLength.hemID }?.contourRule,
+                       .leftNeckVerticalHemMaskV1)
+    }
+
+    /// The remote seam is an independently observed physical point. Unknown
+    /// remote confidence and a missing seam must survive product persistence.
+    private func remoteOuterwearFixture(seamVisible: Bool = true) throws -> SavedMeasurement {
+        var record = try fixture(.top)
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaOuterwearVersion
+        record.landmarks.points.removeAll { $0.id == "neck_center" }
+        for index in record.landmarks.points.indices { record.landmarks.points[index].confidence = nil }
+        let start = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "top_length_start" })
+        record.landmarks.points[start] = .init(id: "top_length_start",
+            point: seamVisible ? .init(x: 0.5, y: 0.2) : .init(x: 0.5, y: 0.5),
+            confidence: nil, isVisible: seamVisible)
+        let hem = try XCTUnwrap(record.landmarks.points.firstIndex { $0.id == "hem_center" })
+        record.landmarks.points[hem].point = .init(x: 0.5, y: 0.8)
+        // A whole-frame mask is invalid garment evidence (coverage must be
+        // 10–85%, and lateral edges must remain clear). Keep this plane fixture
+        // bounded while covering every visible endpoint, including manual edits.
+        let maskSize = record.snapshot.frame.depth.size
+        var maskValues = [UInt8](repeating: 0, count: maskSize.width * maskSize.height)
+        for y in (maskSize.height / 20)..<(maskSize.height * 9 / 10) {
+            for x in (maskSize.width / 10)..<(maskSize.width * 4 / 5) {
+                maskValues[y * maskSize.width + x] = 1
+            }
+        }
+        let mask = GarmentMask(size: maskSize, values: maskValues)
+        _ = try GarmentPlaneGeometry.fit(frame: record.snapshot.frame, mask: mask, uprightOrientation: .up)
+        record.landmarks.mask = mask
+        let assessments = record.landmarks.points.map {
+            LandmarkMaskAssessment(landmarkID: $0.id, status: $0.isVisible ? .associated : .notVisible)
+        }
+        var diagnostics = GarmentRecognitionDiagnostics(requestedOrientation: .up,
+            selectedPoseOrientation: .up, associationPolicy: .subject,
+            rawPoints: record.landmarks.points, pointAssessments: assessments, poseAttempts: [])
+        diagnostics.classifiedCategory = "Jacket"
+        diagnostics.remoteModel = OuterwearLandmarkResponse.expectedModel
+        diagnostics.remoteSchemaVersion = OuterwearLandmarkResponse.expectedSchemaVersion
+        diagnostics.remoteView = "front"
+        diagnostics.remoteNeckStyle = "hood"
+        diagnostics.totalLengthConvention = GarmentLandmarkModelContract.backNeckSeamConvention
+        record.landmarks.recognitionDiagnostics = diagnostics
+        record.options.calculationMode = .garmentPlane
+        for index in record.result.values.indices { record.result.values[index].status = .uncertain }
+        if !seamVisible {
+            let length = try XCTUnwrap(record.result.values.firstIndex { $0.id == "top.totalLength" })
+            record.result.values[length].meters = nil
+            record.result.values[length].status = .unavailable
+            record.result.values[length].failure = .occludedLandmark
+        }
+        return record
+    }
+
+    private func remoteFrontOuterwearFixture(seamVisible: Bool = true) throws -> SavedMeasurement {
+        var record = try remoteOuterwearFixture(seamVisible: false)
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaViewLengthVersion
+        record.landmarks.points.append(.init(id: "front_length_start",
+            point: seamVisible ? .init(x: 0.5, y: 0.22) : .init(x: 0.5, y: 0.5),
+            confidence: nil, isVisible: seamVisible))
+        record.definitions = TopLandmarkSchema.frontLengthMeasurementDefinitions
+        for index in record.result.values.indices {
+            record.result.values[index].id = record.definitions[index].id
+            record.result.values[index].title = record.definitions[index].title
+        }
+        let length = try XCTUnwrap(record.result.values.firstIndex { $0.id == "top.frontLength" })
+        record.result.values[length].meters = seamVisible ? 0.6725 : nil
+        record.result.values[length].status = seamVisible ? .uncertain : .unavailable
+        record.result.values[length].failure = seamVisible ? nil : .occludedLandmark
+        var diagnostics = try XCTUnwrap(record.landmarks.recognitionDiagnostics)
+        diagnostics.remoteSchemaVersion = OuterwearLandmarkResponse.expectedViewLengthSchemaVersion
+        diagnostics.remoteView = "front"
+        diagnostics.totalLengthConvention = GarmentLandmarkModelContract.frontNeckSeamConvention
+        diagnostics.rawPoints = record.landmarks.points
+        diagnostics.pointAssessments = record.landmarks.points.map {
+            .init(landmarkID: $0.id, status: $0.isVisible ? .associated : .notVisible)
+        }
+        record.landmarks.recognitionDiagnostics = diagnostics
+        return record
+    }
+
+    private func frontTotalOuterwearFixture(seamVisible: Bool = true) throws -> SavedMeasurement {
+        var record = try remoteOuterwearFixture(seamVisible: seamVisible)
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaFrontLengthVersion
+        record.landmarks.recognitionDiagnostics?.remoteSchemaVersion = OuterwearLandmarkResponse.expectedFrontLengthSchemaVersion
+        record.landmarks.recognitionDiagnostics?.remoteView = "front"
+        record.landmarks.recognitionDiagnostics?.totalLengthConvention = GarmentLandmarkModelContract.frontNeckSeamConvention
+        return record
+    }
+
+    func testUnavailableTotalPointGetsDisplayHintWithoutChangingCalculationOrSavedEvidence() throws {
+        let record = try frontTotalOuterwearFixture(seamVisible: false)
+        let model = AutomaticMeasurement(record: record)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let before = try encoder.encode(model.calculationLandmarks)
+        let shown = model.photoEditingPresentation
+        let point = try XCTUnwrap(shown.landmarks.points.first { $0.id == "top_length_start" })
+        XCTAssertTrue(point.isVisible)
+        XCTAssertTrue(point.point.isValid)
+        XCTAssertTrue(shown.pendingIDs.contains(point.id))
+        XCTAssertNotEqual(point.point, ImagePoint(x: 0.5, y: 0.5), "A null slot must start near the neck, not the photo center")
+        XCTAssertEqual(try encoder.encode(model.calculationLandmarks), before)
+        XCTAssertFalse(model.hasPointAdjustments)
+        XCTAssertEqual(model.result.values.first { $0.id == "top.totalLength" }?.status, .unavailable)
+        XCTAssertFalse(try XCTUnwrap(model.makeRecord().landmarks.points.first { $0.id == point.id }).isVisible)
+    }
+
+    func testRejectedAICoordinateIsShownAndOnlyExplicitMoveConfirmsIt() throws {
+        var record = try frontTotalOuterwearFixture(seamVisible: false)
+        record.snapshot.presentationCrop = .full
+        let candidate = ImagePoint(x: 0.91, y: 0.12)
+        let index = try XCTUnwrap(record.landmarks.recognitionDiagnostics?.rawPoints.firstIndex { $0.id == "top_length_start" })
+        record.landmarks.recognitionDiagnostics?.rawPoints[index].point = candidate
+        record.landmarks.recognitionDiagnostics?.rawPoints[index].isVisible = true
+        var model = AutomaticMeasurement(record: record)
+        XCTAssertEqual(model.photoEditingPresentation.landmarks.points.first { $0.id == "top_length_start" }?.point, candidate)
+        XCTAssertTrue(model.photoEditingPresentation.pendingIDs.contains("top_length_start"))
+        XCTAssertTrue(model.placePoint(originalPoint: .init(x: 0.5, y: 0.23), id: "top_length_start"))
+        XCTAssertFalse(model.photoEditingPresentation.pendingIDs.contains("top_length_start"))
+        XCTAssertEqual(model.calculationLandmarks.points.first { $0.id == "top_length_start" }?.origin, .manual)
+        model.resetPointAdjustments()
+        XCTAssertTrue(model.photoEditingPresentation.pendingIDs.contains("top_length_start"))
+        XCTAssertFalse(model.calculationLandmarks.points.first { $0.id == "top_length_start" }!.isVisible)
+    }
+
+    func testMissingTotalSlotCanBeDisplayedAndExplicitlyRestoredByDragging() throws {
+        var record = try frontTotalOuterwearFixture(seamVisible: false)
+        record.landmarks.points.removeAll { $0.id == "top_length_start" }
+        var model = AutomaticMeasurement(record: record)
+        XCTAssertTrue(model.photoEditingPresentation.landmarks.points.contains { $0.id == "top_length_start" && $0.isVisible })
+        XCTAssertFalse(model.calculationLandmarks.points.contains { $0.id == "top_length_start" })
+        XCTAssertFalse(model.placePoint(originalPoint: .init(x: 0.5, y: 0.2), id: "unregistered_point"))
+        XCTAssertTrue(model.placePoint(originalPoint: .init(x: 0.5, y: 0.2), id: "top_length_start"))
+        XCTAssertEqual(model.calculationLandmarks.points.first { $0.id == "top_length_start" }?.origin, .manual)
+        let recalculated = GarmentPlaneMeasurementEngine(options: model.options).measure(
+            frame: model.snapshot.frame, landmarks: model.calculationLandmarks, definitions: model.definitions)
+        XCTAssertTrue(model.apply(recalculated, for: model.calculationRevision))
+        let corrected = try model.makeRecord()
+        XCTAssertNotEqual(corrected.landmarks.points.first { $0.id == "hem_center" }?.origin, .manual)
+        XCTAssertFalse(corrected.originalAutomaticLandmarks!.points.contains { $0.id == "top_length_start" })
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(corrected, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+        XCTAssertNil(stored.measurement("totalLength")?.autoValueCm)
+        XCTAssertEqual(try XCTUnwrap(stored.measurementPhoto?.landmark("top_length_start")).hasAutomaticObservation, false)
+        var invented = corrected
+        let start = try XCTUnwrap(invented.landmarks.points.firstIndex { $0.id == "top_length_start" })
+        invented.landmarks.points[start].origin = .model
+        XCTAssertThrowsError(try GarmentStore.importMeasurement(invented, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true), "A display hint cannot become a new model observation")
+    }
+
+    func testV3FrontTotalLengthStoresAndReopensAsTheDefaultTotalLength() async throws {
+        let record = try frontTotalOuterwearFixture()
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = MeasurementArchive(folder: directory.appendingPathComponent("archive", isDirectory: true))
+        _ = try await archive.save(record)
+        let restored = try await archive.load(record.id)
+        XCTAssertEqual(restored.definitions.last?.id, "top.totalLength")
+        XCTAssertEqual(restored.definitions.last?.landmarkIDs, ["top_length_start", "hem_center"])
+        XCTAssertEqual(restored.landmarks.recognitionDiagnostics?.totalLengthConvention,
+            GarmentLandmarkModelContract.frontNeckSeamConvention)
+        let database = directory.appendingPathComponent("front-total.store")
+        let photos = directory.appendingPathComponent("photos", isDirectory: true)
+        try autoreleasepool {
+            let schema = ProductAppStorage.schema
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, url: database, cloudKitDatabase: .none)])
+            let stored = try GarmentStore.importMeasurement(restored, in: ModelContext(container),
+                photosDirectory: photos, allowsSynthetic: true)
+            XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+            XCTAssertEqual(stored.measurement("totalLength")?.label, "총장")
+            XCTAssertNil(stored.measurement("frontLength"))
+            XCTAssertEqual(stored.measurementPhoto?.landmarks.count, 12)
+        }
+        try autoreleasepool {
+            let schema = ProductAppStorage.schema
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, url: database, cloudKitDatabase: .none)])
+            let stored = try XCTUnwrap(ModelContext(container).fetch(FetchDescriptor<Garment>()).first)
+            XCTAssertEqual(stored.measurementPhoto?.measurementModelVersion, GarmentLandmarkModelContract.lunaFrontLengthVersion)
+            XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+            XCTAssertTrue(try XCTUnwrap(stored.measurementPhoto?.landmark("top_length_start")?.hasAutomaticObservation))
+            XCTAssertNil(stored.measurementPhoto?.landmark("front_length_start"))
+        }
+        var wrongConvention = record
+        wrongConvention.landmarks.recognitionDiagnostics?.totalLengthConvention = GarmentLandmarkModelContract.backNeckSeamConvention
+        XCTAssertThrowsError(try GarmentStore.importMeasurement(wrongConvention, in: ModelContext(makeContainer()),
+            photosDirectory: photos, allowsSynthetic: true))
+    }
+
+    func testV4EstimatedCentersSurviveArchiveAndProductImport() async throws {
+        var record = try frontTotalOuterwearFixture()
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaGapLengthVersion
+        record.landmarks.recognitionDiagnostics?.remoteSchemaVersion = OuterwearLandmarkResponse.expectedGapSchemaVersion
+        record.landmarks.recognitionDiagnostics?.totalLengthConvention = GarmentLandmarkModelContract.frontGapConvention
+        record.landmarks.recognitionDiagnostics?.centerEstimates = [.init(landmarkID: "top_length_start",
+            point: .init(x: 0.5, y: 0.22), leftSupport: .init(x: 0.48, y: 0.22), rightSupport: .init(x: 0.52, y: 0.22))]
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = MeasurementArchive(folder: directory.appendingPathComponent("archive"))
+        _ = try await archive.save(record)
+        let restored = try await archive.load(record.id)
+        XCTAssertEqual(restored.landmarks.recognitionDiagnostics?.centerEstimates?.count, 1)
+        let stored = try GarmentStore.importMeasurement(restored, in: ModelContext(makeContainer()),
+            photosDirectory: directory.appendingPathComponent("photos"), allowsSynthetic: true)
+        XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+        XCTAssertEqual(stored.measurementPhoto?.measurementModelVersion, GarmentLandmarkModelContract.lunaGapLengthVersion)
+        var wrong = record
+        wrong.landmarks.recognitionDiagnostics?.totalLengthConvention = GarmentLandmarkModelContract.frontNeckSeamConvention
+        XCTAssertThrowsError(try GarmentStore.importMeasurement(wrong, in: ModelContext(makeContainer()),
+            photosDirectory: directory.appendingPathComponent("wrong"), allowsSynthetic: true))
+    }
+
+    func testV3MissingFrontTotalStartCanBeCorrectedWithoutChangingItsConvention() throws {
+        let record = try frontTotalOuterwearFixture(seamVisible: false)
+        var model = AutomaticMeasurement(record: record)
+        XCTAssertEqual(model.lengthDefinition?.id, "top.totalLength")
+        XCTAssertTrue(try XCTUnwrap(model.visibleEditableLandmarks.points.first { $0.id == "hem_center" }).isVisible,
+            "An unavailable total length must still display its independently supported hem")
+        XCTAssertFalse(try XCTUnwrap(model.visibleEditableLandmarks.points.first { $0.id == "top_length_start" }).isVisible)
+        var manual = try XCTUnwrap(model.manualMeasurement(for: "top.totalLength"))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.5, y: 0.22), index: 0))
+        XCTAssertFalse(model.applyTotalLengthCorrection(from: manual))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.5, y: 0.8), index: 1))
+        XCTAssertTrue(model.applyTotalLengthCorrection(from: manual))
+        let recalculated = GarmentPlaneMeasurementEngine(options: model.options).measure(
+            frame: model.snapshot.frame, landmarks: model.calculationLandmarks, definitions: model.definitions)
+        XCTAssertTrue(model.apply(recalculated, for: model.calculationRevision))
+        let corrected = try model.makeRecord()
+        XCTAssertEqual(corrected.landmarks.recognitionDiagnostics?.totalLengthConvention,
+            GarmentLandmarkModelContract.frontNeckSeamConvention)
+        XCTAssertFalse(try XCTUnwrap(corrected.originalAutomaticLandmarks?.points.first { $0.id == "top_length_start" }).isVisible)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stored = try GarmentStore.importMeasurement(corrected, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+        XCTAssertNil(stored.measurement("totalLength")?.autoValueCm)
+        XCTAssertNil(stored.measurement("frontLength"))
+    }
+
+    func testFrontOuterwearLengthKeepsItsOwnLabelFieldAndSourceAfterArchiveAndProductReopen() async throws {
+        let record = try remoteFrontOuterwearFixture()
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = MeasurementArchive(folder: directory.appendingPathComponent("archive", isDirectory: true))
+        _ = try await archive.save(record)
+        let restored = try await archive.load(record.id)
+        XCTAssertEqual(restored.landmarks.modelVersion, GarmentLandmarkModelContract.lunaViewLengthVersion)
+        XCTAssertEqual(restored.landmarks.recognitionDiagnostics?.totalLengthConvention,
+                       GarmentLandmarkModelContract.frontNeckSeamConvention)
+        XCTAssertEqual(restored.definitions.last?.id, "top.frontLength")
+        XCTAssertEqual(restored.definitions.last?.title, "앞판 총장")
+        XCTAssertEqual(restored.landmarks.points.count, 13)
+        XCTAssertFalse(try XCTUnwrap(restored.landmarks.points.first { $0.id == "top_length_start" }).isVisible)
+        XCTAssertTrue(try XCTUnwrap(restored.landmarks.points.first { $0.id == "front_length_start" }).isVisible)
+
+        let database = directory.appendingPathComponent("front-outerwear-products.store")
+        let photos = directory.appendingPathComponent("photos", isDirectory: true)
+        try autoreleasepool {
+            let schema = ProductAppStorage.schema
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, url: database, cloudKitDatabase: .none)
+            ])
+            let stored = try GarmentStore.importMeasurement(restored, in: ModelContext(container),
+                photosDirectory: photos, allowsSynthetic: true)
+            XCTAssertEqual(stored.orderedMeasurements.count, 6)
+        }
+        try autoreleasepool {
+            let schema = ProductAppStorage.schema
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, url: database, cloudKitDatabase: .none)
+            ])
+            let stored = try XCTUnwrap(ModelContext(container).fetch(FetchDescriptor<Garment>()).first)
+            let front = try XCTUnwrap(stored.measurement("frontLength"))
+            XCTAssertEqual(front.label, "앞판 총장")
+            XCTAssertEqual(front.valueCm, 67.2, accuracy: 0.001)
+            XCTAssertEqual(try XCTUnwrap(front.autoValueCm), 67.25, accuracy: 0.001)
+            XCTAssertNil(stored.measurement("totalLength"))
+            XCTAssertNil(stored.lengthCm, "A front measurement must not populate the back-total-length field")
+            XCTAssertTrue(stored.visibleMeasurements.contains { $0.key == "frontLength" })
+            let photo = try XCTUnwrap(stored.measurementPhoto)
+            XCTAssertEqual(photo.measurementModelVersion, GarmentLandmarkModelContract.lunaViewLengthVersion)
+            let frontPoint = try XCTUnwrap(photo.landmark("front_length_start"))
+            XCTAssertTrue(try XCTUnwrap(frontPoint.isVisible))
+            XCTAssertTrue(try XCTUnwrap(frontPoint.hasAutomaticObservation))
+            XCTAssertFalse(frontPoint.isMoved)
+            XCTAssertFalse(try XCTUnwrap(photo.landmark("top_length_start")?.hasAutomaticObservation))
+        }
+        XCTAssertEqual(try recordBytes(restored), try recordBytes(record))
+    }
+
+    func testFrontOuterwearVersionViewAndLengthDefinitionsCannotBeInterchanged() throws {
+        let front = try remoteFrontOuterwearFixture()
+        var invalid: [SavedMeasurement] = []
+        var record = front
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaOuterwearVersion
+        invalid.append(record)
+        record = try remoteOuterwearFixture()
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaViewLengthVersion
+        invalid.append(record)
+        record = front
+        record.landmarks.recognitionDiagnostics?.remoteView = "back"
+        invalid.append(record)
+        record = front
+        record.landmarks.recognitionDiagnostics?.remoteView = "back"
+        record.landmarks.recognitionDiagnostics?.totalLengthConvention = GarmentLandmarkModelContract.backNeckSeamConvention
+        invalid.append(record)
+        record = front
+        record.definitions = TopLandmarkSchema.canonicalMeasurementDefinitions
+        for index in record.result.values.indices {
+            record.result.values[index].id = record.definitions[index].id
+            record.result.values[index].title = record.definitions[index].title
+        }
+        invalid.append(record)
+        record = front
+        let length = try XCTUnwrap(record.definitions.firstIndex { $0.id == "top.frontLength" })
+        record.definitions[length].landmarkIDs = ["top_length_start", "hem_center"]
+        invalid.append(record)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for record in invalid {
+            XCTAssertThrowsError(try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+                photosDirectory: directory, allowsSynthetic: true))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testMissingFrontSeamRequiresBothManualEndpointsAndKeepsItsAutomaticBaselineUnavailable() throws {
+        let record = try remoteFrontOuterwearFixture(seamVisible: false)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let partial = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        XCTAssertGreaterThan(partial.measurement("chestWidth")?.valueCm ?? 0, 0)
+        XCTAssertEqual(partial.measurement("frontLength")?.valueCm, 0)
+        XCTAssertNil(partial.measurement("frontLength")?.autoValueCm)
+        XCTAssertNil(partial.measurement("totalLength"))
+        let unavailable = try XCTUnwrap(partial.measurementPhoto?.landmark("front_length_start"))
+        XCTAssertFalse(try XCTUnwrap(unavailable.isVisible))
+        XCTAssertFalse(try XCTUnwrap(unavailable.hasAutomaticObservation))
+
+        var model = AutomaticMeasurement(record: record)
+        XCTAssertTrue(model.canCorrectTotalLength)
+        XCTAssertEqual(model.lengthDefinition?.id, "top.frontLength")
+        var manual = try XCTUnwrap(model.manualMeasurement(for: "top.frontLength"))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.5, y: 0.22), index: 0))
+        XCTAssertFalse(model.applyTotalLengthCorrection(from: manual))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.5, y: 0.8), index: 1))
+        XCTAssertTrue(model.applyTotalLengthCorrection(from: manual))
+        let recalculated = GarmentPlaneMeasurementEngine(options: model.options).measure(
+            frame: model.snapshot.frame, landmarks: model.calculationLandmarks, definitions: model.definitions)
+        XCTAssertTrue(model.apply(recalculated, for: model.calculationRevision))
+        XCTAssertGreaterThan(try XCTUnwrap(model.result.values.first { $0.id == "top.frontLength" }?.meters), 0)
+        let corrected = try model.makeRecord()
+        XCTAssertEqual(corrected.landmarks.modelVersion, GarmentLandmarkModelContract.lunaViewLengthVersion)
+        XCTAssertFalse(try XCTUnwrap(corrected.originalAutomaticLandmarks?.points.first { $0.id == "front_length_start" }).isVisible)
+        XCTAssertEqual(corrected.landmarks.points.first { $0.id == "front_length_start" }?.origin, .manual)
+        XCTAssertFalse(try XCTUnwrap(corrected.landmarks.points.first { $0.id == "top_length_start" }).isVisible)
+        let decoded = try JSONDecoder().decode(SavedMeasurement.self, from: recordBytes(corrected))
+        let stored = try GarmentStore.importMeasurement(decoded, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("front_length_start"))
+        XCTAssertTrue(try XCTUnwrap(point.isVisible))
+        XCTAssertTrue(point.isMoved)
+        XCTAssertFalse(try XCTUnwrap(point.hasAutomaticObservation))
+        XCTAssertEqual(point.originRaw, "manual")
+        XCTAssertNil(stored.measurement("frontLength")?.autoValueCm)
+        XCTAssertGreaterThan(stored.measurement("frontLength")?.valueCm ?? 0, 0)
+        XCTAssertEqual(stored.measurement("frontLength")?.label, "앞판 총장")
+        XCTAssertNil(stored.measurement("totalLength"))
+    }
+
+    func testRemoteOuterwearDirectSeamAndSourceSurviveArchiveAndProductReopen() async throws {
+        let record = try remoteOuterwearFixture()
+        XCTAssertEqual(OuterwearLandmarkResponse.expectedModelVersion, GarmentLandmarkModelContract.lunaOuterwearVersion)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = MeasurementArchive(folder: directory.appendingPathComponent("archive", isDirectory: true))
+        _ = try await archive.save(record)
+        let restored = try await archive.load(record.id)
+        XCTAssertEqual(restored.landmarks.modelVersion, GarmentLandmarkModelContract.lunaOuterwearVersion)
+        XCTAssertEqual(restored.options.effectiveCalculationMode, .garmentPlane)
+        XCTAssertEqual(restored.landmarks.recognitionDiagnostics?.remoteModel, "gpt-6-luna")
+        XCTAssertEqual(restored.landmarks.recognitionDiagnostics?.remoteSchemaVersion, "outerwear-landmarks-v1")
+        XCTAssertEqual(restored.landmarks.recognitionDiagnostics?.totalLengthConvention,
+                       GarmentLandmarkModelContract.backNeckSeamConvention)
+        let seam = try XCTUnwrap(restored.landmarks.points.first { $0.id == "top_length_start" })
+        XCTAssertTrue(seam.isVisible)
+        XCTAssertNil(seam.contourRule)
+        XCTAssertNil(seam.derivedFrom)
+        XCTAssertNil(seam.confidence)
+
+        let database = directory.appendingPathComponent("remote-products.store")
+        let photos = directory.appendingPathComponent("photos", isDirectory: true)
+        try autoreleasepool {
+            let schema = ProductAppStorage.schema
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, url: database, cloudKitDatabase: .none)
+            ])
+            let stored = try GarmentStore.importMeasurement(restored, in: ModelContext(container),
+                photosDirectory: photos, allowsSynthetic: true)
+            XCTAssertEqual(stored.orderedMeasurements.count, 6)
+        }
+        try autoreleasepool {
+            let schema = ProductAppStorage.schema
+            let container = try ModelContainer(for: schema, configurations: [
+                ModelConfiguration(schema: schema, url: database, cloudKitDatabase: .none)
+            ])
+            let stored = try XCTUnwrap(ModelContext(container).fetch(FetchDescriptor<Garment>()).first)
+            let photo = try XCTUnwrap(stored.measurementPhoto)
+            XCTAssertEqual(photo.measurementModelVersion, GarmentLandmarkModelContract.lunaOuterwearVersion)
+            XCTAssertEqual(photo.measurementFrameID, record.snapshot.frame.frameID)
+            XCTAssertEqual(photo.landmarks.count, 12)
+            let point = try XCTUnwrap(photo.landmark("top_length_start"))
+            XCTAssertEqual(point.x, seam.point.x)
+            XCTAssertEqual(point.y, seam.point.y)
+            XCTAssertEqual(point.autoX, seam.point.x)
+            XCTAssertEqual(point.autoY, seam.point.y)
+            XCTAssertTrue(try XCTUnwrap(point.isVisible))
+            XCTAssertTrue(try XCTUnwrap(point.hasAutomaticObservation))
+            XCTAssertFalse(point.isMoved)
+            XCTAssertNil(point.confidence)
+            XCTAssertNil(point.autoConfidence)
+            XCTAssertNil(point.derivedFrom)
+            XCTAssertEqual(point.originRaw, "model")
+            XCTAssertEqual(stored.measurement("totalLength")?.sourceStatusRaw, "uncertain")
+        }
+        XCTAssertEqual(try recordBytes(restored), try recordBytes(record))
+    }
+
+    func testRemoteAndCoreMLLengthStartContractsCannotBeInterchanged() throws {
+        let remote = try remoteOuterwearFixture()
+        let start = try XCTUnwrap(remote.landmarks.points.firstIndex { $0.id == "top_length_start" })
+        var invalid: [SavedMeasurement] = []
+        var record = remote
+        record.landmarks.modelVersion = "luna-outerwear11-backseam-v999"
+        invalid.append(record)
+        record = remote
+        record.landmarks.points[start].contourRule = .neckPerpendicularMaskV1
+        invalid.append(record)
+        record = remote
+        record.landmarks.points[start].derivedFrom = ["neck_left", "neck_right"]
+        invalid.append(record)
+        record = remote
+        record.landmarks.modelVersion = AutomaticGarmentKind.top.modelVersion
+        invalid.append(record)
+        record = try fixture(.top)
+        record.landmarks.modelVersion = GarmentLandmarkModelContract.lunaOuterwearVersion
+        invalid.append(record)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for record in invalid {
+            XCTAssertThrowsError(try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+                photosDirectory: directory, allowsSynthetic: true))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testRemoteMissingSeamKeepsOtherDimensionsAndManualCorrectionWithoutFalseBaseline() throws {
+        let record = try remoteOuterwearFixture(seamVisible: false)
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let partial = try GarmentStore.importMeasurement(record, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        XCTAssertGreaterThan(partial.measurement("shoulderWidth")?.valueCm ?? 0, 0)
+        XCTAssertGreaterThan(partial.measurement("chestWidth")?.valueCm ?? 0, 0)
+        XCTAssertEqual(partial.measurement("totalLength")?.valueCm, 0)
+        XCTAssertNil(partial.measurement("totalLength")?.autoValueCm)
+        let unavailable = try XCTUnwrap(partial.measurementPhoto?.landmark("top_length_start"))
+        XCTAssertFalse(try XCTUnwrap(unavailable.isVisible))
+        XCTAssertFalse(try XCTUnwrap(unavailable.hasAutomaticObservation),
+            "The hidden null-seam hint is not an observed automatic reset coordinate")
+
+        var model = AutomaticMeasurement(record: record)
+        XCTAssertTrue(model.canCorrectTotalLength)
+        var manual = try XCTUnwrap(model.manualMeasurement(for: "top.totalLength"))
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.5, y: 0.22), index: 0))
+        XCTAssertFalse(model.applyTotalLengthCorrection(from: manual), "Both physical endpoints require confirmation")
+        XCTAssertTrue(manual.placePoint(displayPoint: .init(x: 0.5, y: 0.8), index: 1))
+        XCTAssertTrue(model.applyTotalLengthCorrection(from: manual))
+        let recalculated = GarmentPlaneMeasurementEngine(options: model.options).measure(
+            frame: model.snapshot.frame, landmarks: model.calculationLandmarks, definitions: model.definitions)
+        XCTAssertTrue(model.apply(recalculated, for: model.calculationRevision))
+        XCTAssertGreaterThan(try XCTUnwrap(model.result.values.first { $0.id == "top.totalLength" }?.meters), 0)
+        let corrected = try model.makeRecord()
+        XCTAssertEqual(corrected.landmarks.modelVersion, GarmentLandmarkModelContract.lunaOuterwearVersion)
+        XCTAssertFalse(try XCTUnwrap(corrected.originalAutomaticLandmarks?.points.first { $0.id == "top_length_start" }).isVisible)
+        XCTAssertNil(corrected.landmarks.points.first { $0.id == "top_length_start" }?.contourRule)
+        XCTAssertEqual(corrected.landmarks.points.first { $0.id == "top_length_start" }?.origin, .manual)
+        let decoded = try JSONDecoder().decode(SavedMeasurement.self, from: recordBytes(corrected))
+        let stored = try GarmentStore.importMeasurement(decoded, in: ModelContext(makeContainer()),
+            photosDirectory: directory, allowsSynthetic: true)
+        let point = try XCTUnwrap(stored.measurementPhoto?.landmark("top_length_start"))
+        XCTAssertTrue(try XCTUnwrap(point.isVisible))
+        XCTAssertTrue(point.isMoved)
+        XCTAssertFalse(try XCTUnwrap(point.hasAutomaticObservation))
+        XCTAssertEqual(point.originRaw, "manual")
+        XCTAssertNil(point.confidence)
+        XCTAssertNil(stored.measurement("totalLength")?.autoValueCm)
+        XCTAssertGreaterThan(stored.measurement("totalLength")?.valueCm ?? 0, 0)
+    }
+
     func testTopCurrentAndAutomaticValuesCoordinatesAndProvenancePersistSeparately() throws {
         let container = try makeContainer()
         let context = ModelContext(container)

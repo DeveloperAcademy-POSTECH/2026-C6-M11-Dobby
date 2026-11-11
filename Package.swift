@@ -7,6 +7,7 @@ let package = Package(
     products: [.library(name: "DobbyLiDARCore", targets: ["DobbyLiDARCore"])],
     targets: [
         .target(name: "DobbyLiDARCore", path: "Dobby/Dobby/LiDAR/Core"),
-        .testTarget(name: "DobbyLiDARCoreTests", dependencies: ["DobbyLiDARCore"], path: "Tests/DobbyLiDARCoreTests")
+        .testTarget(name: "DobbyLiDARCoreTests", dependencies: ["DobbyLiDARCore"], path: "Tests/DobbyLiDARCoreTests",
+                    resources: [.process("Fixtures/PlaneSupportRegression.json")])
     ]
 )

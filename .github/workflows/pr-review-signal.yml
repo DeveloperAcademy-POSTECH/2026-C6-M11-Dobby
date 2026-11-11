@@ -2,14 +2,15 @@ name: PR Review Signal
 
 on:
   pull_request_review:
-    types: [submitted, edited, dismissed]
+    types: [submitted]
 
 permissions: {}
 
 jobs:
-  signal:
+  approved:
+    if: github.event.review.state == 'approved'
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      # PR 코드 실행, 체크아웃, Secret 접근 없이 후속 확인만 유발합니다.
-      - run: echo 'Review state changed.'
+      - name: Signal approved review
+        run: echo 'Approved review received.'

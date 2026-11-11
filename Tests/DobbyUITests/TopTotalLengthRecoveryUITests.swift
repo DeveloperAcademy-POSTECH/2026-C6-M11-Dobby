@@ -21,33 +21,23 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.totalLength"].exists)
+        let pendingPoint = app.buttons["garmentMeasurementPoint_neck_center"]
+        XCTAssertTrue(pendingPoint.exists, "An unavailable total-length point must still have an editable handle")
+        XCTAssertTrue((pendingPoint.value as? String)?.contains("위치 확인 필요") == true)
+        let pendingScreenshot = XCTAttachment(screenshot: app.screenshot())
+        pendingScreenshot.name = "top-total-length-unavailable-visible-handle"
+        pendingScreenshot.lifetime = .keepAlways
+        add(pendingScreenshot)
         XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "garmentMeasurementLabel_top.")).count, 3)
 
         let notice = app.buttons["garmentUnavailableNotice"]
-        notice.tap()
-        XCTAssertTrue(app.navigationBars["총장 위치 지정"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["applyTotalLengthCorrection"].isEnabled)
-        let photo = app.otherElements["totalLengthCorrectionPhoto"].firstMatch
+        XCTAssertFalse(notice.exists, "A visible pending point must not be covered by a failure banner")
+        let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
         XCTAssertTrue(photo.waitForExistence(timeout: 5))
-        XCTAssertGreaterThan(photo.frame.width, 200, "Tap coordinates must refer to the entire photo, not an inherited point label")
-        photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.24)).tap()
-        XCTAssertEqual(app.buttons["totalLengthCorrectionEndpoint_0"].value as? String, "위치 확인 완료")
-        XCTAssertFalse(app.buttons["applyTotalLengthCorrection"].isEnabled)
-        app.buttons["cancelTotalLengthCorrection"].tap()
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.totalLength"].exists,
-                       "Cancel must discard the draft's partial manual edit")
-
-        notice.tap()
-        XCTAssertTrue(app.navigationBars["총장 위치 지정"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["totalLengthCorrectionEndpoint_0"].value as? String, "위치 확인 필요")
-        photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.24)).tap()
-        photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82)).tap()
-        XCTAssertEqual(app.buttons["totalLengthCorrectionEndpoint_1"].value as? String, "위치 확인 완료")
-        let apply = app.buttons["applyTotalLengthCorrection"]
-        XCTAssertTrue(apply.isEnabled)
-        apply.tap()
+        let dragStart = pendingPoint.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        dragStart.press(forDuration: 0.05, thenDragTo: dragStart.withOffset(
+            CGVector(dx: photo.frame.width * 0.01, dy: photo.frame.height * 0.02)))
         let length = app.descendants(matching: .any)["garmentMeasurementLabel_top.totalLength"]
         XCTAssertTrue(length.waitForExistence(timeout: 10))
         XCTAssertFalse(notice.exists)
@@ -63,13 +53,12 @@ final class TopTotalLengthRecoveryUITests: XCTestCase {
         let enabled = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: confirm)
         wait(for: [enabled], timeout: 10)
         confirm.tap()
+        let detailGuide = app.buttons["camera.startDetailCapture"]
+        if detailGuide.waitForExistence(timeout: 2) { detailGuide.tap() }
         let selectPhotos = app.buttons["camera.selectPhotos"]
         XCTAssertTrue(selectPhotos.waitForExistence(timeout: 15))
+        XCTAssertTrue(selectPhotos.wait(for: \.isHittable, toEqual: true, timeout: 5))
         selectPhotos.tap()
-        let completePhotos = app.buttons["camera.completePhotos"]
-        XCTAssertTrue(completePhotos.waitForExistence(timeout: 10))
-        disableProductAutofillIfPresent(in: app)
-        completePhotos.tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         let storedLength = app.textFields["product-info.measurement.totalLength"]
         for _ in 0..<6 where !storedLength.isHittable { app.swipeUp() }

@@ -17,18 +17,25 @@ const MOCK_DRAFT = {
 // A separate entry point makes real HTTP requests impossible in this mode.
 // Incoming env (including any real .dev.vars) is deliberately never used.
 const mockWorker = createWorker({
-  fetchImpl: async () => Response.json({
+  fetchImpl: async (_url, init) => {
+    // Simulate unavailable research without pretending a real web search ran.
+    if (JSON.parse(init.body).text?.format?.name === "garment_brand_discovery") throw new Error("mock-research-unavailable");
+    return Response.json({
     status: "completed",
     output: [{
       type: "message",
       role: "assistant",
-      content: [{ type: "output_text", text: JSON.stringify(MOCK_DRAFT) }],
+      content: [{ type: "output_text", text: JSON.stringify({ ...MOCK_DRAFT, identification: null }) }],
     }],
-  }),
+    });
+  },
 });
 
 function withMockHeader(response) {
   const headers = new Headers(response.headers);
+  headers.delete("X-Dobby-AI-Search-Calls");
+  headers.delete("X-Dobby-AI-Search-Attempts");
+  headers.delete("X-Dobby-AI-Research-Status");
   headers.set("X-Dobby-AI-Mode", "mock");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

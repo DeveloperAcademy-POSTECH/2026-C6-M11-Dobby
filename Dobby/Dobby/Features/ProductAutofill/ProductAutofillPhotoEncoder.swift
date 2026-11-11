@@ -14,15 +14,15 @@ nonisolated enum ProductAutofillPhotoEncoder {
         let imageDataUrl: String
     }
 
-    static func encode(_ photos: [CapturedAsset]) throws -> [Photo] {
+    static func encode(_ photos: [CapturedAsset], totalBudget: Int = maximumTotalBytes) throws -> [Photo] {
         let selected = Array(photos.prefix(maximumPhotoCount))
-        guard let first = selected.first,
+        guard totalBudget > 0, totalBudget <= maximumTotalBytes, let first = selected.first,
               selected.allSatisfy({ $0.garmentID == first.garmentID && $0.sessionID == first.sessionID }),
               Set(selected.map(\.id)).count == selected.count else {
             throw ProductAutofillError.invalidPhotos
         }
         // A per-image share guarantees the aggregate limit even for five noisy photos.
-        let budget = min(maximumPhotoBytes, maximumTotalBytes / selected.count)
+        let budget = min(maximumPhotoBytes, totalBudget / selected.count)
         return try selected.map { photo in
             try Task.checkCancellation()
             guard case let .localFile(url, _) = photo.source, url.isFileURL else {

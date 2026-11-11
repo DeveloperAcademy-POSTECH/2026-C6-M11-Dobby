@@ -9,19 +9,19 @@ import AVFoundation
 
 /// Capture 폴더 담당: mason. 가변 세션·출력·delegate 보관은 이 직렬 큐에서만 다룬다.
 /// @unchecked Sendable은 큐 소유권에 한정한다. UI는 session을 레이어에 연결만 한다.
-nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked Sendable {
+nonisolated final class CameraPreviewDriver: DetailCameraControlling, DetailCameraFocusing, @unchecked Sendable {
     let session = AVCaptureSession()
     private let output = AVCapturePhotoOutput()
     private let queue = DispatchQueue(label: "com.dobby.camera.detail-preview", qos: .userInitiated)
     private var pending: [UUID: CameraPhotoRequest] = [:]
-    private let exposureCompletion = DetailExposureCompletion()
+    private let controlEpoch = DetailCameraControlEpoch()
     let diagnostics = DetailCameraDiagnostics()
     private var diagnosticTimer: DispatchSourceTimer?
     private var whiteBalanceHold: DetailWhiteBalanceHold?
 
     func setRunning(_ active: Bool, completion: @escaping @Sendable (CameraPreviewSession.State) -> Void) {
+        controlEpoch.invalidate()
         queue.async { [self] in
-            exposureCompletion.cancel()
             if active {
                 completion(start())
                 startDiagnosticSampling()
@@ -40,8 +40,8 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
     }
 
     func cancelCapture() {
+        controlEpoch.invalidate()
         queue.async { [self] in
-            exposureCompletion.cancel()
             whiteBalanceHold?.stop()
             whiteBalanceHold = nil
             pending.values.forEach { $0.resolve(.failure(CancellationError())) }
@@ -49,8 +49,12 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
     }
 
     func capture(rotationAngle: CGFloat, diagnosticID: UUID? = nil) async throws -> Data {
-        try await prepareWhiteBalanceHold()
         try Task.checkCancellation()
+        controlEpoch.invalidate()
+        let ticket = controlEpoch.ticket()
+        try await prepareWhiteBalanceHold(ticket: ticket)
+        try Task.checkCancellation()
+        try ticket.checkCancellation()
         let id = UUID()
         // 화면이 닫혀도 최종 콜백까지 driver/delegate를 유지하고 pending 제거로 순환 참조를 끊는다.
         let request = CameraPhotoRequest(diagnostics: diagnostics, diagnosticID: diagnosticID) { [self] in
@@ -61,7 +65,9 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
                 request.install(continuation)
                 queue.async { [self] in
                     guard !request.isResolved else { return }
-                    guard pending.isEmpty, !exposureCompletion.isPending else {
+                    do { try ticket.checkCancellation() }
+                    catch { request.resolve(.failure(error)); return }
+                    guard pending.isEmpty else {
                         request.resolve(.failure(CameraFailure.operationInProgress)); return
                     }
                     guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized,
@@ -84,7 +90,10 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
                     output.capturePhoto(with: settings, delegate: request)
                 }
             }
-        } onCancel: { request.resolve(.failure(CancellationError())) }
+        } onCancel: {
+            ticket.cancel()
+            request.resolve(.failure(CancellationError()))
+        }
     }
 
     private func start() -> CameraPreviewSession.State {
@@ -139,9 +148,7 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
             queue.async { [self] in
                 do {
                     let device = try exposureDevice()
-                    continuation.resume(returning: .init(exposure: exposureRange(device), zoom: zoomRange(device),
-                        exposureBias: Double(device.exposureTargetBias),
-                        zoomFactor: Double(device.videoZoomFactor * device.displayVideoZoomFactorMultiplier)))
+                    continuation.resume(returning: deviceCapabilities(device))
                 } catch { continuation.resume(throwing: error) }
             }
         }
@@ -149,59 +156,102 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
 
     func apply(_ request: DetailCameraControlRequest) async throws -> Double {
         try Task.checkCancellation()
-        if case .zoom(let factor) = request {
-            guard factor.isFinite, factor > 0 else { throw DetailCameraControlFailure.invalidValue }
-            try await prepareWhiteBalanceHold()
-            try Task.checkCancellation()
-        }
-        let applied: Double = try await withCheckedThrowingContinuation { continuation in
-            queue.async { [self] in
-                do {
-                    if case .zoom(let factor) = request {
-                        guard pending.isEmpty, !exposureCompletion.isPending else {
-                            throw DetailCameraControlFailure.operationInProgress
-                        }
+        let ticket = controlEpoch.ticket()
+        let applied: Double = try await withTaskCancellationHandler {
+            if case .zoom(let factor) = request {
+                guard factor.isFinite, factor > 0 else { throw DetailCameraControlFailure.invalidValue }
+                try await prepareWhiteBalanceHold(ticket: ticket)
+                try Task.checkCancellation()
+            }
+            return try await withCheckedThrowingContinuation { continuation in
+                queue.async { [self] in
+                    do {
+                        try ticket.checkCancellation()
+                        guard pending.isEmpty else { throw DetailCameraControlFailure.operationInProgress }
                         let device = try exposureDevice()
-                        guard factor.isFinite, factor > 0 else { throw DetailCameraControlFailure.invalidValue }
                         try device.lockForConfiguration()
                         defer { device.unlockForConfiguration() }
-                        guard let value = zoomRange(device)?.clamped(factor) else {
-                            throw DetailCameraControlFailure.unsupported
-                        }
-                        diagnostics.recordDevice("zoom_requested", device: device, requestedZoom: value)
-                        device.videoZoomFactor = CGFloat(value) / device.displayVideoZoomFactorMultiplier
-                        diagnostics.recordDevice("zoom_setter_returned", device: device, requestedZoom: value)
-                        continuation.resume(returning: Double(device.videoZoomFactor * device.displayVideoZoomFactorMultiplier))
-                        return
-                    }
-                    guard case .exposure(let bias) = request else { throw DetailCameraControlFailure.unsupported }
-                    guard bias.isFinite else { throw DetailCameraControlFailure.invalidValue }
-                    guard pending.isEmpty else { throw DetailCameraControlFailure.operationInProgress }
-                    let device = try exposureDevice()
-                    try device.lockForConfiguration()
-                    defer { device.unlockForConfiguration() }
-                    guard let range = exposureRange(device), let limited = range.clamped(bias) else {
-                        throw DetailCameraControlFailure.unsupported
-                    }
-                    let id = exposureCompletion.begin { continuation.resume(with: $0) }
-                    device.exposureMode = .continuousAutoExposure
-                    device.setExposureTargetBias(Float(limited)) { [self] _ in
-                        queue.async { [self] in
-                            guard session.isRunning, !session.isInterrupted else {
-                                exposureCompletion.finish(id, with: .failure(DetailCameraControlFailure.unavailable)); return
+                        // Cancellation may arrive while the device configuration lock waits.
+                        try ticket.checkCancellation()
+                        switch request {
+                        case .zoom(let factor):
+                            guard factor.isFinite, factor > 0 else { throw DetailCameraControlFailure.invalidValue }
+                            guard let value = zoomRange(device)?.clamped(factor) else {
+                                throw DetailCameraControlFailure.unsupported
                             }
-                            exposureCompletion.finish(id, with: .success(Double(device.exposureTargetBias)))
+                            diagnostics.recordDevice("zoom_requested", device: device, requestedZoom: value)
+                            device.videoZoomFactor = CGFloat(value) / device.displayVideoZoomFactorMultiplier
+                            diagnostics.recordDevice("zoom_setter_returned", device: device, requestedZoom: value)
+                            continuation.resume(returning: Double(device.videoZoomFactor * device.displayVideoZoomFactorMultiplier))
+                        case .exposure(let bias):
+                            guard bias.isFinite else { throw DetailCameraControlFailure.invalidValue }
+                            guard let limited = exposureRange(device)?.clamped(bias) else {
+                                throw DetailCameraControlFailure.unsupported
+                            }
+                            if device.exposureMode != .continuousAutoExposure { device.exposureMode = .continuousAutoExposure }
+                            // A first-applied-buffer callback deliberately does not gate
+                            // subsequent drag commands or the shutter. The receipt is the
+                            // accepted target, not a claim that AE has physically settled.
+                            device.setExposureTargetBias(Float(limited), completionHandler: nil)
+                            continuation.resume(returning: limited)
                         }
-                    }
-                    // 세션 오류로 콜백이 누락돼도 호출자가 영구 대기하지 않도록 한다.
-                    queue.asyncAfter(deadline: .now() + 5) { [self] in
-                        exposureCompletion.finish(id, with: .failure(DetailCameraControlFailure.unavailable))
-                    }
-                } catch { continuation.resume(throwing: error) }
+                    } catch { continuation.resume(throwing: error) }
+                }
             }
-        }
+        } onCancel: { ticket.cancel() }
         try Task.checkCancellation()
         return applied
+    }
+
+    func focus(at point: DetailCameraFocusPoint) async throws -> DetailCameraCapabilities {
+        try Task.checkCancellation()
+        let ticket = controlEpoch.ticket()
+        let receipt: DetailCameraCapabilities = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                queue.async { [self] in
+                    do {
+                        try ticket.checkCancellation()
+                        guard pending.isEmpty else { throw DetailCameraControlFailure.operationInProgress }
+                        let device = try exposureDevice()
+                        guard let mode = tapFocusMode(device) else { throw DetailCameraControlFailure.unsupported }
+                        try device.lockForConfiguration()
+                        defer { device.unlockForConfiguration() }
+                        try ticket.checkCancellation()
+                        // Keep AF, metering and EV reset in one configuration change.
+                        // Smooth AF intentionally slows the lens for movies; this is
+                        // a still-photo interaction and uses the fast focus path.
+                        if device.isSmoothAutoFocusSupported { device.isSmoothAutoFocusEnabled = false }
+                        device.focusPointOfInterest = CGPoint(x: point.x, y: point.y)
+                        device.focusMode = mode
+                        if device.isExposurePointOfInterestSupported,
+                           device.isExposureModeSupported(.continuousAutoExposure) {
+                            device.exposurePointOfInterest = CGPoint(x: point.x, y: point.y)
+                            if device.exposureMode != .continuousAutoExposure { device.exposureMode = .continuousAutoExposure }
+                        }
+                        let reset = exposureRange(device)?.clamped(0)
+                        if let reset { device.setExposureTargetBias(Float(reset), completionHandler: nil) }
+                        continuation.resume(returning: deviceCapabilities(device, acceptedExposure: reset))
+                    } catch { continuation.resume(throwing: error) }
+                }
+            }
+        } onCancel: { ticket.cancel() }
+        try Task.checkCancellation()
+        return receipt
+    }
+
+    private func deviceCapabilities(_ device: AVCaptureDevice, acceptedExposure: Double? = nil) -> DetailCameraCapabilities {
+        .init(exposure: exposureRange(device), zoom: zoomRange(device),
+            exposureBias: acceptedExposure ?? Double(device.exposureTargetBias),
+            zoomFactor: Double(device.videoZoomFactor * device.displayVideoZoomFactorMultiplier),
+            focusSupported: tapFocusMode(device) != nil,
+            meteringSupported: device.isExposurePointOfInterestSupported
+                && device.isExposureModeSupported(.continuousAutoExposure))
+    }
+
+    private func tapFocusMode(_ device: AVCaptureDevice) -> AVCaptureDevice.FocusMode? {
+        CameraTapFocusMode.select(pointOfInterestSupported: device.isFocusPointOfInterestSupported,
+            singleSupported: device.isFocusModeSupported(.autoFocus),
+            continuousSupported: device.isFocusModeSupported(.continuousAutoFocus))
     }
 
     private func exposureDevice() throws -> AVCaptureDevice {
@@ -212,7 +262,6 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
         }
         return device
     }
-
     private func startDiagnosticSampling() {
         diagnosticTimer?.cancel()
         diagnosticTimer = nil
@@ -246,22 +295,35 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, @unchecked
         whiteBalanceHold = DetailWhiteBalanceHold(device: device, queue: queue, diagnostics: diagnostics)
     }
 
-    private func prepareWhiteBalanceHold() async throws {
+    /// WB 준비 전후에도 같은 요청인지 확인해 대기 중 취소된 조작이 재실행되지 않게 한다.
+    private func prepareWhiteBalanceHold(ticket: DetailCameraControlTicket) async throws {
+        try Task.checkCancellation()
+        try ticket.checkCancellation()
         guard diagnostics.holdsWhiteBalanceOnInteraction else { return }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            queue.async { [self] in
-                guard session.isRunning, !session.isInterrupted else {
-                    continuation.resume(throwing: DetailCameraControlFailure.unavailable); return
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                queue.async { [self] in
+                    do {
+                        try ticket.checkCancellation()
+                        guard session.isRunning, !session.isInterrupted else {
+                            throw DetailCameraControlFailure.unavailable
+                        }
+                        guard pending.isEmpty else { throw DetailCameraControlFailure.operationInProgress }
+                        ensureWhiteBalanceHold()
+                        try ticket.checkCancellation()
+                        guard let whiteBalanceHold else { continuation.resume(); return }
+                        whiteBalanceHold.prepare { result in
+                            do {
+                                try ticket.checkCancellation()
+                                continuation.resume(with: result)
+                            } catch { continuation.resume(throwing: error) }
+                        }
+                    } catch { continuation.resume(throwing: error) }
                 }
-                guard pending.isEmpty, !exposureCompletion.isPending else {
-                    continuation.resume(throwing: DetailCameraControlFailure.operationInProgress); return
-                }
-                ensureWhiteBalanceHold()
-                guard let whiteBalanceHold else { continuation.resume(); return }
-                whiteBalanceHold.prepare { continuation.resume(with: $0) }
             }
-        }
+        } onCancel: { ticket.cancel() }
     }
+
     private func exposureRange(_ device: AVCaptureDevice) -> DetailCameraControlRange? {
         guard device.isExposureModeSupported(.continuousAutoExposure) else { return nil }
         return .init(minimum: Double(device.minExposureTargetBias), maximum: Double(device.maxExposureTargetBias))

@@ -9,7 +9,8 @@ nonisolated enum ProductDraftStep: String, Codable, Sendable, CaseIterable {
         switch self {
         case .measurementResult: "실측 결과 단계"
         case .details: "상세 촬영 단계"
-        case .photoSelection: "제품 사진 선택 단계"
+        // Keep the stored raw value readable; legacy drafts now resume capture.
+        case .photoSelection: "상세 촬영 단계"
         case .information: "제품 정보 입력 단계"
         }
     }
@@ -37,6 +38,8 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
     let selectedPhotoIDs: [UUID]
     /// Older saved drafts omit this session-level guide state.
     let hasAcknowledgedCaptureGuide: Bool?
+    /// Optional for drafts written before gallery deletion was introduced.
+    var deletedPhotoIDs: Set<UUID>? = nil
 
     struct Photo: Codable, Sendable, Equatable {
         let id: UUID
@@ -81,7 +84,7 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
     }
 
     init(input: ProductPhotoInput, detailPhotos: [CapturedAsset], selectedPhotoIDs: [UUID],
-         hasAcknowledgedCaptureGuide: Bool = false) throws {
+         hasAcknowledgedCaptureGuide: Bool = false, deletedPhotoIDs: Set<UUID> = []) throws {
         guard Set(detailPhotos.map(\.id)).count == detailPhotos.count,
               detailPhotos.allSatisfy({ $0.garmentID == input.garmentID
                   && $0.id != input.measurement.id && $0.purpose == .detail }),
@@ -95,11 +98,14 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
         self.detailPhotos = try detailPhotos.map(Photo.init)
         self.selectedPhotoIDs = selectedPhotoIDs
         self.hasAcknowledgedCaptureGuide = hasAcknowledgedCaptureGuide
+        self.deletedPhotoIDs = deletedPhotoIDs
         _ = try restoredDetailPhotos(for: input)
     }
 
     func restoredDetailPhotos(for input: ProductPhotoInput) throws -> [CapturedAsset] {
-        guard sessionID == input.sessionID, garmentID == input.garmentID,
+        guard (deletedPhotoIDs ?? []).isDisjoint(with: selectedPhotoIDs),
+              (deletedPhotoIDs ?? []).isDisjoint(with: detailPhotos.map(\.id)),
+              sessionID == input.sessionID, garmentID == input.garmentID,
               measurementPhotoID == input.measurement.id,
               Set(detailPhotos.map(\.id)).count == detailPhotos.count,
               Set(detailPhotos.map { $0.url.standardizedFileURL }).count == detailPhotos.count,
