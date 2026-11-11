@@ -6,7 +6,7 @@ struct ProductMeasurementInputTable: View {
     let focus: FocusState<UUID?>.Binding
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             ProductFieldTitle(title: "실측 사이즈")
             let missingValues = garment.visibleMeasurements.filter {
                 !GarmentMeasurementInputText.hasUsableValue($0, drafts: measurementInput.drafts)
@@ -38,9 +38,9 @@ private struct ProductMeasurementScroll: View {
         }
         .scrollDisabled(columns.count <= 5)
         .background(ProductInformationStyle.background)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).stroke(ProductInformationStyle.field, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 16).stroke(ProductInformationStyle.field, lineWidth: 1.5)
         }
         .accessibilityIdentifier("product-info.measurements")
     }
@@ -77,8 +77,8 @@ private struct SizeColumn: View {
     var body: some View {
         VStack(spacing: 0) {
             Text(ProductInformationStyle.measurementTitle(for: value))
-                .font(.headline)
-                .foregroundStyle(Color(white: 0.32))
+                .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
+                .foregroundStyle(Color("BrandNeutral800"))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
@@ -108,7 +108,7 @@ private struct ProductMeasurementNumber: View {
                 .monospacedDigit()
             Text("cm")
         }
-        .font(.subheadline)
+        .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
         .frame(maxWidth: .infinity)
         .frame(height: 64)
     }

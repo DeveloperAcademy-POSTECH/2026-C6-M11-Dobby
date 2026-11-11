@@ -20,7 +20,7 @@ enum GarmentStore {
     }()
 
     static func url(for photo: GarmentPhoto) -> URL {
-        photosDirectory.appending(path: photo.fileName)
+        productPhotoURL(fileName: photo.fileName, quarterTurns: photo.productRotationQuarterTurns ?? 0)
     }
 
     static func image(for photo: GarmentPhoto) -> UIImage? {
@@ -69,13 +69,13 @@ enum GarmentStore {
     /// 레코드는 `.cascade`가 지우지만 파일은 지워주지 않으므로 여기서 먼저 치운다.
     static func delete(_ garment: Garment, in context: ModelContext) {
         for photo in garment.photos {
-            try? FileManager.default.removeItem(at: url(for: photo))
+            for url in retainedPhotoURLs(for: photo) { try? FileManager.default.removeItem(at: url) }
         }
         context.delete(garment)
     }
 
     static func delete(_ photo: GarmentPhoto, in context: ModelContext) {
-        try? FileManager.default.removeItem(at: url(for: photo))
+        for url in retainedPhotoURLs(for: photo) { try? FileManager.default.removeItem(at: url) }
         photo.garment?.updatedAt = .now
         context.delete(photo)
     }

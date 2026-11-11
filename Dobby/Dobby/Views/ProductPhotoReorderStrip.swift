@@ -7,6 +7,7 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
     let spacing: CGFloat
     let topInset: CGFloat
     let onReorder: ([UUID]) -> Bool
+    var leadingContent: AnyView? = nil
     @ViewBuilder let content: (GarmentPhoto) -> Content
     @Environment(\.isEnabled) private var isEnabled
 
@@ -57,6 +58,7 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
         var isActive = true
         private var parent: ProductPhotoReorderStrip
         private var photos: [GarmentPhoto]
+        private var photoURLs: [UUID: URL]
         private var isEnabled = true
         private let feedback = UIImpactFeedbackGenerator(style: .light)
         private var activeDragID: UUID?
@@ -65,32 +67,48 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
         init(parent: ProductPhotoReorderStrip) {
             self.parent = parent
             self.photos = parent.photos
+            self.photoURLs = Dictionary(uniqueKeysWithValues: parent.photos.map { ($0.id, GarmentStore.url(for: $0)) })
         }
 
         fileprivate func update(parent: ProductPhotoReorderStrip, isEnabled: Bool) {
             self.parent = parent
             self.isEnabled = isEnabled
-            if photos.map(\.id) != parent.photos.map(\.id) {
+            let updatedURLs = Dictionary(uniqueKeysWithValues: parent.photos.map { ($0.id, GarmentStore.url(for: $0)) })
+            if photos.map(\.id) != parent.photos.map(\.id) || photoURLs != updatedURLs {
                 activeDragID = nil
                 photos = parent.photos
                 let ids = Set(photos.map(\.id))
-                dragImages = dragImages.filter { ids.contains($0.key) }
+                dragImages = dragImages.filter { ids.contains($0.key) && photoURLs[$0.key] == updatedURLs[$0.key] }
+                photoURLs = updatedURLs
                 collectionView?.reloadData()
+            }
+            if let leading = parent.leadingContent,
+               let cell = collectionView?.cellForItem(at: IndexPath(item: 0, section: 0)) {
+                cell.contentConfiguration = UIHostingConfiguration { leading }.margins(.all, 0)
             }
             if !isEnabled { activeDragID = nil }
         }
 
-        func collectionView(_ view: UICollectionView, numberOfItemsInSection section: Int) -> Int { photos.count }
+        private var photoOffset: Int { parent.leadingContent == nil ? 0 : 1 }
+
+        func collectionView(_ view: UICollectionView, numberOfItemsInSection section: Int) -> Int { photos.count + photoOffset }
 
         func collectionView(_ view: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
             let cell = view.dequeueReusableCell(withReuseIdentifier: "photo", for: indexPath)
-            guard photos.indices.contains(indexPath.item) else { return cell }
-            let photo = photos[indexPath.item]
+            if indexPath.item == 0, let leading = parent.leadingContent {
+                cell.contentConfiguration = UIHostingConfiguration { leading }.margins(.all, 0)
+                cell.backgroundConfiguration = .clear()
+                return cell
+            }
+            let photoIndex = indexPath.item - photoOffset
+            guard photos.indices.contains(photoIndex) else { return cell }
+            let photo = photos[photoIndex]
             let id = photo.id
             let request = ProductThumbnailRequest(url: GarmentStore.url(for: photo), maximumPixelSize: 320)
             Task { @MainActor [weak self] in
                 let decoded = await ProductThumbnailLoader.shared.image(for: request)
                 guard let self, self.isActive, self.photos.contains(where: { $0.id == id }),
+                      self.photoURLs[id] == request.url,
                       let decoded else { return }
                 self.dragImages[id] = UIImage(cgImage: decoded.image)
             }
@@ -103,8 +121,9 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, itemsForBeginning session: any UIDragSession,
                             at indexPath: IndexPath) -> [UIDragItem] {
-            guard isActive, isEnabled, photos.count > 1, photos.indices.contains(indexPath.item) else { return [] }
-            let id = photos[indexPath.item].id
+            let photoIndex = indexPath.item - photoOffset
+            guard isActive, isEnabled, photos.count > 1, photos.indices.contains(photoIndex) else { return [] }
+            let id = photos[photoIndex].id
             let item = UIDragItem(itemProvider: NSItemProvider(object: id.uuidString as NSString))
             item.localObject = id
             // Use a dedicated image preview rather than a snapshot of the
@@ -115,11 +134,11 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
                 imageView.image = self?.dragImages[id] ?? UIImage(systemName: "photo")
                 imageView.contentMode = .scaleAspectFill
                 imageView.clipsToBounds = true
-                imageView.layer.cornerRadius = ProductDetailPhotoPresentation.compact.cornerRadius
+                imageView.layer.cornerRadius = 16
                 let parameters = UIDragPreviewParameters()
                 parameters.backgroundColor = .clear
                 parameters.visiblePath = UIBezierPath(roundedRect: imageView.bounds,
-                    cornerRadius: ProductDetailPhotoPresentation.compact.cornerRadius)
+                    cornerRadius: 16)
                 return UIDragPreview(view: imageView, parameters: parameters)
             }
             session.localContext = self
@@ -157,9 +176,9 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
                   let item = coordinator.items.first,
                   let id = item.dragItem.localObject as? UUID, id == activeDragID,
                   let source = photos.firstIndex(where: { $0.id == id }), !photos.isEmpty else { return }
-            let destination = min(photos.count - 1, max(0, coordinator.destinationIndexPath?.item ?? photos.count - 1))
+            let destination = min(photos.count - 1, max(0, (coordinator.destinationIndexPath?.item).map { $0 - photoOffset } ?? photos.count - 1))
             guard source != destination else {
-                coordinator.drop(item.dragItem, toItemAt: IndexPath(item: source, section: 0))
+                coordinator.drop(item.dragItem, toItemAt: IndexPath(item: source + photoOffset, section: 0))
                 return
             }
             var reordered = photos
@@ -167,9 +186,9 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
             guard parent.onReorder(reordered.map(\.id)) else { return }
             photos = reordered
             view.performBatchUpdates {
-                view.moveItem(at: IndexPath(item: source, section: 0), to: IndexPath(item: destination, section: 0))
+                view.moveItem(at: IndexPath(item: source + photoOffset, section: 0), to: IndexPath(item: destination + photoOffset, section: 0))
             }
-            coordinator.drop(item.dragItem, toItemAt: IndexPath(item: destination, section: 0))
+            coordinator.drop(item.dragItem, toItemAt: IndexPath(item: destination + photoOffset, section: 0))
         }
     }
 }

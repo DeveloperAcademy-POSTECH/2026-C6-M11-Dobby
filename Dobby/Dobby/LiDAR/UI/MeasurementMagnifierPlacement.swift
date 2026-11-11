@@ -21,6 +21,21 @@ nonisolated enum MeasurementMagnifierPlacement {
         let y = point.y < windowCenter.y ? max(0, photoSize.height - insetY - height) : insetY
         return CGRect(x: x, y: y, width: width, height: height)
     }
+
+    /// The quadrant is selected once at grab time. The 16:9 sheet changes only
+    /// the available lower edge, so preserve X and raise Y just enough to clear it.
+    static func avoidingBottomOcclusion(_ rect: CGRect, photoSize: CGSize,
+                                       bottomInset: CGFloat) -> CGRect {
+        guard bottomInset.isFinite, bottomInset > 0,
+              photoSize.height.isFinite, photoSize.height > 0,
+              !rect.isNull, !rect.isInfinite else { return rect }
+        let availableHeight = max(0, photoSize.height - bottomInset)
+        let margin = min(20, max(0, availableHeight - rect.height) / 2)
+        let maximumY = max(0, availableHeight - margin - rect.height)
+        let minimumY = min(margin, maximumY)
+        return CGRect(x: rect.minX, y: min(maximumY, max(minimumY, rect.minY)),
+                      width: rect.width, height: rect.height)
+    }
 }
 
 /// Measure the handle itself after SwiftUI positions/transforms it. This also

@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftData
 import SwiftUI
 import UIKit
@@ -8,20 +9,77 @@ struct ProductInputPhotoSection: View {
     // Entry and archive editing both allow removal. The edit-mode flag only
     // controls the existing spacing; it must not rename entry as editing.
     var allowsRemoval = true
+    var onImportingChange: ((Bool) -> Void)? = nil
     @Environment(\.modelContext) private var context
     @State private var expandedPhoto: GarmentPhoto?
     @State private var showsDeletionError = false
+    @State private var showsPhotoPicker = false
+    @State private var showsCamera = false
+    @State private var pickedItems: [PhotosPickerItem] = []
+    @State private var isImporting = false
+    @State private var importTask: Task<Void, Never>?
+    @State private var importError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: allowsRemoval ? 4 : 8) {
-            ProductFieldTitle(title: "제품 사진")
+            HStack {
+                ProductFieldTitle(title: "제품 사진", isRequired: true)
+                Spacer()
+                HStack(spacing: 0) {
+                    Text("\(garment.productPhotos.count)")
+                        .foregroundStyle(garment.productPhotos.count > ProductPhotoLimit.maximumCount
+                            ? ProductInformationStyle.error : Color("BrandNeutral800"))
+                    Text("/\(ProductPhotoLimit.maximumCount)").foregroundStyle(Color("BrandNeutral500"))
+                }
+                .font(.custom("Pretendard-Regular", size: 14))
+                .accessibilityLabel("제품 사진 \(garment.productPhotos.count)장, 최대 \(ProductPhotoLimit.maximumCount)장")
+                .accessibilityIdentifier("product-info.photo-count")
+            }
             photoRow.padding(.horizontal, -20)
         }
         .fullScreenCover(item: $expandedPhoto) { photo in
             ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id,
-                                    onDelete: deletionAction)
+                                    onDelete: deletionAction, onRotate: { id in
+                                        guard let photo = garment.productPhotos.first(where: { $0.id == id }) else { return false }
+                                        try await GarmentStore.rotateProductPhoto(photo, in: garment)
+                                        return true
+                                    })
                 .presentationBackground(.clear)
         }
+        .photosPicker(isPresented: $showsPhotoPicker, selection: photoPickerSelection,
+                      maxSelectionCount: max(1, remainingCapacity), matching: .images)
+        .fullScreenCover(isPresented: $showsCamera) {
+            ProductInputCameraPicker { data in
+                showsCamera = false
+                guard let data else { return }
+                setImporting(true)
+                importTask = Task { await importPhotos([data]) }
+            }
+            .ignoresSafeArea()
+        }
+        .onDisappear {
+            importTask?.cancel()
+            onImportingChange?(false)
+        }
+        .task(id: pickedItems) {
+            guard !pickedItems.isEmpty else { return }
+            let items = pickedItems
+            setImporting(true)
+            defer { setImporting(false); pickedItems = [] }
+            do {
+                for item in items {
+                    try Task.checkCancellation()
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        throw GarmentStore.StoreError.encodingFailed
+                    }
+                    try await appendPhoto(data)
+                }
+            } catch is CancellationError { } catch { importError = error.localizedDescription }
+        }
+        .alert("사진을 추가하지 못했어요", isPresented: Binding(
+            get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+            Button("확인", role: .cancel) { importError = nil }
+        } message: { Text(importError ?? "입력한 정보와 기존 사진은 그대로 남아 있어요.") }
         .alert("사진을 삭제하지 못했어요", isPresented: $showsDeletionError) {
             Button("확인", role: .cancel) { }
         } message: {
@@ -29,26 +87,67 @@ struct ProductInputPhotoSection: View {
         }
     }
 
-    @ViewBuilder private var photoRow: some View {
-        if garment.productPhotos.isEmpty {
-            Text("제품 사진이 없어요")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(height: ProductDetailPhotoPresentation.compact.size.height)
-                .padding(.horizontal, 20)
-                .accessibilityIdentifier("product-info.photos.empty")
-        } else {
-            ProductPhotoReorderStrip(photos: garment.productPhotos,
-                spacing: allowsEditing ? 16 : 8, topInset: allowsRemoval ? 4 : 0,
-                onReorder: { GarmentStore.reorderProductPhotos(ids: $0, in: garment) }) { photo in
+    private var photoPickerSelection: Binding<[PhotosPickerItem]> {
+        Binding(get: { pickedItems }, set: { items in
+            // Lock the parent before PhotosPicker dismisses, not in a later
+            // view update that could let Done race the asynchronous import.
+            if !items.isEmpty { setImporting(true) }
+            pickedItems = items
+        })
+    }
+
+    private func setImporting(_ busy: Bool) {
+        onImportingChange?(busy)
+        isImporting = busy
+    }
+
+    private var remainingCapacity: Int {
+        max(0, ProductPhotoModel.maximumSelectionCount - garment.productPhotos.count)
+    }
+
+    private var photoRow: some View {
+        ProductPhotoReorderStrip(photos: garment.productPhotos, spacing: 16,
+            topInset: allowsRemoval ? 4 : 0,
+            onReorder: { GarmentStore.reorderProductPhotos(ids: $0, in: garment) },
+            leadingContent: AnyView(addPhotoButton)) { photo in
                 photoCell(photo)
                     .accessibilityHint("길게 누른 뒤 좌우로 드래그해 순서를 바꿀 수 있어요")
                     .accessibilityAction(named: "앞으로 이동") { movePhoto(photo.id, offset: -1) }
                     .accessibilityAction(named: "뒤로 이동") { movePhoto(photo.id, offset: 1) }
             }
-            .frame(height: ProductDetailPhotoPresentation.compact.size.height + (allowsRemoval ? 4 : 0))
+            .frame(height: 108 + (allowsRemoval ? 4 : 0))
             .accessibilityIdentifier("product-info.photo-strip")
+    }
+
+    private var addPhotoButton: some View {
+        Menu {
+            Button("사진 촬영하기", systemImage: "camera.fill") { showsCamera = true }
+                .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+            Button("앨범에서 선택하기", systemImage: "photo") { showsPhotoPicker = true }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "plus").font(.system(size: 18))
+                Text("사진 추가").font(.custom("Pretendard-Regular", size: 12))
+            }
+            .foregroundStyle(Color("BrandNeutral500"))
+            .frame(width: 77, height: 108)
+            .background(Color("BrandNeutral50"), in: RoundedRectangle(cornerRadius: 16))
+            .overlay { RoundedRectangle(cornerRadius: 16).stroke(Color("BrandNeutral200"), lineWidth: 0.5) }
+            .contentShape(RoundedRectangle(cornerRadius: 16))
         }
+        .disabled(remainingCapacity == 0 || isImporting)
+        .accessibilityLabel("제품 사진 추가")
+        .accessibilityIdentifier("product-info.add-photo")
+    }
+
+    private func importPhotos(_ data: [Data]) async {
+        defer { setImporting(false) }
+        do { for bytes in data { try await appendPhoto(bytes) } }
+        catch is CancellationError { } catch { importError = error.localizedDescription }
+    }
+
+    private func appendPhoto(_ data: Data) async throws {
+        try await ProductPhotoImportStore.append(data, to: garment, in: context)
     }
 
     @ViewBuilder private func photoCell(_ photo: GarmentPhoto) -> some View {
@@ -137,6 +236,6 @@ private struct ProductInputPhotoImage: View {
     var body: some View {
         StoredProductPhotoView(photo: photo, maximumPixelSize: 320, contentMode: .fill)
             .frame(width: presentation.size.width, height: presentation.size.height)
-            .clipShape(RoundedRectangle(cornerRadius: presentation.cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
