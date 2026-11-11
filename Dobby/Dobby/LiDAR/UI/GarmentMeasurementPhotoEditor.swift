@@ -15,6 +15,8 @@ struct GarmentMeasurementPhotoEditor: View {
     var showsEnlargeControl = true
     var allowsViewportZoom = false
     var pendingPointIDs: Set<String> = []
+    /// Display-only space covered by the result sheet at the bottom of the photo.
+    var magnifierBottomInset: CGFloat = 0
     let onEnlarge: () -> Void
     let onMove: (String, ImagePoint) -> Void
     let onEditingChanged: (Bool) -> Void
@@ -79,17 +81,15 @@ struct GarmentMeasurementPhotoEditor: View {
             ZStack(alignment: .topLeading) {
                 photograph(size: size)
                 measurementLines(annotations)
-                GlassEffectContainer(spacing: 0) {
-                    ZStack(alignment: .topLeading) {
-                        if showLabels {
-                            ForEach(annotations) { item in
-                                if let center = item.labelCenter {
-                                    measurementLabel(item).position(center)
-                                }
+                ZStack(alignment: .topLeading) {
+                    if showLabels {
+                        ForEach(annotations) { item in
+                            if let center = item.labelCenter {
+                                measurementLabel(item).position(center)
                             }
                         }
-                    }.frame(width: size.width, height: size.height)
-                }
+                    }
+                }.frame(width: size.width, height: size.height)
                 // The small markers sit above labels. Their larger invisible
                 // touch regions take priority when a finger grabs nearby.
                 ForEach(handles) { point in
@@ -101,7 +101,7 @@ struct GarmentMeasurementPhotoEditor: View {
                         pointTargets: handles.map {
                             MeasurementPhotoPointTarget(id: $0.id,
                                 center: viewport.screenPoint(for: screenPoint(previewPoint($0), size: size)))
-                        }, excludedRects: showsZoomControl ? [zoomControlRect(in: size)] : [],
+                        }, excludedRects: interactionExcludedRects(in: size),
                         interactionID: interactionID,
                         isEnabled: isEnabled && image != nil && scenePhase == .active,
                         onViewportGestureBegan: { cancelDrag(invalidateInteraction: false) },
@@ -214,6 +214,17 @@ struct GarmentMeasurementPhotoEditor: View {
 
     private func zoomControlRect(in size: CGSize) -> CGRect {
         CGRect(x: size.width - 52, y: 8, width: 44, height: 44)
+    }
+
+    private func interactionExcludedRects(in size: CGSize) -> [CGRect] {
+        var rects = showsZoomControl ? [zoomControlRect(in: size)] : []
+        // The recognizer is attached to the hosting controller, so a SwiftUI
+        // overlay alone cannot reliably stop it from beginning under the sheet.
+        if magnifierBottomInset.isFinite, magnifierBottomInset > 0 {
+            let height = min(size.height, magnifierBottomInset)
+            rects.append(CGRect(x: 0, y: size.height - height, width: size.width, height: height))
+        }
+        return rects
     }
 
     private func setViewport(_ value: MeasurementPhotoViewport) {
@@ -349,16 +360,18 @@ struct GarmentMeasurementPhotoEditor: View {
     private func measurementLabel(_ item: Annotation) -> some View {
         HStack(spacing: 4) {
             Text(GarmentMeasurementText.shortTitle(item.definition))
-                .font(.system(size: labelFontSize, weight: .medium))
+                .font(.custom("Pretendard-Regular", size: labelFontSize))
+                .tracking(0.06)
                 .fixedSize(horizontal: true, vertical: false)
             Text(drag != nil || isRecalculating ? "…" : visibleMeasurementValue(item.value))
-                .font(.system(size: labelFontSize, weight: .semibold))
-                .monospacedDigit().fixedSize(horizontal: true, vertical: false)
+                .font(.custom("Pretendard-SemiBold", size: labelFontSize))
+                .tracking(0.06)
+                .fixedSize(horizontal: true, vertical: false)
         }.foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.65), radius: 0.75, y: 0.5)
+            .shadow(color: .black.opacity(0.25), radius: 4, y: 4)
             .lineLimit(1).padding(.horizontal, 4)
             .frame(width: item.labelSize.width, height: item.labelSize.height)
-            .modifier(MeasurementValueGlassCapsule(reduceTransparency: reduceTransparency))
+            .modifier(MeasurementValueCapsule(reduceTransparency: reduceTransparency))
             .allowsHitTesting(false)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(item.definition.title), \(drag != nil || isRecalculating ? "재계산 중" : GarmentMeasurementText.value(item.value))")
@@ -429,7 +442,7 @@ struct GarmentMeasurementPhotoEditor: View {
                           completed.photoSize == size,
                           handles.contains(where: { $0.id == completed.id }) else { cancelDrag(); return }
                     drag = nil
-        lockedMagnifierRect = nil
+                    lockedMagnifierRect = nil
                     dragEpoch = UUID()
                     onMove(completed.id, completed.current)
                     onEditingChanged(false)
@@ -549,10 +562,12 @@ struct GarmentMeasurementPhotoEditor: View {
                   value.points.count == 2, value.points.allSatisfy({ $0.imagePoint.isValid }) else { return nil }
             let start = screenPoint(value.points[0].imagePoint, size: size)
             let end = screenPoint(value.points[1].imagePoint, size: size)
-            // Match the medium title and semibold monospaced value separately,
-            // using the same compact unit spacing as the visible capsule.
-            let titleFont = UIFont.systemFont(ofSize: labelFontSize, weight: .medium)
-            let valueFont = UIFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .semibold)
+            // Match the Figma label faces and the visible capsule's 4pt gap
+            // and 4pt horizontal padding when reserving annotation space.
+            let titleFont = UIFont(name: "Pretendard-Regular", size: labelFontSize)
+                ?? UIFont.systemFont(ofSize: labelFontSize, weight: .regular)
+            let valueFont = UIFont(name: "Pretendard-SemiBold", size: labelFontSize)
+                ?? UIFont.systemFont(ofSize: labelFontSize, weight: .semibold)
             let titleWidth = (GarmentMeasurementText.shortTitle(definition) as NSString)
                 .size(withAttributes: [.font: titleFont]).width
             let valueWidth = (visibleMeasurementValue(value) as NSString)
@@ -614,12 +629,16 @@ struct GarmentMeasurementPhotoEditor: View {
     }
 
     private func magnifierRect(in size: CGSize) -> CGRect {
-        if let lockedMagnifierRect { return lockedMagnifierRect }
         let point = drag.flatMap { moving in
             displayedPointCenters[moving.id] ?? screenPoint(moving.current, size: size)
         } ?? .zero
-        return MeasurementMagnifierPlacement.rect(photoSize: size, point: point,
+        let initialRect = lockedMagnifierRect ?? MeasurementMagnifierPlacement.rect(
+            photoSize: size, point: point,
             windowCenter: windowCenterInPhoto ?? CGPoint(x: size.width / 2, y: size.height / 2))
+        // The grab's quadrant stays locked. A sheet can only raise the loupe's
+        // display frame; it never changes the source point or the photo viewport.
+        return MeasurementMagnifierPlacement.avoidingBottomOcclusion(initialRect,
+            photoSize: size, bottomInset: magnifierBottomInset)
     }
 }
 
@@ -652,17 +671,14 @@ private struct MeasurementGlassCapsule: ViewModifier {
     }
 }
 
-/// Static readings use regular glass for a stable dark backing and stronger
-/// text contrast. They do not advertise button interaction or open details.
-private struct MeasurementValueGlassCapsule: ViewModifier {
+/// Figma's display-only labels use Labels/Tertiary, without an interactive
+/// glass edge. Keep an opaque alternative when Reduce Transparency is enabled.
+private struct MeasurementValueCapsule: ViewModifier {
     let reduceTransparency: Bool
     func body(content: Content) -> some View {
-        if reduceTransparency {
-            content.background(Color(white: 0.12), in: Capsule())
-                .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 0.75))
-        } else {
-            content.glassEffect(.regular.tint(.black.opacity(0.45)), in: Capsule())
-        }
+        content.background(
+            Color(red: 60.0 / 255, green: 60.0 / 255, blue: 67.0 / 255)
+                .opacity(reduceTransparency ? 1 : 0.3), in: Capsule())
     }
 }
 

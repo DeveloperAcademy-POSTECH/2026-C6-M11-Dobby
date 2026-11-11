@@ -62,6 +62,7 @@ struct ProductAutofillSourceTests {
             let context = ModelContext(container)
             context.autosaveEnabled = false
             let garment = Garment(category: "Hoodie", group: .top, name: "후드", detail: "설명", price: 100)
+            garment.photos = [GarmentPhoto(fileName: "autofill-completion.jpg", role: .thumbnail, order: 0)]
             garment.sourceMeasurementID = UUID()
             garment.aiSources = [source]
             context.insert(garment)

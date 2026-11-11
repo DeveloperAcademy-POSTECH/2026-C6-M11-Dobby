@@ -11,6 +11,7 @@ final class ProductInformationEditSession {
     let garment: Garment
     var measurementInput = GarmentMeasurementInputState()
     private let initialSnapshot: ProductInformationEditSnapshot
+    private let initialPhotos: [GarmentPhoto]
 
     init(garmentID: UUID, container: ModelContainer) throws {
         context = ModelContext(container)
@@ -21,6 +22,7 @@ final class ProductInformationEditSession {
             throw CocoaError(.fileNoSuchFile)
         }
         self.garment = garment
+        initialPhotos = garment.photos
         initialSnapshot = ProductInformationEditSnapshot(
             garment: garment, measurementInput: GarmentMeasurementInputState()
         )
@@ -31,7 +33,14 @@ final class ProductInformationEditSession {
     }
 
     func discard() {
+        let uncommittedFiles = ProductPhotoImportStore.uncommittedFileURLs(for: garment, in: context)
         context.rollback()
+        // SwiftData removes inserted models on rollback but can leave their
+        // inverse relationship cached on this loaded garment. Reattach exactly
+        // the original models from this same context; never delete a rolled-
+        // back object or a pre-existing measurement/photo to repair the cache.
+        garment.photos = initialPhotos
+        ProductPhotoImportStore.removeUncommittedFiles(uncommittedFiles)
         // Rollback can leave optional binary metadata stale on the loaded object.
         // Restore the same initial snapshot used by change detection before reusing it.
         initialSnapshot.restore(garment, measurementInput: &measurementInput)
@@ -39,6 +48,13 @@ final class ProductInformationEditSession {
 
     /// InfoInputView의 저장 성공 이후, 기존 상세·목록에서 관찰 중인 객체도 갱신합니다.
     func reflectSavedChanges(in original: Garment) {
+        // Resolve newly added photos in the observing context; never attach
+        // managed models from the editing context to the library context.
+        if let originalContext = original.modelContext {
+            original.photos = garment.photos.compactMap {
+                originalContext.model(for: $0.persistentModelID) as? GarmentPhoto
+            }
+        }
         var input = GarmentMeasurementInputState()
         ProductInformationEditSnapshot(garment: garment, measurementInput: measurementInput)
             .restore(original, measurementInput: &input)

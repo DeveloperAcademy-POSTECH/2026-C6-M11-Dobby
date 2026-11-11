@@ -25,6 +25,8 @@ struct ProductInformationEditSessionTests {
 
     @Test func completionPersistsAndRefreshesExistingDetail() throws {
         let fixture = try Fixture()
+        fixture.original.photos.append(GarmentPhoto(fileName: "remaining.jpg", role: .detail, order: 1))
+        try fixture.container.mainContext.save()
         let session = try fixture.session()
         session.garment.name = "저장"
         session.garment.brand = " \n "
@@ -35,12 +37,12 @@ struct ProductInformationEditSessionTests {
         }
         session.reflectSavedChanges(in: fixture.original)
         #expect(fixture.original.name == "저장")
-        #expect(fixture.original.productPhotos.isEmpty)
+        #expect(fixture.original.productPhotos.count == 1)
         #expect(fixture.original.measurements[0].valueCm == 72.1)
         let reopened = try fixture.session()
         #expect(reopened.garment.name == "저장")
         #expect(reopened.garment.brand == " \n ") // No Brand는 저장값이 아니다.
-        #expect(reopened.garment.productPhotos.isEmpty)
+        #expect(reopened.garment.productPhotos.count == 1)
         #expect(reopened.garment.measurements[0].valueCm == 72.1)
         #expect(reopened.garment.informationCompletedAt != nil)
     }

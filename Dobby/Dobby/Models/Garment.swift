@@ -44,6 +44,8 @@ final class Garment {
 
     /// Optional metadata survives completion; old products have no AI sources.
     var aiSourcesData: Data? = nil
+    /// Written only after AI information is applied. Optional for existing products.
+    var aiInformationGeneratedAt: Date? = nil
 
     /// 내보내기 화면에서 선택한 플랫폼. 기존 상품은 nil이며 업로드 성공 기록과 구분한다.
     var selectedExportChannelRawValues: [String]? = nil
