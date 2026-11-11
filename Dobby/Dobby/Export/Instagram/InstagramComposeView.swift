@@ -9,12 +9,15 @@ struct InstagramComposeView: View {
         ScrollView {
             VStack(alignment: .trailing, spacing: 24) {
                 InstagramAccountCard(account: account)
+                    .frame(maxWidth: 363)
+                    .frame(maxWidth: .infinity)
                 InstagramPhotoEditor(photos: draft.photos)
                     .disabled(isDisabled)
                 InstagramCaptionEditor(draft: $draft)
                     .disabled(isDisabled)
+                    .frame(maxWidth: 363)
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: 363, alignment: .topTrailing)
             .padding(.top, 20)
             .padding(.bottom, 44)
             .frame(maxWidth: .infinity)
@@ -54,18 +57,26 @@ private struct InstagramPhotoEditor: View {
             Text("업로드할 사진")
                 .font(.custom("Pretendard-SemiBold", fixedSize: 17))
                 .foregroundStyle(Color(.brandNeutral950))
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(maxWidth: 363, alignment: .topLeading)
+                .frame(maxWidth: .infinity)
             if photos.isEmpty {
                 ContentUnavailableView("업로드할 사진이 없어요", systemImage: "photo.badge.exclamationmark")
-                    .frame(maxWidth: .infinity, minHeight: 180)
+                    .frame(maxWidth: 363, minHeight: 180)
+                    .frame(maxWidth: .infinity)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 8) {
-                        ForEach(photos) { photo in
-                            InstagramDraftPhotoCell(photo: photo)
+                GeometryReader { geometry in
+                    let horizontalInset = max(0, (geometry.size.width - 363) / 2)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 8) {
+                            ForEach(photos) { photo in
+                                InstagramDraftPhotoCell(photo: photo)
+                            }
                         }
                     }
+                    .contentMargins(.horizontal, horizontalInset, for: .scrollContent)
                 }
+                .frame(height: 212)
             }
         }
     }
