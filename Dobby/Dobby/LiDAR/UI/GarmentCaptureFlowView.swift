@@ -214,8 +214,8 @@ struct GarmentCaptureFlowView: View {
             let photoRect = photoViewport(in: geometry.size)
             ZStack {
                 Color.black
-                // A photo's 1x is its complete sensor field of view. Filling the
-                // entire tall phone first would add an unlabelled ~1.63x crop.
+                // Size video to the selected photograph, not the entire screen.
+                // The shared placement moves chrome without adding a sensor crop.
                 cameraImage
                     .modifier(MeasurementPhotoViewportModifier(rect: photoRect))
                     .accessibilityHidden(showsPlacementTutorial)
@@ -317,10 +317,15 @@ struct GarmentCaptureFlowView: View {
         }
     }
 
+    private func cameraPreviewLayout(in size: CGSize) -> CameraPhotoPreviewLayout {
+        // Keep the source-derived ratio, including frozen processing snapshots.
+        // Only presentation placement is shared; RGB/depth and calibration stay intact.
+        CameraPhotoPreviewLayout(containerSize: size, photoAspectRatio: Double(cameraPhotoAspectRatio),
+            prefersBottomAlignedPortrait: displayedAspectRatio == .sixteenNine)
+    }
+
     private func photoViewport(in size: CGSize) -> CGRect {
-        guard let window = MeasurementCameraChromeLayout.photoViewport(containerWidth: Double(size.width),
-            containerHeight: Double(size.height), photoAspectRatio: Double(cameraPhotoAspectRatio)) else { return .zero }
-        return CGRect(x: window.x, y: window.y, width: window.width, height: window.height)
+        cameraPreviewLayout(in: size).photoFrame
     }
 
     @ViewBuilder
@@ -562,12 +567,7 @@ struct GarmentCaptureFlowView: View {
     }
 
     private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
-        let rect = photoViewport(in: size)
-        return MeasurementCameraChromeLayout.controls(containerWidth: Double(size.width),
-            containerHeight: Double(size.height),
-            photo: .init(x: Double(rect.minX), y: Double(rect.minY),
-                width: Double(rect.width), height: Double(rect.height)),
-            bottomSafeAreaInset: Double(bottomSafeAreaInset))
+        cameraPreviewLayout(in: size).controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset)
     }
 
     private func shutterFrame(in size: CGSize, bottomSafeAreaInset: CGFloat) -> CameraPhotoViewport? {

@@ -108,6 +108,67 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         XCTAssertEqual(fixture.samples.creations, 1)
     }
 
+    func testExtendedTransitionKeepsOneSurfaceAndPassesLocalPhotographBounds() async throws {
+        let size = CGSize(width: 402, height: 874)
+        let fixture = try host(prefersBottomAlignedPortrait: true, size: size)
+        defer { fixture.close() }
+        let initial = DetailAspectRatioPreviewLayout(containerSize: size,
+            aspectRatio: .fourThree).frame.size
+        try await waitForSize(fixture, size: initial)
+        fixture.samples.sizes.removeAll()
+        fixture.samples.framings.removeAll()
+        fixture.options.photoAspectRatio = .sixteenNine
+        let photoSize = CGSize(width: 402, height: 402 * 16.0 / 9)
+        try await waitForSize(fixture, size: photoSize)
+        try await Task.sleep(for: .milliseconds(400))
+        let framing = try XCTUnwrap(fixture.samples.framings.last)
+        XCTAssertEqual(framing.1.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(framing.1.height, 714.666667, accuracy: 1)
+        XCTAssertEqual(framing.0.height, photoSize.height, accuracy: 1)
+        fixture.options.photoAspectRatio = .fourThree
+        let normal = DetailAspectRatioPreviewLayout(containerSize: CGSize(width: 402, height: 874),
+            aspectRatio: .fourThree).frame.size
+        try await waitForSize(fixture, size: normal)
+        XCTAssertTrue(fixture.samples.sizes.contains { $0.height > normal.height + 1 && $0.height < photoSize.height - 1 })
+        XCTAssertEqual(fixture.samples.creations, 1)
+        // UIKit can stop issuing layoutSubviews after bounds round to their
+        // final pixel size. Check the last supplied crop, not an earlier layout sample.
+        try await eventually("최종 사진 영역은 표면의 원점으로 돌아와야 합니다.") {
+            fixture.samples.latestViewport?.origin == .zero
+        }
+    }
+
+    func testRapidExtendedRatioChangesSettleOnLatestPhotograph() async throws {
+        let size = CGSize(width: 402, height: 874)
+        let fixture = try host(prefersBottomAlignedPortrait: true, size: size)
+        defer { fixture.close() }
+        try await waitForSize(fixture, size: CGSize(width: 402, height: 536))
+        fixture.options.photoAspectRatio = .sixteenNine
+        try await Task.sleep(for: .milliseconds(60))
+        fixture.options.photoAspectRatio = .square
+        try await waitForSize(fixture, size: CGSize(width: 402, height: 402))
+        try await Task.sleep(for: .milliseconds(400))
+        let viewport = try XCTUnwrap(fixture.samples.latestViewport)
+        // Spring interpolation can leave subpixel floating-point residuals.
+        XCTAssertEqual(viewport.minX, 0, accuracy: 0.001)
+        XCTAssertEqual(viewport.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(viewport.width, 402, accuracy: 0.001)
+        XCTAssertEqual(viewport.height, 402, accuracy: 0.001)
+        XCTAssertEqual(fixture.samples.creations, 1)
+    }
+
+    func testExtendedPreviewRespectsDisabledAnimations() async throws {
+        let fixture = try host(disablesAnimations: true, prefersBottomAlignedPortrait: true,
+            size: CGSize(width: 402, height: 874))
+        defer { fixture.close() }
+        try await waitForSize(fixture, size: CGSize(width: 402, height: 536))
+        fixture.samples.sizes.removeAll()
+        fixture.options.photoAspectRatio = .sixteenNine
+        try await waitForSize(fixture, size: CGSize(width: 402, height: 402 * 16.0 / 9))
+        XCTAssertFalse(fixture.samples.sizes.contains { $0.height > 537 && $0.height < 713 })
+        XCTAssertEqual(fixture.samples.creations, 1)
+    }
+
     func testPortraitRatiosUseTheSamePhotoWindowAndBlackMaskAsMeasurement() throws {
         for size in [CGSize(width: 375, height: 667), CGSize(width: 390, height: 844),
                      CGSize(width: 440, height: 956)] {
@@ -143,7 +204,9 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         }
     }
 
-    private func host(ratio: DetailPhotoAspectRatio = .fourThree, disablesAnimations: Bool = false) throws -> Fixture {
+    private func host(ratio: DetailPhotoAspectRatio = .fourThree, disablesAnimations: Bool = false,
+                      prefersBottomAlignedPortrait: Bool = false,
+                      size: CGSize = CGSize(width: 400, height: 800)) throws -> Fixture {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previousKeyWindow = scene.windows.first { $0.isKeyWindow }
         let window = UIWindow(windowScene: scene)
@@ -151,7 +214,8 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         options.photoAspectRatio = ratio
         let samples = PreviewSamples()
         window.rootViewController = UIHostingController(rootView:
-            PreviewHarness(options: options, samples: samples, disablesAnimations: disablesAnimations))
+            PreviewHarness(options: options, samples: samples, size: size, disablesAnimations: disablesAnimations,
+                prefersBottomAlignedPortrait: prefersBottomAlignedPortrait))
         window.makeKeyAndVisible()
         return Fixture(window: window, previousKeyWindow: previousKeyWindow, options: options,
                        samples: samples)
@@ -181,6 +245,7 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
     var sizes: [CGSize] = []
     var framings: [(CGRect, CGRect)] = []
     var creations = 0
+    var latestViewport: CGRect?
 }
 
 private struct PreviewHarness: View {
@@ -188,8 +253,10 @@ private struct PreviewHarness: View {
     let samples: PreviewSamples
     var size = CGSize(width: 400, height: 800)
     var disablesAnimations = false
+    var prefersBottomAlignedPortrait = false
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio) { viewport in
+        DetailAspectRatioPreview(aspectRatio: options.photoAspectRatio,
+            prefersBottomAlignedPortrait: prefersBottomAlignedPortrait) { viewport in
             PreviewProbe(samples: samples, viewport: viewport)
         }
         .frame(width: size.width, height: size.height)
@@ -208,7 +275,10 @@ private struct PreviewProbe: UIViewRepresentable {
         (view.layer as? AVCaptureVideoPreviewLayer)?.videoGravity = .resizeAspectFill
         return view
     }
-    func updateUIView(_ uiView: RecordingPreviewView, context: Context) { uiView.viewport = viewport }
+    func updateUIView(_ uiView: RecordingPreviewView, context: Context) {
+        uiView.viewport = viewport
+        samples.latestViewport = viewport
+    }
 }
 
 private final class RecordingPreviewView: UIView {

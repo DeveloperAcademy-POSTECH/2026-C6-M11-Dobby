@@ -32,7 +32,9 @@ struct MeasurementProcessingIndicator: View {
                 .fill(Color(red: 224 / 255, green: 90 / 255, blue: 61 / 255))
                 .frame(width: 25, height: 25)
         }
-        .frame(width: 92, height: 92)
+        // Keep the occupied bounds aligned with the shared 98pt shutter while
+        // preserving the processing ring's existing animation and dimensions.
+        .frame(width: 98, height: 98)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(phase.processingIndicatorLabel)
