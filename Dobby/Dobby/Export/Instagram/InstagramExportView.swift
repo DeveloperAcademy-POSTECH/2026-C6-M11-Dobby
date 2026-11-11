@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum InstagramUploadState {
     case idle
@@ -16,6 +17,7 @@ private enum InstagramUploadState {
 
 struct InstagramExportView: View {
     let product: ExportProduct
+    let onRequestExit: (ExportReturnDestination) -> Void
     let onPublished: (InstagramPublishResult) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var client = InstagramIntegrationClient()
@@ -25,25 +27,30 @@ struct InstagramExportView: View {
     @State private var draft: InstagramExportDraft
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
-    @State private var confirmingRepublish = false
     @State private var isShowingUploadFailure = false
     @State private var message: String?
     @State private var requestID = UUID().uuidString
 
-    init(product: ExportProduct, onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
+    init(product: ExportProduct, onRequestExit: @escaping (ExportReturnDestination) -> Void,
+         onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
         self.product = product
+        self.onRequestExit = onRequestExit
         self.onPublished = onPublished
         _draft = State(initialValue: InstagramExportDraft(product: product))
     }
 
     var body: some View {
         Group {
-            if let account {
+            if uploadState.isCompleted {
+                InstagramUploadCompletionView(
+                    onOpenLibrary: requestLibraryExit,
+                    onOpenInstagram: openInstagram
+                )
+            } else if let account {
                 InstagramComposeView(
                     account: account,
                     draft: $draft,
-                    isDisabled: busy || uploadState.isCompleted,
-                    isCompleted: uploadState.isCompleted
+                    isDisabled: busy
                 )
             } else {
                 InstagramConnectionView(
@@ -53,9 +60,10 @@ struct InstagramExportView: View {
                 )
             }
         }
-        .navigationTitle("인스타그램으로 내보내기")
+        .navigationTitle("인스타그램에 업로드하기")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
+        .toolbar(uploadState.isCompleted ? .hidden : .visible, for: .navigationBar)
         .toolbar {
             if !uploadState.isUploading {
                 ToolbarItem(placement: .topBarLeading) {
@@ -67,7 +75,7 @@ struct InstagramExportView: View {
                     }
                 }
             }
-            if account != nil && !uploadState.isUploading {
+            if account != nil && !uploadState.isUploading && !uploadState.isCompleted {
                 ToolbarItem(placement: .topBarTrailing) {
                     ExportAccountMenu(
                         accessibilityLabel: "Instagram 계정 메뉴",
@@ -78,19 +86,15 @@ struct InstagramExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if account != nil {
+            if account != nil && !uploadState.isCompleted {
                 ExportBottomActionBar {
                     ExportBottomAction(
                         title: "업로드하기",
                         isWorking: uploadState.isUploading,
                         isComplete: false,
-                        isEnabled: uploadState.isCompleted || canPublish
+                        isEnabled: canPublish
                     ) {
-                        if uploadState.isCompleted {
-                            confirmingRepublish = true
-                        } else {
-                            Task { await publish() }
-                        }
+                        Task { await publish() }
                     }
                 }
             }
@@ -112,13 +116,6 @@ struct InstagramExportView: View {
         }
         .interactiveDismissDisabled(uploadState.isUploading)
         .task { await loadAccount() }
-        .confirmationDialog("게시물을 한 번 더 올릴까요?", isPresented: $confirmingRepublish,
-                            titleVisibility: .visible) {
-            Button("다시 업로드하기") { Task { await republish() } }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text("다시 업로드하면 같은 계정에 새 게시물이 추가됩니다.")
-        }
         .alert("Instagram 안내", isPresented: Binding(
             get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("확인", role: .cancel) {}
@@ -129,6 +126,24 @@ struct InstagramExportView: View {
 
     private var canPublish: Bool {
         !busy && !uploadState.isUploading && account != nil && draft.canPublish
+    }
+
+    private func requestLibraryExit() {
+        onRequestExit(.library)
+    }
+
+    private func openInstagram() {
+        Task { await openInstagramDestination() }
+    }
+
+    private func openInstagramDestination() async {
+        let destination = ExportChannel.instagram.destinationURL
+        let didOpenApp = await UIApplication.shared.open(
+            destination,
+            options: [.universalLinksOnly: true]
+        )
+        guard !didOpenApp else { return }
+        await UIApplication.shared.open(destination)
     }
 
     private func loadAccount() async {
