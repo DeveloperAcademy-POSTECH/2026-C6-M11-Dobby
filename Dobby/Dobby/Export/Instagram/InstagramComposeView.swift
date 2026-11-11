@@ -4,14 +4,10 @@ struct InstagramComposeView: View {
     let account: InstagramAccount
     @Binding var draft: InstagramExportDraft
     let isDisabled: Bool
-    var isCompleted = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if isCompleted {
-                    InstagramUploadCompletedHeader()
-                }
                 InstagramAccountCard(account: account)
                 InstagramPhotoEditor(photos: draft.photos)
                     .disabled(isDisabled)
@@ -24,23 +20,6 @@ struct InstagramComposeView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Color(.brandNeutral50).ignoresSafeArea())
-    }
-}
-
-private struct InstagramUploadCompletedHeader: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("인스타그램에 업로드 완료 🎉")
-                .font(.title3.bold())
-            HStack(spacing: 4) {
-                Text("연결된 계정에 자동 업로드를")
-                Text("완료").foregroundStyle(Color(.brandMain500))
-                Text("했어요")
-            }
-            .font(.body)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
     }
 }
 
