@@ -4,6 +4,7 @@ import SwiftUI
 /// 삭제할 사진은 호출 화면에서 고정한다. 바깥 영역을 탭하면 삭제 없이 닫는다.
 struct DetailPhotoDeleteConfirmation: View {
     let isDeleting: Bool
+    let bottomInset: CGFloat
     let onCancel: () -> Void
     let onDelete: () -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -22,8 +23,10 @@ struct DetailPhotoDeleteConfirmation: View {
                     ScrollView { panel }.scrollBounceBehavior(.basedOnSize)
                 }
                 .frame(width: min(typeSize.isAccessibilitySize ? 358 : 300,
-                                  max(0, geometry.size.width - 56)))
-                .padding(28)
+                                  max(0, geometry.size.width - 40)))
+                .padding(.trailing, 20)
+                .padding(.top, 16)
+                .padding(.bottom, max(0, bottomInset))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -77,5 +80,8 @@ struct DetailPhotoDeleteConfirmation: View {
                 .glassEffect(.regular, in: shape)
                 .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
         }
+        // 글라스의 문구·여백 탭이 뒤쪽 취소 영역으로 전달되지 않게 한다.
+        .contentShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+        .onTapGesture {}
     }
 }
