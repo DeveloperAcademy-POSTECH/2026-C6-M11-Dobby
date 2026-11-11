@@ -3,7 +3,7 @@ import SwiftUI
 
 struct ExportView: View {
     let product: ExportProduct
-    private let onClose: (() throws -> Void)?
+    private let onRequestExit: ((ExportReturnDestination) throws -> Void)?
     @Binding var showFruits: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -14,9 +14,9 @@ struct ExportView: View {
     @State private var showInstagram = false
 
     init(product: ExportProduct, showFruits: Binding<Bool>,
-         onClose: (() throws -> Void)? = nil) {
+         onRequestExit: ((ExportReturnDestination) throws -> Void)? = nil) {
         self.product = product
-        self.onClose = onClose
+        self.onRequestExit = onRequestExit
         _showFruits = showFruits
         _completedChannels = State(initialValue: product.completedChannels)
     }
@@ -35,7 +35,11 @@ struct ExportView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    ExportNavigationButton(systemImage: "xmark", accessibilityLabel: "홈으로 이동", action: close)
+                    ExportNavigationButton(
+                        systemImage: "xmark",
+                        accessibilityLabel: "홈으로 이동",
+                        action: requestHomeExit
+                    )
                     .accessibilityIdentifier("export.close")
                 }
             }
@@ -52,7 +56,7 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showInstagram) {
-                InstagramExportView(product: product) { _ in
+                InstagramExportView(product: product, onRequestExit: requestExit) { _ in
                     completedChannels.insert(.instagram)
                     try? ExportCompletionRecorder.record(productID: product.id, channel: .instagram,
                                                          in: modelContext)
@@ -76,10 +80,14 @@ struct ExportView: View {
         }
     }
 
-    private func close() {
+    private func requestHomeExit() {
+        requestExit(to: .home)
+    }
+
+    private func requestExit(to destination: ExportReturnDestination) {
         closeError = nil
         do {
-            if let onClose { try onClose() }
+            if let onRequestExit { try onRequestExit(destination) }
             else { dismiss() }
         } catch {
             closeError = "진행 중인 작업을 저장하지 못해 홈으로 이동하지 못했어요. 내용은 화면에 남아 있어요. 확인 후 닫기 버튼을 다시 눌러 주세요.\n\(error.localizedDescription)"

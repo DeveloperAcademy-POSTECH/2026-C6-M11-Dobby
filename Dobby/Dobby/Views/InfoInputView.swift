@@ -19,7 +19,7 @@ struct InfoInputView: View {
     private let onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)?
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.returnHomeFromExport) private var returnHomeFromExport
+    @Environment(\.returnFromExport) private var returnFromExport
 
     @State private var exportProduct: ExportProduct?
     @State private var showFruits = false
@@ -27,7 +27,7 @@ struct InfoInputView: View {
     private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
     @State private var saveError: String?
     @State private var hasAttemptedCompletion = false
-    @State private var returnsHomeAfterExport = false
+    @State private var pendingExportDestination: ExportReturnDestination?
     @State private var generationRequestID: UUID?
     @State private var generationError: String?
     @State private var showsReplacementConfirmation = false
@@ -137,9 +137,9 @@ struct InfoInputView: View {
         }
         // 내보내기 화면은 자체 NavigationStack과 닫기 버튼을 갖고 있어 시트로 띄운다.
         .sheet(item: $exportProduct, onDismiss: finishExportDismissal) { product in
-            ExportView(product: product, showFruits: $showFruits) {
+            ExportView(product: product, showFruits: $showFruits) { destination in
                 try modelContext.save()
-                returnsHomeAfterExport = true
+                pendingExportDestination = destination
                 showFruits = false
                 exportProduct = nil
             }
@@ -253,7 +253,7 @@ struct InfoInputView: View {
             if let onComplete {
                 onComplete(garment)
             } else {
-                returnsHomeAfterExport = false
+                pendingExportDestination = nil
                 showFruits = false
                 exportProduct = ExportProduct(garment: garment)
             }
@@ -267,9 +267,9 @@ struct InfoInputView: View {
     }
 
     private func finishExportDismissal() {
-        guard returnsHomeAfterExport else { return }
-        returnsHomeAfterExport = false
-        returnHomeFromExport?()
+        guard let destination = pendingExportDestination else { return }
+        pendingExportDestination = nil
+        returnFromExport?(to: destination)
     }
 
     private func revealMeasurements(using proxy: ScrollViewProxy) {
