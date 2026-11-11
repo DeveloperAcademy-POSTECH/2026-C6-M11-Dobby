@@ -28,7 +28,7 @@ struct ExportProductHandoffTests {
         #expect(product.marketplacePayload.measurements == "총장 65 cm\n가슴 단면 53.25 cm")
         #expect(product.marketplacePayload.length == "65")
         #expect(product.marketplacePayload.waist.isEmpty && product.marketplacePayload.thigh.isEmpty)
-        #expect(product.instagramPayload.measurements == "총장 65cm\n가슴 단면 53.2cm")
+        #expect(product.instagramPayload.measurements == "총장 65cm\n가슴 단면 53cm")
         garment.name = "이후 수정"
         #expect(product.name == "수정한 제품명")
     }
@@ -62,10 +62,10 @@ struct ExportProductHandoffTests {
         #expect(product.exportMeasurements.map(\.title) == ["총장", "허리", "밑위", "허벅지", "밑단"])
         #expect(product.marketplacePayload.thigh == "32.1256")
         #expect(product.marketplacePayload.measurements == "총장 102.25 cm\n허리 43.25 cm\n밑위 28.5 cm\n허벅지 32.1256 cm\n밑단 21.125 cm")
-        #expect(product.instagramPayload.measurements == "총장 102.2cm\n허리 43.2cm\n밑위 28.5cm\n허벅지 32.1cm\n밑단 21.1cm")
-        #expect(product.instagramPayload.length == "102.2")
-        #expect(product.instagramPayload.waist == "43.2")
-        #expect(product.instagramPayload.thigh == "32.1")
+        #expect(product.instagramPayload.measurements == "총장 102cm\n허리 43cm\n밑위 29cm\n허벅지 32cm\n밑단 21cm")
+        #expect(product.instagramPayload.length == "102")
+        #expect(product.instagramPayload.waist == "43")
+        #expect(product.instagramPayload.thigh == "32")
         #expect(garment.measurements.count == 6)
         #expect(garment.measurement("thighWidthRight")?.label == "원본 표기")
         #expect(abs((garment.measurement("thighWidthRight")?.autoValueCm ?? .nan) - 31.1256) < 1e-10)
@@ -159,7 +159,7 @@ struct ExportProductHandoffTests {
         #expect(product.exportMeasurements.first { $0.id == "sleeveLengthLeft" }?.value == "62.25123456789")
         #expect(!product.marketplacePayload.measurements.contains("오른쪽") && !product.marketplacePayload.measurements.contains("왼쪽"))
         #expect(product.instagramPayload.measurements == [
-            "어깨 45.1cm", "가슴 55.2cm", "밑단 51.2cm", "소매길이 62.2cm", "총장 68.2cm"
+            "어깨 45cm", "가슴 55cm", "밑단 51cm", "소매길이 62cm", "총장 68cm"
         ].joined(separator: "\n"))
         #expect(garment.orderedMeasurements.count == 6 && garment.visibleMeasurements.count == 5)
         for (value, definition) in zip(garment.orderedMeasurements, definitions) {
@@ -269,7 +269,7 @@ struct ExportProductHandoffTests {
         #expect(typed.valueCm == 67.25123456789 && !typed.isEdited)
     }
 
-    @Test func instagramMeasurementsTruncateAndOmitZeroDecimal() {
+    @Test func instagramMeasurementsRoundToWholeCentimeters() {
         let garment = Garment(category: "Jacket", group: .top)
         garment.measurements = [
             MeasuredValue(key: "a", label: "A", displayOrder: 0, valueCm: 45.95, autoValueCm: nil),
@@ -280,7 +280,7 @@ struct ExportProductHandoffTests {
 
         let product = ExportProduct(garment: garment, loadPhoto: { _ in nil })
 
-        #expect(product.instagramPayload.measurements == "A 45.9cm\nB 45.9cm\nC 45cm\nD 45cm")
+        #expect(product.instagramPayload.measurements == "A 46cm\nB 46cm\nC 45cm\nD 45cm")
         #expect(garment.measurements.map(\.valueCm) == [45.95, 45.99, 45.01, 45])
     }
 }
