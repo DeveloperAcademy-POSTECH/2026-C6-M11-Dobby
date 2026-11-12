@@ -1,7 +1,6 @@
 ![착(chak) — 찍고, 재고, 올리는 일을 한 번에 착!](assets/readme/banner.png)
 
 <h1>
-  <a href="https://apps.apple.com/kr/app/chak-%EC%B0%A9/id6823445800"><img src="assets/readme/app-icon.svg" width="48" align="center" alt="chak(착) 앱 아이콘"></a>
   chak(착)&nbsp;
   <a href="https://apps.apple.com/kr/app/chak-%EC%B0%A9/id6823445800"><img src="assets/readme/app-store-badge.svg" height="40" align="center" alt="Download on the App Store"></a>&nbsp;
   <img src="https://img.shields.io/badge/iOS-26.4%2B-000000?style=flat&amp;logo=apple&amp;logoColor=white&amp;labelColor=000000" align="center" alt="iOS 26.4 이상">
@@ -56,13 +55,69 @@
 
 ---
 
+## 🏗 Architecture
+
+착은 **MV 기반으로 화면과 데이터를 관리**하고, 촬영·실측·AI 생성은 기능별 서비스에 연결합니다.
+
+```mermaid
+flowchart TB
+    subgraph mvGroup["MV · 화면과 데이터"]
+        viewNode["View
+        SwiftUI 화면 · 입력 · 화면 전환"]
+        modelNode["Model
+        상품 · 사진 · 치수 · 변경 규칙"]
+        viewNode <-->|조회 · 변경| modelNode
+    end
+
+    operationNode["Workflow · Session
+    촬영 · 실측 실행 · AI 생성"]
+    persistenceNode["Store · Archive
+    상품과 실측 기록 저장 · 복원"]
+
+    viewNode -->|작업 요청| operationNode
+    viewNode -->|저장 · 불러오기| persistenceNode
+
+    protocolNode["Protocol
+    촬영 · 측정점 인식 · AI 생성 계약"]
+    implementationNode["주입되는 구현
+    실제 카메라 · 인식 모델 · API Client
+    또는 테스트용 구현"]
+
+    operationNode -->|주입받은 구현 호출| protocolNode
+    implementationNode -.->|프로토콜 구현| protocolNode
+
+    storageNode[("SwiftData · 파일 저장")]
+    persistenceNode --> storageNode
+
+    classDef mv fill:#FFF0D8,stroke:#E34825,color:#33251D
+    classDef service fill:#F3F4F6,stroke:#8B949E,color:#24292F
+    classDef contract fill:#E8EFFC,stroke:#5078BD,color:#243858
+
+    class viewNode,modelNode mv
+    class operationNode,persistenceNode,storageNode service
+    class protocolNode,implementationNode contract
+```
+
+| 설계 방식 | 코드에서의 적용 |
+|---|---|
+| **MV — 화면과 데이터 분리** | View에서 입력·화면 상태를 관리하고, Model에 상품·측정 데이터와 변경 규칙을 배치 |
+| **서비스 분리** | `AutomaticMeasurementWorkflow`, `ProductAutofillSession` 등이 비동기 작업의 실행·취소를 담당 |
+| **의존성 주입** | 촬영·측정점 인식·AI 생성 프로토콜을 통해 실제 구현과 테스트용 구현을 연결 |
+| **저장 책임 분리** | `GarmentStore`, `MeasurementArchive`에서 상품·사진·실측 기록의 저장과 복원을 처리 |
+
+*도식은 주요 책임과 의존 관계를 요약합니다. 프로토콜 주입은 촬영·인식·AI 생성 등 실제 적용된 경계를 표현합니다.*
+
+---
+
 ## 🛠 Tech Stack
 
 ### Core Frameworks
 
 ![SwiftUI](https://img.shields.io/badge/SwiftUI-007AFF?style=flat&logo=swift&logoColor=white)
-![SwiftData](https://img.shields.io/badge/SwiftData-5856D6?style=flat&logo=apple&logoColor=white)
+![UIKit](https://img.shields.io/badge/UIKit-2396F3?style=flat&logo=apple&logoColor=white)
+![Observation](https://img.shields.io/badge/Observation-5856D6?style=flat&logo=swift&logoColor=white)
 ![Combine](https://img.shields.io/badge/Combine-FF9500?style=flat&logo=swift&logoColor=white)
+![SwiftData](https://img.shields.io/badge/SwiftData-5856D6?style=flat&logo=apple&logoColor=white)
 
 ### Camera & Photos
 
@@ -77,11 +132,22 @@
 ![ARKit](https://img.shields.io/badge/ARKit-000000?style=flat&logo=apple&logoColor=white)
 ![LiDAR](https://img.shields.io/badge/LiDAR-34C759?style=flat&logo=apple&logoColor=white)
 
+### Concurrency & Networking
+
+![Swift Concurrency](https://img.shields.io/badge/Swift_Concurrency-F05138?style=flat&logo=swift&logoColor=white)
+![URLSession](https://img.shields.io/badge/URLSession-007AFF?style=flat&logo=apple&logoColor=white)
+
 ### Interaction & Animation
 
+![AVKit](https://img.shields.io/badge/AVKit-34C759?style=flat&logo=apple&logoColor=white)
 ![ActivityKit](https://img.shields.io/badge/ActivityKit-FF9500?style=flat&logo=apple&logoColor=white)
 ![WidgetKit](https://img.shields.io/badge/WidgetKit-007AFF?style=flat&logo=apple&logoColor=white)
 ![Lottie](https://img.shields.io/badge/Lottie-00BFA5?style=flat)
+
+### AI & Backend
+
+![OpenAI API](https://img.shields.io/badge/OpenAI_API-412991?style=flat)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020?style=flat&logo=cloudflareworkers&logoColor=white)
 
 ### Environment
 
@@ -105,38 +171,46 @@
 
 <!-- 이름에 프로필 링크를 연결할 때는 <a href="URL">이름</a> 형식 사용 -->
 
-<table>
+<table width="100%">
   <tr>
-    <td width="16%" align="center" valign="top">
-      <img src="assets/readme/mason.png" width="80" alt="Mason 메이슨 프로필"><br>
-      <sub><strong>Mason&nbsp;·&nbsp;메이슨</strong></sub><br>
-      <sub>PM&nbsp;·&nbsp;Developer</sub>
-    </td>
-    <td width="16%" align="center" valign="top">
-      <img src="assets/readme/tobae.png" width="80" alt="Tobae 토바에 프로필"><br>
-      <sub><strong>Tobae&nbsp;·&nbsp;토바에</strong></sub><br>
-      <sub>Developer</sub>
-    </td>
-    <td width="16%" align="center" valign="top">
-      <img src="assets/readme/mugu.png" width="80" alt="Mugu 무구 프로필"><br>
-      <sub><strong>Mugu&nbsp;·&nbsp;무구</strong></sub><br>
-      <sub>Developer</sub>
-    </td>
-    <td width="16%" align="center" valign="top">
-      <img src="assets/readme/ichi.png" width="80" alt="Ichi 이치 프로필"><br>
-      <sub><strong>Ichi&nbsp;·&nbsp;이치</strong></sub><br>
-      <sub>Developer</sub>
-    </td>
-    <td width="16%" align="center" valign="top">
-      <img src="assets/readme/ddoechii.png" width="80" alt="Ddoechii 또치 프로필"><br>
-      <sub><strong>Ddoechii&nbsp;·&nbsp;또치</strong></sub><br>
-      <sub>Designer</sub>
-    </td>
-    <td width="16%" align="center" valign="top">
-      <img src="assets/readme/iris.png" width="80" alt="Iris 아이리스 프로필"><br>
-      <sub><strong>Iris&nbsp;·&nbsp;아이리스</strong></sub><br>
-      <sub>Designer</sub>
-    </td>
+    <td width="16%" align="center"><img src="assets/readme/mason.png" width="80" alt="Mason 메이슨 프로필"></td>
+    <td width="16%" align="center"><img src="assets/readme/tobae.png" width="80" alt="Tobae 토바에 프로필"></td>
+    <td width="16%" align="center"><img src="assets/readme/mugu.png" width="80" alt="Mugu 무구 프로필"></td>
+    <td width="16%" align="center"><img src="assets/readme/ichi.png" width="80" alt="Ichi 이치 프로필"></td>
+    <td width="16%" align="center"><img src="assets/readme/ddoechii.png" width="80" alt="Ddoechii 또치 프로필"></td>
+    <td width="16%" align="center"><img src="assets/readme/iris.png" width="80" alt="Iris 아이리스 프로필"></td>
+  </tr>
+  <tr>
+    <th align="center"><sub>Mason</sub></th>
+    <th align="center"><sub>Tobae</sub></th>
+    <th align="center"><sub>Mugu</sub></th>
+    <th align="center"><sub>Ichi</sub></th>
+    <th align="center"><sub>Ddoechii</sub></th>
+    <th align="center"><sub>Iris</sub></th>
+  </tr>
+  <tr>
+    <td align="center"><sub>메이슨</sub></td>
+    <td align="center"><sub>토바에</sub></td>
+    <td align="center"><sub>무구</sub></td>
+    <td align="center"><sub>이치</sub></td>
+    <td align="center"><sub>또치</sub></td>
+    <td align="center"><sub>아이리스</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>PM&nbsp;·&nbsp;Developer</sub></td>
+    <td align="center"><sub>Developer</sub></td>
+    <td align="center"><sub>Developer</sub></td>
+    <td align="center"><sub>Developer</sub></td>
+    <td align="center"><sub>Designer</sub></td>
+    <td align="center"><sub>Designer</sub></td>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><sub>프로젝트 운영<br>일정·범위 조율<br>상세 촬영</sub></td>
+    <td align="center" valign="top"><sub>플랫폼 연동<br>설정</sub></td>
+    <td align="center" valign="top"><sub>LiDAR 실측<br>사진 업로드<br>공통 UI</sub></td>
+    <td align="center" valign="top"><sub>Garment ML<br>보관함<br>상품 정보 입력</sub></td>
+    <td align="center" valign="top"><sub>UX/UI 디자인</sub></td>
+    <td align="center" valign="top"><sub>UX/UI 디자인</sub></td>
   </tr>
 </table>
 
