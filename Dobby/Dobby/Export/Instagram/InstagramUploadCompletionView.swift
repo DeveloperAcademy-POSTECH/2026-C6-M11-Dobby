@@ -123,6 +123,7 @@ private struct InstagramCompletionText: View {
             Text(message)
                 .font(.custom("Pretendard-SemiBold", fixedSize: 17))
                 .foregroundStyle(Color(.brandNeutral600))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: 362, alignment: .top)
