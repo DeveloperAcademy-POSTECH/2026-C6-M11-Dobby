@@ -81,6 +81,7 @@ struct GarmentCaptureFlowView: View {
                         initialRecord: restoredRecord, allowsRetake: allowsRetake)
                 } else {
                     cameraScreen
+                        .productCreationProgress(.measurement)
                         .navigationTitle("실측 촬영")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
