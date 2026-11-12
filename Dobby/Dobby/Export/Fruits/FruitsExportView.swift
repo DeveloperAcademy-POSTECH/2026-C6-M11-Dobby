@@ -7,22 +7,16 @@ struct FruitsExportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
     @State private var pipController = MeasurementPiPController()
-    @State private var isSavingPhotos: Bool
-    @State private var hasSavedPhotos: Bool
     @State private var opening: Bool
     @State private var alertMessage: String?
 
     init(
         product: ExportProduct,
         onOpened: @escaping () -> Void = { },
-        initialIsSavingPhotos: Bool = false,
-        initialHasSavedPhotos: Bool = false,
         initialOpening: Bool = false
     ) {
         self.product = product
         self.onOpened = onOpened
-        _isSavingPhotos = State(initialValue: initialIsSavingPhotos)
-        _hasSavedPhotos = State(initialValue: initialHasSavedPhotos)
         _opening = State(initialValue: initialOpening)
     }
 
@@ -36,9 +30,6 @@ struct FruitsExportView: View {
                 .accessibilityHidden(true)
             FruitsExportLayout(
                 product: product,
-                isSavingPhotos: isSavingPhotos,
-                hasSavedPhotos: hasSavedPhotos,
-                onSave: savePhotos,
                 onCopy: copy
             )
         }
@@ -60,17 +51,15 @@ struct FruitsExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if hasSavedPhotos {
-                ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: opening) {
-                    startPiPAndOpenFruits()
-                }
-                .disabled(opening)
-                .accessibilityIdentifier("export.fruits.open")
-                .padding(.horizontal, 33)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                .background(.white)
+            ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: opening) {
+                startPiPAndOpenFruits()
             }
+            .disabled(opening)
+            .accessibilityIdentifier("export.fruits.open")
+            .padding(.horizontal, 33)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .background(.white)
         }
         .onDisappear {
             if phase == .active {
@@ -89,19 +78,6 @@ struct FruitsExportView: View {
 
     private func copy(_ field: ProductCopyField) {
         ClipboardWriter().copyText(product.marketplacePayload.value(for: field))
-    }
-
-    private func savePhotos() {
-        isSavingPhotos = true
-        Task {
-            do {
-                try await FruitsPhotoLibraryWriter().save(photos: product.exportPhotos)
-                hasSavedPhotos = true
-            } catch {
-                alertMessage = error.localizedDescription
-            }
-            isSavingPhotos = false
-        }
     }
 
     private func startPiPAndOpenFruits() {
@@ -139,36 +115,20 @@ struct FruitsExportView: View {
     }
 }
 
-#Preview("저장 전") {
+#Preview("기본") {
     NavigationStack {
         FruitsExportView(product: .fruitsPreview)
     }
 }
 
-#Preview("저장 중") {
+#Preview("긴 내용") {
     NavigationStack {
-        FruitsExportView(product: .fruitsPreview, initialIsSavingPhotos: true)
-    }
-}
-
-#Preview("저장 완료") {
-    NavigationStack {
-        FruitsExportView(product: .fruitsPreview, initialHasSavedPhotos: true)
-    }
-}
-
-#Preview("저장 완료 - 긴 내용") {
-    NavigationStack {
-        FruitsExportView(product: .fruitsLongPreview, initialHasSavedPhotos: true)
+        FruitsExportView(product: .fruitsLongPreview)
     }
 }
 
 #Preview("앱 여는 중") {
     NavigationStack {
-        FruitsExportView(
-            product: .fruitsPreview,
-            initialHasSavedPhotos: true,
-            initialOpening: true
-        )
+        FruitsExportView(product: .fruitsPreview, initialOpening: true)
     }
 }
