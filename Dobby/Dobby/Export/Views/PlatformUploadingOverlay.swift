@@ -41,3 +41,10 @@ private struct PlatformUploadingContent: View {
     Color.white.ignoresSafeArea()
         .overlay { PlatformUploadingOverlay(platformName: "인스타그램") }
 }
+
+#Preview("업로드 중 · 콘텐츠", traits: .sizeThatFitsLayout) {
+    PlatformUploadingContent()
+        .frame(width: 402)
+        .padding(.vertical)
+        .background(Color.black.opacity(0.6))
+}

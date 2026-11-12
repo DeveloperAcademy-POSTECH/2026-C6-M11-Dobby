@@ -6,7 +6,7 @@ struct InstagramConnectionView: View {
     let onConnect: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 48) {
+        VStack(alignment: .leading, spacing: 0) {
             InstagramConnectionHeader()
 
             Spacer(minLength: 0)
@@ -15,15 +15,16 @@ struct InstagramConnectionView: View {
         }
         .frame(maxWidth: 362, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 20)
-        .padding(.top, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 38)
         .frame(maxWidth: .infinity, alignment: .top)
-        .background(Color(.brandNeutral50).ignoresSafeArea())
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
     }
 }
 
 private struct InstagramConnectionHeader: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 48) {
             Text("먼저 인스타그램 프로페셔널\n계정과 연결이 필요해요")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(Color(.brandNeutralBlack))
@@ -60,8 +61,7 @@ private struct InstagramConnectionActions: View {
             Button(action: onConnect) {
                 HStack(alignment: .center, spacing: 12) {
                     if isLoading {
-                        ProgressView()
-                            .tint(Color(.brandNeutralWhite))
+                        ChakLoadingIndicator(tint: Color(.brandNeutralWhite))
                             .frame(width: 30, height: 30)
                     } else {
                         Image("InstagramLogo")
@@ -107,7 +107,30 @@ private struct InstagramConnectionActions: View {
     InstagramConnectionView(isLoading: true, errorMessage: nil, onConnect: {})
 }
 
-#Preview("좁은 화면") {
-    InstagramConnectionView(isLoading: false, errorMessage: nil, onConnect: {})
-        .frame(width: 320, height: 568)
+#Preview("계정 연결 · 제목과 안내", traits: .sizeThatFitsLayout) {
+    InstagramConnectionHeader()
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("계정 연결 · 안내 문구", traits: .sizeThatFitsLayout) {
+    InstagramConnectionInstructions()
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("계정 연결 · 버튼", traits: .sizeThatFitsLayout) {
+    InstagramConnectionActions(isLoading: false, onConnect: {})
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("계정 연결 · 로딩 버튼", traits: .sizeThatFitsLayout) {
+    InstagramConnectionActions(isLoading: true, onConnect: {})
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
 }

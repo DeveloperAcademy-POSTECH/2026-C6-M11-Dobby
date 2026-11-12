@@ -96,11 +96,7 @@ struct DetailPhotoLibrarySavingOverlay: View {
             .frame(width: 22, height: 22)
             .transaction { $0.animation = nil }
         } else {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .controlSize(.regular)
-                .tint(Color("BrandNeutral400"))
-                .scaleEffect(1.2)
+            ChakLoadingIndicator(tint: Color("BrandNeutral400"))
         }
     }
 
