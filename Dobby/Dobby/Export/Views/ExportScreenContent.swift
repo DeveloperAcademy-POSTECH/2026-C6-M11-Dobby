@@ -21,9 +21,6 @@ struct ExportScreenContent<Content: View>: View {
 
 #Preview("내보내기 화면 본문") {
     ExportScreenContent {
-        ExportInfoBanner(text: "연결된 계정으로 게시물이 자동 업로드돼요.")
-        ExportSectionCard(title: "상품 정보", subtitle: "업로드 전에 내용을 확인해 주세요.") {
-            ExportProductSummary(product: .instagramPreview, photoCount: 3)
-        }
+        ExportSectionCard(title: "상품 정보", subtitle: "업로드 전에 내용을 확인해 주세요.") {}
     }
 }
