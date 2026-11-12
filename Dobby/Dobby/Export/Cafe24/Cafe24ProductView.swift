@@ -133,13 +133,14 @@ private struct Cafe24ProductDescriptionField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품 설명", onReset: onReset)
-            TextEditor(text: $text)
+            TextField("상품 설명", text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
                 .font(.body)
                 .foregroundStyle(Color(.brandNeutral800))
-                .scrollContentBackground(.hidden)
+                .lineLimit(1...)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .frame(minHeight: 140)
+                .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
                 .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
         }
     }
