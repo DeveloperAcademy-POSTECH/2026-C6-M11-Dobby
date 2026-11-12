@@ -60,8 +60,7 @@ private struct InstagramConnectionActions: View {
             Button(action: onConnect) {
                 HStack(alignment: .center, spacing: 12) {
                     if isLoading {
-                        ProgressView()
-                            .tint(Color(.brandNeutralWhite))
+                        ChakLoadingIndicator(tint: Color(.brandNeutralWhite))
                             .frame(width: 30, height: 30)
                     } else {
                         Image("InstagramLogo")
