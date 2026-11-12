@@ -137,3 +137,34 @@ private struct InstagramCompletionText: View {
 #Preview("인스타그램 연결 완료") {
     InstagramConnectionCompletionView(onOpenLibrary: {}, onContinueToUpload: {})
 }
+
+#Preview("연결 완료 · 전체 콘텐츠") {
+    InstagramCompletionContent(
+        icon: .instagramConnectionCompletionIcon,
+        title: "인스타그램 연결 완료!",
+        message: "인스타그램 프로페셔널 계정과\n성공적으로 연결을 완료했어요",
+        secondary: .init(title: "보관함으로 가기", action: {}),
+        primary: .init(title: "업로드하러 가기", action: {}),
+        primaryFontSize: 17
+    )
+}
+
+#Preview("연결 완료 · 요약", traits: .sizeThatFitsLayout) {
+    InstagramCompletionSummary(
+        icon: .instagramConnectionCompletionIcon,
+        title: "인스타그램 연결 완료!",
+        message: "인스타그램 프로페셔널 계정과\n성공적으로 연결을 완료했어요"
+    )
+    .padding()
+    .background(Color(.brandNeutral50))
+}
+
+#Preview("연결 완료 · 문구", traits: .sizeThatFitsLayout) {
+    InstagramCompletionText(
+        title: "인스타그램 연결 완료!",
+        message: "인스타그램 프로페셔널 계정과\n성공적으로 연결을 완료했어요"
+    )
+    .frame(width: 362)
+    .padding()
+    .background(Color(.brandNeutral50))
+}

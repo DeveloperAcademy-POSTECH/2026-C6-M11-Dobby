@@ -105,3 +105,31 @@ private struct InstagramConnectionActions: View {
 #Preview("계정 연결 중") {
     InstagramConnectionView(isLoading: true, errorMessage: nil, onConnect: {})
 }
+
+#Preview("계정 연결 · 제목과 안내", traits: .sizeThatFitsLayout) {
+    InstagramConnectionHeader()
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("계정 연결 · 안내 문구", traits: .sizeThatFitsLayout) {
+    InstagramConnectionInstructions()
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("계정 연결 · 버튼", traits: .sizeThatFitsLayout) {
+    InstagramConnectionActions(isLoading: false, onConnect: {})
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("계정 연결 · 로딩 버튼", traits: .sizeThatFitsLayout) {
+    InstagramConnectionActions(isLoading: true, onConnect: {})
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
