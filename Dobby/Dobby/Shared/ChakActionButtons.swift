@@ -76,10 +76,11 @@ private struct ChakActionButton: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, horizontalPadding)
                 .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+                .background(backgroundColor, in: Capsule())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .foregroundStyle(foregroundColor)
-        .background(backgroundColor, in: Capsule())
         .accessibilityIdentifier(configuration.accessibilityIdentifier ?? "")
     }
 }
