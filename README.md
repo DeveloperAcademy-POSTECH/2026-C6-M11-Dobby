@@ -142,28 +142,28 @@
     <td width="16%" align="center"><img src="assets/readme/iris.png" width="80" alt="Iris 아이리스 프로필"></td>
   </tr>
   <tr>
-    <th align="center"><sub>Mason</sub></th>
-    <th align="center"><sub>Tobae</sub></th>
-    <th align="center"><sub>Mugu</sub></th>
-    <th align="center"><sub>Ichi</sub></th>
-    <th align="center"><sub>Ddoechii</sub></th>
-    <th align="center"><sub>Iris</sub></th>
+    <th align="center">Mason</th>
+    <th align="center">Tobae</th>
+    <th align="center">Mugu</th>
+    <th align="center">Ichi</th>
+    <th align="center">Ddoechii</th>
+    <th align="center">Iris</th>
   </tr>
   <tr>
-    <td align="center"><sub>메이슨</sub></td>
-    <td align="center"><sub>토바에</sub></td>
-    <td align="center"><sub>무구</sub></td>
-    <td align="center"><sub>이치</sub></td>
-    <td align="center"><sub>또치</sub></td>
-    <td align="center"><sub>아이리스</sub></td>
+    <td align="center">메이슨</td>
+    <td align="center">토바에</td>
+    <td align="center">무구</td>
+    <td align="center">이치</td>
+    <td align="center">또치</td>
+    <td align="center">아이리스</td>
   </tr>
   <tr>
-    <td align="center"><sub>PM&nbsp;·&nbsp;Developer</sub></td>
-    <td align="center"><sub>Developer</sub></td>
-    <td align="center"><sub>Developer</sub></td>
-    <td align="center"><sub>Developer</sub></td>
-    <td align="center"><sub>Designer</sub></td>
-    <td align="center"><sub>Designer</sub></td>
+    <td align="center">PM&nbsp;·&nbsp;Developer</td>
+    <td align="center">Developer</td>
+    <td align="center">Developer</td>
+    <td align="center">Developer</td>
+    <td align="center">Designer</td>
+    <td align="center">Designer</td>
   </tr>
   <tr>
     <td align="center" valign="top"><sub>프로젝트 운영<br>일정·범위 조율<br>상세 촬영</sub></td>
