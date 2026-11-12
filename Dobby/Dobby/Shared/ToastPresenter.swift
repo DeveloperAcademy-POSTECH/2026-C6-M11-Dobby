@@ -25,13 +25,14 @@ final class ToastPresenter {
 
 private struct ToastModifier: ViewModifier {
     @State private var presenter = ToastPresenter()
+    let bottomPadding: CGFloat
 
     func body(content: Content) -> some View {
         content
             .environment(presenter)
             .overlay(alignment: .bottom) {
                 ToastOverlay(presenter: presenter)
-                    .padding(.bottom, 84)
+                    .padding(.bottom, bottomPadding)
             }
     }
 }
@@ -60,7 +61,7 @@ private struct ToastOverlay: View {
 }
 
 extension View {
-    func toast() -> some View {
-        modifier(ToastModifier())
+    func toast(bottomPadding: CGFloat = 84) -> some View {
+        modifier(ToastModifier(bottomPadding: bottomPadding))
     }
 }

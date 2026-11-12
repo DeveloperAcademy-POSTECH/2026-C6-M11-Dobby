@@ -5,19 +5,19 @@ struct FruitsCopyCard: View {
     let onCopy: (ProductCopyField) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 17) {
             FruitsCopyFieldView(
                 field: .productName,
                 value: product.marketplacePayload.productName,
                 onCopy: onCopy
             )
-            Divider().overlay(Color("BrandNeutral200"))
+            FruitsCopyDivider()
             FruitsCopyFieldView(
                 field: .description,
                 value: product.marketplacePayload.description,
                 onCopy: onCopy
             )
-            Divider().overlay(Color("BrandNeutral200"))
+            FruitsCopyDivider()
             FruitsCopyFieldView(
                 field: .brand,
                 value: product.marketplacePayload.brand,
@@ -25,10 +25,22 @@ struct FruitsCopyCard: View {
             )
         }
         .padding(.horizontal, 16)
-        .background(Color("BrandNeutral100"))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.top, 20)
+        .padding(.bottom, 16)
+        .frame(maxWidth: 360, alignment: .topLeading)
+        .background(Color("BrandNeutral50"))
+        .cornerRadius(16)
     }
+}
 
+private struct FruitsCopyDivider: View {
+    var body: some View {
+        Rectangle()
+            .foregroundStyle(.clear)
+            .frame(maxWidth: .infinity)
+            .frame(height: 1)
+            .background(Color("BrandNeutral200"))
+    }
 }
 
 #Preview {

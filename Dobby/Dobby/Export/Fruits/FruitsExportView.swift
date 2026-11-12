@@ -34,7 +34,7 @@ struct FruitsExportView: View {
                 onCopy: copy
             )
         }
-        .background(.white)
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
         .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -52,15 +52,9 @@ struct FruitsExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: opening) {
+            FruitsExportBottomAction(isLoading: opening) {
                 startPiPAndOpenFruits()
             }
-            .disabled(opening)
-            .accessibilityIdentifier("export.fruits.open")
-            .padding(.horizontal, 33)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .background(.white)
         }
         .onDisappear {
             if phase == .active {
@@ -114,6 +108,26 @@ struct FruitsExportView: View {
                 }
             }
         }
+    }
+}
+
+private struct FruitsExportBottomAction: View {
+    let isLoading: Bool
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: isLoading) {
+                action()
+            }
+                .disabled(isLoading)
+                .accessibilityIdentifier("export.fruits.open")
+        }
+        .padding(.horizontal, 33)
+        .padding(.top, 16)
+        .padding(.bottom, 34)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(.brandNeutralWhite))
     }
 }
 

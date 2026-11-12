@@ -60,7 +60,7 @@ struct ExportView: View {
                 }
             }
         }
-        .toast()
+        .toast(bottomPadding: 112)
         .alert("플랫폼 기록을 저장하지 못했어요", isPresented: Binding(
             get: { selectionSaveError != nil },
             set: { if !$0 { selectionSaveError = nil } }

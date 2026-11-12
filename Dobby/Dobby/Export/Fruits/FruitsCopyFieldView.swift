@@ -10,24 +10,26 @@ struct FruitsCopyFieldView: View {
             onCopy(field)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
+                HStack(alignment: .center) {
                     Text(title)
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.labelPrimary)
-                    Image(systemName: "document.on.document")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color("BrandPrimary100"))
+                    Spacer()
+                    Image("ci:copy")
+                        .renderingMode(.template)
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(Color("BrandNeutralBlack"))
                 }
                 Text(value)
-                    .font(.system(size: 14))
+                    .font(.system(size: 15))
                     .foregroundColor(.labelPrimary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(field == .description ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .frame(maxWidth: 328, alignment: .topLeading)
             .foregroundStyle(.primary)
-            .padding(.vertical, 16)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

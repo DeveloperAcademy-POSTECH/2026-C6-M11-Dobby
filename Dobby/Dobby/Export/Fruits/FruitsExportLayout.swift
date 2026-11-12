@@ -7,15 +7,14 @@ struct FruitsExportLayout: View {
     var body: some View {
         ViewThatFits(in: .vertical) {
             FruitsExportContent(product: product, onCopy: onCopy)
-                .padding(.top, 28)
                 .fixedSize(horizontal: false, vertical: true)
 
             ScrollView {
                 FruitsExportContent(product: product, onCopy: onCopy)
-                    .padding(.top, 28)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color(.brandNeutralWhite))
     }
 }
 
