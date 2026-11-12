@@ -130,48 +130,38 @@
 
 ## 👥 Team
 
-<!-- 이름에 프로필 링크를 연결할 때는 <a href="URL">이름</a> 형식 사용 -->
-
 <table width="100%">
   <tr>
-    <td width="16%" align="center"><img src="assets/readme/mason.png" width="80" alt="Mason 메이슨 프로필"></td>
-    <td width="16%" align="center"><img src="assets/readme/tobae.png" width="80" alt="Tobae 토바에 프로필"></td>
-    <td width="16%" align="center"><img src="assets/readme/mugu.png" width="80" alt="Mugu 무구 프로필"></td>
-    <td width="16%" align="center"><img src="assets/readme/ichi.png" width="80" alt="Ichi 이치 프로필"></td>
-    <td width="16%" align="center"><img src="assets/readme/ddoechii.png" width="80" alt="Ddoechii 또치 프로필"></td>
-    <td width="16%" align="center"><img src="assets/readme/iris.png" width="80" alt="Iris 아이리스 프로필"></td>
+    <td width="160" align="center"><img src="assets/readme/mason.png" width="80" alt="이민혁 Mason 프로필"></td>
+    <td width="160" align="center"><img src="assets/readme/tobae.png" width="80" alt="박지원 Tobae 프로필"></td>
+    <td width="160" align="center"><img src="assets/readme/mugu.png" width="80" alt="정무구 Mugu 프로필"></td>
+    <td width="160" align="center"><img src="assets/readme/ichi.png" width="80" alt="오하나 Ichi 프로필"></td>
+    <td width="160" align="center"><img src="assets/readme/ddoechii.png" width="80" alt="윤현주 Ddoechii 프로필"></td>
+    <td width="160" align="center"><img src="assets/readme/iris.png" width="80" alt="박채은 Iris 프로필"></td>
   </tr>
   <tr>
-    <th align="center">Mason</th>
-    <th align="center">Tobae</th>
-    <th align="center">Mugu</th>
-    <th align="center">Ichi</th>
-    <th align="center">Ddoechii</th>
-    <th align="center">Iris</th>
+    <th align="center"><a href="https://github.com/decl5th">이민혁</a></th>
+    <th align="center"><a href="https://github.com/tobae-time">박지원</a></th>
+    <th align="center"><a href="https://github.com/moogoochung">정무구</a></th>
+    <th align="center"><a href="https://github.com/hana5111">오하나</a></th>
+    <th align="center"><a href="https://github.com/qoqoqle">윤현주</a></th>
+    <th align="center"><a href="https://github.com/takechaens">박채은</a></th>
   </tr>
   <tr>
-    <td align="center">메이슨</td>
-    <td align="center">토바에</td>
-    <td align="center">무구</td>
-    <td align="center">이치</td>
-    <td align="center">또치</td>
-    <td align="center">아이리스</td>
+    <td align="center"><div>&#8203;<sub>Mason&nbsp;·&nbsp;메&#8288;이&#8288;슨</sub></div></td>
+    <td align="center"><div>&#8203;<sub>Tobae&nbsp;·&nbsp;토&#8288;바&#8288;에</sub></div></td>
+    <td align="center"><div>&#8203;<sub>Mugu&nbsp;·&nbsp;무&#8288;구</sub></div></td>
+    <td align="center"><div>&#8203;<sub>Ichi&nbsp;·&nbsp;이&#8288;치</sub></div></td>
+    <td align="center"><div>&#8203;<sub>Ddoechii&nbsp;·&nbsp;또&#8288;치</sub></div></td>
+    <td align="center"><div>&#8203;<sub>Iris&nbsp;·&nbsp;아&#8288;이&#8288;리&#8288;스</sub></div></td>
   </tr>
   <tr>
-    <td align="center">PM&nbsp;·&nbsp;Developer</td>
-    <td align="center">Developer</td>
-    <td align="center">Developer</td>
-    <td align="center">Developer</td>
-    <td align="center">Designer</td>
-    <td align="center">Designer</td>
-  </tr>
-  <tr>
-    <td align="center" valign="top"><sub>프로젝트 운영<br>일정·범위 조율<br>상세 촬영</sub></td>
-    <td align="center" valign="top"><sub>플랫폼 연동<br>설정</sub></td>
-    <td align="center" valign="top"><sub>LiDAR 실측<br>사진 업로드<br>공통 UI</sub></td>
-    <td align="center" valign="top"><sub>Garment ML<br>보관함<br>상품 정보 입력</sub></td>
-    <td align="center" valign="top"><sub>UX/UI 디자인</sub></td>
-    <td align="center" valign="top"><sub>UX/UI 디자인</sub></td>
+    <td align="center" valign="top">🎯&nbsp;PM<br>💻&nbsp;Developer</td>
+    <td align="center" valign="top">💻&nbsp;Developer</td>
+    <td align="center" valign="top">💻&nbsp;Developer</td>
+    <td align="center" valign="top">💻&nbsp;Developer</td>
+    <td align="center" valign="top">🎨&nbsp;Designer</td>
+    <td align="center" valign="top">🎨&nbsp;Designer</td>
   </tr>
 </table>
 
@@ -187,6 +177,5 @@
 게시 전 확인
 - 기능별 화면 이미지 추가
 - 공개 빌드의 기능 범위와 기술 스택 대조
-- 팀원 프로필 링크 확인
 - 시연 영상 URL 연결
 -->
