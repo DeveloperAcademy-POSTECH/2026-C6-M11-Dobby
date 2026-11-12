@@ -39,8 +39,6 @@ struct Cafe24ConnectionView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.white)
             .background(Color(.label), in: RoundedRectangle(cornerRadius: 60))
-            .disabled(isLoading || normalizedMallID.isEmpty)
-            .opacity(normalizedMallID.isEmpty ? 0.45 : 1)
         }
         .padding(.horizontal, 20)
         .padding(.top, 24)
