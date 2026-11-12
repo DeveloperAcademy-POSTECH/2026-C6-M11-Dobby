@@ -7,12 +7,29 @@
 착은 빈티지숍 운영자를 위한 iOS 앱입니다.<br>
 한 벌의 사진과 실측, 상품 정보를 정리하고 판매 채널로 전달하는 과정을 돕습니다.
 
-**[App Store에서 chak(착) 다운로드](https://apps.apple.com/kr/app/chak-%EC%B0%A9/id6823445800)**
+<div align="center">
+
+<p>
+  <a href="https://apps.apple.com/kr/app/chak-%EC%B0%A9/id6823445800">
+    <img src="assets/readme/app-icon.svg" width="80" alt="chak(착) 앱 아이콘 — App Store에서 다운로드">
+  </a>
+</p>
+
+<p><strong>chak(착)</strong></p>
+
+<!-- Apple 공식 다운로드 배지 원본: https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg -->
+<p>
+  <a href="https://apps.apple.com/kr/app/chak-%EC%B0%A9/id6823445800">
+    <img src="assets/readme/app-store-badge.svg" height="40" alt="Download on the App Store">
+  </a>
+</p>
 
 ![iOS 26.4+](https://img.shields.io/badge/iOS-26.4%2B-000000?style=flat&logo=apple&logoColor=white&labelColor=000000)
 ![App 1.0.0](https://img.shields.io/badge/App-1.0.0-E34825?style=flat&labelColor=E34825)
 
 <sub>앱 버전은 현재 프로젝트 설정 기준입니다.</sub>
+
+</div>
 
 ---
 
@@ -101,13 +118,75 @@
 
 ## 👥 Team
 
-<!-- 이름에 프로필 링크를 연결할 때는 [이름](URL) 형식 사용 -->
+<!-- 이름에 프로필 링크를 연결할 때는 <a href="URL">이름</a> 형식 사용 -->
 
-| Mason · 메이슨 | Tobae · 토바에 | Mugu · 무구 | Ichi · 이치 | Ddoechii · 또치 | Iris · 아이리스 |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| <img src="assets/readme/mason.png" width="100" alt="Mason 메이슨 프로필"> | <img src="assets/readme/tobae.png" width="100" alt="Tobae 토바에 프로필"> | <img src="assets/readme/mugu.png" width="100" alt="Mugu 무구 프로필"> | <img src="assets/readme/ichi.png" width="100" alt="Ichi 이치 프로필"> | <img src="assets/readme/ddoechii.png" width="100" alt="Ddoechii 또치 프로필"> | <img src="assets/readme/iris.png" width="100" alt="Iris 아이리스 프로필"> |
-| PM · Developer | Developer | PM · Developer | Developer · Designer | Designer | Designer |
-| 프로젝트 운영<br>일정·범위 조율<br>상세 촬영 | 판매 플랫폼 연동<br>설정 | LiDAR 실측<br>사진 업로드<br>공통 UI | Garment ML<br>보관함<br>상품 정보 입력 | UX/UI 디자인 | UX/UI 디자인 |
+<table>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <img src="assets/readme/mason.png" width="100" alt="Mason 메이슨 프로필"><br>
+      <strong>Mason&nbsp;·&nbsp;메이슨</strong>
+      <p>PM · Developer</p>
+      <p align="left"><strong>담당 업무</strong></p>
+      <ul align="left">
+        <li>프로젝트&nbsp;운영</li>
+        <li>일정·범위&nbsp;조율</li>
+        <li>상세&nbsp;촬영</li>
+      </ul>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="assets/readme/tobae.png" width="100" alt="Tobae 토바에 프로필"><br>
+      <strong>Tobae&nbsp;·&nbsp;토바에</strong>
+      <p>Developer</p>
+      <p align="left"><strong>담당 업무</strong></p>
+      <ul align="left">
+        <li>판매&nbsp;플랫폼&nbsp;연동</li>
+        <li>설정</li>
+      </ul>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="assets/readme/mugu.png" width="100" alt="Mugu 무구 프로필"><br>
+      <strong>Mugu&nbsp;·&nbsp;무구</strong>
+      <p>Developer</p>
+      <p align="left"><strong>담당 업무</strong></p>
+      <ul align="left">
+        <li>LiDAR&nbsp;실측</li>
+        <li>사진&nbsp;업로드</li>
+        <li>공통&nbsp;UI</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <img src="assets/readme/ichi.png" width="100" alt="Ichi 이치 프로필"><br>
+      <strong>Ichi&nbsp;·&nbsp;이치</strong>
+      <p>Developer</p>
+      <p align="left"><strong>담당 업무</strong></p>
+      <ul align="left">
+        <li>Garment&nbsp;ML</li>
+        <li>보관함</li>
+        <li>상품&nbsp;정보&nbsp;입력</li>
+      </ul>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="assets/readme/ddoechii.png" width="100" alt="Ddoechii 또치 프로필"><br>
+      <strong>Ddoechii&nbsp;·&nbsp;또치</strong>
+      <p>Designer</p>
+      <p align="left"><strong>담당 업무</strong></p>
+      <ul align="left">
+        <li>UX/UI&nbsp;디자인</li>
+      </ul>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <img src="assets/readme/iris.png" width="100" alt="Iris 아이리스 프로필"><br>
+      <strong>Iris&nbsp;·&nbsp;아이리스</strong>
+      <p>Designer</p>
+      <p align="left"><strong>담당 업무</strong></p>
+      <ul align="left">
+        <li>UX/UI&nbsp;디자인</li>
+      </ul>
+    </td>
+  </tr>
+</table>
 
 ---
 
