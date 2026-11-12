@@ -7,15 +7,8 @@ struct Cafe24ConnectionView: View {
     @State private var mallID = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("처음이신가요?")
-                .font(.subheadline)
-            Text("가지고 계신 카페24 계정과 연결할게요")
-                .font(.title3.bold())
-                .fixedSize(horizontal: false, vertical: true)
-            Text("먼저 카페24 ID를 입력하고 아래 버튼을 눌러\n계정 연결을 완료해주세요.")
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 0) {
+            Cafe24ConnectionHeader()
 
             Spacer()
                 .frame(height: 102)
@@ -40,12 +33,57 @@ struct Cafe24ConnectionView: View {
             .foregroundStyle(.white)
             .background(Color(.label), in: RoundedRectangle(cornerRadius: 60))
         }
+        .frame(maxWidth: 362, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 20)
         .padding(.top, 24)
-        .background(Color(.brandNeutral50).ignoresSafeArea())
+        .padding(.bottom, 34)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
     }
 
     private var normalizedMallID: String {
         mallID.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+private struct Cafe24ConnectionHeader: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 48) {
+            Text("가지고 계신 카페24 계정과 \n연결할게요")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(Color(.brandNeutralBlack))
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("먼저 카페24 ID를 입력하고 아래 버튼을 눌러\n계정 연결을 완료해주세요.")
+                .font(.body.weight(.regular))
+                .foregroundStyle(Color(.brandNeutral600))
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+#Preview("계정 연결 전") {
+    Cafe24ConnectionView(
+        isLoading: false,
+        errorMessage: nil,
+        onConnect: { _ in }
+    )
+}
+
+#Preview("계정 연결 중") {
+    Cafe24ConnectionView(
+        isLoading: true,
+        errorMessage: nil,
+        onConnect: { _ in }
+    )
+}
+
+#Preview("계정 연결 · 제목과 안내", traits: .sizeThatFitsLayout) {
+    Cafe24ConnectionHeader()
+        .frame(width: 362)
+        .padding()
+        .background(Color(.brandNeutralWhite))
 }
