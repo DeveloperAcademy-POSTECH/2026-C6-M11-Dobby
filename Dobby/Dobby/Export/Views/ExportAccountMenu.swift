@@ -90,3 +90,23 @@ private struct ExportAccountMenuButton: View {
             }
     }
 }
+
+#Preview("계정 메뉴 · 항목", traits: .sizeThatFitsLayout) {
+    VStack(spacing: 0) {
+        ExportAccountMenuButton(
+            title: "다시 연결하기",
+            systemImage: "arrow.clockwise",
+            action: {}
+        )
+
+        ExportAccountMenuButton(
+            title: "연결 해제하기",
+            systemImage: "personalhotspot.slash",
+            tint: Color(.accentsRed),
+            action: {}
+        )
+    }
+    .padding(.vertical, 10)
+    .frame(width: 238)
+    .background(Color(.brandNeutralWhite))
+}

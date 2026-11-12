@@ -143,3 +143,21 @@ private extension String {
     }
     .background(Color(.brandNeutral50))
 }
+
+#Preview("상품 썸네일", traits: .sizeThatFitsLayout) {
+    let imageData = UIImage(named: "LaunchSplashJacket")?.jpegData(compressionQuality: 0.9)
+
+    ExportProductThumbnail(imageData: imageData)
+        .frame(width: 175, height: 233)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+}
+
+#Preview("상품 정보", traits: .sizeThatFitsLayout) {
+    ExportProductItemMetadata(
+        name: "베이프 카모플라주 후드 셔츠 재킷",
+        brand: "Bape",
+        priceText: "155,000원"
+    )
+    .frame(width: 175)
+    .background(Color(.brandNeutral50))
+}

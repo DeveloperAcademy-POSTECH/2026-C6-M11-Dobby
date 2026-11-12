@@ -41,3 +41,27 @@ private struct ExportChannelSection: View {
     ExportChannelListView(completedChannels: [], onSelectChannel: { _ in })
         .padding(30)
 }
+
+#Preview("자동 업로드 섹션", traits: .sizeThatFitsLayout) {
+    ExportChannelSection(
+        title: "자동 업로드",
+        channels: [.instagram, .cafe24],
+        completedChannels: [.instagram],
+        onSelectChannel: { _ in }
+    )
+    .frame(width: 337)
+    .padding()
+    .background(Color(.brandNeutralWhite))
+}
+
+#Preview("복사해서 옮기기 섹션", traits: .sizeThatFitsLayout) {
+    ExportChannelSection(
+        title: "복사해서 옮기기",
+        channels: [.fruitsFamily],
+        completedChannels: [],
+        onSelectChannel: { _ in }
+    )
+    .frame(width: 337)
+    .padding()
+    .background(Color(.brandNeutralWhite))
+}

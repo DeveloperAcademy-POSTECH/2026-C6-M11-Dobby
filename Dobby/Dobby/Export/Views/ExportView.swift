@@ -137,3 +137,13 @@ private struct ExportContentView: View {
 #Preview {
     ExportView(product: .demo, showFruits: .constant(false))
 }
+
+#Preview("플랫폼 업로드 · 본문", traits: .sizeThatFitsLayout) {
+    ExportContentView(
+        product: .demo,
+        completedChannels: [.instagram],
+        onSelectChannel: { _ in }
+    )
+    .frame(width: 402)
+    .background(Color(.brandNeutralWhite))
+}
