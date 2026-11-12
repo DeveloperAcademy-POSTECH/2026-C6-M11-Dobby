@@ -6,6 +6,65 @@ import XCTest
 
 @MainActor
 final class ProductAutofillClientTests: XCTestCase {
+    func testProductFlowDefaultUsesWebPipelineWithoutLaunchFlag() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let photos = try makePhotos(count: 3, directory: directory)
+        let draft = ProductAutofillDraft(productName: "그래픽 긴팔 티셔츠", brand: nil,
+            description: "- 등판에 식당 그래픽이 있습니다.", reviewNotes: [])
+        let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft), endpoint: ProductAutofillEndpoints.generation)
+        defer { stub.remove() }
+        let client = ProductAutofillClient(session: stub.session, bearerTokenProvider: { "fixture-token" })
+        let result = try await client.generate(photos: photos)
+        XCTAssertEqual(result, draft)
+        XCTAssertEqual(stub.request?.url?.path, "/v1/garments/autofill-web-detection")
+        XCTAssertEqual(stub.requestCount, 1)
+        let body = try XCTUnwrap(stub.request?.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertNil(json["labelCrops"])
+    }
+
+    func testWebDetectionRequestSkipsOCRPreflightAndKeepsStandardPhotoBudget() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let photos = try makePhotos(count: 5, directory: directory)
+        let endpoint = URL(string: "https://autofill-test.invalid/v1/garments/autofill-web-detection")!
+        let draft = ProductAutofillDraft(productName: "데님 셔츠", brand: "CLIQUE",
+            description: "- 스냅 버튼과 가슴 자수", reviewNotes: [])
+        let stub = AutofillHTTPStub(status: 200, body: try JSONEncoder().encode(draft), endpoint: endpoint)
+        defer { stub.remove() }
+        let client = ProductAutofillClient(endpoint: endpoint, session: stub.session,
+            bearerTokenProvider: { "fixture-token" })
+        let result = try await client.generate(photos: photos)
+        XCTAssertEqual(result, draft)
+        XCTAssertEqual(stub.requestCount, 1)
+        let body = try XCTUnwrap(stub.request?.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertNil(json["labelCrops"])
+        let uploaded = try XCTUnwrap(json["photos"] as? [[String: String]])
+        XCTAssertEqual(uploaded.count, 5)
+        XCTAssertEqual(uploaded.compactMap { $0["id"] }, photos.map { $0.id.uuidString })
+        for photo in uploaded {
+            let dataURL = try XCTUnwrap(photo["imageDataUrl"])
+            let data = try XCTUnwrap(Data(base64Encoded: String(dataURL.split(separator: ",")[1])))
+            XCTAssertLessThanOrEqual(data.count, ProductAutofillPhotoEncoder.maximumPhotoBytes)
+        }
+        XCTAssertEqual(stub.request?.timeoutInterval, 95)
+    }
+
+    func testWebDetectionDiagnosticsAcceptTwoSearchesAndSeparateStages() throws {
+        let response = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://autofill-test.invalid/")!,
+            statusCode: 200, httpVersion: nil, headerFields: [
+                "X-Dobby-AI-Search-Calls": "2", "X-Dobby-AI-Web-Detection-Ms": "12000",
+                "X-Dobby-AI-Synthesis-Ms": "8000", "X-Dobby-AI-Brand-Reason": "web_detection_photo_comparison",
+            ]))
+        let activity = try XCTUnwrap(ProductAutofillDiagnostics.SearchActivity.read(response))
+        XCTAssertEqual(activity.completedCalls, 2)
+        XCTAssertEqual(activity.serverTimings?["Web-Detection"], 12000)
+        XCTAssertEqual(activity.serverTimings?["Synthesis"], 8000)
+        XCTAssertEqual(activity.brandReason, "web_detection_photo_comparison")
+    }
+
     func testLabelProcessUsesSameAuthorizationAndContinuesWithEmptyBrandEvidenceWhenNoRegionExists() async throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -450,7 +509,8 @@ private nonisolated final class AutofillURLProtocol: URLProtocol, @unchecked Sen
     static func register(_ stub: AutofillHTTPStub) { lock.withLock { stubs[stub.endpoint] = stub } }
     static func remove(_ url: URL) { lock.withLock { _ = stubs.removeValue(forKey: url) } }
     override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "autofill-test.invalid"
+        // Never let a request from the test session escape to the network.
+        true
     }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {

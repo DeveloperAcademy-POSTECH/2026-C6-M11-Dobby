@@ -1,3 +1,6 @@
+import { loadProductPageImage } from "./product-page-images.js";
+import { downloadComparisonImage } from "./comparison-images.js";
+import { WebDetectionError, runWebDetectionAutofill, searchWebDetection } from "./garment-web-detection.js";
 import { buildOpenAIRequest, DraftResponseError, parseOpenAIResponse } from "./garment-draft.js";
 import { locateBrandLabels, readCroppedBrandLabels } from "./brand-label-pilot.js";
 import { runProductAutofill } from "./garment-autofill.js";
@@ -46,9 +49,12 @@ function autofillHeaders(result) {
     "X-Dobby-AI-Search-Attempts": String(result.searchAttempts),
     "X-Dobby-AI-Research-Status": result.researchStatus,
   };
-  for (const [stage, name] of Object.entries({ identification: "Identification", label: "Label-Read", search: "Search", server: "Server" })) {
+  for (const [stage, name] of Object.entries({ identification: "Identification", label: "Label-Read", search: "Search", webDetection: "Web-Detection", synthesis: "Synthesis", server: "Server" })) {
     const value = result.stageTimings?.[stage];
     if (Number.isFinite(value) && value >= 0) headers[`X-Dobby-AI-${name}-Ms`] = String(Math.round(value));
+  }
+  if (["matched", "rejected", "not_found", "incomplete"].includes(result.detailedBrandStatus)) {
+    headers["X-Dobby-AI-Research-Brand-Status"] = result.detailedBrandStatus;
   }
   if (result.brandDecision) {
     headers["X-Dobby-AI-Brand-Status"] = result.brandDecision.status;
@@ -363,8 +369,8 @@ async function generateProductAutofill(photos, env, fetchImpl, timeoutMs, operat
   try {
     const requestResponse = async body => {
       const callStarted = Date.now();
-      const stage = ({ garment_identification: "identification", garment_cropped_label_readings: "label",
-        garment_brand_discovery: "search", garment_heritage: "search" })[body.text?.format?.name];
+      const stage = ({ garment_keyword_research: "search", garment_web_detection_selection: "identification", garment_web_detection_synthesis: "synthesis", garment_identification: "identification", garment_cropped_label_readings: "label",
+        garment_brand_discovery: "search", garment_heritage: "search", garment_detailed_research: "search" })[body.text?.format?.name];
       try {
         if (controller.signal.aborted) throw new Failure(504, "ai_timeout", "AI 응답 시간이 초과되었습니다. 다시 시도해 주세요.");
         const response = await fetchImpl(OPENAI_RESPONSES_URL, {
@@ -373,6 +379,26 @@ async function generateProductAutofill(photos, env, fetchImpl, timeoutMs, operat
           body: JSON.stringify(body), signal: controller.signal,
         });
         if (!response.ok) {
+          if (response.status === 400 && body.text?.format?.name === "garment_web_detection_synthesis") {
+            let detail;
+            try { detail = (await response.json())?.error; } catch { /* Never expose raw provider data. */ }
+            if (["invalid_image_url", "image_parse_error", "invalid_image", "image_download_failed", "failed_to_download_image", "invalid_image_format"].includes(detail?.code)
+              || detail?.code === "invalid_value" && detail?.param === "input") {
+              throw new Failure(502, "comparison_images_unavailable", "외부 비교 이미지를 가져오지 못했습니다.");
+            }
+            const failure = upstreamFailure(response.status);
+            const codes = new Set(["invalid_value", "invalid_request_error", "invalid_json_schema", "unsupported_parameter", "unsupported_value", "context_length_exceeded"]);
+            failure.headers = { "X-Dobby-AI-Failure-Stage": "synthesis", "X-Dobby-AI-Upstream-Status": String(response.status),
+              "X-Dobby-AI-Upstream-Code": codes.has(detail?.code) ? detail.code : "unknown" };
+            if (typeof detail?.param === "string" && /^[a-zA-Z0-9_.\[\]]{1,120}$/u.test(detail.param)) {
+              failure.headers["X-Dobby-AI-Upstream-Param"] = detail.param;
+            }
+            // Classify an image download error without exposing its URL or message.
+            if (typeof detail?.message === "string" && /(?:error while downloading|failed to download|timeout while downloading|invalid image|unsupported image)/iu.test(detail.message)) {
+              failure.headers["X-Dobby-AI-Image-Error"] = "1";
+            }
+            throw failure;
+          }
           if ((operation === locateBrandLabels || operation === readCroppedBrandLabels) && response.status === 400) {
             let failure;
             try { failure = (await response.json())?.error; } catch { /* Only allowlisted metadata is public. */ }
@@ -394,10 +420,25 @@ async function generateProductAutofill(photos, env, fetchImpl, timeoutMs, operat
         if (stage) stageTimings[stage] = (stageTimings[stage] || 0) + Date.now() - callStarted;
       }
     };
-    const result = await operation(photos, { requestResponse, onBrandDecision: decision => { brandDecision = decision; } });
+    const result = await operation(photos, { requestResponse, loadProductImage: url => loadProductPageImage(url, { fetchImpl, signal: controller.signal }), downloadImage: url => downloadComparisonImage(url, { fetchImpl, signal: controller.signal }), searchPhoto: photo => searchWebDetection(photo, { apiKey: env.GOOGLE_VISION_API_KEY, fetchImpl, signal: controller.signal }),
+      onWebDetectionTiming: ms => { stageTimings.webDetection = ms; }, onBrandDecision: decision => { brandDecision = decision; } });
     return result.draft ? { ...result, stageTimings: { ...stageTimings, server: Date.now() - started }, brandDecision } : result;
   } catch (error) {
     if (error instanceof Failure) throw error;
+    if (error instanceof WebDetectionError && !controller.signal.aborted) {
+      const messages = {
+        web_detection_configuration_error: [503, "Google Vision API 인증 또는 API 활성화 설정을 확인해 주세요."],
+        web_detection_rate_limited: [503, "Web Detection 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요."],
+        web_detection_image_too_large: [413, "검색용 사진은 2MiB 이하여야 합니다."],
+      };
+      const [status, message] = messages[error.code] || [502, "Web Detection 검색을 완료하지 못했습니다. 다시 시도해 주세요."];
+      const failure = new Failure(status, error.code, message);
+      failure.headers = {};
+      if (Number.isInteger(error.providerStatus)) failure.headers["X-Dobby-Vision-Status"] = String(error.providerStatus);
+      if (error.providerReason) failure.headers["X-Dobby-Vision-Reason"] = error.providerReason;
+      if (error.providerProject) failure.headers["X-Dobby-Vision-Project"] = error.providerProject;
+      throw failure;
+    }
     if (error instanceof DraftResponseError) {
       if ((operation === locateBrandLabels || operation === readCroppedBrandLabels)) {
         const codes = new Set(["INVALID_LABEL_ACTIVITY", "INVALID_LABEL_REGIONS", "INVALID_LABEL_REGION", "INVALID_LABEL_BOX",
@@ -433,7 +474,7 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000,
         if (path === "/health" && request.method === "GET") {
           return json({ service: "dobby-garment-ai", status: "ok" }, 200, requestId);
         }
-        if (!["/v1/garments/autofill-labels", "/v1/garments/brand-label-regions", "/v1/garments/brand-label-readings", "/v1/garments/autofill", "/v1/garments/landmarks", "/v2/garments/landmarks", "/v2/garments/landmark-refinement", "/v3/garments/landmarks", "/v3/garments/landmark-refinement", "/v4/garments/landmarks", "/v4/garments/landmark-refinement", "/v4/garments/length-refinement", "/v4/garments/neck-refinement", "/health"].includes(path)) {
+        if (!["/v1/garments/autofill-web-detection-test", "/v1/garments/autofill-research", "/v1/garments/autofill-web-detection", "/v1/garments/autofill-labels", "/v1/garments/brand-label-regions", "/v1/garments/brand-label-readings", "/v1/garments/autofill", "/v1/garments/landmarks", "/v2/garments/landmarks", "/v2/garments/landmark-refinement", "/v3/garments/landmarks", "/v3/garments/landmark-refinement", "/v4/garments/landmarks", "/v4/garments/landmark-refinement", "/v4/garments/length-refinement", "/v4/garments/neck-refinement", "/health"].includes(path)) {
           throw new Failure(404, "not_found", "요청 경로를 확인해 주세요.");
         }
         const method = path === "/health" ? "GET" : "POST";
@@ -446,10 +487,36 @@ export function createWorker({ fetchImpl = fetch, timeoutMs = 30000,
           await enforceAppUsageLimits(env, authentication.installationID);
         }
         const body = await readJSON(request);
-        if (path === "/v1/garments/autofill-labels") {
+        if (["/v1/garments/autofill-web-detection", "/v1/garments/autofill-web-detection-test"].includes(path)) {
+          if (!hasSecret(env.GOOGLE_VISION_API_KEY)) throw new Failure(503, "service_not_configured", "Google Vision API 키가 설정되지 않았습니다.");
+          if (!/^[\x21-\x7e]+$/u.test(env.GOOGLE_VISION_API_KEY)) {
+            const failure = new Failure(503, "web_detection_configuration_error", "등록한 Google Vision API 키 형식을 확인해 주세요.");
+            failure.headers = { "X-Dobby-Vision-Reason": "INVALID_KEY_FORMAT" };
+            throw failure;
+          }
+          const photos = validatePhotos(body);
+          const isTest = path.endsWith("-test");
+          const trace = { selectedPhotoIds: [], searches: [], synthesisAttempts: [],
+            brandPhotoId: null, brandObservedText: null, selectedSourceIds: [], comparisonFailed: false };
+          const operation = isTest ? (input, dependencies) => runWebDetectionAutofill(input,
+            { ...dependencies, diagnostics: trace }) : runWebDetectionAutofill;
+          try {
+            const result = await generateProductAutofill(photos, env, fetchImpl, 85000, operation);
+            return json(isTest ? { draft: result.draft, trace, error: null, requestId,
+              timings: result.stageTimings } : result.draft, 200, requestId, autofillHeaders(result));
+          } catch (error) {
+            if (!isTest) throw error;
+            const failure = failureResponse(error, requestId);
+            const body = await failure.json();
+            return json({ draft: null, trace, error: body.error, requestId, timings: null },
+              failure.status, requestId, Object.fromEntries(failure.headers));
+          }
+        }
+        if (["/v1/garments/autofill-labels", "/v1/garments/autofill-research"].includes(path)) {
           const { photos, crops } = validateLabelAutofill(body);
-          const operation = (input, dependencies) => runProductAutofill(input, { ...dependencies, labelCrops: crops });
-          const result = await generateProductAutofill(photos, env, fetchImpl, autofillTimeoutMs, operation);
+          const detailedResearch = path === "/v1/garments/autofill-research";
+          const operation = (input, dependencies) => runProductAutofill(input, { ...dependencies, labelCrops: crops, detailedResearch });
+          const result = await generateProductAutofill(photos, env, fetchImpl, detailedResearch ? Math.max(autofillTimeoutMs, 80000) : autofillTimeoutMs, operation);
           return json(result.draft, 200, requestId, autofillHeaders(result));
         }
         const refinement = path.endsWith("/neck-refinement") ? "neck" : path.endsWith("/length-refinement") ? "length" : path.endsWith("/landmark-refinement");
