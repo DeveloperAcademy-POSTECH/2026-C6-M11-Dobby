@@ -28,12 +28,12 @@ struct Cafe24ProductView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
-            .padding(.bottom, 116)
+            .padding(.bottom, 43)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color(.brandNeutral50).ignoresSafeArea())
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
     }
 
     private var areFieldsDisabled: Bool { isDisabled || isCompleted }
