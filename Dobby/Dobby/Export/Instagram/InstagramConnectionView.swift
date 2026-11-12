@@ -6,7 +6,7 @@ struct InstagramConnectionView: View {
     let onConnect: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 48) {
+        VStack(alignment: .leading, spacing: 0) {
             InstagramConnectionHeader()
 
             Spacer(minLength: 0)
@@ -15,15 +15,16 @@ struct InstagramConnectionView: View {
         }
         .frame(maxWidth: 362, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 20)
-        .padding(.top, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 38)
         .frame(maxWidth: .infinity, alignment: .top)
-        .background(Color(.brandNeutral50).ignoresSafeArea())
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
     }
 }
 
 private struct InstagramConnectionHeader: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 48) {
             Text("먼저 인스타그램 프로페셔널\n계정과 연결이 필요해요")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(Color(.brandNeutralBlack))
