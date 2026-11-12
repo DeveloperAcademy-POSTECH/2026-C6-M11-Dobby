@@ -100,11 +100,7 @@ struct Cafe24ExportView: View {
             }
         }
         .overlay {
-            if isConnecting {
-                ExportLoadingOverlay(message: "카페24와 연결 중…")
-            } else if isDisconnecting {
-                ExportLoadingOverlay(message: "카페24 연결을 해제하고 있어요…")
-            } else if uploadState.isUploading {
+            if uploadState.isUploading {
                 PlatformUploadingOverlay(platformName: "카페24")
             }
         }

@@ -20,10 +20,15 @@ struct Cafe24ConnectionView: View {
 
             Button { onConnect(normalizedMallID) } label: {
                 HStack(spacing: 10) {
-                    Image("Cafe24Logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 30, height: 30)
+                    if isLoading {
+                        ChakLoadingIndicator(tint: Color(.brandNeutralWhite))
+                            .frame(width: 30, height: 30)
+                    } else {
+                        Image("Cafe24Logo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 30, height: 30)
+                    }
                     Text("카페24 계정 연결하기")
                         .font(.body.weight(.semibold))
                 }
