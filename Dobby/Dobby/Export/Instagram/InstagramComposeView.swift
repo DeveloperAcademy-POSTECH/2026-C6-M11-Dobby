@@ -195,3 +195,65 @@ struct InstagramProfileImage: View {
         isDisabled: false
     )
 }
+
+#Preview("계정 카드", traits: .sizeThatFitsLayout) {
+    InstagramAccountCard(account: .preview)
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("프로필 이미지", traits: .sizeThatFitsLayout) {
+    InstagramProfileImage(url: nil)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("업로드할 사진", traits: .sizeThatFitsLayout) {
+    let draft = InstagramExportDraft(product: .instagramPreview)
+
+    InstagramPhotoEditor(photos: draft.photos)
+        .frame(width: 402, height: 246)
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("사진 셀", traits: .sizeThatFitsLayout) {
+    let draft = InstagramExportDraft(product: .instagramPreview)
+
+    if let photo = draft.photos.first {
+        InstagramDraftPhotoCell(photo: photo)
+            .padding()
+            .background(Color(.brandNeutralWhite))
+    }
+}
+
+#Preview("캡션 편집", traits: .sizeThatFitsLayout) {
+    @Previewable @State var draft = InstagramExportDraft(product: .instagramPreview)
+
+    InstagramCaptionEditor(draft: $draft)
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("캡션 제목", traits: .sizeThatFitsLayout) {
+    InstagramCaptionHeader(onReset: {})
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("캡션 입력란", traits: .sizeThatFitsLayout) {
+    @Previewable @State var text = "90s 나이키 자켓\n\n가격: 89,000원"
+
+    InstagramCaptionInput(text: $text)
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("초기화 버튼", traits: .sizeThatFitsLayout) {
+    InstagramResetButton(action: {})
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
