@@ -158,8 +158,11 @@ private struct FruitsExportButtonStyle: ButtonStyle {
             .foregroundStyle(isEnabled ? Color(.brandNeutralWhite) : Color(.brandNeutral100))
             .padding(.horizontal, 28)
             .frame(width: 335, height: 62, alignment: .center)
-            .background(isEnabled ? Color(.brandMain500) : Color(.brandNeutral400))
-            .cornerRadius(60)
+            .background(
+                isEnabled ? Color(.brandMain500) : Color(.brandNeutral400),
+                in: RoundedRectangle(cornerRadius: 60)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 60))
     }
 }
 

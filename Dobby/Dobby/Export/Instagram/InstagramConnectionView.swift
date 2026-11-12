@@ -76,10 +76,11 @@ private struct InstagramConnectionActions: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity, minHeight: 62, maxHeight: 62)
+                .background(Color(.brandNeutral950), in: RoundedRectangle(cornerRadius: 60))
+                .contentShape(RoundedRectangle(cornerRadius: 60))
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color(.brandNeutralWhite))
-            .background(Color(.brandNeutral950), in: RoundedRectangle(cornerRadius: 60))
             .disabled(isLoading)
 
             Button("프로페셔널 계정으로 어떻게 설정하나요?") {
