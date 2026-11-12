@@ -100,11 +100,35 @@ nonisolated enum ProductAutofillError: Error, Equatable, LocalizedError, Sendabl
     }
 }
 
+/// Product registration uses the web search pipeline.
+/// This is part of the app configuration, independent of Xcode launch variables.
+nonisolated enum ProductAutofillEndpoints {
+    static let generation = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v1/garments/autofill-web-detection")!
+}
+
+/// Builds the photo request for the web search pipeline.
+nonisolated enum ProductAutofillWebRequest {
+    static func make(photos: [ProductAutofillPhotoEncoder.Photo], endpoint: URL,
+                     token: String, appAPIKey: String?) throws -> URLRequest {
+        struct Body: Encodable { let photos: [ProductAutofillPhotoEncoder.Photo] }
+        let body = try JSONEncoder().encode(Body(photos: photos))
+        guard body.count <= 12 * 1024 * 1024 else { throw ProductAutofillError.photoTooLarge }
+        var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 95)
+        request.httpMethod = "POST"
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        if let appAPIKey { request.setValue(appAPIKey, forHTTPHeaderField: "X-Dobby-App-Key") }
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.httpBody = body
+        return request
+    }
+}
+
 /// The OpenAI key stays in the Worker. This client accepts an app authorization provider.
 actor ProductAutofillClient: ProductAutofillGenerating {
     typealias BearerTokenProvider = @Sendable () async throws -> String?
     typealias AppAuthorizationProvider = @Sendable () async throws -> DobbyAppAuthorization?
-    static let endpoint = URL(string: "https://dobby-openai.dobbyisvintage.workers.dev/v1/garments/autofill-labels")!
+    static let endpoint = ProductAutofillEndpoints.generation
     private let endpoint: URL
     private let session: URLSession
     private let diagnosticOrigin: String
@@ -192,6 +216,7 @@ actor ProductAutofillClient: ProductAutofillGenerating {
                 throw ProductAutofillError.notConfigured
             }
         }
+        let usesWebDetectionProcess = endpoint.path == "/v1/garments/autofill-web-detection"
         let usesLabelProcess = endpoint.path == "/v1/garments/autofill-labels"
         let encodingStarted = Date()
         let encodedPhotos = try ProductAutofillPhotoEncoder.encode(photos,
@@ -215,17 +240,23 @@ actor ProductAutofillClient: ProductAutofillGenerating {
             phaseTimes["labelPreparationMs"] = Date().timeIntervalSince(labelStarted) * 1000
         }
         try Task.checkCancellation()
-        let body = try JSONEncoder().encode(Request(photos: encodedPhotos, labelCrops: labelCrops))
-        guard body.count <= 12 * 1024 * 1024 else { throw ProductAutofillError.photoTooLarge }
-        var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer " + authorization.token, forHTTPHeaderField: "Authorization")
-        if let appAPIKey = authorization.appAPIKey {
-            request.setValue(appAPIKey, forHTTPHeaderField: "X-Dobby-App-Key")
+        var request: URLRequest
+        if usesWebDetectionProcess {
+            request = try ProductAutofillWebRequest.make(photos: encodedPhotos, endpoint: endpoint,
+                token: authorization.token, appAPIKey: authorization.appAPIKey)
+        } else {
+            let body = try JSONEncoder().encode(Request(photos: encodedPhotos, labelCrops: labelCrops))
+            guard body.count <= 12 * 1024 * 1024 else { throw ProductAutofillError.photoTooLarge }
+            request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer " + authorization.token, forHTTPHeaderField: "Authorization")
+            if let appAPIKey = authorization.appAPIKey {
+                request.setValue(appAPIKey, forHTTPHeaderField: "X-Dobby-App-Key")
+            }
+            request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+            request.httpBody = body
         }
-        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-        request.httpBody = body
         let finalRequestStarted = Date()
         #if DEBUG
         let diagnostic = ProductAutofillDiagnostics.begin(origin: diagnosticOrigin, endpoint: endpoint,
@@ -278,11 +309,11 @@ actor ProductAutofillClient: ProductAutofillGenerating {
         let code = (try? JSONDecoder().decode(FailureEnvelope.self, from: data))?.error.code
         if status == 401 || status == 403 { return .unauthorized }
         switch code {
-        case "service_not_configured", "ai_configuration_error": return .serverNotConfigured
+        case "web_detection_configuration_error", "service_not_configured", "ai_configuration_error": return .serverNotConfigured
         case "photo_unusable": return .photoUnusable
         case "ai_timeout": return .timeout
-        case "ai_rate_limited": return .busy
-        case "photo_too_large", "photos_too_large", "request_too_large": return .photoTooLarge
+        case "web_detection_rate_limited", "ai_rate_limited": return .busy
+        case "web_detection_image_too_large", "photo_too_large", "photos_too_large", "request_too_large": return .photoTooLarge
         case "invalid_photo", "invalid_request", "invalid_photo_role", "invalid_json", "unsupported_content_type": return .invalidPhotos
         case "invalid_ai_response": return .invalidResponse
         default:

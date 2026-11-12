@@ -4,3 +4,6 @@
 OPENAI_API_KEY=
 DOBBY_APP_API_KEY=
 DRAFT_API_TOKEN=
+
+# Optional: required only for /v1/garments/autofill-web-detection.
+GOOGLE_VISION_API_KEY=

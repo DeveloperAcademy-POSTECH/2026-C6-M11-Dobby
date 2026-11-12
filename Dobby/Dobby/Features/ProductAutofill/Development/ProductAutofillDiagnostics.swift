@@ -26,20 +26,20 @@ nonisolated enum ProductAutofillDiagnostics {
         var brandReason: String? = nil
         static func read(_ response: HTTPURLResponse) -> Self? {
             func count(_ name: String) -> Int? {
-                guard let value = response.value(forHTTPHeaderField: name), let count = Int(value), (0...2).contains(count) else { return nil }
+                guard let value = response.value(forHTTPHeaderField: name), let count = Int(value), (0...5).contains(count) else { return nil }
                 return count
             }
             let raw = response.value(forHTTPHeaderField: "X-Dobby-AI-Research-Status")
             let status = raw.flatMap { ["skipped", "matched", "no_match", "incomplete"].contains($0) ? $0 : nil }
             let attempts = count("X-Dobby-AI-Search-Attempts"), completed = count("X-Dobby-AI-Search-Calls")
             var timings: [String: Double] = [:]
-            for stage in ["Identification", "Label-Read", "Search", "Server"] {
+            for stage in ["Identification", "Label-Read", "Search", "Web-Detection", "Synthesis", "Server"] {
                 if let raw = response.value(forHTTPHeaderField: "X-Dobby-AI-\(stage)-Ms"),
                    let value = Double(raw), value.isFinite, (0...300_000).contains(value) { timings[stage] = value }
             }
             let rawBrandStatus = response.value(forHTTPHeaderField: "X-Dobby-AI-Brand-Status")
             let brandStatus = rawBrandStatus.flatMap { ["verified", "unverified"].contains($0) ? $0 : nil }
-            let reasons = ["verified", "invalid_candidate", "no_candidate", "low_confidence", "unreadable", "ocr_mismatch", "label_text_mismatch", "label_read_failed", "no_ocr_crop"]
+            let reasons = ["web_detection_photo_comparison", "verified", "invalid_candidate", "no_candidate", "low_confidence", "unreadable", "ocr_mismatch", "label_text_mismatch", "label_read_failed", "no_ocr_crop"]
             let brandReason = response.value(forHTTPHeaderField: "X-Dobby-AI-Brand-Reason").flatMap { reasons.contains($0) ? $0 : nil }
             guard attempts != nil || completed != nil || status != nil || !timings.isEmpty || brandStatus != nil else { return nil }
             return .init(attempts: attempts, completedCalls: completed, status: status,

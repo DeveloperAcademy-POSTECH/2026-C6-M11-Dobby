@@ -447,3 +447,7 @@ npm run check:cloud -- https://dobby-garment-ai-dev.dobbyisvintage.workers.dev
 앱 Debug 기록은 encodingMs, labelDetectionMs, cropOCRMs, labelPreparationMs, finalRequestMs, totalMs와 서버 시간·브랜드 사유를 저장합니다. 기존 기록은 이 계측이 없어 전체 지연을 재구성할 수 없습니다. 다음 앱 빌드 이후 생성부터 기록됩니다.
 
 검증: 서버 521개, 앱 XCTest 18개와 Session Swift Testing 10개 통과, 메인 앱 시뮬레이터 빌드 성공. 운영 서버 배포 `002fb57c-4ba0-4c87-a687-137aa36a6a1f`. 실제 실패 기록의 전송 사진 4장 해시·크롭·OCR 원문을 유지한 재요청에서 HTTP 200, POLO RALPH LAUREN 채택, 검색 1회/no_match를 확인했습니다. 요청 경과 15.187초, 서버 13.820초, 전체 사진 분석 8.233초·크롭 판독 3.868초(병렬), 검색 5.587초였습니다. 이전 기록의 마지막 요청 구간은 약38.2초였으나 새 모델 호출의 변동과 네트워크가 있어 이 한 번으로 고정된 성능 개선 비율을 주장할 수 없습니다. 이 계측은 앞단 라벨 탐지·OCR을 포함하지 않은 재요청입니다. 사진별 정확도와 전체 앱 지연의 추가 검증은 남아 있습니다.
+
+## Web Detection product information experiment
+
+See [WEB-DETECTION.md](WEB-DETECTION.md) for the optional Google Web Detection → Luna route, server key setup, Debug activation, request limits and verification. Existing product generation stays on the current route until the experiment is explicitly enabled.
