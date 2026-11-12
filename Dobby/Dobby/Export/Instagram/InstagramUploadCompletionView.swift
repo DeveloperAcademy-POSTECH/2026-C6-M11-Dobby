@@ -83,7 +83,7 @@ private struct InstagramCompletionContent: View {
             .padding(.top, Layout.buttonBarTopPadding)
             .padding(.bottom, Layout.buttonBarBottomPadding)
             .frame(maxWidth: Layout.buttonBarMaximumWidth)
-            .background(Color(.brandNeutral50))
+            .background(Color(.brandNeutralWhite))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color(.brandNeutralWhite).ignoresSafeArea())
