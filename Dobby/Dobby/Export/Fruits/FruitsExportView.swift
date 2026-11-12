@@ -8,16 +8,19 @@ struct FruitsExportView: View {
     @Environment(\.scenePhase) private var phase
     @Environment(ToastPresenter.self) private var toastPresenter
     @State private var pipController = MeasurementPiPController()
+    @State private var hasCopied: Bool
     @State private var opening: Bool
     @State private var alertMessage: String?
 
     init(
         product: ExportProduct,
         onOpened: @escaping () -> Void = { },
+        initialHasCopied: Bool = false,
         initialOpening: Bool = false
     ) {
         self.product = product
         self.onOpened = onOpened
+        _hasCopied = State(initialValue: initialHasCopied)
         _opening = State(initialValue: initialOpening)
     }
 
@@ -52,7 +55,10 @@ struct FruitsExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            FruitsExportBottomAction(isLoading: opening) {
+            FruitsExportBottomAction(
+                hasCopied: hasCopied,
+                isLoading: opening
+            ) {
                 startPiPAndOpenFruits()
             }
         }
@@ -73,6 +79,7 @@ struct FruitsExportView: View {
 
     private func copy(_ field: ProductCopyField) {
         ClipboardWriter().copyText(product.marketplacePayload.value(for: field))
+        hasCopied = true
         toastPresenter.show(field.fruitsToastMessage)
     }
 
@@ -112,16 +119,27 @@ struct FruitsExportView: View {
 }
 
 private struct FruitsExportBottomAction: View {
+    let hasCopied: Bool
     let isLoading: Bool
     let action: @MainActor () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: isLoading) {
+            Button {
                 action()
+            } label: {
+                HStack(alignment: .center, spacing: 10) {
+                    if isLoading {
+                        ProgressView()
+                            .tint(.white)
+                    }
+                    Text("후루츠패밀리에 붙여넣으러 가기")
+                        .multilineTextAlignment(.center)
+                }
             }
-                .disabled(isLoading)
-                .accessibilityIdentifier("export.fruits.open")
+            .buttonStyle(FruitsExportButtonStyle())
+            .disabled(!hasCopied || isLoading)
+            .accessibilityIdentifier("export.fruits.open")
         }
         .padding(.horizontal, 33)
         .padding(.top, 16)
@@ -131,9 +149,30 @@ private struct FruitsExportBottomAction: View {
     }
 }
 
-#Preview("기본") {
+private struct FruitsExportButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
+            .foregroundStyle(isEnabled ? Color(.brandNeutralWhite) : Color(.brandNeutral100))
+            .padding(.horizontal, 28)
+            .frame(width: 335, height: 62, alignment: .center)
+            .background(isEnabled ? Color(.brandMain500) : Color(.brandNeutral400))
+            .cornerRadius(60)
+    }
+}
+
+#Preview("복사 전") {
     NavigationStack {
         FruitsExportView(product: .fruitsPreview)
+    }
+    .toast()
+}
+
+#Preview("복사 후") {
+    NavigationStack {
+        FruitsExportView(product: .fruitsPreview, initialHasCopied: true)
     }
     .toast()
 }
@@ -147,7 +186,11 @@ private struct FruitsExportBottomAction: View {
 
 #Preview("앱 여는 중") {
     NavigationStack {
-        FruitsExportView(product: .fruitsPreview, initialOpening: true)
+        FruitsExportView(
+            product: .fruitsPreview,
+            initialHasCopied: true,
+            initialOpening: true
+        )
     }
     .toast()
 }
