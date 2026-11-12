@@ -132,36 +132,47 @@
 
 <table width="100%">
   <tr>
-    <td width="160" align="center"><img src="assets/readme/mason.png" width="80" alt="이민혁 Mason 프로필"></td>
-    <td width="160" align="center"><img src="assets/readme/tobae.png" width="80" alt="박지원 Tobae 프로필"></td>
-    <td width="160" align="center"><img src="assets/readme/mugu.png" width="80" alt="정무구 Mugu 프로필"></td>
-    <td width="160" align="center"><img src="assets/readme/ichi.png" width="80" alt="오하나 Ichi 프로필"></td>
-    <td width="160" align="center"><img src="assets/readme/ddoechii.png" width="80" alt="윤현주 Ddoechii 프로필"></td>
-    <td width="160" align="center"><img src="assets/readme/iris.png" width="80" alt="박채은 Iris 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/mason.png" width="80" alt="이민혁 Mason 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/ddoechii.png" width="80" alt="윤현주 Ddoechii 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/iris.png" width="80" alt="박채은 Iris 프로필"></td>
   </tr>
   <tr>
     <th align="center"><a href="https://github.com/decl5th">이민혁</a></th>
-    <th align="center"><a href="https://github.com/tobae-time">박지원</a></th>
-    <th align="center"><a href="https://github.com/moogoochung">정무구</a></th>
-    <th align="center"><a href="https://github.com/hana5111">오하나</a></th>
     <th align="center"><a href="https://github.com/qoqoqle">윤현주</a></th>
     <th align="center"><a href="https://github.com/takechaens">박채은</a></th>
   </tr>
   <tr>
     <td align="center">Mason&nbsp;·&nbsp;메&#8288;이&#8288;슨</td>
-    <td align="center">Tobae&nbsp;·&nbsp;토&#8288;바&#8288;에</td>
-    <td align="center">Mugu&nbsp;·&nbsp;무&#8288;구</td>
-    <td align="center">Ichi&nbsp;·&nbsp;이&#8288;치</td>
     <td align="center">Ddoechii&nbsp;·&nbsp;또&#8288;치</td>
     <td align="center">Iris&nbsp;·&nbsp;아&#8288;이&#8288;리&#8288;스</td>
   </tr>
   <tr>
-    <td align="center" valign="top">🎯&nbsp;PM<br>💻&nbsp;Developer</td>
-    <td align="center" valign="top">💻&nbsp;Developer</td>
-    <td align="center" valign="top">💻&nbsp;Developer</td>
-    <td align="center" valign="top">💻&nbsp;Developer</td>
-    <td align="center" valign="top">🎨&nbsp;Designer</td>
-    <td align="center" valign="top">🎨&nbsp;Designer</td>
+    <td align="center">🎯&nbsp;PM&nbsp;·&nbsp;💻&nbsp;Developer</td>
+    <td align="center">🎨&nbsp;Product&nbsp;Designer</td>
+    <td align="center">🎨&nbsp;Product&nbsp;Designer</td>
+  </tr>
+</table>
+
+<table width="100%">
+  <tr>
+    <td width="320" align="center"><img src="assets/readme/tobae.png" width="80" alt="박지원 Tobae 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/mugu.png" width="80" alt="정무구 Mugu 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/ichi.png" width="80" alt="오하나 Ichi 프로필"></td>
+  </tr>
+  <tr>
+    <th align="center"><a href="https://github.com/tobae-time">박지원</a></th>
+    <th align="center"><a href="https://github.com/moogoochung">정무구</a></th>
+    <th align="center"><a href="https://github.com/hana5111">오하나</a></th>
+  </tr>
+  <tr>
+    <td align="center">Tobae&nbsp;·&nbsp;토&#8288;바&#8288;에</td>
+    <td align="center">Mugu&nbsp;·&nbsp;무&#8288;구</td>
+    <td align="center">Ichi&nbsp;·&nbsp;이&#8288;치</td>
+  </tr>
+  <tr>
+    <td align="center">💻&nbsp;Developer</td>
+    <td align="center">💻&nbsp;Developer</td>
+    <td align="center">💻&nbsp;Developer</td>
   </tr>
 </table>
 
