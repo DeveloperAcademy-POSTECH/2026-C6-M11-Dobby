@@ -97,8 +97,8 @@ struct GarmentCaptureFlowView: View {
                         }
                 }
             }
-            .toolbarBackground(model == nil ? Color.clear : Color.white, for: .navigationBar)
-            .toolbarBackground(model == nil ? .hidden : .visible, for: .navigationBar)
+            .toolbarBackground(model == nil ? Color.black : Color.white, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .background {
                 if model == nil { GarmentCaptureStyle.background.ignoresSafeArea() }
                 else { Color.white.ignoresSafeArea() }
@@ -203,16 +203,22 @@ struct GarmentCaptureFlowView: View {
         // Read the same navigation-safe container inset as CameraFlowView
         // before the live canvas expands to the complete camera screen.
         GeometryReader { safeGeometry in
-            cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom)
+            cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom,
+                headerBottom: safeGeometry.frame(in: .global).minY)
         }
         .background(GarmentCaptureStyle.background)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("garmentCaptureScreen")
     }
 
-    private func cameraCanvas(bottomSafeAreaInset: CGFloat) -> some View {
+    private func cameraCanvas(bottomSafeAreaInset: CGFloat, headerBottom: CGFloat) -> some View {
         GeometryReader { geometry in
-            let photoRect = photoViewport(in: geometry.size)
+            // Figma: toolbar ends at 132pt, photograph starts at 146pt.
+            // Convert the actual header into the full-screen canvas coordinates
+            // so status-bar heights and preview banners do not change the gap.
+            let photoTop = max(0, headerBottom - geometry.frame(in: .global).minY + ProductCreationLayoutMetrics.photoGap)
+            let layout = cameraPreviewLayout(in: geometry.size, photoTop: photoTop)
+            let photoRect = layout.photoFrame
             ZStack {
                 Color.black
                 // Size video to the selected photograph, not the entire screen.
@@ -225,7 +231,7 @@ struct GarmentCaptureFlowView: View {
                 cameraFeedback
                 if !showsCameraOptions {
                     responsiveCameraChrome(in: geometry.size, photoRect: photoRect,
-                        bottomSafeAreaInset: bottomSafeAreaInset)
+                        bottomSafeAreaInset: bottomSafeAreaInset, layout: layout)
                         .animation(presentationReduceMotion ? nil : .smooth(duration: 0.30), value: displayedAspectRatio)
                         .animation(nil, value: geometry.size)
                         .opacity(showsPlacementTutorial ? 0 : 1)
@@ -233,7 +239,7 @@ struct GarmentCaptureFlowView: View {
                         .transition(.opacity)
                 }
                 if !showsCameraOptions {
-                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset, layout: layout)
                         .animation(presentationReduceMotion ? nil : .smooth(duration: 0.30), value: displayedAspectRatio)
                         .animation(nil, value: geometry.size)
                         .transition(.opacity)
@@ -318,19 +324,17 @@ struct GarmentCaptureFlowView: View {
         }
     }
 
-    private func cameraPreviewLayout(in size: CGSize) -> CameraPhotoPreviewLayout {
+    private func cameraPreviewLayout(in size: CGSize, photoTop: CGFloat) -> CameraPhotoPreviewLayout {
         // Keep the source-derived ratio, including frozen processing snapshots.
         // Only presentation placement is shared; RGB/depth and calibration stay intact.
         CameraPhotoPreviewLayout(containerSize: size, photoAspectRatio: Double(cameraPhotoAspectRatio),
-            prefersBottomAlignedPortrait: displayedAspectRatio == .sixteenNine)
-    }
-
-    private func photoViewport(in size: CGSize) -> CGRect {
-        cameraPreviewLayout(in: size).photoFrame
+            prefersBottomAlignedPortrait: displayedAspectRatio == .sixteenNine,
+            portraitPhotoTop: photoTop)
     }
 
     @ViewBuilder
-    private func responsiveCameraChrome(in size: CGSize, photoRect: CGRect, bottomSafeAreaInset: CGFloat) -> some View {
+    private func responsiveCameraChrome(in size: CGSize, photoRect: CGRect, bottomSafeAreaInset: CGFloat,
+                                       layout: CameraPhotoPreviewLayout) -> some View {
         let photo = CameraPhotoViewport(x: Double(photoRect.minX), y: Double(photoRect.minY),
             width: Double(photoRect.width), height: Double(photoRect.height))
         let labelWidth = max(44, min(380, photoRect.width - 32) - 32)
@@ -341,7 +345,7 @@ struct GarmentCaptureFlowView: View {
         let labelHeight = max(44, ceil(textHeight) + 20)
         if let chrome = MeasurementCameraChromeLayout.layout(containerWidth: Double(size.width),
             containerHeight: Double(size.height), photo: photo, guidanceHeight: Double(labelHeight),
-            shutter: shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset)) {
+            shutter: layout.controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset)?.shutter) {
             if !isCapturing, let frame = chrome.guidanceFrame {
                 recognitionGuidance
                     .frame(width: frame.width, height: frame.height)
@@ -567,17 +571,10 @@ struct GarmentCaptureFlowView: View {
             .allowsHitTesting(false)
     }
 
-    private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
-        cameraPreviewLayout(in: size).controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset)
-    }
-
-    private func shutterFrame(in size: CGSize, bottomSafeAreaInset: CGFloat) -> CameraPhotoViewport? {
-        captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset)?.shutter
-    }
-
     @ViewBuilder
-    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
-        if let controls = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset) {
+    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat,
+                                 layout: CameraPhotoPreviewLayout) -> some View {
+        if let controls = layout.controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset) {
             let shutter = controls.shutter
             let centerX = shutter.x + shutter.width / 2
             let centerY = shutter.y + shutter.height / 2

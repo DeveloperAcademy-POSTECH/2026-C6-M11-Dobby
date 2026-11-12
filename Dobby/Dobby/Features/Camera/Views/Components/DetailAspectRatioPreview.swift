@@ -6,13 +6,15 @@ import SwiftUI
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
     var prefersBottomAlignedPortrait = false
+    var portraitPhotoTop: CGFloat? = nil
     @ViewBuilder var content: (CGRect) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
             let layout = DetailCameraPreviewLayout(containerSize: geometry.size,
-                aspectRatio: aspectRatio, prefersBottomAlignedPortrait: prefersBottomAlignedPortrait)
+                aspectRatio: aspectRatio, prefersBottomAlignedPortrait: prefersBottomAlignedPortrait,
+                portraitPhotoTop: portraitPhotoTop)
             DetailPreviewViewport(rect: layout.photoFrame, content: content)
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)

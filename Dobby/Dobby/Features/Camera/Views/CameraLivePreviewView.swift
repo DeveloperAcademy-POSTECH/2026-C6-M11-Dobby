@@ -14,11 +14,13 @@ struct CameraLivePreviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     let camera: CameraPreviewSession
     var aspectRatio: DetailPhotoAspectRatio = .fourThree
+    var portraitPhotoTop: CGFloat? = nil
     var interactionEnabled = true
     @State private var isVisible = false
 
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: aspectRatio, prefersBottomAlignedPortrait: true) { photoRect in
+        DetailAspectRatioPreview(aspectRatio: aspectRatio, prefersBottomAlignedPortrait: true,
+                               portraitPhotoTop: portraitPhotoTop) { photoRect in
             CameraPreviewSurface(session: camera.session, photoRect: photoRect,
                 onRotationChange: { camera.rotationAngle = $0 },
                 onFramingReady: { camera.previewCrop = $0 },

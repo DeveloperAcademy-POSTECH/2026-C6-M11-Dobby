@@ -27,9 +27,7 @@ nonisolated struct MeasurementResultLayout {
         collapsedSheetHeight = safeBottom + 25
 
         if usesSheet ?? Self.usesSheet(aspect: aspect) {
-            // 402×874 reference: the canvas starts below the status bar;
-            // the 16:9 photograph begins at screen y=158 and extends to y=874.
-            let top: CGFloat = 96
+            let top = ProductCreationLayoutMetrics.headerHeight + ProductCreationLayoutMetrics.photoGap
             let photoHeight = min(width / aspect, max(1, height - top))
             let photoWidth = min(width, photoHeight * aspect)
             photo = CGRect(x: (width - photoWidth) / 2, y: top, width: photoWidth, height: photoHeight)
@@ -41,15 +39,13 @@ nonisolated struct MeasurementResultLayout {
             sheetTop = nil
             let summaryTop = height - safeBottom - 15 - summaryHeight
             summary = CGRect(x: 20.5, y: max(0, summaryTop), width: max(1, width - 41), height: summaryHeight)
-            // Fit in the reference 4:3 window; a square photo is centred within
-            // it with the designer's 6pt optical adjustment. No extra crop.
-            let top: CGFloat = 83
+            // Anchor every result photo below the same header as capture.
+            let top = ProductCreationLayoutMetrics.headerHeight + ProductCreationLayoutMetrics.photoGap
             let windowHeight = max(1, summary.minY - 33 - top)
             let photoHeight = min(width / aspect, windowHeight)
             let photoWidth = min(width, photoHeight * aspect)
-            let squareAdjustment: CGFloat = abs(aspect - 1) < 0.02 ? min(6, max(0, windowHeight - photoHeight) / 2) : 0
             photo = CGRect(x: (width - photoWidth) / 2,
-                           y: top + max(0, windowHeight - photoHeight) / 2 + squareAdjustment,
+                           y: top,
                            width: photoWidth, height: photoHeight)
         }
     }
