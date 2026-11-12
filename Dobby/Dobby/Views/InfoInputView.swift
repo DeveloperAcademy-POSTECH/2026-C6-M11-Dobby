@@ -142,7 +142,7 @@ struct InfoInputView: View {
                             ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
                             in: Capsule())
                 }
-                .disabled(generationRequestID != nil || isImportingPhotos || !GarmentInformationValidation.hasAnyInformation(garment))
+                .disabled(generationRequestID != nil || isImportingPhotos || !GarmentInformationValidation.canAttemptCompletion(garment))
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }

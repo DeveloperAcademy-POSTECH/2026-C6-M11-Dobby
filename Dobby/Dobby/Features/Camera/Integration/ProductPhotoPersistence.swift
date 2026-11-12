@@ -77,11 +77,9 @@ enum ProductPhotoHandoff {
                 for photo in added { photo.isSelectedForProduct = registrationIDs.contains(photo.id) }
                 GarmentStore.reorder(previousPhotos.sorted { $0.order < $1.order } + added, in: garment)
             } else {
-                // Copy every captured picture above, but register at most ten.
-                // Unselected evidence remains in this product and in Photos.
-                let selectedIDs = includesAllCapturedPhotos
-                    ? Array(output.selectedPhotos.prefix(ProductPhotoLimit.maximumCount).map(\.id))
-                    : output.selectedPhotos.map(\.id)
+                // Let the seller review every capture in product information.
+                // Final registration validates the limit without trimming photos.
+                let selectedIDs = output.selectedPhotos.map(\.id)
                 for photo in garment.photos {
                     photo.isSelectedForProduct = selectedIDs.contains(photo.id)
                     photo.role = photo.id == output.representativePhotoID ? .thumbnail : .detail

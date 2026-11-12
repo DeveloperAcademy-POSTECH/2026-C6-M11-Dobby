@@ -6,22 +6,23 @@ import UIKit
 
 @MainActor
 struct ProductCapturePersistenceTests {
-    @Test func allOriginalsPersistWhileRegistrationIsLimitedToTenWithoutDuplicateCopies() async throws {
+    @Test func allCapturedPhotosRemainVisibleBeyondTenWithoutDuplicateCopies() async throws {
         let f = try Fixture()
         defer { f.remove() }
         let details = try (0..<11).map { _ in try f.detail() }
         try await f.apply(details)
         let expected = f.input.measurementPhotos.map(\.id) + details.map(\.id)
-        #expect(f.garment.productPhotos.map(\.id) == Array(expected.prefix(10)))
+        #expect(f.garment.productPhotos.map(\.id) == expected)
         #expect(f.garment.thumbnail?.id == f.input.measurement.id)
         let firstAppliedAt = try #require(f.garment.capturePhotosAppliedAt)
         try await f.apply(details)
         #expect(f.garment.photos.count == 13)
+        #expect(f.garment.productPhotos.map(\.id) == expected)
         #expect(f.garment.capturePhotosAppliedAt == firstAppliedAt)
         #expect(try FileManager.default.contentsOfDirectory(atPath: f.photos.path).count == 13)
         let reader = ModelContext(f.container)
         let stored = try #require(reader.fetch(FetchDescriptor<Garment>()).first)
-        #expect(stored.productPhotos.map(\.id) == Array(expected.prefix(10)))
+        #expect(stored.productPhotos.map(\.id) == expected)
         #expect(stored.capturePhotosAppliedAt == firstAppliedAt)
         for detail in details {
             let saved = try #require(stored.photos.first { $0.id == detail.id })
@@ -48,6 +49,43 @@ struct ProductCapturePersistenceTests {
         #expect(f.garment.productPhotos.map(\.id) == [first.id, visual.id, second.id])
         #expect(f.garment.thumbnail?.id == first.id)
         #expect(f.garment.measurementPhoto === original)
+    }
+
+    @Test func revisitingAtTenAppendsEveryNewCaptureWithoutRestoringRemovedPhotos() async throws {
+        let f = try Fixture()
+        defer { f.remove() }
+        let details = try (0..<9).map { _ in try f.detail() }
+        try await f.apply(details)
+        let original = try #require(f.garment.measurementPhoto)
+        #expect(try GarmentStore.removeProductPhoto(id: original.id, from: f.garment, in: f.context))
+        let visualID = try #require(f.input.measurementVisualization?.id)
+        let editedOrder = [details[8].id, visualID] + details.prefix(8).reversed().map(\.id)
+        #expect(GarmentStore.reorderProductPhotos(ids: editedOrder, in: f.garment))
+        #expect(f.garment.productPhotos.count == 10)
+        try f.context.save()
+        let retainedOrder = f.garment.orderedPhotos.map(\.id)
+        let firstAppliedAt = f.garment.capturePhotosAppliedAt
+        let additions = try [f.detail(), f.detail()]
+
+        try await f.apply(details + additions)
+        let expected = editedOrder + additions.map(\.id)
+        #expect(f.garment.productPhotos.map(\.id) == expected)
+        #expect(f.garment.orderedPhotos.map(\.id) == retainedOrder + additions.map(\.id))
+        #expect(f.garment.thumbnail?.id == editedOrder.first)
+        #expect(f.garment.measurementPhoto === original)
+        #expect(original.isSelectedForProduct == false)
+        #expect(f.garment.capturePhotosAppliedAt == firstAppliedAt)
+        #expect(FileManager.default.fileExists(atPath: f.photos.appending(path: original.fileName).path))
+
+        try await f.apply(details + additions)
+        #expect(f.garment.productPhotos.map(\.id) == expected)
+        #expect(f.garment.photos.count == 13)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.photos.path).count == 13)
+        let reader = ModelContext(f.container)
+        let stored = try #require(reader.fetch(FetchDescriptor<Garment>()).first)
+        #expect(stored.productPhotos.map(\.id) == expected)
+        #expect(stored.thumbnail?.id == editedOrder.first)
+        #expect(stored.measurementPhoto?.isSelectedForProduct == false)
     }
 
     @Test func failedSaveRestoresMarkerPhotosAndFilesThenRetrySucceeds() async throws {
@@ -136,14 +174,19 @@ struct ProductCapturePersistenceTests {
         defer { f.remove() }
         let details = try (0..<11).map { _ in try f.detail() }
         let originalIDs = f.garment.photos.map(\.id)
+        let originalSelection = f.garment.productPhotos.map(\.id)
+        let originalOrder = f.garment.orderedPhotos.map(\.id)
         await #expect(throws: SaveFailure.self) {
             try await f.apply(details, persist: { _ in throw SaveFailure.failed })
         }
         #expect(f.garment.photos.map(\.id) == originalIDs)
+        #expect(f.garment.productPhotos.map(\.id) == originalSelection)
+        #expect(f.garment.orderedPhotos.map(\.id) == originalOrder)
         #expect(f.garment.capturePhotosAppliedAt == nil)
         #expect(try FileManager.default.contentsOfDirectory(atPath: f.photos.path).count == 2)
         try await f.apply(details)
-        #expect(f.garment.photos.count == 13 && f.garment.productPhotos.count == 10)
+        #expect(f.garment.photos.count == 13)
+        #expect(f.garment.productPhotos.map(\.id) == f.input.measurementPhotos.map(\.id) + details.map(\.id))
         #expect(try FileManager.default.contentsOfDirectory(atPath: f.photos.path).count == 13)
     }
 
