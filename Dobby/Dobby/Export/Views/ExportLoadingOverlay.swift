@@ -20,3 +20,11 @@ struct ExportLoadingOverlay: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+#Preview("내보내기 로딩") {
+    Color(.brandNeutralWhite)
+        .ignoresSafeArea()
+        .overlay {
+            ExportLoadingOverlay(message: "게시물을 업로드하고 있어요")
+        }
+}

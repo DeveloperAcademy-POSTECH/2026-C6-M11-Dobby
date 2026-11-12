@@ -49,3 +49,21 @@ struct ExportStatusBadge: View {
             .background(color.opacity(0.12), in: Capsule())
     }
 }
+
+#Preview("서비스 헤더", traits: .sizeThatFitsLayout) {
+    ExportServiceHeader(
+        channel: .instagram,
+        title: "인스타그램",
+        description: "프로페셔널 계정으로 상품 사진과 캡션을 업로드해요.",
+        status: "연결됨"
+    )
+    .frame(width: 363)
+    .padding()
+    .background(ExportScreenStyle.background)
+}
+
+#Preview("상태 배지", traits: .sizeThatFitsLayout) {
+    ExportStatusBadge(title: "연결됨")
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}

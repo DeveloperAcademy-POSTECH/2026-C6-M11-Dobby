@@ -35,3 +35,10 @@ struct ExportProductSummary: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+#Preview("상품 요약", traits: .sizeThatFitsLayout) {
+    ExportProductSummary(product: .instagramPreview, photoCount: 3)
+        .frame(width: 363)
+        .padding()
+        .background(ExportScreenStyle.background)
+}

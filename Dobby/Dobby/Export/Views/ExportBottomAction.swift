@@ -30,3 +30,22 @@ struct ExportBottomActionBar<Content: View>: View {
             .background(.ultraThinMaterial)
     }
 }
+
+#Preview("하단 액션 · 상태", traits: .sizeThatFitsLayout) {
+    VStack(spacing: 12) {
+        ExportBottomAction(title: "업로드하기", action: {})
+        ExportBottomAction(title: "업로드하기", isWorking: true, action: {})
+        ExportBottomAction(title: "업로드 완료", isComplete: true, action: {})
+        ExportBottomAction(title: "업로드하기", isEnabled: false, action: {})
+    }
+    .frame(width: 363)
+    .padding()
+    .background(Color(.brandNeutralWhite))
+}
+
+#Preview("하단 액션 바", traits: .sizeThatFitsLayout) {
+    ExportBottomActionBar {
+        ExportBottomAction(title: "업로드하기", action: {})
+    }
+    .frame(width: 402)
+}

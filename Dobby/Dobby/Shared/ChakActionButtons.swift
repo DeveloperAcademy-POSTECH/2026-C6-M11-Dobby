@@ -104,3 +104,18 @@ private struct ChakActionButton: View {
     .frame(width: 402)
     .background(Color(.brandNeutral50))
 }
+
+#Preview("단일 액션 버튼", traits: .sizeThatFitsLayout) {
+    ChakActionButton(
+        configuration: .init(title: "업로드하러 가기", action: {}),
+        fontName: "Pretendard-SemiBold",
+        foregroundColor: Color(.brandNeutralWhite),
+        backgroundColor: Color(.brandMain500),
+        horizontalPadding: 28,
+        height: 58,
+        fontSize: 17
+    )
+    .frame(width: 334)
+    .padding()
+    .background(Color(.brandNeutral50))
+}

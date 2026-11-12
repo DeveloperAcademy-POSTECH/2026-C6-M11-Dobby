@@ -24,3 +24,14 @@ struct ExportSectionCard<Content: View>: View {
         .background(ExportScreenStyle.card, in: RoundedRectangle(cornerRadius: ExportScreenStyle.cardCornerRadius))
     }
 }
+
+#Preview("섹션 카드", traits: .sizeThatFitsLayout) {
+    ExportSectionCard(title: "캡션", subtitle: "눌러서 직접 글을 수정할 수 있어요") {
+        Text("90s 나이키 자켓")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .exportTextFieldStyle()
+    }
+    .frame(width: 363)
+    .padding()
+    .background(ExportScreenStyle.background)
+}

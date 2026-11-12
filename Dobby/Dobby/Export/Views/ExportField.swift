@@ -28,3 +28,13 @@ extension View {
         modifier(ExportTextFieldBackground())
     }
 }
+
+#Preview("입력 필드", traits: .sizeThatFitsLayout) {
+    ExportField(label: "상품명") {
+        TextField("상품명을 입력해 주세요", text: .constant("90s 나이키 자켓"))
+            .exportTextFieldStyle()
+    }
+    .frame(width: 363)
+    .padding()
+    .background(ExportScreenStyle.background)
+}

@@ -19,3 +19,10 @@ struct ExportInfoBanner: View {
         .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: ExportScreenStyle.fieldCornerRadius))
     }
 }
+
+#Preview("안내 배너", traits: .sizeThatFitsLayout) {
+    ExportInfoBanner(text: "연결된 계정으로 게시물이 자동 업로드돼요.")
+        .frame(width: 363)
+        .padding()
+        .background(ExportScreenStyle.background)
+}

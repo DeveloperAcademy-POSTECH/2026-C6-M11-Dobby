@@ -15,3 +15,21 @@ struct ExportNavigationButton: View {
         .accessibilityLabel(accessibilityLabel)
     }
 }
+
+#Preview("내비게이션 버튼", traits: .sizeThatFitsLayout) {
+    HStack(spacing: 24) {
+        ExportNavigationButton(
+            systemImage: "chevron.left",
+            accessibilityLabel: "뒤로 가기",
+            action: {}
+        )
+        ExportNavigationButton(
+            systemImage: "xmark",
+            accessibilityLabel: "닫기",
+            isDisabled: true,
+            action: {}
+        )
+    }
+    .padding()
+    .background(Color(.brandNeutralWhite))
+}
