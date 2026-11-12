@@ -41,7 +41,7 @@ extension GarmentStore {
         (0..<4).map { productPhotoURL(fileName: photo.fileName, quarterTurns: $0) }
     }
 
-    private nonisolated static func writeProductRotation(original: URL, destination: URL,
+    nonisolated static func writeProductRotation(original: URL, destination: URL,
                                                          quarterTurns: Int) throws {
         // A given variant is always generated from the same original, so it
         // never accumulates lossy rotations or invalidates an earlier edit.

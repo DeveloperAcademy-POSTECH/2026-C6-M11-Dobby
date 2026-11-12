@@ -42,7 +42,8 @@ enum ProductMeasurementRetake {
         }
         let oldVisualURL = oldVisualization.map { directory.appending(path: $0.fileName) }
         let visualID = MeasurementProductPhoto.identifier(garmentID: garment.id, recordID: record.id)
-        let newVisualURL = directory.appending(path: "\(garment.id.uuidString)-\(visualID.uuidString).png")
+        let newVisualURL = directory.appending(path:
+            MeasurementProductPhoto.fileName(garmentID: garment.id, recordID: record.id))
         let visualExisted = FileManager.default.fileExists(atPath: newVisualURL.path)
         var newOriginalURL: URL?
         do {

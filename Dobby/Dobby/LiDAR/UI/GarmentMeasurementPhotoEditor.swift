@@ -13,6 +13,7 @@ struct GarmentMeasurementPhotoEditor: View {
     let isEnabled: Bool
     let isRecalculating: Bool
     var showsEnlargeControl = true
+    var usesResultPointStyleForEndpoints: Bool = false
     var allowsViewportZoom = false
     var pendingPointIDs: Set<String> = []
     /// Display-only space covered by the result sheet at the bottom of the photo.
@@ -90,6 +91,13 @@ struct GarmentMeasurementPhotoEditor: View {
                         }
                     }
                 }.frame(width: size.width, height: size.height)
+                if usesResultPointStyleForEndpoints {
+                    ForEach(Array(uniqueEndpoints(in: annotations).enumerated()), id: \.offset) { _, endpoint in
+                        MeasurementPointMarker().position(endpoint)
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
                 // The small markers sit above labels. Their larger invisible
                 // touch regions take priority when a finger grabs nearby.
                 ForEach(handles) { point in
@@ -336,9 +344,11 @@ struct GarmentMeasurementPhotoEditor: View {
                     style: .init(lineWidth: 1.5, lineCap: .round, dash: [4, 5]))
                 // Endpoint indicators accompany the measurement line; editable
                 // physical and contour handles are drawn separately above it.
-                for endpoint in [item.start, item.end] {
-                    let marker = Path(ellipseIn: CGRect(x: endpoint.x - 3, y: endpoint.y - 3, width: 6, height: 6))
-                    context.fill(marker, with: .color(.white))
+                if !usesResultPointStyleForEndpoints {
+                    for endpoint in [item.start, item.end] {
+                        let marker = Path(ellipseIn: CGRect(x: endpoint.x - 3, y: endpoint.y - 3, width: 6, height: 6))
+                        context.fill(marker, with: .color(.white))
+                    }
                 }
                 let middle = CGPoint(x: (item.start.x + item.end.x) / 2, y: (item.start.y + item.end.y) / 2)
                 if showLabels, item.isCallout, let center = item.labelCenter {
@@ -355,6 +365,12 @@ struct GarmentMeasurementPhotoEditor: View {
                 }
             }
         }.allowsHitTesting(false).accessibilityHidden(true)
+    }
+
+    private func uniqueEndpoints(in annotations: [Annotation]) -> [CGPoint] {
+        annotations.flatMap { [$0.start, $0.end] }.reduce(into: []) { endpoints, endpoint in
+            if !endpoints.contains(endpoint) { endpoints.append(endpoint) }
+        }
     }
 
     private func measurementLabel(_ item: Annotation) -> some View {
@@ -390,16 +406,9 @@ struct GarmentMeasurementPhotoEditor: View {
             selectedPointID = point.id
             UISelectionFeedbackGenerator().selectionChanged()
         } label: {
-            ZStack {
-                Circle().fill(.black.opacity(0.35)).frame(width: 12.5, height: 12.5)
-                if pending {
-                    Circle().fill(GarmentCaptureStyle.accent.opacity(0.25)).frame(width: 12, height: 12)
-                    Circle().stroke(GarmentCaptureStyle.accent, lineWidth: 2).frame(width: 12, height: 12)
-                } else {
-                    Circle().fill(.white).frame(width: 10, height: 10)
-                }
-            }.shadow(color: .black.opacity(0.4), radius: 2, y: 1)
-                .frame(width: 56, height: 56)
+            MeasurementPointMarker(isPending: pending)
+                .frame(width: MeasurementPointMarkerStyle.touchTargetDiameter,
+                    height: MeasurementPointMarkerStyle.touchTargetDiameter)
                 .contentShape(MeasurementPointHitShape(neighborOffsets: neighbors))
         }.buttonStyle(.plain).disabled(!isEnabled)
         let movement = DragGesture(minimumDistance: 2, coordinateSpace: .named("garmentPhoto"))
