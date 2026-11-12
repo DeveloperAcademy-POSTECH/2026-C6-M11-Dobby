@@ -229,8 +229,10 @@ final class ProductCreationFlowTests: XCTestCase {
         // must persist all digits instead of reusing the rounded display value.
         app.buttons["product-info.done"].tap()
         XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 15))
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 3)
+        XCTAssertEqual(app.images.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-detail.photo.")).count, 3)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 0)
         attachScreenshot(app, name: "flow-top-completion-real-product")
+        reveal(app.buttons["product-complete.export"], in: app)
         app.buttons["product-complete.export"].tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))
@@ -378,6 +380,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertFalse(app.textFields["product-info.measurement.shoulderWidth"].exists)
         app.buttons["product-info.done"].tap()
         XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
+        reveal(app.buttons["product-complete.library"], in: app)
         app.buttons["product-complete.library"].tap()
         openLibraryProduct(named: name, app: app)
         for key in expected {
@@ -484,18 +487,15 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", detail)).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["브랜드"].exists, "An omitted brand must not leave an empty section")
         attachScreenshot(app, name: "product-complete-summary")
-        let photoButtons = app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대"))
-        let photo = photoButtons.firstMatch
+        let photo = app.images.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-detail.photo.")).firstMatch
         reveal(photo, in: app)
-        let photoCount = photoButtons.count
+        XCTAssertTrue(photo.exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 0)
         photo.tap()
         let pager = app.descendants(matching: .any)["product-gallery.pager"].firstMatch
-        XCTAssertTrue(pager.waitForExistence(timeout: 5))
-        wait(for: NSPredicate(format: "value == %@", "1 / \(photoCount)"), on: pager)
-        XCTAssertFalse(app.buttons["product-gallery.delete"].exists)
-        XCTAssertTrue(app.buttons["product-gallery.close"].exists)
-        app.buttons["product-gallery.close"].tap()
-        XCTAssertTrue(pager.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(pager.exists, "Completion photos are a static summary, not a gallery entry")
+        XCTAssertFalse(app.buttons["product-gallery.close"].exists)
         let measurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
         let actions = app.buttons["product-complete.export"]
         for _ in 0..<5 {
@@ -506,6 +506,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(measurements.exists)
         XCTAssertLessThanOrEqual(measurements.frame.maxY, actions.frame.minY)
         attachScreenshot(app, name: "product-complete-measurements")
+        reveal(actions, in: app)
         actions.tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Design validation"].exists)
