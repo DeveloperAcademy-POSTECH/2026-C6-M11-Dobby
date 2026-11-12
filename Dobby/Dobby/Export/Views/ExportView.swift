@@ -128,7 +128,7 @@ private struct ExportContentView: View {
                                   onSelectChannel: onSelectChannel)
         }
         .frame(maxWidth: 337)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 32)
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity)
     }
