@@ -138,9 +138,9 @@ private struct Cafe24ProductDescriptionField: View {
                 .font(.body)
                 .foregroundStyle(Color(.brandNeutral800))
                 .lineLimit(1...)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
         }
     }
