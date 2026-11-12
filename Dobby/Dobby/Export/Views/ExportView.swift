@@ -46,7 +46,7 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showCafe24) {
-                Cafe24ExportView(product: product) { _ in
+                Cafe24ExportView(product: product, onRequestExit: requestExit) { _ in
                     completedChannels.insert(.cafe24)
                     try? ExportCompletionRecorder.record(productID: product.id, channel: .cafe24,
                                                          in: modelContext)

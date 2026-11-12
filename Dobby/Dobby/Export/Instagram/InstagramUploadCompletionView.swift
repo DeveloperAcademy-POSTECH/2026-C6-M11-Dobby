@@ -5,7 +5,7 @@ struct InstagramUploadCompletionView: View {
     let onOpenInstagram: () -> Void
 
     var body: some View {
-        InstagramCompletionContent(
+        ExportCompletionContent(
             icon: .uploadCompletionIcon,
             title: "업로드 완료",
             message: "연결된 계정에 자동으로 업로드했어요!",
@@ -28,7 +28,7 @@ struct InstagramConnectionCompletionView: View {
     let onContinueToUpload: () -> Void
 
     var body: some View {
-        InstagramCompletionContent(
+        ExportCompletionContent(
             icon: .instagramConnectionCompletionIcon,
             title: "인스타그램 연결 완료!",
             message: "인스타그램 프로페셔널 계정과\n성공적으로 연결을 완료했어요",
@@ -47,7 +47,7 @@ struct InstagramConnectionCompletionView: View {
     }
 }
 
-private struct InstagramCompletionContent: View {
+struct ExportCompletionContent: View {
     private enum Layout {
         static let contentTopSpacing: CGFloat = 176
         static let contentBottomSpacing: CGFloat = 215
@@ -139,7 +139,7 @@ private struct InstagramCompletionText: View {
 }
 
 #Preview("연결 완료 · 전체 콘텐츠") {
-    InstagramCompletionContent(
+    ExportCompletionContent(
         icon: .instagramConnectionCompletionIcon,
         title: "인스타그램 연결 완료!",
         message: "인스타그램 프로페셔널 계정과\n성공적으로 연결을 완료했어요",
