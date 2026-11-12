@@ -12,8 +12,13 @@ final class ProductInformationEditSession {
     var measurementInput = GarmentMeasurementInputState()
     private let initialSnapshot: ProductInformationEditSnapshot
     private let initialPhotos: [GarmentPhoto]
+    private let autofill: ProductAutofillSession
+    private let photosDirectory: URL
 
-    init(garmentID: UUID, container: ModelContainer) throws {
+    init(garmentID: UUID, container: ModelContainer,
+         generator: (any ProductAutofillGenerating)? = nil, photosDirectory: URL? = nil) throws {
+        autofill = ProductAutofillSession(generator: generator, diagnosticOrigin: "libraryEdit")
+        self.photosDirectory = photosDirectory ?? GarmentStore.photosDirectory
         context = ModelContext(container)
         context.autosaveEnabled = false
         var request = FetchDescriptor<Garment>(predicate: #Predicate { $0.id == garmentID })
@@ -32,7 +37,31 @@ final class ProductInformationEditSession {
         initialSnapshot.hasChanges(in: garment, measurementInput: measurementInput)
     }
 
+    /// Generate against the current editing draft. Only Done persists these changes.
+    func generateInformation() async throws {
+        let before = ProductAutofillInputSnapshot(garment: garment)
+        let photos = Array(garment.productPhotos.prefix(5))
+        guard !photos.isEmpty else { throw ProductAutofillError.invalidPhotos }
+        let sessionID = UUID()
+        let assets = try photos.map { photo in
+            let url = photosDirectory.appending(path: photo.fileName)
+            return CapturedAsset(id: photo.id, sessionID: sessionID, garmentID: garment.id,
+                purpose: .detail, capturedAt: photo.capturedAt,
+                source: .localFile(url, metadata: try ProductPhotoHandoff.metadata(for: url)))
+        }
+        let photoState = ProductInformationEditSnapshot(garment: garment, measurementInput: measurementInput)
+        let draft = try await autofill.generate(photos: assets)
+        try Task.checkCancellation()
+        guard !photoState.hasChanges(in: garment, measurementInput: measurementInput) else {
+            throw ProductAutofillCompletionFailure.changedInformation
+        }
+        try before.apply(draft, to: garment)
+    }
+
+    func cancelGeneration() { autofill.cancel() }
+
     func discard() {
+        cancelGeneration()
         let uncommittedFiles = ProductPhotoImportStore.uncommittedFileURLs(for: garment, in: context)
         context.rollback()
         // SwiftData removes inserted models on rollback but can leave their

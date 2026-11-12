@@ -64,7 +64,8 @@ struct InfoInputView: View {
                         VStack(alignment: .leading, spacing: 24) {
                             ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing,
                                 onImportingChange: { isImportingPhotos = $0 })
-                            if onGenerateAI != nil { generateInformationButton }
+                                .productInputInteractionArea()
+                            if onGenerateAI != nil { generateInformationButton.productInputInteractionArea() }
                         }
                         ProductInformationFields(garment: garment, measurementInput: measurementInput,
                             focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
@@ -82,18 +83,14 @@ struct InfoInputView: View {
                 }
                     .disabled(generationRequestID != nil || isImportingPhotos)
                     .padding(.horizontal, 20)
-                    .padding(.top, 26)
+                    .padding(.top, allowsPhotoEditing ? 32 : 26)
                     .padding(.bottom, 16)
-                    .background {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture(perform: dismissKeyboard)
+                    .backgroundPreferenceValue(ProductInputInteractionBounds.self) { bounds in
+                        ProductInputKeyboardDismissBackground(bounds: bounds, onDismiss: dismissKeyboard)
                     }
             }
-            .background {
-                ProductInformationStyle.background
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: dismissKeyboard)
+            .backgroundPreferenceValue(ProductInputInteractionBounds.self) { bounds in
+                ProductInputKeyboardDismissBackground(bounds: bounds, onDismiss: dismissKeyboard)
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: focusedMeasurementID) { _, _ in
@@ -223,10 +220,10 @@ struct InfoInputView: View {
                     .frame(height: 20)
                 Text(garment.aiInformationGeneratedAt == nil
                     ? "AI로 제품 정보 생성하기" : "다시 정보 생성하기")
-                    .tracking(-0.31)
+                    .tracking(allowsPhotoEditing ? -0.16 : -0.31)
 
             }
-            .font(.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout))
+            .font(.custom(allowsPhotoEditing ? "Pretendard-Medium" : "Pretendard-SemiBold", size: 16, relativeTo: .callout))
             .foregroundStyle(Color("BrandMain500"))
             .frame(maxWidth: .infinity, minHeight: 20)
             .padding(.horizontal, 8)

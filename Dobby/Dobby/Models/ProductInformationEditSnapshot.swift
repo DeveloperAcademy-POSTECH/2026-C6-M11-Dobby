@@ -20,6 +20,7 @@ struct ProductInformationEditSnapshot: Equatable {
     private let brand: String
     private let detail: String
     private let aiSourcesData: Data?
+    private let aiInformationGeneratedAt: Date?
     private let price: Int?
     private let updatedAt: Date
     private let lengthCm: Double?
@@ -36,6 +37,7 @@ struct ProductInformationEditSnapshot: Equatable {
         brand = garment.brand
         detail = garment.detail
         aiSourcesData = garment.aiSourcesData
+        aiInformationGeneratedAt = garment.aiInformationGeneratedAt
         price = garment.price
         updatedAt = garment.updatedAt
         lengthCm = garment.lengthCm
@@ -61,6 +63,7 @@ struct ProductInformationEditSnapshot: Equatable {
         garment.brand = brand
         garment.detail = detail
         garment.aiSourcesData = aiSourcesData
+        garment.aiInformationGeneratedAt = aiInformationGeneratedAt
         garment.price = price
         garment.lengthCm = lengthCm
         garment.shoulderCm = shoulderCm
