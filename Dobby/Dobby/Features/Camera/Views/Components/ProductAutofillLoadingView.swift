@@ -50,14 +50,7 @@ struct ProductAutofillLoadingView: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityFocused($titleIsFocused)
 
-            // Static frame 35 of the original Figma tape artwork, matching its preview.
-            // UploadLoadingAnimation remains unchanged for platform uploads.
-            Image("ProductAutofillTapeMeasure")
-                .resizable()
-                .scaledToFill()
-                .frame(width: imageSide, height: imageSide)
-                .clipped()
-                .accessibilityHidden(true)
+            UploadLoadingAnimation(source: .upload, width: imageSide, height: imageSide)
 
             Text("사진을 꼼꼼히 보며\n어떤 옷인지 알아보고 있어요")
                 .font(.custom("Pretendard-Regular", fixedSize: messageSize))
@@ -71,8 +64,8 @@ struct ProductAutofillLoadingView: View {
         .padding(.vertical, 12)
         .padding(16)
         .frame(width: width)
-        .background(Color("BrandNeutralWhite"), in: RoundedRectangle(cornerRadius: 44))
-        .clipShape(RoundedRectangle(cornerRadius: 44))
+        .background(Color("BrandNeutralWhite"), in: RoundedRectangle(cornerRadius: 44, style: .circular))
+        .clipShape(RoundedRectangle(cornerRadius: 44, style: .circular))
         .shadow(color: .black.opacity(0.25), radius: 4)
     }
 }
