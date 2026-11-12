@@ -76,11 +76,7 @@ struct Cafe24ExportView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if connectedMallID != nil {
                 ExportBottomActionBar {
-                    ExportBottomAction(
-                        title: "업로드하기",
-                        isWorking: uploadState.isUploading,
-                        isEnabled: !isDisconnecting && (uploadState.isCompleted || canPublish)
-                    ) {
+                    ExportBottomAction(title: "업로드하기") {
                         if uploadState.isCompleted {
                             isConfirmingRepublish = true
                         } else {
@@ -116,10 +112,6 @@ struct Cafe24ExportView: View {
             }
     }
 
-    private var canPublish: Bool {
-        !uploadState.isUploading && draft.canPublish
-    }
-
     private func loadStatus() async {
         isLoadingConnection = true
         connectionError = nil
@@ -147,6 +139,7 @@ struct Cafe24ExportView: View {
     }
 
     private func publish() async {
+        guard !isConnecting, !isDisconnecting, !uploadState.isUploading else { return }
         if let validationMessage = draft.validationMessage {
             message = validationMessage
             return
