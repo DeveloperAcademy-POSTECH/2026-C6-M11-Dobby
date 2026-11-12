@@ -46,3 +46,13 @@ struct UploadLoadingAnimation: View {
         return .playing(.fromProgress(0, toProgress: 1, loopMode: .loop))
     }
 }
+
+#Preview("업로드 애니메이션", traits: .sizeThatFitsLayout) {
+    UploadLoadingAnimation(source: .upload, width: 280, height: 280)
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("AI 정보 애니메이션", traits: .sizeThatFitsLayout) {
+    UploadLoadingAnimation(source: .aiInformation, width: 328, height: 90)
+        .background(Color(.brandNeutralWhite))
+}

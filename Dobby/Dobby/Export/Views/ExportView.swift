@@ -24,13 +24,10 @@ struct ExportView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    ExportProductItem(product: product)
-                    ExportChannelListView(completedChannels: completedChannels,
-                                          onSelectChannel: didSelectChannel)
-                }.padding(.horizontal, 33).padding(.bottom, 32)
+                ExportContentView(product: product, completedChannels: completedChannels,
+                                  onSelectChannel: didSelectChannel)
             }
-            .background(Color(.brandNeutral50))
+            .background(Color(.brandNeutralWhite))
             .navigationTitle("플랫폼 업로드하기")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -119,6 +116,34 @@ struct ExportView: View {
     }
 }
 
+private struct ExportContentView: View {
+    let product: ExportProduct
+    let completedChannels: Set<ExportChannel>
+    let onSelectChannel: (ExportChannel) -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            ExportProductItem(product: product)
+            ExportChannelListView(completedChannels: completedChannels,
+                                  onSelectChannel: onSelectChannel)
+        }
+        .frame(maxWidth: 337)
+        .padding(.horizontal, 32)
+        .padding(.bottom, 32)
+        .frame(maxWidth: .infinity)
+    }
+}
+
 #Preview {
     ExportView(product: .demo, showFruits: .constant(false))
+}
+
+#Preview("플랫폼 업로드 · 본문", traits: .sizeThatFitsLayout) {
+    ExportContentView(
+        product: .demo,
+        completedChannels: [.instagram],
+        onSelectChannel: { _ in }
+    )
+    .frame(width: 402)
+    .background(Color(.brandNeutralWhite))
 }
