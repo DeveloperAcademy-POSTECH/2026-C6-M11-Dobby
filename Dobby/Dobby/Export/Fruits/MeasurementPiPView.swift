@@ -11,7 +11,7 @@ struct MeasurementPiPView: View {
             MeasurementPiPTable(measurements: measurements)
         }
         .frame(width: Self.renderSize.width, height: Self.renderSize.height)
-        .background(Color("MeasurementPiPBackgroundColor"))
+        .background(.brandMain600)
         .environment(\.colorScheme, .light)
     }
 }
