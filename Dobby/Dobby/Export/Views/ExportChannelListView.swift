@@ -37,17 +37,7 @@ private struct ExportChannelSection: View {
     }
 }
 
-#Preview("처음 방문", traits: .sizeThatFitsLayout) {
+#Preview("업로드 채널", traits: .sizeThatFitsLayout) {
     ExportChannelListView(completedChannels: [], onSelectChannel: { _ in })
-        .padding(30)
-}
-
-#Preview("일부 방문", traits: .sizeThatFitsLayout) {
-    ExportChannelListView(completedChannels: [.instagram], onSelectChannel: { _ in })
-        .padding(30)
-}
-
-#Preview("모두 방문", traits: .sizeThatFitsLayout) {
-    ExportChannelListView(completedChannels: Set(ExportChannel.availableCases), onSelectChannel: { _ in })
         .padding(30)
 }

@@ -55,13 +55,3 @@ struct ExportChannelButton: View {
     ExportChannelButton(channel: .instagram, isComplete: true, action: {})
         .padding()
 }
-
-#Preview("카페24", traits: .sizeThatFitsLayout) {
-    ExportChannelButton(channel: .cafe24, isComplete: false, action: {})
-        .padding()
-}
-
-#Preview("후루츠패밀리", traits: .sizeThatFitsLayout) {
-    ExportChannelButton(channel: .fruitsFamily, isComplete: false, action: {})
-        .padding()
-}
