@@ -86,7 +86,7 @@ private struct InstagramCompletionContent: View {
             .background(Color(.brandNeutral50))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color(.brandNeutral50).ignoresSafeArea())
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
     }
 }
 
