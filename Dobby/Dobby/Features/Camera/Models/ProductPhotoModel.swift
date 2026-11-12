@@ -58,13 +58,22 @@ final class ProductPhotoModel {
 
     // 최소 한 장, 선택 순서 유지, 첫 선택이 대표 사진이다.
     var output: ProductPhotoOutput? {
+        guard selectedPhotoIDs.count <= Self.maximumSelectionCount else { return nil }
+        return informationOutput
+    }
+
+    /// Information drafts may retain more than ten photos until the seller
+    /// removes the overflow. AI and draft synchronization use the complete set.
+    var informationOutput: ProductPhotoOutput? {
         guard !isCapturing, !isDeleting, !isDiscardingDetails,
-              selectedPhotoIDs.count <= Self.maximumSelectionCount,
               let representativeID = selectedPhotoIDs.first else { return nil }
+        let selectedPhotos = selectedPhotoIDs.compactMap { id in selectablePhotos.first { $0.id == id } }
+        guard selectedPhotos.count == selectedPhotoIDs.count,
+              Set(selectedPhotoIDs).count == selectedPhotoIDs.count else { return nil }
         return ProductPhotoOutput(
             sessionID: input.sessionID, garmentID: input.garmentID,
             detailPhotos: detailPhotos,
-            selectedPhotos: selectedPhotoIDs.compactMap { id in selectablePhotos.first { $0.id == id } },
+            selectedPhotos: selectedPhotos,
             representativePhotoID: representativeID, deletedPhotoIDs: deletedPhotoIDs
         )
     }
@@ -200,7 +209,6 @@ final class ProductPhotoModel {
     @discardableResult
     func synchronizeSelectedProductPhotos(_ orderedIDs: [UUID]) -> Bool {
         guard !isCapturing, !isDeleting, !isDiscardingDetails,
-              orderedIDs.count <= Self.maximumSelectionCount,
               Set(orderedIDs).count == orderedIDs.count,
               Set(orderedIDs).isSubset(of: Set(selectablePhotos.map(\.id))) else { return false }
         selectedPhotoIDs = orderedIDs

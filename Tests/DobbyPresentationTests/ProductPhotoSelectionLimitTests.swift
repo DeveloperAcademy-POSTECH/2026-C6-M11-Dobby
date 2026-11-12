@@ -45,6 +45,34 @@ struct ProductPhotoSelectionLimitTests {
         #expect(model.output?.representativePhotoID == photos[0].id)
     }
 
+    @Test func informationSelectionKeepsOverflowOrderWhileLegacyOutputRemainsLimited() async throws {
+        let model = try await makeModel()
+        let ordered = Array(model.selectablePhotos.reversed())
+        let ids = ordered.map(\.id)
+
+        #expect(model.synchronizeSelectedProductPhotos(ids))
+        #expect(model.selectedPhotoIDs == ids)
+        #expect(model.output == nil)
+        let information = try #require(model.informationOutput)
+        #expect(information.selectedPhotos == ordered)
+        #expect(information.representativePhotoID == ids.first)
+        #expect(information.detailPhotos == model.detailPhotos)
+        #expect(information.sessionID == model.input.sessionID)
+        #expect(information.garmentID == model.input.garmentID)
+
+        #expect(!model.synchronizeSelectedProductPhotos(ids + [ids[0]]))
+        #expect(!model.synchronizeSelectedProductPhotos(Array(ids.dropLast()) + [UUID()]))
+        #expect(model.selectedPhotoIDs == ids)
+        #expect(model.informationOutput == information)
+        #expect(model.allPhotosOutput?.selectedPhotos == model.selectablePhotos)
+
+        let repairedIDs = Array(ids.prefix(10))
+        #expect(model.synchronizeSelectedProductPhotos(repairedIDs))
+        #expect(model.output?.selectedPhotos.map(\.id) == repairedIDs)
+        #expect(model.informationOutput == model.output)
+        #expect(model.allPhotosOutput?.selectedPhotos == model.selectablePhotos)
+    }
+
     private func makeModel() async throws -> ProductPhotoModel {
         let seed = CapturedAsset(id: UUID(), sessionID: UUID(), garmentID: UUID(),
             purpose: .measurement, capturedAt: .now, source: .mockPlaceholder)

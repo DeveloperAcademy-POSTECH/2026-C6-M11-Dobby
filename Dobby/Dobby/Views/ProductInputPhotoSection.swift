@@ -41,7 +41,7 @@ struct ProductInputPhotoSection: View {
             ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id,
                                     onDelete: deletionAction, onRotate: { id in
                                         guard let photo = garment.productPhotos.first(where: { $0.id == id }) else { return false }
-                                        try await GarmentStore.rotateProductPhoto(photo, in: garment)
+                                        try await GarmentStore.rotateProductPhoto(photo, in: garment, clockwise: false)
                                         return true
                                     })
                 .presentationBackground(.clear)

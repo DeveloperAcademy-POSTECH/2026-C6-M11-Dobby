@@ -208,7 +208,8 @@ struct ProductCreationFlowView: View {
     private func handleInformationBack() {
         guard path.last == .information, !isFinishing, let garment else { return }
         synchronizeInformationPhotoSelection()
-        // Use the Done button's enabled condition, not full completion validation.
+        // Preserve entered information on exit even when excess photos prevent
+        // final completion. Required-field validation remains a separate step.
         if GarmentInformationValidation.hasAnyInformation(garment) {
             requestDraftExit()
         } else {
@@ -223,7 +224,7 @@ struct ProductCreationFlowView: View {
         guard let garment, let photoModel else { return false }
         do {
             try photoModel.synchronizeStoredProductPhotos(garment.productPhotos)
-            return photoModel.synchronizeSelectedProductPhotos(garment.productPhotos.prefix(ProductPhotoModel.maximumSelectionCount).map(\.id))
+            return photoModel.synchronizeSelectedProductPhotos(garment.productPhotos.map(\.id))
         } catch {
             return false
         }
@@ -356,7 +357,7 @@ struct ProductCreationFlowView: View {
 
     private func generateInformationFromButton() async throws {
         guard synchronizeInformationPhotoSelection() else { throw ProductAutofillError.invalidPhotos }
-        guard let garment, let output = photoModel?.output,
+        guard let garment, let output = photoModel?.informationOutput,
               path.last == .information else {
             throw ProductAutofillError.invalidPhotos
         }
@@ -376,7 +377,7 @@ struct ProductCreationFlowView: View {
             try Task.checkCancellation()
             guard isPresented, path.last == expectedStep,
                   self.garment?.id == output.garmentID,
-                  photoModel.output?.selectedPhotos == output.selectedPhotos else {
+                  photoModel.informationOutput?.selectedPhotos == output.selectedPhotos else {
                 throw CancellationError()
             }
             try before.apply(draft, to: garment)
