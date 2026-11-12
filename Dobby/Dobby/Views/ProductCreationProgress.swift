@@ -1,6 +1,12 @@
 import SwiftUI
 import UIKit
 
+nonisolated enum ProductCreationLayoutMetrics {
+    // Figma: status bar ends at 62, toolbar ends at 132, photo starts at 146.
+    static let headerHeight: CGFloat = 70
+    static let photoGap: CGFloat = 14
+}
+
 enum ProductCreationStage: Int, CaseIterable {
     case measurement = 1, measurementResult, details, information
 

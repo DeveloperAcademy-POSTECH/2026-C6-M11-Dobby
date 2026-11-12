@@ -7,7 +7,7 @@ nonisolated struct CameraPhotoPreviewLayout {
     let isBottomAligned: Bool
 
     init(containerSize: CGSize, photoAspectRatio: Double,
-         prefersBottomAlignedPortrait: Bool = false) {
+         prefersBottomAlignedPortrait: Bool = false, portraitPhotoTop: CGFloat? = nil) {
         let width = containerSize.width, height = containerSize.height
         guard width.isFinite, height.isFinite, width > 0, height > 0,
               photoAspectRatio.isFinite, photoAspectRatio > 0 else {
@@ -25,7 +25,14 @@ nonisolated struct CameraPhotoPreviewLayout {
             let viewport = MeasurementCameraChromeLayout.photoViewport(
                 containerWidth: Double(width), containerHeight: Double(height),
                 photoAspectRatio: photoAspectRatio)
-            photoFrame = viewport.map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) } ?? .zero
+            var frame = viewport.map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) } ?? .zero
+            // Move the intact photo below the real navigation header. Keep the
+            // existing fit on compact windows where that placement cannot fit.
+            if width < height, let top = portraitPhotoTop, top.isFinite, top >= 0,
+               frame.height > 0, top + frame.height <= height {
+                frame.origin.y = top
+            }
+            photoFrame = frame
             isBottomAligned = false
         }
     }
