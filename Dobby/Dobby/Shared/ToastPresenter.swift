@@ -10,16 +10,49 @@ final class ToastPresenter {
     }
 
     private(set) var current: Item?
+    private var next: Item?
+    private var isDismissing = false
 
     func show(_ message: String) {
-        withAnimation(.easeOut(duration: 0.2)) {
-            current = Item(message: message)
+        let item = Item(message: message)
+
+        guard current == nil, !isDismissing else {
+            next = item
+            dismissCurrent()
+            return
         }
+
+        present(item)
     }
 
     fileprivate func dismiss(id: UUID) {
         guard current?.id == id else { return }
-        current = nil
+        dismissCurrent()
+    }
+
+    private func present(_ item: Item) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            current = item
+        }
+    }
+
+    private func dismissCurrent() {
+        guard current != nil, !isDismissing else { return }
+        isDismissing = true
+
+        withAnimation(.easeOut(duration: 0.2), completionCriteria: .removed) {
+            current = nil
+        } completion: {
+            self.finishDismissal()
+        }
+    }
+
+    private func finishDismissal() {
+        isDismissing = false
+
+        guard let item = next else { return }
+        next = nil
+        present(item)
     }
 }
 
@@ -52,9 +85,7 @@ private struct ToastOverlay: View {
                         return
                     }
 
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        presenter.dismiss(id: item.id)
-                    }
+                    presenter.dismiss(id: item.id)
                 }
         }
     }
