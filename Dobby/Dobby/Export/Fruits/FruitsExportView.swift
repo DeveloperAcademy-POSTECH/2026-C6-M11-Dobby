@@ -6,6 +6,7 @@ struct FruitsExportView: View {
     let onOpened: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
+    @Environment(ToastPresenter.self) private var toastPresenter
     @State private var pipController = MeasurementPiPController()
     @State private var opening: Bool
     @State private var alertMessage: String?
@@ -78,6 +79,7 @@ struct FruitsExportView: View {
 
     private func copy(_ field: ProductCopyField) {
         ClipboardWriter().copyText(product.marketplacePayload.value(for: field))
+        toastPresenter.show(field.fruitsToastMessage)
     }
 
     private func startPiPAndOpenFruits() {
@@ -119,16 +121,30 @@ struct FruitsExportView: View {
     NavigationStack {
         FruitsExportView(product: .fruitsPreview)
     }
+    .toast()
 }
 
 #Preview("긴 내용") {
     NavigationStack {
         FruitsExportView(product: .fruitsLongPreview)
     }
+    .toast()
 }
 
 #Preview("앱 여는 중") {
     NavigationStack {
         FruitsExportView(product: .fruitsPreview, initialOpening: true)
+    }
+    .toast()
+}
+
+private extension ProductCopyField {
+    var fruitsToastMessage: String {
+        switch self {
+        case .productName: "제품명을 복사했어요"
+        case .description: "설명을 복사했어요"
+        case .brand: "브랜드를 복사했어요"
+        case .measurements: "실측 사이즈를 복사했어요"
+        }
     }
 }
