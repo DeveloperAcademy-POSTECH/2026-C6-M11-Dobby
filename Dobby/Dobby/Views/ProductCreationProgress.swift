@@ -1,6 +1,22 @@
 import SwiftUI
 import UIKit
 
+/// Shared vertical rhythm of the three Figma capture/result headers.
+/// On the 402×874 reference, status-safe y=62 gives photo y=146.
+nonisolated enum ProductCreationHeaderLayout {
+    static let progressHeight: CGFloat = 3
+    static let segmentSpacing: CGFloat = 6
+    static let progressToToolbar: CGFloat = 13
+    static let toolbarHeight: CGFloat = 44
+    static let toolbarBottomPadding: CGFloat = 10
+    static let photoGap: CGFloat = 14
+
+    static let navigationInset = progressHeight + progressToToolbar
+    static let navigationHeight = toolbarHeight + toolbarBottomPadding
+    static let toolbarToPhoto = toolbarBottomPadding + photoGap
+    static let photoTop = navigationInset + navigationHeight + photoGap
+}
+
 enum ProductCreationStage: Int, CaseIterable {
     case measurement = 1, measurementResult, details, information
 
@@ -38,7 +54,7 @@ final class ProductCreationProgressBar: UIView {
         accessibilityLabel = "촬영 및 등록 진행 단계"
         for (index, segment) in segments.enumerated() {
             // The design's large radius resolves to half of the 3pt segment height.
-            segment.layer.cornerRadius = 1.5
+            segment.layer.cornerRadius = ProductCreationHeaderLayout.progressHeight / 2
             segment.layer.maskedCorners = index == 0
                 ? [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
                 : index == 3 ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
@@ -61,13 +77,14 @@ final class ProductCreationProgressBar: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let width = max(0, (bounds.width - 18) / 4)
+        let gap = ProductCreationHeaderLayout.segmentSpacing
+        let width = max(0, (bounds.width - gap * 3) / 4)
         for (index, segment) in segments.enumerated() {
-            segment.frame = CGRect(x: CGFloat(index) * (width + 6), y: 0, width: width, height: 3)
+            segment.frame = CGRect(x: CGFloat(index) * (width + gap), y: 0, width: width, height: ProductCreationHeaderLayout.progressHeight)
         }
     }
 
-    override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: 3) }
+    override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: ProductCreationHeaderLayout.progressHeight) }
 }
 
 extension View {
@@ -138,13 +155,13 @@ private struct ProductCreationProgressPresenter: UIViewControllerRepresentable {
                 restore()
                 insetNavigation = navigation
                 originalInsets = navigation.additionalSafeAreaInsets
-                navigation.additionalSafeAreaInsets.top += 16
+                navigation.additionalSafeAreaInsets.top += ProductCreationHeaderLayout.navigationInset
             }
             bar.configure(stage: stage)
             if bar.superview !== navigation.view { navigation.view.addSubview(bar) }
             navigation.view.bringSubviewToFront(bar)
             let top = navigation.view.convert(CGPoint(x: 0, y: window.safeAreaInsets.top), from: window).y
-            bar.frame = CGRect(x: 0, y: top, width: navigation.view.bounds.width, height: 3)
+            bar.frame = CGRect(x: 0, y: top, width: navigation.view.bounds.width, height: ProductCreationHeaderLayout.progressHeight)
         }
     }
 }

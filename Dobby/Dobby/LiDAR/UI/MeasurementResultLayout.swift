@@ -43,8 +43,8 @@ nonisolated struct MeasurementResultLayout {
             summary = CGRect(x: 20.5, y: max(0, summaryTop), width: max(1, width - 41), height: summaryHeight)
             // Fit in the reference 4:3 window; a square photo is centred within
             // it with the designer's 6pt optical adjustment. No extra crop.
-            let top: CGFloat = 83
-            let windowHeight = max(1, summary.minY - 33 - top)
+            let top = ProductCreationHeaderLayout.photoTop
+            let windowHeight = max(1, summary.minY - 32 - top)
             let photoHeight = min(width / aspect, windowHeight)
             let photoWidth = min(width, photoHeight * aspect)
             let squareAdjustment: CGFloat = abs(aspect - 1) < 0.02 ? min(6, max(0, windowHeight - photoHeight) / 2) : 0

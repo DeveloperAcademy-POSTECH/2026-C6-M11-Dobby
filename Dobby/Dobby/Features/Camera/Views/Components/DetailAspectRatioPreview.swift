@@ -6,17 +6,20 @@ import SwiftUI
 struct DetailAspectRatioPreview<Content: View>: View {
     let aspectRatio: DetailPhotoAspectRatio
     var prefersBottomAlignedPortrait = false
+    var minimumPhotoTop: CGFloat = 0
     @ViewBuilder var content: (CGRect) -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
             let layout = DetailCameraPreviewLayout(containerSize: geometry.size,
-                aspectRatio: aspectRatio, prefersBottomAlignedPortrait: prefersBottomAlignedPortrait)
+                aspectRatio: aspectRatio, prefersBottomAlignedPortrait: prefersBottomAlignedPortrait,
+                minimumPhotoTop: minimumPhotoTop)
             DetailPreviewViewport(rect: layout.photoFrame, content: content)
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
                 .animation(nil, value: geometry.size)
+                .animation(nil, value: minimumPhotoTop)
                 .animation(nil, value: reduceMotion)
         }
         .clipped()
@@ -43,6 +46,9 @@ private struct DetailPreviewViewport<Content: View>: View, Animatable {
             content(CGRect(origin: .zero, size: rect.size))
                 .frame(width: rect.width, height: rect.height)
                 .clipped()
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("상세 촬영 사진 표시 영역")
+                .accessibilityIdentifier("camera.photoViewport")
                 .position(x: rect.midX, y: rect.midY)
             CameraBlackSurroundings(photoRect: rect)
         }

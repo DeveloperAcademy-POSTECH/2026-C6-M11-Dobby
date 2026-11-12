@@ -105,7 +105,7 @@ struct GarmentMeasurementResultView: View {
     }
 
     private var resultNavigation: some View {
-        VStack(spacing: 13) {
+        VStack(spacing: ProductCreationHeaderLayout.progressToToolbar) {
             MeasurementResultProgress()
             MeasurementResultNavigationBar(
                 canGoBack: allowsRetake && !isSaving && !isEditingPoint && !model.needsRecalculation,
@@ -114,7 +114,7 @@ struct GarmentMeasurementResultView: View {
                 busyDescription: isSaving ? "저장 중" : "다시 측정 중",
                 backIdentifier: onConfirmedRecord == nil ? "retakeGarmentMeasurement" : "product-flow.back",
                 onBack: retakeIfAllowed, onContinue: { Task { await confirm() } })
-                .frame(height: 54)
+                .frame(height: ProductCreationHeaderLayout.navigationHeight)
         }
         .frame(maxWidth: .infinity)
         .background(Color.white)

@@ -15,10 +15,12 @@ struct CameraLivePreviewView: View {
     let camera: CameraPreviewSession
     var aspectRatio: DetailPhotoAspectRatio = .fourThree
     var interactionEnabled = true
+    var minimumPhotoTop: CGFloat = 0
     @State private var isVisible = false
 
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: aspectRatio, prefersBottomAlignedPortrait: true) { photoRect in
+        DetailAspectRatioPreview(aspectRatio: aspectRatio, prefersBottomAlignedPortrait: true,
+                                 minimumPhotoTop: minimumPhotoTop) { photoRect in
             CameraPreviewSurface(session: camera.session, photoRect: photoRect,
                 onRotationChange: { camera.rotationAngle = $0 },
                 onFramingReady: { camera.previewCrop = $0 },
