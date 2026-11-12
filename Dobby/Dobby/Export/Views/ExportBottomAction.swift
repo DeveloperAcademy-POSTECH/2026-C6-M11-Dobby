@@ -29,10 +29,3 @@ struct ExportBottomActionBar<Content: View>: View {
         .padding()
         .background(Color(.brandNeutralWhite))
 }
-
-#Preview("하단 액션 바", traits: .sizeThatFitsLayout) {
-    ExportBottomActionBar {
-        ExportBottomAction(title: "업로드하기", action: {})
-    }
-    .frame(width: 402)
-}

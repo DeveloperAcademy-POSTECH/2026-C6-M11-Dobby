@@ -214,3 +214,102 @@ private struct Cafe24ResetButton: View {
         .buttonStyle(.plain)
     }
 }
+
+#Preview("상품 편집") {
+    @Previewable @State var draft = Cafe24ExportDraft(product: .demo)
+
+    Cafe24ProductView(
+        draft: $draft,
+        isCompleted: false,
+        isDisabled: false
+    )
+}
+
+#Preview("업로드 완료") {
+    @Previewable @State var draft = Cafe24ExportDraft(product: .demo)
+
+    Cafe24ProductView(
+        draft: $draft,
+        isCompleted: true,
+        isDisabled: false
+    )
+}
+
+#Preview("완료 안내", traits: .sizeThatFitsLayout) {
+    Cafe24CompletionHeader()
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("업로드할 사진", traits: .sizeThatFitsLayout) {
+    let draft = Cafe24ExportDraft(product: .demo)
+
+    Cafe24ProductPhotos(photos: draft.photos)
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("사진 목록", traits: .sizeThatFitsLayout) {
+    let draft = Cafe24ExportDraft(product: .demo)
+
+    Cafe24PhotoStrip(photos: draft.photos)
+        .frame(width: 363, height: 212)
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("상품 사진", traits: .sizeThatFitsLayout) {
+    let draft = Cafe24ExportDraft(product: .demo)
+
+    Cafe24ProductPhoto(data: draft.photos.first)
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("상품명 입력", traits: .sizeThatFitsLayout) {
+    @Previewable @State var text = "빈티지 재킷"
+
+    Cafe24ProductNameField(text: $text, onReset: {})
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("상품 설명 입력", traits: .sizeThatFitsLayout) {
+    @Previewable @State var text = "가볍게 걸치기 좋은 빈티지 재킷입니다."
+
+    Cafe24ProductDescriptionField(text: $text, onReset: {})
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("판매가 입력", traits: .sizeThatFitsLayout) {
+    @Previewable @State var priceText = "89,000"
+
+    Cafe24PriceField(priceText: $priceText, onReset: {})
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("편집 제목", traits: .sizeThatFitsLayout) {
+    Cafe24EditorHeader(title: "상품명", onReset: {})
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("편집 안내", traits: .sizeThatFitsLayout) {
+    Cafe24EditorTitle(title: "상품명")
+        .padding()
+        .background(Color(.brandNeutral50))
+}
+
+#Preview("초기화 버튼", traits: .sizeThatFitsLayout) {
+    Cafe24ResetButton(action: {})
+        .padding()
+        .background(Color(.brandNeutral50))
+}
