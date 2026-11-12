@@ -15,7 +15,7 @@ struct ExportAccountMenu: View {
         }
         .accessibilityLabel(accessibilityLabel)
         .popover(isPresented: $isPresented) {
-            VStack(spacing: 0) {
+            VStack(alignment: .center, spacing: 0) {
                 ExportAccountMenuButton(
                     title: "다시 연결하기",
                     systemImage: "arrow.clockwise",
@@ -28,7 +28,8 @@ struct ExportAccountMenu: View {
                     action: performDisconnect
                 )
             }
-            .padding(12)
+            .padding(.vertical, 10)
+            .frame(width: 238, alignment: .top)
             .presentationCompactAdaptation(.popover)
         }
     }
