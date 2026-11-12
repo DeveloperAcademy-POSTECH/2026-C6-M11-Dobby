@@ -116,9 +116,27 @@ nonisolated enum DetailPhotoLibrarySaveError: Error, LocalizedError, Equatable, 
     }
 }
 
-/// One process-wide serial owner prevents separate screen instances from saving
-/// the same capture concurrently. Receipts are one small atomic file per capture,
-/// so history does not accumulate as full image buffers or an in-memory registry.
+/// A successful Photos transaction, including the version of a derived raster.
+nonisolated struct DetailPhotoLibraryReceipt: Codable, Sendable {
+    let schemaVersion: Int
+    let captureID: UUID
+    let captureSessionID: UUID?
+    let photoLibraryIdentifier: String?
+    let savedAt: Date
+    let visualizationRenderVersion: Int?
+
+    func matches(_ photo: CapturedAsset, visualizationRenderVersion: Int?) -> Bool {
+        guard schemaVersion == 1, captureID == photo.id,
+              captureSessionID == photo.sessionID || (captureSessionID == nil && photo.purpose == .detail) else {
+            return false
+        }
+        return photo.purpose != .measurementVisualization
+            || self.visualizationRenderVersion == visualizationRenderVersion
+    }
+}
+
+/// One process-wide serial owner prevents concurrent duplicate saves. Receipts
+/// stay small and never retain full image buffers or require Photos read access.
 private actor DetailPhotoLibraryArchive {
     static let shared = DetailPhotoLibraryArchive()
 
@@ -127,17 +145,7 @@ private actor DetailPhotoLibraryArchive {
     private var isSaving = false
     /// Retain one successful transaction when a receipt write fails, so retrying
     /// in this process cannot create a second Photos asset for that transaction.
-    private var unrecordedReceipt: Receipt?
-
-    private struct Receipt: Codable, Sendable {
-        let schemaVersion: Int
-        let captureID: UUID
-        let captureSessionID: UUID?
-        // A successful transaction still counts if PhotoKit omits a placeholder.
-        // No read permission is requested merely to recover that identifier.
-        let photoLibraryIdentifier: String?
-        let savedAt: Date
-    }
+    private var unrecordedReceipt: DetailPhotoLibraryReceipt?
 
     func save(_ photos: [CapturedAsset],
               onProgress: @MainActor @Sendable (Int) -> Void) async throws {
@@ -157,8 +165,7 @@ private actor DetailPhotoLibraryArchive {
         for photo in photos {
             try Task.checkCancellation()
             // A prior receipt-write failure does not undo the Photos commit.
-            if unrecordedReceipt?.captureID == photo.id,
-               unrecordedReceipt?.captureSessionID == photo.sessionID {
+            if unrecordedReceipt?.matches(photo, visualizationRenderVersion: renderVersion(for: photo)) == true {
                 completed += 1
                 continue
             }
@@ -195,8 +202,12 @@ private actor DetailPhotoLibraryArchive {
             let localIdentifier = try await createPhoto(photo)
             // Do not check cancellation between Photos success and this write:
             // PhotoKit transactions cannot be cancelled after submission.
-            unrecordedReceipt = Receipt(schemaVersion: 1, captureID: photo.id, captureSessionID: photo.sessionID,
-                photoLibraryIdentifier: localIdentifier, savedAt: .now)
+            // An updated overlay is saved once as a new Photos asset. Existing
+            // Photos images and receipts for camera originals stay untouched.
+            unrecordedReceipt = DetailPhotoLibraryReceipt(schemaVersion: 1,
+                captureID: photo.id, captureSessionID: photo.sessionID,
+                photoLibraryIdentifier: localIdentifier, savedAt: .now,
+                visualizationRenderVersion: renderVersion(for: photo))
             completed += 1
             do {
                 try flushUnrecordedReceipt()
@@ -287,21 +298,26 @@ private actor DetailPhotoLibraryArchive {
             guard values.isRegularFile == true, let size = values.fileSize, size > 0, size <= 4_096 else {
                 throw DetailPhotoLibrarySaveError.receiptStorageFailed
             }
-            let receipt = try JSONDecoder().decode(Receipt.self, from: Data(contentsOf: url))
+            let receipt = try JSONDecoder().decode(DetailPhotoLibraryReceipt.self, from: Data(contentsOf: url))
             guard receipt.schemaVersion == 1, receipt.captureID == id else {
                 throw DetailPhotoLibrarySaveError.receiptStorageFailed
             }
             // Retaking measurement reuses the product photo ID but replaces
             // its capture session. Save that new original instead of skipping it.
             // Legacy receipts were detail-only; their IDs are immutable.
-            return receipt.captureSessionID == photo.sessionID
-                || (receipt.captureSessionID == nil && photo.purpose == .detail)
+            return receipt.matches(photo, visualizationRenderVersion: renderVersion(for: photo))
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
             return false
         } catch {
             // An unreadable or malformed receipt must not trigger a duplicate.
             throw DetailPhotoLibrarySaveError.fromReceiptStorage(error)
         }
+    }
+
+    private func renderVersion(for photo: CapturedAsset) -> Int? {
+        guard photo.purpose == .measurementVisualization,
+              case let .localFile(url, _) = photo.source else { return nil }
+        return MeasurementProductPhoto.renderingVersion(of: url)
     }
 
     private func flushUnrecordedReceipt() throws {

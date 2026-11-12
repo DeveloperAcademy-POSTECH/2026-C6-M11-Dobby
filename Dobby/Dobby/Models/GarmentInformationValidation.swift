@@ -8,6 +8,12 @@ enum GarmentInformationValidation {
         } || garment.price != nil
     }
 
+    // Partial information still enables a tap to reveal required-field errors.
+    // Overflow must be repaired before that completion attempt is available.
+    static func canAttemptCompletion(_ garment: Garment) -> Bool {
+        hasAnyInformation(garment) && garment.productPhotos.count <= ProductPhotoLimit.maximumCount
+    }
+
     static func isNameValid(_ garment: Garment) -> Bool {
         !garment.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }

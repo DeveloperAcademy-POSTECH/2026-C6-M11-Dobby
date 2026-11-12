@@ -7,12 +7,12 @@ nonisolated enum ProductPhotoLimit {
     static func remaining(after count: Int) -> Int { max(0, maximumCount - max(0, count)) }
     static func canRegister(count: Int) -> Bool { (1...maximumCount).contains(count) }
 
-    /// Preserve existing selections (including legacy overflow for user repair)
-    /// and fill only the remaining slots with newly captured pictures.
+    /// Keep every unique capture in the editable draft, including overflow for
+    /// the seller to remove. The final registration limit is checked separately.
     static func registrationIDs(existing: [UUID], incoming: [UUID]) -> [UUID] {
         var seen = Set(existing)
         let additions = incoming.filter { seen.insert($0).inserted }
-        return existing + additions.prefix(remaining(after: existing.count))
+        return existing + additions
     }
 
     enum ValidationError: LocalizedError {

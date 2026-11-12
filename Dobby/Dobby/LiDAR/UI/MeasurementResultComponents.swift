@@ -138,22 +138,8 @@ struct MeasurementResultSummary: View {
 /// Figma's four-part Progress Bar, with the result screen on its second stage.
 struct MeasurementResultProgress: View {
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<4) { index in
-                Rectangle()
-                    .fill(Color(index < 2 ? "BrandMain500" : "BrandNeutral200"))
-                    .clipShape(UnevenRoundedRectangle(
-                        topLeadingRadius: index == 0 ? 0 : 22,
-                        bottomLeadingRadius: index == 0 ? 0 : 22,
-                        bottomTrailingRadius: index == 3 ? 0 : 22,
-                        topTrailingRadius: index == 3 ? 0 : 22))
-            }
-        }
+        ProductCreationProgress(stage: .measurementResult)
         .frame(height: 3)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("촬영 및 등록 진행 단계")
-        .accessibilityValue("4단계 중 2단계, 실측 결과")
-        .accessibilityIdentifier("garmentResultProgress")
     }
 }
 

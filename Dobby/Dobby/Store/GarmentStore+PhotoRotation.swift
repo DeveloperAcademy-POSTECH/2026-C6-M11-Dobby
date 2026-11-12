@@ -6,12 +6,13 @@ extension GarmentStore {
     /// The original is immutable: rotation creates a product-only JPEG. Keeping
     /// the three immutable variants also lets an unsaved edit roll back safely.
     @MainActor
-    static func rotateProductPhoto(_ photo: GarmentPhoto, in garment: Garment) async throws {
+    static func rotateProductPhoto(_ photo: GarmentPhoto, in garment: Garment,
+                                   clockwise: Bool = true) async throws {
         guard garment.productPhotos.contains(where: { $0.id == photo.id }) else {
             throw StoreError.encodingFailed
         }
         let previous = photo.productRotationQuarterTurns ?? 0
-        let next = (previous + 1) % 4
+        let next = ((previous + (clockwise ? 1 : -1)) % 4 + 4) % 4
         let original = photosDirectory.appending(path: photo.fileName)
         let destination = productPhotoURL(fileName: photo.fileName, quarterTurns: next)
         if next != 0 {
@@ -41,7 +42,7 @@ extension GarmentStore {
         (0..<4).map { productPhotoURL(fileName: photo.fileName, quarterTurns: $0) }
     }
 
-    private nonisolated static func writeProductRotation(original: URL, destination: URL,
+    nonisolated static func writeProductRotation(original: URL, destination: URL,
                                                          quarterTurns: Int) throws {
         // A given variant is always generated from the same original, so it
         // never accumulates lossy rotations or invalidates an earlier edit.

@@ -4,6 +4,29 @@ import XCTest
 /// Relaunches prove that a new flow restores saved state rather than live view state.
 @MainActor
 final class ProductDraftResumeTests: XCTestCase {
+    func testLongPressDraftSelectsDraftGridWithoutResuming() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+        openMeasurementResult(in: app)
+        let id = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
+        let draft = app.buttons.matching(identifier: "library.draft.\(id)").firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.press(forDuration: 0.8)
+        let remove = app.buttons["library.delete.\(id)"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["library.edit-mode"].label, "완료")
+        XCTAssertFalse(app.navigationBars["제품 상세 촬영"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["library.draft-banner.\(id)"].exists,
+                      "임시저장 목록을 수정할 때도 상단 이어하기 카드를 유지한다")
+        XCTAssertTrue(app.buttons["library.resume-delete.\(id)"].exists)
+        attachScreenshot(app, name: "library-draft-long-press-editing")
+        app.buttons["library.edit-mode"].tap()
+        XCTAssertTrue(remove.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(draft.waitForExistence(timeout: 5))
+    }
+
     func testInformationBackUsesDoneStateBeforeAndAfterHomeResume() {
         continueAfterFailure = false
         let app = fixtureApp()
@@ -149,7 +172,7 @@ final class ProductDraftResumeTests: XCTestCase {
         app.tabBars.buttons["보관함"].tap()
         XCTAssertTrue(app.navigationBars["보관함"].waitForExistence(timeout: 10))
         let drafts = draftButtons(in: app)
-        XCTAssertEqual(drafts.count, 2)
+        XCTAssertEqual(drafts.count, 1, "상단에는 최근 임시저장 작업만 표시한다")
         guard let discarded = drafts.allElementsBoundByIndex.first(where: { !$0.identifier.hasSuffix(retainedID) }) else {
             XCTFail("The second registration must have its own saved draft")
             return
@@ -271,10 +294,27 @@ final class ProductDraftResumeTests: XCTestCase {
         expectHomeResume(stage: "상세 촬영 단계", app: app)
         app.tabBars.buttons["보관함"].tap()
         let drafts = draftButtons(in: app)
-        XCTAssertEqual(drafts.count, 2)
+        XCTAssertEqual(drafts.count, 1, "상단에는 최근 임시저장 작업만 표시한다")
         let second = drafts.allElementsBoundByIndex.first { !$0.identifier.hasSuffix(firstID) }
         guard let second else { XCTFail("새 촬영은 별도 초안을 생성해야 한다"); return }
         let secondID = String(second.identifier.dropFirst("library.draft.".count))
+        let badge = app.buttons["library.draft-count"]
+        XCTAssertEqual(badge.label, "임시저장 2개")
+        XCTAssertFalse(app.buttons["library.draft.\(firstID)"].exists)
+        let draftCards = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "library.draft-product."
+        ))
+        XCTAssertEqual(draftCards.count, 0)
+        badge.tap()
+        XCTAssertEqual(badge.value as? String, "선택됨")
+        XCTAssertEqual(draftCards.count, 2)
+        XCTAssertTrue(app.buttons["library.draft-product.\(firstID)"].exists)
+        XCTAssertTrue(app.buttons["library.draft-product.\(secondID)"].exists)
+        XCTAssertEqual(drafts.count, 1, "임시저장 목록을 열어도 상단 카드는 하나만 유지한다")
+        attachScreenshot(app, name: "library-all-drafts-grid")
+        badge.tap()
+        XCTAssertTrue(draftCards.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(draftCards.count, 0)
         deleteDraft(productID: secondID, app: app)
         app.tabBars.buttons["홈"].tap()
         expectHomeResume(stage: "상세 촬영 단계", app: app)

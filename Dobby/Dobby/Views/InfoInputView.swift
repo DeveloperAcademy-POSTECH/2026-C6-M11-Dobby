@@ -107,6 +107,7 @@ struct InfoInputView: View {
         }
         .background(ProductInformationStyle.background)
         .navigationTitle(allowsPhotoEditing ? "제품 정보 수정" : "제품 정보 입력")
+        .productCreationProgress(allowsPhotoEditing ? nil : .information)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil)
         .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
@@ -142,7 +143,7 @@ struct InfoInputView: View {
                             ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
                             in: Capsule())
                 }
-                .disabled(generationRequestID != nil || isImportingPhotos || !GarmentInformationValidation.hasAnyInformation(garment))
+                .disabled(generationRequestID != nil || isImportingPhotos || !GarmentInformationValidation.canAttemptCompletion(garment))
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }
