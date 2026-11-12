@@ -148,12 +148,12 @@
     <th align="center"><a href="https://github.com/takechaens">박채은</a></th>
   </tr>
   <tr>
-    <td align="center"><div>&#8203;<sub>Mason&nbsp;·&nbsp;메&#8288;이&#8288;슨</sub></div></td>
-    <td align="center"><div>&#8203;<sub>Tobae&nbsp;·&nbsp;토&#8288;바&#8288;에</sub></div></td>
-    <td align="center"><div>&#8203;<sub>Mugu&nbsp;·&nbsp;무&#8288;구</sub></div></td>
-    <td align="center"><div>&#8203;<sub>Ichi&nbsp;·&nbsp;이&#8288;치</sub></div></td>
-    <td align="center"><div>&#8203;<sub>Ddoechii&nbsp;·&nbsp;또&#8288;치</sub></div></td>
-    <td align="center"><div>&#8203;<sub>Iris&nbsp;·&nbsp;아&#8288;이&#8288;리&#8288;스</sub></div></td>
+    <td align="center">Mason&nbsp;·&nbsp;메&#8288;이&#8288;슨</td>
+    <td align="center">Tobae&nbsp;·&nbsp;토&#8288;바&#8288;에</td>
+    <td align="center">Mugu&nbsp;·&nbsp;무&#8288;구</td>
+    <td align="center">Ichi&nbsp;·&nbsp;이&#8288;치</td>
+    <td align="center">Ddoechii&nbsp;·&nbsp;또&#8288;치</td>
+    <td align="center">Iris&nbsp;·&nbsp;아&#8288;이&#8288;리&#8288;스</td>
   </tr>
   <tr>
     <td align="center" valign="top">🎯&nbsp;PM<br>💻&nbsp;Developer</td>
