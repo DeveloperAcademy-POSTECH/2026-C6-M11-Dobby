@@ -24,7 +24,9 @@ final class DetailCaptureGuideUITests: XCTestCase {
         XCTAssertTrue(more.wait(for: \.isHittable, toEqual: true, timeout: 5))
         more.tap()
         let closeOptions = app.buttons["camera.closeOptions"]
-        XCTAssertTrue(closeOptions.waitForExistence(timeout: 5))
+        let menu = app.descendants(matching: .any)["camera.optionsMenu"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        XCTAssertFalse(closeOptions.exists)
         XCTAssertFalse(capture.exists)
         XCTAssertFalse(app.buttons["camera.openGallery"].exists)
         XCTAssertFalse(app.buttons["camera.exposureOption"].isEnabled)
@@ -32,7 +34,9 @@ final class DetailCaptureGuideUITests: XCTestCase {
         XCTAssertEqual(app.buttons["camera.aspectRatioOption"].value as? String, "4:3",
                        "The shared panel reports its selected ratio even when the separate availability gate disables editing")
         attachScreenshot(app, name: "detail-capture-options-menu")
-        closeOptions.tap()
+        app.buttons["camera.dismissOptions"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.3)).tap()
+        XCTAssertTrue(menu.waitForNonExistence(timeout: 5))
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 5))
         more.tap()
         app.buttons["camera.dismissOptions"].tap()
@@ -44,7 +48,7 @@ final class DetailCaptureGuideUITests: XCTestCase {
         app.buttons["confirmGarmentMeasurement"].tap()
         XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 15))
         XCTAssertFalse(exitConfirmation(in: app).exists)
-        XCTAssertFalse(closeOptions.exists)
+        XCTAssertFalse(menu.exists)
         XCTAssertFalse(guide.exists)
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 5))
         let productID = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
@@ -59,7 +63,7 @@ final class DetailCaptureGuideUITests: XCTestCase {
         draft.tap()
         XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 15))
         XCTAssertFalse(guide.exists)
-        XCTAssertFalse(closeOptions.exists)
+        XCTAssertFalse(menu.exists)
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 10))
         capture.tap()
         let next = app.buttons["camera.selectPhotos"]

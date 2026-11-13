@@ -84,7 +84,8 @@ final class CaptureProgressLayoutUITests: XCTestCase {
             XCTAssertTrue(selection.waitForExistence(timeout: 5))
             selection.tap()
             app.buttons["camera.aspectRatioBack"].tap()
-            app.buttons["camera.closeOptions"].tap()
+            app.buttons["camera.dismissOptions"]
+                .coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.3)).tap()
             XCTAssertTrue(app.descendants(matching: .any)["camera.optionsMenu"].firstMatch
                 .waitForNonExistence(timeout: 5))
 
