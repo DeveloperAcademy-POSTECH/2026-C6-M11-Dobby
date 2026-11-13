@@ -17,7 +17,7 @@ struct ProductInformationEditingView: View {
             .environment(\.modelContext, session.context)
             .fullScreenCover(isPresented: $showsDiscardConfirmation) {
                 ProductInformationDiscardConfirmation(
-                    onCancel: { showsDiscardConfirmation = false },
+                    onCancel: { setDiscardConfirmationVisible(false) },
                     onDiscard: discardChangesAndExit
                 )
                 .presentationBackground(.clear)
@@ -30,13 +30,21 @@ struct ProductInformationEditingView: View {
             onExit()
             return
         }
-        showsDiscardConfirmation = true
+        setDiscardConfirmationVisible(true)
     }
 
     private func discardChangesAndExit() {
-        showsDiscardConfirmation = false
+        setDiscardConfirmationVisible(false)
         session.discard()
         onDiscard()
+    }
+
+    private func setDiscardConfirmationVisible(_ isVisible: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            showsDiscardConfirmation = isVisible
+        }
     }
 }
 
