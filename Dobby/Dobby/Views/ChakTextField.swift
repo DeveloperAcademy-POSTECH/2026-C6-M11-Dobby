@@ -67,7 +67,7 @@ private struct ChakTextFieldEditor: View {
             prompt: Text(placeholder)
                 .foregroundStyle(Color(red: 191 / 255, green: 191 / 255, blue: 191 / 255))
         )
-        .font(.custom("Pretendard-Regular", fixedSize: 16))
+        .font(.custom("Pretendard-Regular", fixedSize: 15))
         .tracking(-0.16)
         .focused(isFocused)
         .padding(.horizontal, 20)

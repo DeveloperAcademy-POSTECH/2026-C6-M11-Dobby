@@ -147,14 +147,12 @@ final class CaptureProgressLayoutUITests: XCTestCase {
         // y=146. Other window sizes retain their responsive camera placement.
         if abs(app.frame.width - 402) < 1 && abs(app.frame.height - 874) < 1 {
             if identifier == "garmentResultPhotoViewport" {
-                // Fit the complete 4:5 synthetic image in the 4:3 reference
-                // window. A real 4:3 capture starts exactly at progress +84.
+                // Every result ratio starts below the same header. Preserve
+                // the complete 4:5 fixture without vertically centering it.
                 let summary = app.descendants(matching: .any)["garmentResultMeasurementSummary"].firstMatch
                 XCTAssertTrue(summary.exists)
-                let top = progress.minY + 84
-                let availableHeight = summary.frame.minY - 32 - top
-                let centering = max(0, (availableHeight - photoFrame.height) / 2)
-                XCTAssertEqual(photoFrame.minY, top + centering, accuracy: 1)
+                XCTAssertEqual(photoFrame.minY, progress.minY + 84, accuracy: 1)
+                XCTAssertGreaterThanOrEqual(summary.frame.minY - photoFrame.maxY, 33)
             } else {
                 // The synthetic provenance banner occupies a safe-area inset
                 // below the native toolbar. Production has no such banner.

@@ -4,29 +4,29 @@ struct Cafe24MallIDField: View {
     @Binding var mallID: String
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            ChakTextField(
-                label: "카페24 ID",
-                text: $mallID,
-                placeholder: "카페24 ID를 적어주세요",
-                isRequired: true
-            )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
+        VStack(alignment: .leading, spacing: 8) {
+            Text("카페24 ID")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(Color(.label))
 
-            if !mallID.isEmpty {
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(
-                        Color(red: 122 / 255, green: 117 / 255, blue: 110 / 255),
-                        lineWidth: 1
-                    )
-                    .frame(height: 56)
-                    .allowsHitTesting(false)
+            HStack(alignment: .center, spacing: 10) {
+                TextField(
+                    "",
+                    text: $mallID,
+                    prompt: Text("카페24 ID를 적어주세요")
+                        .foregroundStyle(Color(red: 191 / 255, green: 191 / 255, blue: 191 / 255))
+                )
+                .font(.custom("Pretendard-Regular", fixedSize: 15))
+                .tracking(-0.16)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+                Cafe24MallIDSuffix()
             }
-
-            Cafe24MallIDSuffix()
-                .frame(height: 56)
-                .padding(.trailing, 20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 16))
         }
     }
 }
@@ -34,11 +34,8 @@ struct Cafe24MallIDField: View {
 private struct Cafe24MallIDSuffix: View {
     var body: some View {
         Text(".cafe24.com")
-            .font(.custom("Pretendard-Medium", fixedSize: 16))
-            .tracking(-0.16)
-            .foregroundStyle(Color(.brandNeutral900))
-            .padding(.leading, 12)
-            .background(Color(.brandNeutral100))
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Color(.brandNeutralBlack))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -55,4 +52,10 @@ private struct Cafe24MallIDSuffix: View {
     .padding(24)
     .frame(width: 820)
     .background(Color(.brandNeutralWhite))
+}
+
+#Preview("도메인 접미사", traits: .sizeThatFitsLayout) {
+    Cafe24MallIDSuffix()
+        .padding()
+        .background(Color(.brandNeutralWhite))
 }

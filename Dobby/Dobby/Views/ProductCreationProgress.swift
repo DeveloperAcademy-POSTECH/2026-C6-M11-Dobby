@@ -17,6 +17,12 @@ nonisolated enum ProductCreationHeaderLayout {
     static let photoTop = navigationInset + navigationHeight + photoGap
 }
 
+/// The native toolbar and result layout use the same header rhythm.
+nonisolated enum ProductCreationLayoutMetrics {
+    static let headerHeight = ProductCreationHeaderLayout.navigationInset + ProductCreationHeaderLayout.navigationHeight
+    static let photoGap = ProductCreationHeaderLayout.photoGap
+}
+
 enum ProductCreationStage: Int, CaseIterable {
     case measurement = 1, measurementResult, details, information
 

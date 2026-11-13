@@ -243,27 +243,31 @@ struct ProductSavedDetailView: View {
     var body: some View {
         ScrollView {
             ProductDetailCard(garment: garment, measurementAccessibilityPrefix: "library.measurement",
-                              photoPresentation: .compact)
+                              photoPresentation: .compact, style: .library)
                 .padding(.horizontal, 21)
-                .padding(.vertical, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 10)
                 .frame(maxWidth: 640)
                 .frame(maxWidth: .infinity)
         }
-        .background(ProductInformationStyle.background)
+        .background(LibraryStyle.background)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ChakPrimaryButton(title: "플랫폼에 업로드하러 가기") {
-                openExport()
+            Button(action: openExport) {
+                Text("플랫폼에 업로드하러 가기")
+                    .font(LibraryDetailTypography.upload)
+                    .tracking(-0.31)
             }
+                .buttonStyle(ChakPrimaryButtonStyle(variant: .solid))
                 .accessibilityIdentifier("library.export")
-                .padding(.horizontal, 33)
+                .padding(.horizontal, 33.5)
                 .padding(.top, 16)
                 .frame(maxWidth: 640)
                 .frame(maxWidth: .infinity)
-                .background(ProductInformationStyle.background.ignoresSafeArea(edges: .bottom))
+                .background(LibraryStyle.background.ignoresSafeArea(edges: .bottom))
         }
         .navigationTitle(garment.name.isEmpty ? "이름 없는 \(garment.group.label)" : garment.name)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(ProductInformationStyle.background, for: .navigationBar)
+        .toolbarBackground(LibraryStyle.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.light, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
@@ -271,6 +275,7 @@ struct ProductSavedDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("수정", action: openInformation)
+                    .font(LibraryDetailTypography.edit)
                     .foregroundStyle(.primary)
                     .accessibilityIdentifier("library.edit")
             }

@@ -24,6 +24,7 @@ struct InstagramExportView: View {
     @State private var account: InstagramAccount?
     @State private var isLoadingAccount = true
     @State private var accountLoadError: String?
+    @State private var showsConnectionCompletion = false
     @State private var draft: InstagramExportDraft
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
@@ -31,11 +32,14 @@ struct InstagramExportView: View {
     @State private var message: String?
     @State private var requestID = UUID().uuidString
 
-    init(product: ExportProduct, onRequestExit: @escaping (ExportReturnDestination) -> Void,
+    init(product: ExportProduct, initialAccount: InstagramAccount? = nil,
+         onRequestExit: @escaping (ExportReturnDestination) -> Void,
          onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
         self.product = product
         self.onRequestExit = onRequestExit
         self.onPublished = onPublished
+        _account = State(initialValue: initialAccount)
+        _isLoadingAccount = State(initialValue: initialAccount == nil)
         _draft = State(initialValue: InstagramExportDraft(product: product))
     }
 
@@ -45,6 +49,11 @@ struct InstagramExportView: View {
                 InstagramUploadCompletionView(
                     onOpenLibrary: requestLibraryExit,
                     onOpenInstagram: openInstagram
+                )
+            } else if showsConnectionCompletion {
+                InstagramConnectionCompletionView(
+                    onOpenLibrary: requestLibraryExit,
+                    onContinueToUpload: { showsConnectionCompletion = false }
                 )
             } else if let account {
                 InstagramComposeView(
@@ -63,9 +72,9 @@ struct InstagramExportView: View {
         .navigationTitle("인스타그램에 업로드하기")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
-        .toolbar(uploadState.isCompleted ? .hidden : .visible, for: .navigationBar)
+        .toolbar(showsCompletion ? .hidden : .visible, for: .navigationBar)
         .toolbar {
-            if !uploadState.isUploading {
+            if !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(
                         systemImage: "chevron.left",
@@ -73,30 +82,28 @@ struct InstagramExportView: View {
                     ) {
                         dismiss()
                     }
+                    .buttonBorderShape(.circle)
                 }
             }
-            if account != nil && !uploadState.isUploading && !uploadState.isCompleted {
+            if account != nil && !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarTrailing) {
                     ExportAccountMenu(
                         accessibilityLabel: "Instagram 계정 메뉴",
                         onReconnect: { Task { await connect() } },
                         onDisconnect: { Task { await disconnect() } }
                     )
+                    .buttonBorderShape(.capsule)
                 }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if account != nil && !uploadState.isCompleted {
-                ExportBottomActionBar {
-                    ExportBottomAction(
-                        title: "업로드하기",
-                        isWorking: uploadState.isUploading,
-                        isComplete: false,
-                        isEnabled: canPublish
-                    ) {
-                        Task { await publish() }
-                    }
+            if account != nil && !showsCompletion {
+                ExportBottomAction(title: "업로드하기") {
+                    Task { await publish() }
                 }
+                .padding(.horizontal, 33)
+                .padding(.top, 16)
+                .background(Color(.brandNeutralWhite))
             }
         }
         .overlay {
@@ -115,7 +122,10 @@ struct InstagramExportView: View {
             }
         }
         .interactiveDismissDisabled(uploadState.isUploading)
-        .task { await loadAccount() }
+        .task {
+            guard account == nil else { return }
+            await loadAccount()
+        }
         .alert("Instagram 안내", isPresented: Binding(
             get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("확인", role: .cancel) {}
@@ -124,8 +134,8 @@ struct InstagramExportView: View {
             }
     }
 
-    private var canPublish: Bool {
-        !busy && !uploadState.isUploading && account != nil && draft.canPublish
+    private var showsCompletion: Bool {
+        showsConnectionCompletion || uploadState.isCompleted
     }
 
     private func requestLibraryExit() {
@@ -161,6 +171,7 @@ struct InstagramExportView: View {
             account = try await client.connect()
             accountLoadError = nil
             requestID = UUID().uuidString
+            showsConnectionCompletion = true
         } catch {
             accountLoadError = error.localizedDescription
         }
@@ -181,6 +192,11 @@ struct InstagramExportView: View {
     }
 
     private func publish() async {
+        guard !busy, !uploadState.isUploading else { return }
+        if let validationMessage = draft.validationMessage {
+            message = validationMessage
+            return
+        }
         guard let expected = account else { return }
         uploadState = .uploading
         do {
@@ -204,5 +220,15 @@ struct InstagramExportView: View {
     private func republish() async {
         requestID = UUID().uuidString
         await publish()
+    }
+}
+
+#Preview("계정 연결 후 · 업로드 화면") {
+    NavigationStack {
+        InstagramExportView(
+            product: .instagramPreview,
+            initialAccount: .preview,
+            onRequestExit: { _ in }
+        )
     }
 }

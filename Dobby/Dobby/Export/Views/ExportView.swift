@@ -24,13 +24,10 @@ struct ExportView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    ExportProductItem(product: product)
-                    ExportChannelListView(completedChannels: completedChannels,
-                                          onSelectChannel: didSelectChannel)
-                }.padding(.horizontal, 33).padding(.bottom, 32)
+                ExportContentView(product: product, completedChannels: completedChannels,
+                                  onSelectChannel: didSelectChannel)
             }
-            .background(Color(.brandNeutral50))
+            .background(Color(.brandNeutralWhite))
             .navigationTitle("플랫폼 업로드하기")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -49,7 +46,7 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showCafe24) {
-                Cafe24ExportView(product: product) { _ in
+                Cafe24ExportView(product: product, onRequestExit: requestExit) { _ in
                     completedChannels.insert(.cafe24)
                     try? ExportCompletionRecorder.record(productID: product.id, channel: .cafe24,
                                                          in: modelContext)
@@ -63,6 +60,7 @@ struct ExportView: View {
                 }
             }
         }
+        .toast(bottomPadding: 112)
         .alert("플랫폼 기록을 저장하지 못했어요", isPresented: Binding(
             get: { selectionSaveError != nil },
             set: { if !$0 { selectionSaveError = nil } }
@@ -119,6 +117,34 @@ struct ExportView: View {
     }
 }
 
+private struct ExportContentView: View {
+    let product: ExportProduct
+    let completedChannels: Set<ExportChannel>
+    let onSelectChannel: (ExportChannel) -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            ExportProductItem(product: product)
+            ExportChannelListView(completedChannels: completedChannels,
+                                  onSelectChannel: onSelectChannel)
+        }
+        .frame(maxWidth: 337)
+        .padding(.horizontal, 32)
+        .padding(.bottom, 32)
+        .frame(maxWidth: .infinity)
+    }
+}
+
 #Preview {
     ExportView(product: .demo, showFruits: .constant(false))
+}
+
+#Preview("플랫폼 업로드 · 본문", traits: .sizeThatFitsLayout) {
+    ExportContentView(
+        product: .demo,
+        completedChannels: [.instagram],
+        onSelectChannel: { _ in }
+    )
+    .frame(width: 402)
+    .background(Color(.brandNeutralWhite))
 }

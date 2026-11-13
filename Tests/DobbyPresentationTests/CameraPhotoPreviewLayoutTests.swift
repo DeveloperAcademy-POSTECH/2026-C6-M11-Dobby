@@ -4,6 +4,36 @@ import XCTest
 @testable import Dobby
 
 final class CameraPhotoPreviewLayoutTests: XCTestCase {
+    func testMeasurementPhotoStartsBelowHeaderWithoutChangingPhotoSize() throws {
+        for (size, top) in [(CGSize(width: 402, height: 874), CGFloat(146)),
+                            (CGSize(width: 375, height: 667), CGFloat(108))] {
+            let original = CameraPhotoPreviewLayout(containerSize: size, photoAspectRatio: 0.75)
+            let placed = CameraPhotoPreviewLayout(containerSize: size, photoAspectRatio: 0.75,
+                portraitPhotoTop: top)
+            XCTAssertEqual(placed.photoFrame.minY, top)
+            XCTAssertEqual(placed.photoFrame.size, original.photoFrame.size)
+            XCTAssertEqual(placed.photoFrame.minX, original.photoFrame.minX)
+            XCTAssertNotNil(placed.controls(in: size, bottomSafeAreaInset: 34))
+            let detail = DetailCameraPreviewLayout(containerSize: size, aspectRatio: .fourThree,
+                prefersBottomAlignedPortrait: true, portraitPhotoTop: top)
+            assertRect(placed.photoFrame, detail.photoFrame)
+        }
+        let tall = CameraPhotoPreviewLayout(containerSize: CGSize(width: 402, height: 874),
+            photoAspectRatio: 9.0 / 16, prefersBottomAlignedPortrait: true, portraitPhotoTop: 146)
+        XCTAssertTrue(tall.isBottomAligned)
+        XCTAssertEqual(tall.photoFrame.maxY, 874)
+    }
+
+    func testResultPhotoKeepsFourteenPointGapBelowHeaderForEveryRatio() {
+        let aspects: [CGFloat] = [0.75, 1, 9.0 / 16]
+        for aspect in aspects {
+            let layout = MeasurementResultLayout(size: CGSize(width: 402, height: 812),
+                bottomSafeArea: 34, aspect: aspect, summaryHeight: 111)
+            XCTAssertEqual(layout.photo.minY, 84)
+            XCTAssertEqual(layout.photo.width / layout.photo.height, aspect, accuracy: 0.000001)
+        }
+    }
+
     func testUpdatedShutterFitsSafeAreaAndDoesNotOverlapOtherControls() throws {
         for size in [CGSize(width: 320, height: 568), CGSize(width: 375, height: 667),
                      CGSize(width: 402, height: 874), CGSize(width: 440, height: 956),

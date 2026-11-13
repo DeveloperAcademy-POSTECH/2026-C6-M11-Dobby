@@ -5,19 +5,19 @@ import XCTest
 final class CaptureHeaderPhotoLayoutTests: XCTestCase {
     func testFourThreeStartsBelowTheFigmaHeaderWithoutChangingItsAspectOrWidth() {
         let layout = CameraPhotoPreviewLayout(containerSize: CGSize(width: 402, height: 874),
-            photoAspectRatio: 3.0 / 4, minimumPhotoTop: 146)
+            photoAspectRatio: 3.0 / 4, portraitPhotoTop: 146)
         assertRect(layout.photoFrame, CGRect(x: 0, y: 146, width: 402, height: 536))
         XCTAssertFalse(layout.isBottomAligned)
     }
 
-    func testAnAlreadyClearSquareOrBottomAlignedTallPhotoKeepsItsComposition() {
+    func testSquareStartsBelowHeaderWhileTallPhotoKeepsBottomAlignment() {
         let size = CGSize(width: 402, height: 874)
         let square = CameraPhotoPreviewLayout(containerSize: size,
-            photoAspectRatio: 1, minimumPhotoTop: 146)
-        assertRect(square.photoFrame, CGRect(x: 0, y: 177.25, width: 402, height: 402))
+            photoAspectRatio: 1, portraitPhotoTop: 146)
+        assertRect(square.photoFrame, CGRect(x: 0, y: 146, width: 402, height: 402))
 
         let tall = CameraPhotoPreviewLayout(containerSize: size,
-            photoAspectRatio: 9.0 / 16, prefersBottomAlignedPortrait: true, minimumPhotoTop: 146)
+            photoAspectRatio: 9.0 / 16, prefersBottomAlignedPortrait: true, portraitPhotoTop: 146)
         XCTAssertTrue(tall.isBottomAligned)
         assertRect(tall.photoFrame, CGRect(x: 0, y: 874 - 402.0 * 16 / 9,
                                            width: 402, height: 402.0 * 16 / 9))
@@ -28,7 +28,7 @@ final class CaptureHeaderPhotoLayoutTests: XCTestCase {
                      CGSize(width: 402, height: 874), CGSize(width: 440, height: 956)] {
             for aspect in [1.0, 3.0 / 4, 9.0 / 16] {
                 let layout = CameraPhotoPreviewLayout(containerSize: size, photoAspectRatio: aspect,
-                    prefersBottomAlignedPortrait: aspect == 9.0 / 16, minimumPhotoTop: 146)
+                    prefersBottomAlignedPortrait: aspect == 9.0 / 16, portraitPhotoTop: 146)
                 let photo = layout.photoFrame
                 XCTAssertGreaterThan(photo.width, 0)
                 XCTAssertGreaterThan(photo.height, 0)
@@ -68,7 +68,7 @@ final class CaptureHeaderPhotoLayoutTests: XCTestCase {
     func testCompactHeaderClearanceScalesBothPhotoAxesByTheSameFactor() {
         let size = CGSize(width: 320, height: 568)
         let layout = CameraPhotoPreviewLayout(containerSize: size,
-            photoAspectRatio: 3.0 / 4, minimumPhotoTop: 146)
+            photoAspectRatio: 3.0 / 4, portraitPhotoTop: 146)
         // A 320×426⅔ photo would extend below the 568pt canvas from y=146.
         // Preserve all source content by fitting it into the remaining 422pt.
         assertRect(layout.photoFrame, CGRect(x: 1.75, y: 146, width: 316.5, height: 422))
@@ -79,13 +79,18 @@ final class CaptureHeaderPhotoLayoutTests: XCTestCase {
         let size = CGSize(width: 402, height: 874 - 62)
         let standard = MeasurementResultLayout(size: size, bottomSafeArea: 34,
             aspect: 3.0 / 4, summaryHeight: 111)
-        assertRect(standard.photo, CGRect(x: 0, y: 84, width: 402, height: 536))
+        assertRect(standard.photo, CGRect(x: 0.375, y: 84, width: 401.25, height: 535))
         XCTAssertEqual(standard.photo.minY + 62, 146, accuracy: 0.001)
         XCTAssertNil(standard.sheetTop)
 
+        let square = MeasurementResultLayout(size: size, bottomSafeArea: 34,
+            aspect: 1, summaryHeight: 111)
+        assertRect(square.photo, CGRect(x: 0, y: 84, width: 402, height: 402))
+        XCTAssertNil(square.sheetTop)
+
         let tall = MeasurementResultLayout(size: size, bottomSafeArea: 34,
             aspect: 9.0 / 16, summaryHeight: 111)
-        XCTAssertEqual(tall.photo.minY, 96, accuracy: 0.001)
+        XCTAssertEqual(tall.photo.minY, 84, accuracy: 0.001)
         XCTAssertEqual(tall.photo.width, 402, accuracy: 0.001)
         XCTAssertEqual(tall.photo.height, 402.0 * 16 / 9, accuracy: 0.001)
         XCTAssertNotNil(tall.sheetTop)

@@ -11,7 +11,7 @@ struct MeasurementPiPView: View {
             MeasurementPiPTable(measurements: measurements)
         }
         .frame(width: Self.renderSize.width, height: Self.renderSize.height)
-        .background(Color("MeasurementPiPBackgroundColor"))
+        .background(.brandMain600)
         .environment(\.colorScheme, .light)
     }
 }
@@ -26,13 +26,14 @@ private struct MeasurementPiPHeader: View {
                 width: MeasurementPiPView.renderSize.width,
                 height: Self.headerHeight
             )
-            .overlay(alignment: .topLeading) {
+            .overlay(alignment: .top) {
                 Text("실측 사이즈를 보고 바로 입력해요")
                     .font(.custom("Pretendard-Bold", fixedSize: 24))
                     .foregroundStyle(.white)
                     .padding(.top, 41)
                     .padding(.horizontal, 27)
             }
+            .background(.brandMain500)
     }
 }
 

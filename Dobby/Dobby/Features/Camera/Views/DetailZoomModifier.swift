@@ -5,7 +5,7 @@ struct DetailZoomModifier: ViewModifier {
     let options: DetailCameraOptions?
     let enabled: Bool
     var bottomSafeAreaInset: CGFloat = 0
-    var minimumPhotoTop: CGFloat = 0
+    var portraitPhotoTop: CGFloat? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stops = DetailZoomStops()
     @State private var pinchStart: Double?
@@ -60,7 +60,7 @@ struct DetailZoomModifier: ViewModifier {
     private func zoomLayout(in size: CGSize) -> MeasurementCameraChromeLayout? {
         let layout = DetailCameraPreviewLayout(containerSize: size,
             aspectRatio: options?.photoAspectRatio ?? .fourThree, prefersBottomAlignedPortrait: true,
-            minimumPhotoTop: minimumPhotoTop)
+            portraitPhotoTop: portraitPhotoTop)
         let rect = layout.photoFrame
         let photo = CameraPhotoViewport(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
         guard let controls = layout.controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset) else { return nil }

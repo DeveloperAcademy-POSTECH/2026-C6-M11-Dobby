@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum ProductInformationStyle {
     static let background = Color(.systemBackground)
@@ -42,20 +43,20 @@ struct ProductInformationFields: View {
                                          onImportingChange: onPhotoImportingChange)
             }
             ProductInputField(title: "제품명", text: $garment.name,
-                placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name", isRequired: true,
+                placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name", isRequired: true, usesEditingLayout: allowsPhotoEditing,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isNameValid(garment)
                     ? "제품명을 입력해주세요" : nil)
             ProductInputField(title: "상세 설명", text: $garment.detail,
                 placeholder: "제품의 상세 설명을 입력해주세요",
-                identifier: "detail", isRequired: true, isMultiline: true,
+                identifier: "detail", isRequired: true, isMultiline: true, usesEditingLayout: allowsPhotoEditing,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isDetailValid(garment)
                     ? "설명을 입력해주세요" : nil)
-            ProductPriceField(garment: garment,
+            ProductPriceField(garment: garment, usesEditingLayout: allowsPhotoEditing,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isPriceValid(garment)
                     ? "가격을 입력해주세요" : nil)
             ProductInputField(title: "브랜드", text: $garment.brand,
-                placeholder: "브랜드를 입력해주세요", identifier: "brand")
-            ProductMeasurementInputTable(garment: garment, measurementInput: $measurementInput, focus: focus)
+                placeholder: "브랜드를 입력해주세요", identifier: "brand", usesEditingLayout: allowsPhotoEditing)
+            ProductMeasurementInputTable(garment: garment, measurementInput: $measurementInput, focus: focus, usesEditingLayout: allowsPhotoEditing)
                 .id(InfoInputView.measurementTableID)
         }
     }
@@ -86,12 +87,15 @@ struct ProductInputField: View {
     let identifier: String
     var isRequired = false
     var isMultiline = false
+    var usesEditingLayout = false
     var errorMessage: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ProductFieldTitle(title: title, isRequired: isRequired)
-            ProductFieldEditor(text: $text, placeholder: placeholder, isMultiline: isMultiline)
+                .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
+            ProductFieldEditor(text: $text, placeholder: placeholder, isMultiline: isMultiline,
+                               usesEditingLayout: usesEditingLayout)
                 .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
                 .tracking(-0.23)
                 .foregroundStyle(Color("BrandNeutralBlack"))
@@ -108,6 +112,7 @@ struct ProductInputField: View {
                 }
                 .accessibilityLabel(title)
                 .accessibilityIdentifier("product-info.\(identifier)")
+                .productInputInteractionArea()
             if let errorMessage {
                 Text(errorMessage)
                     .font(.system(.caption))
@@ -122,9 +127,20 @@ private struct ProductFieldEditor: View {
     @Binding var text: String
     let placeholder: String
     let isMultiline: Bool
+    let usesEditingLayout: Bool
+    @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 15
 
     var body: some View {
-        if isMultiline {
+        if isMultiline && usesEditingLayout {
+            EditingDescriptionTextView(text: $text, fontSize: fontSize)
+                .frame(height: 172)
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text(placeholder).foregroundStyle(Color("BrandNeutral300"))
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                }
+        } else if isMultiline {
             TextEditor(text: $text)
                 .scrollContentBackground(.hidden)
                 .contentMargins(.all, 0)
@@ -140,18 +156,91 @@ private struct ProductFieldEditor: View {
         } else {
             TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color("BrandNeutral300")), axis: .vertical)
                 .lineLimit(1...2)
+                .multilineTextAlignment(.leading)
+                .lineSpacing(usesEditingLayout ? max(0, 20 * fontSize / 15 - inputFont.lineHeight) : 0)
+                .padding(.vertical, usesEditingLayout ? max(0, 20 * fontSize / 15 - inputFont.lineHeight) / 2 : 0)
+        }
+    }
+
+    private var inputFont: UIFont {
+        UIFont(name: "Pretendard-Regular", size: fontSize) ?? .systemFont(ofSize: fontSize)
+    }
+
+}
+
+/// TextEditor does not consistently apply SwiftUI tracking to editable text.
+/// Specify the paragraph metrics on the backing text itself, without compensating insets.
+private struct EditingDescriptionTextView: UIViewRepresentable {
+    @Binding var text: String
+    let fontSize: CGFloat
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.backgroundColor = .clear
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.textAlignment = .left
+        view.adjustsFontForContentSizeCategory = false
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        context.coordinator.parent = self
+        guard view.markedTextRange == nil else { return }
+        let attributes = textAttributes
+        if view.text != text || context.coordinator.appliedFontSize != fontSize {
+            let selection = view.selectedRange
+            let offset = view.contentOffset
+            view.attributedText = NSAttributedString(string: text, attributes: attributes)
+            view.selectedRange = NSRange(location: min(selection.location, view.text.utf16.count), length: 0)
+            view.setContentOffset(offset, animated: false)
+            context.coordinator.appliedFontSize = fontSize
+        }
+        view.typingAttributes = attributes
+    }
+
+    private var textAttributes: [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .left
+        paragraph.minimumLineHeight = 20 * fontSize / 15
+        paragraph.maximumLineHeight = 20 * fontSize / 15
+        paragraph.paragraphSpacing = 0
+        paragraph.lineBreakMode = .byWordWrapping
+        return [.font: UIFont(name: "Pretendard-Regular", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize),
+                .kern: -0.23 * fontSize / 15,
+                .foregroundColor: UIColor(named: "BrandNeutralBlack") ?? UIColor.label,
+                .paragraphStyle: paragraph]
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: EditingDescriptionTextView
+        var appliedFontSize: CGFloat?
+        init(_ parent: EditingDescriptionTextView) { self.parent = parent }
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
+        }
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            guard textView.markedTextRange == nil else { return }
+            textView.typingAttributes = parent.textAttributes
         }
     }
 }
 
 struct ProductPriceField: View {
     @Bindable var garment: Garment
+    var usesEditingLayout = false
     let errorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ProductFieldTitle(title: "가격", isRequired: true)
+                .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
             ProductPriceInput(price: $garment.price)
+                .productInputInteractionArea()
                 .background(ProductInformationStyle.field, in: RoundedRectangle(cornerRadius: 16))
                 .overlay {
                     if errorMessage != nil {

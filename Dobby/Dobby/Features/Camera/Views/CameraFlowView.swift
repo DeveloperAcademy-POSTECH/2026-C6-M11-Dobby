@@ -58,7 +58,7 @@ struct CameraFlowView: View {
         CameraPermissionGate(permission: permission) {
             GeometryReader { safeGeometry in
                 cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom,
-                    minimumPhotoGlobalTop: safeGeometry.frame(in: .global).minY + ProductCreationHeaderLayout.photoGap)
+                    headerBottom: safeGeometry.frame(in: .global).minY)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -69,7 +69,8 @@ struct CameraFlowView: View {
         .productCreationProgress(isCompletingCapture ? nil : .details)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil || isCompletingCapture)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarBackground(.black, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar(isCompletingCapture ? .hidden : .automatic, for: .navigationBar)
         .toolbar {
@@ -197,25 +198,23 @@ struct CameraFlowView: View {
 
     /// Match the measurement camera's complete canvas and ratio-aware anchors.
     /// Reading the safe inset outside ignoresSafeArea prevents a second offset.
-    private func cameraCanvas(bottomSafeAreaInset: CGFloat, minimumPhotoGlobalTop: CGFloat) -> some View {
+    private func cameraCanvas(bottomSafeAreaInset: CGFloat, headerBottom: CGFloat) -> some View {
         GeometryReader { geometry in
-            let minimumPhotoTop = max(0, minimumPhotoGlobalTop - geometry.frame(in: .global).minY)
+            let photoTop = max(0, headerBottom - geometry.frame(in: .global).minY + ProductCreationLayoutMetrics.photoGap)
             ZStack {
                 Color.black
-                ratioPreview(minimumPhotoTop: minimumPhotoTop)
+                ratioPreview(photoTop: photoTop)
                     .modifier(DetailZoomModifier(options: camera?.options,
                         enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
                             && (previewSource != nil || camera?.state == .running),
-                        bottomSafeAreaInset: bottomSafeAreaInset, minimumPhotoTop: minimumPhotoTop))
+                        bottomSafeAreaInset: bottomSafeAreaInset, portraitPhotoTop: photoTop))
                 if !isMoreOptionsPresented {
-                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset,
-                                    minimumPhotoTop: minimumPhotoTop)
+                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)
                         .animation(reduceMotion ? nil : .smooth(duration: 0.30),
                             value: camera?.options.photoAspectRatio ?? .fourThree)
                         .animation(nil, value: geometry.size)
                 }
-                captureFeedback(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset,
-                                minimumPhotoTop: minimumPhotoTop)
+                captureFeedback(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)
                 cameraOptionsOverlay(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
                     .allowsHitTesting(isMoreOptionsPresented)
                     .accessibilityHidden(!isMoreOptionsPresented)
@@ -227,10 +226,8 @@ struct CameraFlowView: View {
     }
 
     @ViewBuilder
-    private func captureFeedback(in size: CGSize, bottomSafeAreaInset: CGFloat,
-                                 minimumPhotoTop: CGFloat) -> some View {
-        if let frame = shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset,
-                                    minimumPhotoTop: minimumPhotoTop),
+    private func captureFeedback(in size: CGSize, bottomSafeAreaInset: CGFloat, photoTop: CGFloat) -> some View {
+        if let frame = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)?.shutter,
            failureMessage != nil {
             Group {
                 if let failureMessage {
@@ -267,19 +264,18 @@ struct CameraFlowView: View {
     }
 
     @ViewBuilder
-    private func ratioPreview(minimumPhotoTop: CGFloat) -> some View {
+    private func ratioPreview(photoTop: CGFloat) -> some View {
         let ratio = camera?.options.photoAspectRatio ?? .fourThree
         Group {
             if let previewSource {
                 DetailAspectRatioPreview(aspectRatio: ratio, prefersBottomAlignedPortrait: true,
-                                         minimumPhotoTop: minimumPhotoTop) { _ in
+                                         portraitPhotoTop: photoTop) { _ in
                     CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
                 }
             } else if let camera {
-                CameraLivePreviewView(camera: camera, aspectRatio: ratio,
+                CameraLivePreviewView(camera: camera, aspectRatio: ratio, portraitPhotoTop: photoTop,
                     interactionEnabled: !isMoreOptionsPresented && !isPhotoOperationInProgress
-                        && !isCaptureGuidePresented && !isGalleryPresented && scenePhase == .active,
-                    minimumPhotoTop: minimumPhotoTop)
+                        && !isCaptureGuidePresented && !isGalleryPresented && scenePhase == .active)
             } else {
                 ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
             }
@@ -319,25 +315,17 @@ struct CameraFlowView: View {
             .accessibilityIdentifier("camera.captureDetail")
     }
 
-    private func shutterFrame(in size: CGSize, bottomSafeAreaInset: CGFloat,
-                               minimumPhotoTop: CGFloat) -> CameraPhotoViewport? {
-        captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset,
-                             minimumPhotoTop: minimumPhotoTop)?.shutter
-    }
-
     private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat,
-                                      minimumPhotoTop: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
+                                      photoTop: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
         DetailCameraPreviewLayout(containerSize: size,
             aspectRatio: camera?.options.photoAspectRatio ?? .fourThree,
-            prefersBottomAlignedPortrait: true, minimumPhotoTop: minimumPhotoTop)
+            prefersBottomAlignedPortrait: true, portraitPhotoTop: photoTop)
             .controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset)
     }
 
     @ViewBuilder
-    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat,
-                                 minimumPhotoTop: CGFloat) -> some View {
-        if let controls = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset,
-                                               minimumPhotoTop: minimumPhotoTop) {
+    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat, photoTop: CGFloat) -> some View {
+        if let controls = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop) {
             let frame = controls.shutter
             let centerY = frame.y + frame.height / 2
             shutter.position(x: frame.x + frame.width / 2, y: centerY)

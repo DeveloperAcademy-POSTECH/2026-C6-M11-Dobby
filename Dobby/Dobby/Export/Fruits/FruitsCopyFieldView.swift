@@ -3,7 +3,6 @@ import SwiftUI
 struct FruitsCopyFieldView: View {
     let field: ProductCopyField
     let value: String
-    let showsCopyFeedback: Bool
     let onCopy: (ProductCopyField) -> Void
 
     var body: some View {
@@ -11,31 +10,26 @@ struct FruitsCopyFieldView: View {
             onCopy(field)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 29) {
-                    HStack(spacing: 6) {
-                        Text(title)
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(.labelPrimary)
-                        Image(systemName: "document.on.document")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color("BrandPrimary100"))
-                    }
-
-                    if showsCopyFeedback {
-                        FruitsCopyFeedbackView()
-                            .accessibilityHidden(true)
-                    }
+                HStack(alignment: .center) {
+                    Text(title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.labelPrimary)
+                    Spacer()
+                    Image("ci:copy")
+                        .renderingMode(.template)
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(Color("BrandNeutralBlack"))
                 }
                 Text(value)
-                    .font(.system(size: 14))
+                    .font(.system(size: 15))
                     .foregroundColor(.labelPrimary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(field == .description ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .frame(maxWidth: 328, alignment: .topLeading)
             .foregroundStyle(.primary)
-            .padding(.vertical, 16)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -57,7 +51,6 @@ struct FruitsCopyFieldView: View {
     FruitsCopyFieldView(
         field: .productName,
         value: "LEVI'S 550 보로 사시코 커스텀 팬츠",
-        showsCopyFeedback: false,
         onCopy: { _ in }
     )
     .padding(.horizontal, 16)
@@ -67,7 +60,6 @@ struct FruitsCopyFieldView: View {
     FruitsCopyFieldView(
         field: .description,
         value: "빈티지한 워싱과 자연스러운 실루엣이 돋보이는 제품입니다. 사용감과 수선 흔적까지 상품의 상태를 충분히 확인할 수 있도록 긴 설명이 모두 표시되는지 확인합니다.",
-        showsCopyFeedback: true,
         onCopy: { _ in }
     )
     .padding(.horizontal, 16)
@@ -77,7 +69,6 @@ struct FruitsCopyFieldView: View {
     FruitsCopyFieldView(
         field: .brand,
         value: "LEVI'S",
-        showsCopyFeedback: false,
         onCopy: { _ in }
     )
     .padding(.horizontal, 16)

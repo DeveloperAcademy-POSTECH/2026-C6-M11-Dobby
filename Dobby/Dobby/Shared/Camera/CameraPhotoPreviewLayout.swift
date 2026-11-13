@@ -7,7 +7,7 @@ nonisolated struct CameraPhotoPreviewLayout {
     let isBottomAligned: Bool
 
     init(containerSize: CGSize, photoAspectRatio: Double,
-         prefersBottomAlignedPortrait: Bool = false, minimumPhotoTop: CGFloat = 0) {
+         prefersBottomAlignedPortrait: Bool = false, portraitPhotoTop: CGFloat? = nil) {
         let width = containerSize.width, height = containerSize.height
         guard width.isFinite, height.isFinite, width > 0, height > 0,
               photoAspectRatio.isFinite, photoAspectRatio > 0 else {
@@ -29,12 +29,13 @@ nonisolated struct CameraPhotoPreviewLayout {
             preferredFrame = viewport.map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) } ?? .zero
             isBottomAligned = false
         }
-        // The native navigation bar determines the clear header boundary. Keep
-        // the existing square/tall framing when it already clears that boundary.
-        // Compact windows fit the complete photograph rather than cropping it.
-        if width <= height, preferredFrame.height > 0, minimumPhotoTop.isFinite,
-           minimumPhotoTop > preferredFrame.minY {
-            let top = min(max(0, minimumPhotoTop), max(0, height - 1))
+        // Anchor ordinary portrait ratios below the real navigation header.
+        // Keep the tall photo bottom-aligned when it already clears the header.
+        // Compact windows scale the intact photo to preserve the same clearance.
+        if width < height, let requestedTop = portraitPhotoTop,
+           requestedTop.isFinite, requestedTop >= 0, preferredFrame.height > 0,
+           !isBottomAligned || requestedTop > preferredFrame.minY {
+            let top = min(requestedTop, max(0, height - 1))
             let fittedHeight = min(preferredFrame.height, height - top)
             let scale = fittedHeight / preferredFrame.height
             let fittedSize = CGSize(width: preferredFrame.width * scale, height: fittedHeight)

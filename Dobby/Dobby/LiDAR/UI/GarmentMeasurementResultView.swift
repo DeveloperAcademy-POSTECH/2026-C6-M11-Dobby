@@ -206,7 +206,7 @@ struct GarmentMeasurementResultView: View {
                     photoEditor(showsEnlargeControl: false)
                     resultSummary(overlaysPhoto: false).padding(.horizontal, 20)
                     auxiliaryContent.padding(.horizontal, 20)
-                }.padding(.top, 16).padding(.bottom, 24)
+                }.padding(.top, ProductCreationLayoutMetrics.photoGap).padding(.bottom, 24)
                     .frame(maxWidth: 700).frame(maxWidth: .infinity)
             }
         }
