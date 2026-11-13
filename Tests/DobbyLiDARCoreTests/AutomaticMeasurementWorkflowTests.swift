@@ -92,6 +92,31 @@ final class AutomaticMeasurementWorkflowTests: XCTestCase {
         XCTAssertEqual(decoded.landmarks.modelVersion, output.landmarks.modelVersion)
     }
 
+    func testRemoteLandmarksUseTheFrozenGarmentPlaneWithoutInventingConfidence() async throws {
+        var value = fixture()
+        value.points.modelVersion = GarmentLandmarkModelContract.lunaOuterwearVersion
+        value.points.garmentKind = .top
+        for index in value.points.points.indices { value.points.points[index].confidence = nil }
+        let size = value.snapshot.frame.depth.size
+        value.points.mask = .init(size: size, values: (0..<(size.width * size.height)).map { index in
+            let x = index % size.width, y = index / size.width
+            return x >= size.width / 8 && x < size.width * 7 / 8
+                && y >= size.height / 8 && y < size.height * 7 / 8 ? 1 : 0
+        })
+        let provider = RecordingWorkflowModel(answers: [value.snapshot.frame.frameID: value.points])
+        let workflow = AutomaticMeasurementWorkflow(camera: ImmediateWorkflowCamera([value.snapshot]),
+            landmarks: provider, definitions: [.testDistance])
+        let output = try await workflow.run(orientation: .up)
+        XCTAssertEqual(output.options.effectiveCalculationMode, .garmentPlane)
+        XCTAssertEqual(output.result.algorithmVersion, GarmentPlaneMeasurementEngine.algorithmVersion)
+        XCTAssertEqual(try XCTUnwrap(output.result.values.first?.meters), 0.5, accuracy: 0.002)
+        XCTAssertEqual(output.result.values.first?.status, .uncertain)
+        XCTAssertTrue(output.landmarks.points.allSatisfy { $0.confidence == nil })
+        let observed = await provider.observedSnapshots
+        XCTAssertEqual(observed.count, 1)
+        XCTAssertEqual(output.result.frameID, value.snapshot.frame.frameID)
+    }
+
     func testCaptureFailureNeverCallsModelAndIdentifiesItsStage() async {
         let camera = ImmediateWorkflowCamera([], error: WorkflowTestError.capture)
         let model = RecordingWorkflowModel(answers: [:])

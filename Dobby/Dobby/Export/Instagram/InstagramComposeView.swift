@@ -4,43 +4,26 @@ struct InstagramComposeView: View {
     let account: InstagramAccount
     @Binding var draft: InstagramExportDraft
     let isDisabled: Bool
-    var isCompleted = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                if isCompleted {
-                    InstagramUploadCompletedHeader()
-                }
+            VStack(alignment: .trailing, spacing: 24) {
                 InstagramAccountCard(account: account)
+                    .frame(maxWidth: 363)
+                    .frame(maxWidth: .infinity)
                 InstagramPhotoEditor(photos: draft.photos)
                     .disabled(isDisabled)
                 InstagramCaptionEditor(draft: $draft)
                     .disabled(isDisabled)
+                    .frame(maxWidth: 363)
+                    .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 20)
             .padding(.top, 20)
-            .padding(.bottom, 116)
+            .padding(.bottom, 44)
+            .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color(.brandNeutral50).ignoresSafeArea())
-    }
-}
-
-private struct InstagramUploadCompletedHeader: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("인스타그램에 업로드 완료 🎉")
-                .font(.title3.bold())
-            HStack(spacing: 4) {
-                Text("연결된 계정에 자동 업로드를")
-                Text("완료").foregroundStyle(Color(.brandMain500))
-                Text("했어요")
-            }
-            .font(.body)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
     }
 }
 
@@ -61,8 +44,8 @@ private struct InstagramAccountCard: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -72,11 +55,13 @@ private struct InstagramPhotoEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("업로드할 사진")
-                .font(.body.weight(.medium))
-            if photos.isEmpty {
-                ContentUnavailableView("업로드할 사진이 없어요", systemImage: "photo.badge.exclamationmark")
-                    .frame(maxWidth: .infinity, minHeight: 180)
-            } else {
+                .font(.custom("Pretendard-SemiBold", fixedSize: 17))
+                .foregroundStyle(Color(.brandNeutral950))
+                .frame(maxWidth: 363, alignment: .topLeading)
+                .frame(maxWidth: .infinity)
+            GeometryReader { geometry in
+                let horizontalInset = max(0, (geometry.size.width - 363) / 2)
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 8) {
                         ForEach(photos) { photo in
@@ -84,7 +69,9 @@ private struct InstagramPhotoEditor: View {
                         }
                     }
                 }
+                .contentMargins(.horizontal, horizontalInset, for: .scrollContent)
             }
+            .frame(height: 212)
         }
     }
 }
@@ -111,24 +98,9 @@ private struct InstagramCaptionEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("캡션").font(.body.weight(.medium))
-                    Text("눌러서 직접 글을 수정할 수 있어요")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                InstagramResetButton(action: { draft.resetCaption() })
-            }
-            TextEditor(text: $draft.caption)
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .frame(minHeight: 260)
-                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 14))
-                .accessibilityValue("\(draft.caption.utf16.count) / 2,200자")
+            InstagramCaptionHeader(onReset: { draft.resetCaption() })
+            InstagramCaptionInput(text: $draft.caption)
+
             if let validationMessage = draft.validationMessage,
                draft.photos.isEmpty == false {
                 Text(validationMessage)
@@ -139,13 +111,55 @@ private struct InstagramCaptionEditor: View {
     }
 }
 
+private struct InstagramCaptionHeader: View {
+    let onReset: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("캡션")
+                    .font(.custom("Pretendard-SemiBold", fixedSize: 17))
+                    .foregroundStyle(Color(.brandNeutral950))
+                Text("눌러서 직접 글을 수정할 수 있어요")
+                    .font(.custom("Pretendard-Regular", fixedSize: 14))
+                    .foregroundStyle(Color(.brandNeutral700))
+            }
+            Spacer()
+            InstagramResetButton(action: onReset)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+}
+
+private struct InstagramCaptionInput: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            TextField("", text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.custom("Pretendard-Regular", fixedSize: 17))
+                .foregroundStyle(Color(.label))
+                .lineLimit(1...)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
 private struct InstagramResetButton: View {
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Label("초기화", systemImage: "arrow.clockwise")
-                .font(.subheadline)
+            HStack(alignment: .center, spacing: 4) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .medium))
+                Text("초기화")
+                    .font(.custom("Pretendard-Regular", fixedSize: 14))
+            }
                 .foregroundStyle(Color(.brandNeutral800))
         }
         .buttonStyle(.plain)
@@ -170,4 +184,76 @@ struct InstagramProfileImage: View {
         .clipShape(RoundedRectangle(cornerRadius: 15))
         .accessibilityHidden(true)
     }
+}
+
+#Preview("사진 3장 · 캡션 편집") {
+    @Previewable @State var draft = InstagramExportDraft(product: .instagramPreview)
+
+    InstagramComposeView(
+        account: .preview,
+        draft: $draft,
+        isDisabled: false
+    )
+}
+
+#Preview("계정 카드", traits: .sizeThatFitsLayout) {
+    InstagramAccountCard(account: .preview)
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("프로필 이미지", traits: .sizeThatFitsLayout) {
+    InstagramProfileImage(url: nil)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("업로드할 사진", traits: .sizeThatFitsLayout) {
+    let draft = InstagramExportDraft(product: .instagramPreview)
+
+    InstagramPhotoEditor(photos: draft.photos)
+        .frame(width: 402, height: 246)
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("사진 셀", traits: .sizeThatFitsLayout) {
+    let draft = InstagramExportDraft(product: .instagramPreview)
+
+    if let photo = draft.photos.first {
+        InstagramDraftPhotoCell(photo: photo)
+            .padding()
+            .background(Color(.brandNeutralWhite))
+    }
+}
+
+#Preview("캡션 편집", traits: .sizeThatFitsLayout) {
+    @Previewable @State var draft = InstagramExportDraft(product: .instagramPreview)
+
+    InstagramCaptionEditor(draft: $draft)
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("캡션 제목", traits: .sizeThatFitsLayout) {
+    InstagramCaptionHeader(onReset: {})
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("캡션 입력란", traits: .sizeThatFitsLayout) {
+    @Previewable @State var text = "90s 나이키 자켓\n\n가격: 89,000원"
+
+    InstagramCaptionInput(text: $text)
+        .frame(width: 363)
+        .padding()
+        .background(Color(.brandNeutralWhite))
+}
+
+#Preview("초기화 버튼", traits: .sizeThatFitsLayout) {
+    InstagramResetButton(action: {})
+        .padding()
+        .background(Color(.brandNeutralWhite))
 }

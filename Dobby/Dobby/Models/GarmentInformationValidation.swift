@@ -8,6 +8,12 @@ enum GarmentInformationValidation {
         } || garment.price != nil
     }
 
+    // Partial information still enables a tap to reveal required-field errors.
+    // Overflow must be repaired before that completion attempt is available.
+    static func canAttemptCompletion(_ garment: Garment) -> Bool {
+        hasAnyInformation(garment) && garment.productPhotos.count <= ProductPhotoLimit.maximumCount
+    }
+
     static func isNameValid(_ garment: Garment) -> Bool {
         !garment.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -22,9 +28,16 @@ enum GarmentInformationValidation {
 
     static func isValid(_ garment: Garment) -> Bool {
         isNameValid(garment) && isDetailValid(garment) && isPriceValid(garment)
+            && ProductPhotoLimit.canRegister(count: garment.productPhotos.count)
     }
 
     static func validate(_ garment: Garment) throws {
+        guard !garment.productPhotos.isEmpty else {
+            throw GarmentInputCompletion.ValidationError.missingInformation("제품 사진")
+        }
+        guard garment.productPhotos.count <= ProductPhotoLimit.maximumCount else {
+            throw ProductPhotoLimit.ValidationError.tooManyPhotos
+        }
         for (label, text) in [("제품명", garment.name), ("설명", garment.detail)] {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw GarmentInputCompletion.ValidationError.missingInformation(label)

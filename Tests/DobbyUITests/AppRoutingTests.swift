@@ -177,14 +177,17 @@ final class AppRoutingTests: XCTestCase {
         exportButton.tap()
 
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
-        let fruitsA = app.buttons["후루츠패밀리로 내보내기 (A)"]
-        let fruitsB = app.buttons["후루츠패밀리로 내보내기 (B)"]
-        reveal(fruitsB, in: app)
-        XCTAssertTrue(fruitsA.exists)
-        XCTAssertTrue(fruitsB.exists)
+        let fruits = app.buttons["후르츠패밀리에 업로드하기"]
+        reveal(fruits, in: app)
+        XCTAssertTrue(fruits.exists)
         attachScreenshot(app, name: "debug-library-sample-export-channels")
 
         app.buttons["export.close"].tap()
+        expectHome(in: app)
+        app.tabBars.buttons["보관함"].tap()
+        let exportedProduct = app.buttons["library.product.53E00000-0000-4000-8000-000000000053"]
+        XCTAssertTrue(exportedProduct.waitForExistence(timeout: 5))
+        exportedProduct.tap()
         XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 5))
         app.buttons["library.edit"].tap()
         XCTAssertTrue(information.waitForExistence(timeout: 5))
@@ -264,6 +267,12 @@ final class AppRoutingTests: XCTestCase {
         assertGalleryPage(pager, in: app, page: 2, total: originalCount)
         let galleryDelete = app.buttons["product-gallery.delete"]
         XCTAssertTrue(galleryDelete.isHittable)
+        XCTAssertEqual(galleryDelete.label, "제품 사진 삭제")
+        XCTAssertEqual(galleryDelete.frame.width, 48, accuracy: 1)
+        XCTAssertEqual(galleryDelete.frame.height, 48, accuracy: 1)
+        XCTAssertFalse(galleryDelete.staticTexts["삭제"].exists)
+        XCTAssertEqual(pager.frame.maxX - galleryDelete.frame.maxX, 10, accuracy: 1)
+        XCTAssertEqual(galleryDelete.frame.minY - pager.frame.minY, 10, accuracy: 1)
         pager.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)))
         assertGalleryPage(pager, in: app, page: 3, total: originalCount)

@@ -25,10 +25,19 @@ enum ProductPhotoHandoff {
     static func apply(_ output: ProductPhotoOutput, to garment: Garment, in context: ModelContext,
                       input: ProductPhotoInput,
                       photosDirectory: URL? = nil,
+                      includesAllCapturedPhotos: Bool = false,
                       persist: @MainActor (ModelContext) throws -> Void = { try $0.save() }) async throws {
         let photosDirectory = photosDirectory ?? GarmentStore.photosDirectory
         try Task.checkCancellation()
-        try validate(output, input: input, garment: garment, photosDirectory: photosDirectory)
+        try validate(output, input: input, garment: garment, photosDirectory: photosDirectory,
+                     includesAllCapturedPhotos: includesAllCapturedPhotos)
+        if includesAllCapturedPhotos {
+            let remaining = (input.measurementPhotos + output.detailPhotos).filter { !output.deletedPhotoIDs.contains($0.id) }
+            guard output.selectedPhotos == remaining,
+                  output.representativePhotoID == remaining.first?.id else {
+                throw HandoffError.invalidOutput
+            }
+        }
         let existingIDs = Set(garment.photos.map(\.id))
         let newAssets = output.selectedPhotos.filter { !existingIDs.contains($0.id) }
         let plans = newAssets.map { PhotoCopyPlan(asset: $0, garmentID: garment.id, directory: photosDirectory) }
@@ -40,6 +49,7 @@ enum ProductPhotoHandoff {
         let previousPhotos = garment.photos
         let previousState = previousPhotos.map { PhotoState(photo: $0) }
         let previousUpdatedAt = garment.updatedAt
+        let previousAppliedAt = garment.capturePhotosAppliedAt
         do {
             try Task.checkCancellation()
             // 같은 초안에서 중복 완료가 겹쳐 원본이나 선택 순서를 덮어쓰지 않게 한다.
@@ -56,19 +66,43 @@ enum ProductPhotoHandoff {
                 added.append(photo)
                 garment.photos.append(photo)
             }
-            let selectedIDs = output.selectedPhotos.map(\.id)
-            for photo in garment.photos {
-                photo.isSelectedForProduct = selectedIDs.contains(photo.id)
-                photo.role = photo.id == output.representativePhotoID ? .thumbnail : .detail
+            let preservesEdits = includesAllCapturedPhotos && (previousAppliedAt != nil
+                || garment.informationCompletedAt != nil || garment.creationDraft?.step == .information)
+            if preservesEdits {
+                // 입력 화면의 순서·제외·대표 사진은 유지하고 새 촬영만 끝에 추가한다.
+                let addedIDs = Set(added.map(\.id))
+                let registrationIDs = Set(ProductPhotoLimit.registrationIDs(
+                    existing: garment.productPhotos.filter { !addedIDs.contains($0.id) }.map(\.id),
+                    incoming: added.map(\.id)))
+                for photo in added { photo.isSelectedForProduct = registrationIDs.contains(photo.id) }
+                GarmentStore.reorder(previousPhotos.sorted { $0.order < $1.order } + added, in: garment)
+            } else {
+                // Let the seller review every capture in product information.
+                // Final registration validates the limit without trimming photos.
+                let selectedIDs = output.selectedPhotos.map(\.id)
+                for photo in garment.photos {
+                    photo.isSelectedForProduct = selectedIDs.contains(photo.id)
+                    photo.role = photo.id == output.representativePhotoID ? .thumbnail : .detail
+                }
+                let selected = selectedIDs.compactMap { id in garment.photos.first { $0.id == id } }
+                let retained = garment.orderedPhotos.filter { !selectedIDs.contains($0.id) }
+                GarmentStore.reorder(selected + retained, in: garment)
             }
-            let selected = selectedIDs.compactMap { id in garment.photos.first { $0.id == id } }
-            let retained = garment.orderedPhotos.filter { !selectedIDs.contains($0.id) }
-            GarmentStore.reorder(selected + retained, in: garment)
+            // 입력 화면에서 이미 정한 순서는 유지하되, 촬영 갤러리에서 삭제한 사진은 되살리지 않는다.
+            for photo in garment.photos where output.deletedPhotoIDs.contains(photo.id) {
+                photo.isSelectedForProduct = false
+                photo.role = .detail
+            }
+            if !garment.productPhotos.contains(where: { $0.role == .thumbnail }) {
+                garment.productPhotos.first?.role = .thumbnail
+            }
+            if includesAllCapturedPhotos { garment.capturePhotosAppliedAt = previousAppliedAt ?? .now }
             try persist(context)
         } catch {
             garment.photos = previousPhotos
             for state in previousState { state.restore() }
             garment.updatedAt = previousUpdatedAt
+            garment.capturePhotosAppliedAt = previousAppliedAt
             for photo in added { context.delete(photo) }
             // 촬영 원본과 이전부터 존재한 상품 파일은 삭제하지 않는다.
             await Task.detached { removeCopiedFiles(copied) }.value
@@ -77,7 +111,10 @@ enum ProductPhotoHandoff {
     }
 
     private static func validate(_ output: ProductPhotoOutput, input: ProductPhotoInput,
-                                 garment: Garment, photosDirectory: URL) throws {
+                                 garment: Garment, photosDirectory: URL, includesAllCapturedPhotos: Bool) throws {
+        if !includesAllCapturedPhotos, output.selectedPhotos.count > ProductPhotoLimit.maximumCount {
+            throw ProductPhotoLimit.ValidationError.tooManyPhotos
+        }
         guard input.garmentID == garment.id, output.garmentID == garment.id,
               output.sessionID == input.sessionID,
               input.measurement.sessionID == input.sessionID,
@@ -88,6 +125,8 @@ enum ProductPhotoHandoff {
               measurement.measurementSessionID == nil || measurement.measurementSessionID == input.sessionID,
               case let .localFile(measurementURL, _) = input.measurement.source,
               measurementURL.standardizedFileURL == photosDirectory.appending(path: measurement.fileName).standardizedFileURL,
+              output.deletedPhotoIDs.isDisjoint(with: output.selectedPhotos.map(\.id)),
+              output.deletedPhotoIDs.isDisjoint(with: output.detailPhotos.map(\.id)),
               !output.selectedPhotos.isEmpty,
               Set(output.selectedPhotos.map(\.id)).count == output.selectedPhotos.count,
               Set(output.detailPhotos.map(\.id)).count == output.detailPhotos.count,
@@ -95,20 +134,32 @@ enum ProductPhotoHandoff {
             throw HandoffError.invalidOutput
         }
         for detail in output.detailPhotos {
-            guard detail.sessionID == input.sessionID, detail.garmentID == garment.id,
+            guard detail.garmentID == garment.id,
                   detail.purpose == .detail, detail.id != measurement.id,
                   case let .localFile(url, _) = detail.source, url.isFileURL else {
                 throw HandoffError.invalidOutput
             }
         }
         for selected in output.selectedPhotos {
-            guard selected == input.measurement || output.detailPhotos.contains(selected) else {
+            guard input.measurementPhotos.contains(selected) || output.detailPhotos.contains(selected) else {
+                throw HandoffError.invalidOutput
+            }
+        }
+        if let visualization = input.measurementVisualization {
+            guard visualization.purpose == .measurementVisualization,
+                  visualization.sessionID == input.sessionID, visualization.garmentID == garment.id,
+                  visualization.id != measurement.id,
+                  !output.detailPhotos.contains(where: { $0.id == visualization.id }),
+                  let stored = garment.photos.first(where: { $0.id == visualization.id }),
+                  !stored.isMeasurementSource,
+                  case let .localFile(url, _) = visualization.source,
+                  url.standardizedFileURL == photosDirectory.appending(path: stored.fileName).standardizedFileURL else {
                 throw HandoffError.invalidOutput
             }
         }
     }
 
-    nonisolated private static func metadata(for url: URL) throws -> CapturedAsset.ImageMetadata {
+    nonisolated static func metadata(for url: URL) throws -> CapturedAsset.ImageMetadata {
         guard url.isFileURL,
               let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let type = CGImageSourceGetType(source) as String?,

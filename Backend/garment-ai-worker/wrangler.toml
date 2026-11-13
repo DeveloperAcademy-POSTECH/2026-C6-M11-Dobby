@@ -1,0 +1,32 @@
+name = "dobby-openai"
+account_id = "1bd840ec9780970ad95e2dc88d9d452f"
+main = "src/index.js"
+compatibility_date = "2026-10-28"
+preview_urls = false
+
+# Approximate request limits per Cloudflare location, not a global spending cap.
+# Keep namespace IDs distinct from other rate-limit bindings in this account.
+[[ratelimits]]
+name = "AI_INSTALLATION_RATE_LIMITER"
+namespace_id = "1211221"
+  [ratelimits.simple]
+  limit = 5
+  period = 60
+
+[[ratelimits]]
+name = "AI_SHARED_RATE_LIMITER"
+namespace_id = "1211222"
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+[observability]
+enabled = false
+
+# Configure these with Wrangler secrets or an ignored local .dev.vars file.
+# GOOGLE_VISION_API_KEY: Google Cloud Vision Web Detection, server only.
+# OPENAI_API_KEY: Dobby's OpenAI project API key; never sent to the client.
+# DOBBY_APP_API_KEY: common Dobby app key, matching the Instagram app integration.
+# App requests also send a 64-character lowercase hex installation Bearer.
+# DRAFT_API_TOKEN: development-only bearer token; not production app authentication.
+# No credentials or user data belong in this file.

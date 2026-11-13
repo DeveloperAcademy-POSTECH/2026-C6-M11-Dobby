@@ -14,13 +14,21 @@ struct CameraLivePreviewView: View {
     @Environment(\.scenePhase) private var scenePhase
     let camera: CameraPreviewSession
     var aspectRatio: DetailPhotoAspectRatio = .fourThree
+    var portraitPhotoTop: CGFloat? = nil
+    var interactionEnabled = true
     @State private var isVisible = false
 
     var body: some View {
-        DetailAspectRatioPreview(aspectRatio: aspectRatio) { viewport in
-            CameraPreviewSurface(session: camera.session, viewport: viewport,
+        DetailAspectRatioPreview(aspectRatio: aspectRatio, prefersBottomAlignedPortrait: true,
+                               portraitPhotoTop: portraitPhotoTop) { photoRect in
+            CameraPreviewSurface(session: camera.session, photoRect: photoRect,
                 onRotationChange: { camera.rotationAngle = $0 },
-                onFramingReady: { camera.previewCrop = $0 })
+                onFramingReady: { camera.previewCrop = $0 },
+                interactionEnabled: interactionEnabled && scenePhase == .active && camera.canAdjustPreview,
+                controlCapabilities: camera.options.previewControlCapabilities,
+                controlState: camera.options.previewControlState,
+                onFocus: { camera.requestFocus(at: $0, requestID: $1) },
+                onExposure: { camera.requestExposure($0) })
         }
             .accessibilityLabel("후면 카메라 실시간 미리보기")
             .overlay {
@@ -40,6 +48,7 @@ struct CameraLivePreviewView: View {
             .clipped()
             .task(id: aspectRatio) {
                 camera.isPreviewTransitioning = true
+                camera.options.clearPreviewFocus(cancelPendingRequests: true)
                 do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
                 camera.isPreviewTransitioning = false
             }

@@ -24,7 +24,7 @@ extension ExportProduct {
             }
         let instagramMeasurements = measurements.map { measurement in
             ExportMeasurement(id: measurement.id, title: measurement.title,
-                value: Double(measurement.value).map(StoredMeasurementValue.text) ?? measurement.value)
+                value: measurement.displayValue)
         }
         let photos = garment.productPhotos.compactMap { photo -> (id: UUID, data: Data)? in
             guard let data = loadPhoto(photo) else { return nil }

@@ -6,33 +6,7 @@ import XCTest
 final class MeasurementCameraSurroundingsGlassTests: XCTestCase {
     private let canvas = CGRect(x: 0, y: 0, width: 402, height: 874)
 
-    func testNativeGlassRimIsOutsideEveryVisibleCanvasEdge() throws {
-        for canvas in [self.canvas, CGRect(x: 0, y: 0, width: 874, height: 402),
-                       CGRect(x: 0, y: 0, width: 375, height: 667),
-                       CGRect(x: 0, y: 0, width: 1024, height: 1366),
-                       CGRect(x: 12, y: 24, width: 402, height: 874)] {
-            let pane = try XCTUnwrap(MeasurementCameraSurroundingsSurface.paneFrame(in: canvas))
-            XCTAssertTrue(pane.contains(canvas))
-            XCTAssertEqual(pane.midX, canvas.midX)
-            XCTAssertEqual(pane.midY, canvas.midY)
-            // Keep refraction/highlight sampling well off-screen, rather
-            // than only clipping an edge drawn exactly on the canvas border.
-            XCTAssertGreaterThanOrEqual(canvas.minX - pane.minX, 64)
-            XCTAssertGreaterThanOrEqual(canvas.minY - pane.minY, 64)
-            XCTAssertGreaterThanOrEqual(pane.maxX - canvas.maxX, 64)
-            XCTAssertGreaterThanOrEqual(pane.maxY - canvas.maxY, 64)
-        }
-    }
-
-    func testInvalidCanvasDoesNotCreateAnOverscannedGlassLayer() {
-        XCTAssertNil(MeasurementCameraSurroundingsSurface.paneFrame(in: .zero))
-        XCTAssertNil(MeasurementCameraSurroundingsSurface.paneFrame(
-            in: .init(x: 0, y: 0, width: CGFloat.nan, height: 874)))
-        XCTAssertNil(MeasurementCameraSurroundingsSurface.paneFrame(
-            in: .init(x: CGFloat.infinity, y: 0, width: 402, height: 874)))
-    }
-
-    func testGlassMaskLeavesEveryPhotoRatioClearAndCoversTheShutterChrome() {
+    func testOverlayMaskLeavesEveryPhotoRatioClearAndCoversTheShutterChrome() {
         let photos: [CGRect] = [
             .init(x: 0, y: 146, width: 402, height: 536),
             .init(x: 0, y: 56, width: 402, height: 402 * 16 / 9),
@@ -73,7 +47,7 @@ final class MeasurementCameraSurroundingsGlassTests: XCTestCase {
         XCTAssertTrue(emptyCanvas.isEmpty)
     }
 
-    func testRatioAnimationKeepsTheGlassHoleOnEveryIntermediatePhotoRectangle() {
+    func testRatioAnimationKeepsTheOverlayHoleOnEveryIntermediatePhotoRectangle() {
         let from = CGRect(x: 0, y: 146, width: 402, height: 536)
         let to = CGRect(x: 0, y: 213, width: 402, height: 402)
         for fraction: CGFloat in [0, 0.25, 0.5, 0.75, 1] {
@@ -81,7 +55,9 @@ final class MeasurementCameraSurroundingsGlassTests: XCTestCase {
                 y: from.minY + (to.minY - from.minY) * fraction,
                 width: from.width + (to.width - from.width) * fraction,
                 height: from.height + (to.height - from.height) * fraction)
-            var view = MeasurementCameraSurroundingsGlass(photoRect: from)
+            // The measurement view is now a compatibility wrapper; the shared
+            // camera surroundings owns interpolation for both capture screens.
+            var view = CameraBlackSurroundings(photoRect: from)
             view.animatableData = .init(.init(expected.minX, expected.minY), .init(expected.width, expected.height))
             XCTAssertEqual(view.photoRect, expected)
             var shape = MeasurementCameraSurroundingsMask(photoRect: from)

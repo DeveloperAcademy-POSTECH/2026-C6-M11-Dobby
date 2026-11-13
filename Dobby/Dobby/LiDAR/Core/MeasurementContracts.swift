@@ -83,11 +83,13 @@ nonisolated enum LandmarkOrigin: String, Codable, Sendable {
 /// A contour intersection is not the spatial average described by derivedFrom.
 nonisolated enum GarmentContourRule: String, Codable, Sendable {
     case neckPerpendicularMaskV1
+    case leftNeckVerticalHemMaskV1
     case waistParallelRightThighMaskV1
 
     var sourceLandmarkIDs: [String] {
         switch self {
         case .neckPerpendicularMaskV1: ["neck_left", "neck_right", "hem_center"]
+        case .leftNeckVerticalHemMaskV1: ["neck_left"]
         case .waistParallelRightThighMaskV1: ["waist_left", "waist_right", "crotch"]
         }
     }

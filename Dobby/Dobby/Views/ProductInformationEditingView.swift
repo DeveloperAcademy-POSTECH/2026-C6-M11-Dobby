@@ -2,29 +2,19 @@ import SwiftData
 import SwiftUI
 
 struct ProductInformationEditingView: View {
-    @Bindable var garment: Garment
-    @Binding private var measurementInput: GarmentMeasurementInputState
+    @Bindable var session: ProductInformationEditSession
     let onExit: () -> Void
+    let onDiscard: () -> Void
     let onComplete: (Garment) -> Void
 
-    @State private var initialSnapshot: ProductInformationEditSnapshot
     @State private var showsDiscardConfirmation = false
 
-    init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>,
-         onExit: @escaping () -> Void, onComplete: @escaping (Garment) -> Void) {
-        self.garment = garment
-        _measurementInput = measurementInput
-        self.onExit = onExit
-        self.onComplete = onComplete
-        _initialSnapshot = State(initialValue: ProductInformationEditSnapshot(
-            garment: garment,
-            measurementInput: measurementInput.wrappedValue
-        ))
-    }
-
     var body: some View {
-        InfoInputView(garment: garment, measurementInput: $measurementInput,
-                      allowsPhotoEditing: true, onExit: requestExit, onComplete: onComplete)
+        InfoInputView(garment: session.garment, measurementInput: $session.measurementInput,
+                      allowsPhotoEditing: true, onExit: requestExit,
+                      onGenerateAI: { try await session.generateInformation() },
+                      onCancelGeneration: { session.cancelGeneration() }, onComplete: onComplete)
+            .environment(\.modelContext, session.context)
             .fullScreenCover(isPresented: $showsDiscardConfirmation) {
                 ProductInformationDiscardConfirmation(
                     onCancel: { showsDiscardConfirmation = false },
@@ -36,7 +26,7 @@ struct ProductInformationEditingView: View {
     }
 
     private func requestExit() {
-        guard initialSnapshot.hasChanges(in: garment, measurementInput: measurementInput) else {
+        guard session.hasChanges else {
             onExit()
             return
         }
@@ -45,8 +35,8 @@ struct ProductInformationEditingView: View {
 
     private func discardChangesAndExit() {
         showsDiscardConfirmation = false
-        initialSnapshot.restore(garment, measurementInput: &measurementInput)
-        onExit()
+        session.discard()
+        onDiscard()
     }
 }
 

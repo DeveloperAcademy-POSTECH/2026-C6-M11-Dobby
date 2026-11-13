@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum InstagramUploadState {
     case idle
@@ -16,34 +17,49 @@ private enum InstagramUploadState {
 
 struct InstagramExportView: View {
     let product: ExportProduct
+    let onRequestExit: (ExportReturnDestination) -> Void
     let onPublished: (InstagramPublishResult) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var client = InstagramIntegrationClient()
     @State private var account: InstagramAccount?
     @State private var isLoadingAccount = true
     @State private var accountLoadError: String?
+    @State private var showsConnectionCompletion = false
     @State private var draft: InstagramExportDraft
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
-    @State private var confirmingRepublish = false
     @State private var isShowingUploadFailure = false
     @State private var message: String?
     @State private var requestID = UUID().uuidString
 
-    init(product: ExportProduct, onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
+    init(product: ExportProduct, initialAccount: InstagramAccount? = nil,
+         onRequestExit: @escaping (ExportReturnDestination) -> Void,
+         onPublished: @escaping (InstagramPublishResult) -> Void = { _ in }) {
         self.product = product
+        self.onRequestExit = onRequestExit
         self.onPublished = onPublished
+        _account = State(initialValue: initialAccount)
+        _isLoadingAccount = State(initialValue: initialAccount == nil)
         _draft = State(initialValue: InstagramExportDraft(product: product))
     }
 
     var body: some View {
         Group {
-            if let account {
+            if uploadState.isCompleted {
+                InstagramUploadCompletionView(
+                    onOpenLibrary: requestLibraryExit,
+                    onOpenInstagram: openInstagram
+                )
+            } else if showsConnectionCompletion {
+                InstagramConnectionCompletionView(
+                    onOpenLibrary: requestLibraryExit,
+                    onContinueToUpload: { showsConnectionCompletion = false }
+                )
+            } else if let account {
                 InstagramComposeView(
                     account: account,
                     draft: $draft,
-                    isDisabled: busy || uploadState.isCompleted,
-                    isCompleted: uploadState.isCompleted
+                    isDisabled: busy
                 )
             } else {
                 InstagramConnectionView(
@@ -53,11 +69,12 @@ struct InstagramExportView: View {
                 )
             }
         }
-        .navigationTitle("인스타그램으로 내보내기")
+        .navigationTitle("인스타그램에 업로드하기")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
+        .toolbar(showsCompletion ? .hidden : .visible, for: .navigationBar)
         .toolbar {
-            if !uploadState.isUploading {
+            if !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(
                         systemImage: "chevron.left",
@@ -65,34 +82,28 @@ struct InstagramExportView: View {
                     ) {
                         dismiss()
                     }
+                    .buttonBorderShape(.circle)
                 }
             }
-            if account != nil && !uploadState.isUploading {
+            if account != nil && !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarTrailing) {
                     ExportAccountMenu(
                         accessibilityLabel: "Instagram 계정 메뉴",
                         onReconnect: { Task { await connect() } },
                         onDisconnect: { Task { await disconnect() } }
                     )
+                    .buttonBorderShape(.capsule)
                 }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if account != nil {
-                ExportBottomActionBar {
-                    ExportBottomAction(
-                        title: "업로드하기",
-                        isWorking: uploadState.isUploading,
-                        isComplete: false,
-                        isEnabled: uploadState.isCompleted || canPublish
-                    ) {
-                        if uploadState.isCompleted {
-                            confirmingRepublish = true
-                        } else {
-                            Task { await publish() }
-                        }
-                    }
+            if account != nil && !showsCompletion {
+                ExportBottomAction(title: "업로드하기") {
+                    Task { await publish() }
                 }
+                .padding(.horizontal, 33)
+                .padding(.top, 16)
+                .background(Color(.brandNeutralWhite))
             }
         }
         .overlay {
@@ -111,13 +122,9 @@ struct InstagramExportView: View {
             }
         }
         .interactiveDismissDisabled(uploadState.isUploading)
-        .task { await loadAccount() }
-        .confirmationDialog("게시물을 한 번 더 올릴까요?", isPresented: $confirmingRepublish,
-                            titleVisibility: .visible) {
-            Button("다시 업로드하기") { Task { await republish() } }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text("다시 업로드하면 같은 계정에 새 게시물이 추가됩니다.")
+        .task {
+            guard account == nil else { return }
+            await loadAccount()
         }
         .alert("Instagram 안내", isPresented: Binding(
             get: { message != nil }, set: { if !$0 { message = nil } })) {
@@ -127,8 +134,26 @@ struct InstagramExportView: View {
             }
     }
 
-    private var canPublish: Bool {
-        !busy && !uploadState.isUploading && account != nil && draft.canPublish
+    private var showsCompletion: Bool {
+        showsConnectionCompletion || uploadState.isCompleted
+    }
+
+    private func requestLibraryExit() {
+        onRequestExit(.library)
+    }
+
+    private func openInstagram() {
+        Task { await openInstagramDestination() }
+    }
+
+    private func openInstagramDestination() async {
+        let destination = ExportChannel.instagram.destinationURL
+        let didOpenApp = await UIApplication.shared.open(
+            destination,
+            options: [.universalLinksOnly: true]
+        )
+        guard !didOpenApp else { return }
+        await UIApplication.shared.open(destination)
     }
 
     private func loadAccount() async {
@@ -146,6 +171,7 @@ struct InstagramExportView: View {
             account = try await client.connect()
             accountLoadError = nil
             requestID = UUID().uuidString
+            showsConnectionCompletion = true
         } catch {
             accountLoadError = error.localizedDescription
         }
@@ -166,6 +192,11 @@ struct InstagramExportView: View {
     }
 
     private func publish() async {
+        guard !busy, !uploadState.isUploading else { return }
+        if let validationMessage = draft.validationMessage {
+            message = validationMessage
+            return
+        }
         guard let expected = account else { return }
         uploadState = .uploading
         do {
@@ -189,5 +220,15 @@ struct InstagramExportView: View {
     private func republish() async {
         requestID = UUID().uuidString
         await publish()
+    }
+}
+
+#Preview("계정 연결 후 · 업로드 화면") {
+    NavigationStack {
+        InstagramExportView(
+            product: .instagramPreview,
+            initialAccount: .preview,
+            onRequestExit: { _ in }
+        )
     }
 }

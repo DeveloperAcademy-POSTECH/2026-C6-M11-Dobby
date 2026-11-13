@@ -6,17 +6,17 @@ struct ProductDraftExitConfirmation: View {
     let onSave: () -> Void
     let onDiscard: () -> Void
 
-    @ScaledMetric(relativeTo: .title3) private var titleFontSize: CGFloat = 20
-    @ScaledMetric(relativeTo: .title3) private var titleLineHeight: CGFloat = 29
-    @ScaledMetric(relativeTo: .callout) private var messageFontSize: CGFloat = 16
-    @ScaledMetric(relativeTo: .callout) private var messageLineHeight: CGFloat = 24
-    @ScaledMetric(relativeTo: .callout) private var buttonFontSize: CGFloat = 16
-    @ScaledMetric(relativeTo: .callout) private var buttonLineHeight: CGFloat = 20
+    @ScaledMetric(relativeTo: .title2) private var titleFontSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .title2) private var titleLineHeight: CGFloat = 28
+    @ScaledMetric(relativeTo: .body) private var messageFontSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .body) private var messageLineHeight: CGFloat = 22
+    @ScaledMetric(relativeTo: .headline) private var buttonFontSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .headline) private var buttonLineHeight: CGFloat = 22
     @AccessibilityFocusState private var messageIsFocused: Bool
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.4)
+            Color.black.opacity(0.6)
                 .contentShape(Rectangle())
                 // Outside taps are consumed without dismissing the confirmation.
                 .onTapGesture { }
@@ -52,29 +52,29 @@ struct ProductDraftExitConfirmation: View {
                 Button(action: onSave) {
                     actionLabel("임시저장하고 나가기")
                         .foregroundStyle(.white)
-                        .background(LibraryStyle.editAccent, in: Capsule())
+                        .background(Color("BrandMain500"), in: Capsule())
                 }
                 .accessibilityIdentifier("product-flow.exit-save")
 
                 Button(role: .destructive, action: onDiscard) {
                     actionLabel("삭제하고 나가기")
-                        .foregroundStyle(Color("AccentsRed"))
-                        .background(Color("DraftExitSecondaryBackground"), in: Capsule())
+                        .foregroundStyle(Color("BrandMain600"))
+                        .background(Color("BrandMain50"), in: Capsule())
                 }
                 .accessibilityIdentifier("product-flow.exit-discard")
 
                 Button(role: .cancel, action: onCancel) {
                     actionLabel("닫기")
-                        .foregroundStyle(Color("BrandNeutral900"))
-                        .background(Color("DraftExitSecondaryBackground"), in: Capsule())
+                        .foregroundStyle(Color("BrandNeutral950"))
+                        .background(Color("BrandNeutral50"), in: Capsule())
                 }
                 .accessibilityIdentifier("product-flow.exit-cancel")
             }
             .buttonStyle(.plain)
         }
-        .padding(16)
+        .padding(20)
         .frame(maxWidth: 358)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .background(Color("BrandNeutralWhite"), in: RoundedRectangle(cornerRadius: 44))
         .environment(\.colorScheme, .light)
     }
 
@@ -85,18 +85,17 @@ struct ProductDraftExitConfirmation: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("product-flow.exit-title")
                 .accessibilityFocused($messageIsFocused)
-            styledText("나중에 이어서 작성할 수 있도록 임시 저장할까요?", fontName: "Pretendard-Regular",
+            styledText("나중에 이어서 작성할 수 있도록\n임시 저장할까요?", fontName: "Pretendard-Regular",
                        size: messageFontSize, lineHeight: messageLineHeight)
                 .accessibilityIdentifier("product-flow.exit-message")
         }
-        .foregroundStyle(.black)
+        .foregroundStyle(Color("BrandNeutralBlack"))
         .frame(maxWidth: .infinity)
     }
 
     private func actionLabel(_ title: String) -> some View {
-        styledText(title, fontName: "Pretendard-Medium", size: buttonFontSize, lineHeight: buttonLineHeight)
+        styledText(title, fontName: "Pretendard-SemiBold", size: buttonFontSize, lineHeight: buttonLineHeight)
             .padding(.horizontal, 28)
-            .padding(.vertical, 17)
             .frame(maxWidth: .infinity, minHeight: 54)
             .contentShape(Capsule())
     }
@@ -107,7 +106,7 @@ struct ProductDraftExitConfirmation: View {
 
         return Text(value)
             .font(.custom(fontName, fixedSize: size))
-            .tracking(-size * 0.01)
+            .tracking(fontName == "Pretendard-Bold" ? -0.26 : -0.43)
             .lineSpacing(lineHeightAdjustment)
             .padding(.vertical, lineHeightAdjustment / 2)
             .multilineTextAlignment(.center)

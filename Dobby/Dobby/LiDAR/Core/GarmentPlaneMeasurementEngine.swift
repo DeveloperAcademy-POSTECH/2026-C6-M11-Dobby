@@ -4,7 +4,8 @@ import Foundation
 /// Fitting failure never falls back to local/median endpoint sampling. A bad
 /// endpoint or contour derivation affects only measurements that depend on it.
 nonisolated struct GarmentPlaneMeasurementEngine {
-    static let algorithmVersion = "garment-plane-neck-perpendicular-mask-1"
+    static let algorithmVersion = "garment-plane-neck-perpendicular-mask-4"
+    static let sideNeckAlgorithmVersion = "garment-plane-left-neck-vertical-hem-mask-3"
     private let options: MeasurementOptions
 
     init(options: MeasurementOptions = .init()) { self.options = options }
@@ -18,7 +19,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
             if let mask = landmarks.mask {
                 do {
                     plane = try GarmentPlaneGeometry.fitDetailed(frame: frame, mask: mask,
-                        uprightOrientation: landmarks.recognitionDiagnostics?.selectedPoseOrientation ?? frame.orientation)
+                        uprightOrientation: landmarks.recognitionDiagnostics?.selectedPoseOrientation ?? frame.orientation, landmarks: landmarks)
                 } catch let error as ContextualMeasurementError { globalError = error }
                 catch let failure as MeasurementFailure {
                     globalError = .init(failure: failure, context: .init(stage: .garmentPlane, reason: .unknown, scope: .capture))
@@ -38,7 +39,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
         func quality(_ position: Point3D, method: DepthSamplingMethod) -> PointQuality {
             let support = plane!.quality
             return .init(validSamples: support.inlierCount, candidateSamples: support.candidateCount,
-                confidenceAvailable: true, depthSpreadMeters: 0, planeResidualMeters: nil, method: method,
+                confidenceAvailable: frame.depth.confidence != nil, depthSpreadMeters: 0, planeResidualMeters: nil, method: method,
                 viewingAngleDegrees: GarmentPlaneGeometry.viewingAngleDegrees(at: position, plane: plane!),
                 garmentPlaneQuality: support)
         }
@@ -71,7 +72,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                 if landmark.contourRule == nil,
                    let failure = validator.validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
                     resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
-                } else if sources.count < 2 || sources.count > 64 || sources.contains(where: \.isEmpty)
+                } else if sources.count < (landmark.contourRule == nil ? 2 : 1) || sources.count > 64 || sources.contains(where: \.isEmpty)
                     || Set(sources).count != sources.count || (landmark.contourRule != nil && landmark.derivedFrom != nil) {
                     resolution = .failure(.init(reason: .invalidDefinition, context: .landmark(.invalidDerivation, ids: [id], recovery: .retry)))
                 } else {
@@ -90,7 +91,7 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                             let position: Point3D, method: DepthSamplingMethod
                             if let rule = landmark.contourRule {
                                 guard sources == rule.sourceLandmarkIDs, let mask = landmarks.mask,
-                                      contributors.count == 3 else { throw MeasurementFailure.invalidDefinition }
+                                      contributors.count == sources.count else { throw MeasurementFailure.invalidDefinition }
                                 switch rule {
                                 case .neckPerpendicularMaskV1:
                                     guard id == "top_length_start" else { throw MeasurementFailure.invalidDefinition }
@@ -102,6 +103,14 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                                     position = try BottomThighContour.right(waistLeft: contributors[0].position,
                                         waistRight: contributors[1].position, crotch: contributors[2].position,
                                         mask: mask, frame: frame)
+                                case .leftNeckVerticalHemMaskV1:
+                                    guard id == TopSideNeckLength.hemID,
+                                          GarmentLandmarkModelContract.usesSideNeckLength(landmarks) else {
+                                        throw MeasurementFailure.invalidDefinition
+                                    }
+                                    position = try TopSideNeckLength.end(neck: contributors[0].position,
+                                        mask: mask, frame: frame, plane: plane!,
+                                        orientation: landmarks.recognitionDiagnostics?.selectedPoseOrientation ?? frame.orientation)
                                 }
                                 method = .contourIntersection
                             } else {
@@ -122,7 +131,10 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                     }
                 }
             } else if let failure = validator.validateLandmark(landmark, origin: landmark.origin ?? landmarks.origin) {
-                resolution = .failure(.init(reason: failure, context: .landmark(failure.landmarkFailureReason, ids: [id])))
+                let reason = failure == .occludedLandmark
+                    ? landmarks.recognitionDiagnostics?.remoteUnavailableReason(for: id) ?? failure.landmarkFailureReason
+                    : failure.landmarkFailureReason
+                resolution = .failure(.init(reason: failure, context: .landmark(reason, ids: [id])))
             } else {
                 do {
                     let position = try GarmentPlaneGeometry.intersectionDetailed(point: landmark.point, frame: frame, plane: plane!)
@@ -191,7 +203,10 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                 }
             }
             if let failure { return unavailable(failure, points: points, failedIDs: definition.landmarkIDs) }
-            var uncertain = definition.landmarkIDs.contains(where: uncertainIDs.contains)
+            // Missing AVFoundation confidence is unknown quality, not a missing
+            // length. Preserve that provenance through direct and derived values.
+            var uncertain = frame.depth.confidence == nil
+                || definition.landmarkIDs.contains(where: uncertainIDs.contains)
             // Retain explicit archive projection semantics; new canonical
             // definitions have no projection. No hidden total-length correction.
             if let projection = definition.projection {
@@ -230,7 +245,9 @@ nonisolated struct GarmentPlaneMeasurementEngine {
                          status: uncertain ? .uncertain : .valid, failure: nil, points: points)
         }
         return .init(sessionID: frame.sessionID, frameID: frame.frameID,
-                     algorithmVersion: Self.algorithmVersion, source: frame.source, values: values)
+                     algorithmVersion: GarmentLandmarkModelContract.usesSideNeckLength(landmarks)
+                        ? Self.sideNeckAlgorithmVersion : Self.algorithmVersion,
+                     source: frame.source, values: values)
     }
 
     private struct ResolutionError: Error {

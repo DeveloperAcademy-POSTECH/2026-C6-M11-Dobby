@@ -11,75 +11,54 @@ import AVFoundation
 /// 상세 촬영 Hi-Fi 화면. 기본은 실제 영상이며 Canvas에서만 샘플 이미지를 주입한다.
 /// 상위 NavigationStack에 삽입하며 화면 이동 중 같은 Model을 유지한다.
 struct CameraFlowView: View {
+    @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let model: ProductPhotoModel
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
     let onComplete: (ProductPhotoOutput) async throws -> Void
-    let onSelectPhotos: (() -> Void)?
     let onExit: (() -> Void)?
-    private let onSelectionVisibilityChange: (Bool) -> Void
     var previewSource: CapturedAsset.Source?
-    private let background = Color(red: 26 / 255, green: 25 / 255, blue: 25 / 255)
-    @State private var controlsHeight: CGFloat = 148
+    private let background = Color.black
     @State private var captureRequested = false
+    @State private var captureIndicatorPhase: AutomaticMeasurementPhase = .capturing
     @State private var failureMessage: String?
     @State private var isCaptureGuidePresented = false
     @State private var isGalleryPresented = false
     @State private var isMoreOptionsPresented = false
+    @State private var librarySaver = DetailPhotoLibrarySaver()
+    @State private var isCompletingCapture = false
+    @State private var capturePhotosToSave: [CapturedAsset] = []
+    @State private var hasStartedLibrarySaving = false
+    @State private var didSaveAllCapturePhotos = false
+    @State private var captureOutputToSave: ProductPhotoOutput?
+    @State private var completionTask: Task<Void, Never>?
+    @State private var librarySaveFailure: LibrarySaveFailure?
+
+    private struct LibrarySaveFailure {
+        let message: String
+        let canOpenSettings: Bool
+    }
 
     init(model: ProductPhotoModel, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
          previewSource: CapturedAsset.Source? = nil,
-         onSelectPhotos: (() -> Void)? = nil,
          onExit: (() -> Void)? = nil,
-         onSelectionVisibilityChange: @escaping (Bool) -> Void = { _ in },
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
         self.camera = camera
         _permission = State(initialValue: permission)
         self.onComplete = onComplete
-        self.onSelectPhotos = onSelectPhotos
         self.onExit = onExit
-        self.onSelectionVisibilityChange = onSelectionVisibilityChange
         self.previewSource = previewSource
     }
 
     var body: some View {
         CameraPermissionGate(permission: permission) {
-            GeometryReader { geometry in
-                ratioPreview
-                    .modifier(DetailZoomModifier(options: camera?.options,
-                        enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
-                            && (previewSource != nil || camera?.state == .running),
-                        bottomInset: controlsHeight + 17))
-                    .overlay {
-                        if isMoreOptionsPresented {
-                            Button { isMoreOptionsPresented = false } label: {
-                                Color.clear.contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
-                            .accessibilityIdentifier("camera.dismissOptions")
-                        }
-                    }
-                    .overlay(alignment: .bottom) {
-                        VStack(spacing: 0) {
-                            if let failureMessage {
-                                Text(failureMessage).padding().background(.ultraThinMaterial)
-                            } else if model.isCapturing {
-                                ProgressView("사진 촬영·저장 중").padding().background(.ultraThinMaterial)
-                            }
-                            if isMoreOptionsPresented {
-                                DetailCaptureOptionsView(options: camera?.options) { isMoreOptionsPresented = false }
-                            } else {
-                                captureControls
-                                    .padding(.bottom, geometry.safeAreaInsets.bottom)
-                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controlsHeight = $0 }
-                            }
-                        }
-                    }
-                    .ignoresSafeArea()
+            GeometryReader { safeGeometry in
+                cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom,
+                    headerBottom: safeGeometry.frame(in: .global).minY)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,25 +66,56 @@ struct CameraFlowView: View {
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
+        .productCreationProgress(isCompletingCapture ? nil : .details)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(onExit != nil)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(onExit != nil || isCompletingCapture)
+        .toolbarBackground(.black, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar(isCompletingCapture ? .hidden : .automatic, for: .navigationBar)
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { requestExit(onExit) } label: {
-                        Image(systemName: "chevron.left")
+                        GarmentCaptureToolbarIcon(systemName: "chevron.left")
                             .foregroundStyle(.white)
                     }
+                        .buttonStyle(.plain)
                         .disabled(isExitDisabled)
+                        .accessibilityHidden(isCompletingCapture)
                         .accessibilityLabel("뒤로가기")
                         .accessibilityIdentifier("product-flow.back")
-                }
+                }.sharedBackgroundVisibility(.hidden)
             }
             ToolbarItem(placement: .confirmationAction) {
-                // 기존 사진 선택에는 카메라 권한이 필요하지 않다.
-                photoSelectionControl
+                // 촬영을 마친 전체 사진을 저장한 뒤 상위 흐름에 전달한다.
+                completionControl
+            }.sharedBackgroundVisibility(.hidden)
+        }
+        .accessibilityHidden(isCompletingCapture)
+        .overlay {
+            if isCompletingCapture {
+                DetailPhotoLibrarySavingOverlay(
+                    savedCount: hasStartedLibrarySaving
+                        ? min(librarySaver.savedCount, capturePhotosToSave.count) : 0,
+                    totalCount: capturePhotosToSave.count)
+            }
+        }
+        .interactiveDismissDisabled(isCompletingCapture)
+        .alert("사진을 저장하지 못했어요", isPresented: Binding(
+            get: { librarySaveFailure != nil },
+            set: { if !$0 { librarySaveFailure = nil } }
+        )) {
+            Button("다시 시도") { requestCompletion() }
+            if librarySaveFailure?.canOpenSettings == true {
+                Button("설정 열기") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }
+            }
+            Button("촬영 화면으로", role: .cancel) {}
+        } message: {
+            if let failure = librarySaveFailure {
+                Text("\(librarySaver.totalCount)장 중 \(librarySaver.savedCount)장을 저장했어요.\n\(failure.message)\n촬영 목록은 유지돼요. 이미 저장한 사진은 다시 저장하지 않아요.")
             }
         }
         .fullScreenCover(isPresented: $isCaptureGuidePresented) {
@@ -124,6 +134,7 @@ struct CameraFlowView: View {
         .task(id: captureRequested) {
             guard captureRequested else { return }
             failureMessage = nil
+            captureIndicatorPhase = .capturing
             do {
                 permission.refresh()
                 guard permission.status == .authorized else {
@@ -131,12 +142,38 @@ struct CameraFlowView: View {
                     return
                 }
                 try await model.captureDetail()
+                captureIndicatorPhase = .completed
+                if !reduceMotion { try await Task.sleep(for: .milliseconds(280)) }
             } catch {
                 if !(error is CancellationError) && !Task.isCancelled {
                     failureMessage = (error as? CameraFailure ?? .captureFailed).message
                 }
             }
             captureRequested = false
+        }
+        .task(id: isCompletingCapture) {
+            guard isCompletingCapture else { return }
+            hasStartedLibrarySaving = true
+            do {
+                try await librarySaver.save(capturePhotosToSave)
+                try Task.checkCancellation()
+                didSaveAllCapturePhotos = true
+                // The Photos authorization dialog temporarily makes the scene
+                // inactive. Navigate only after it has returned to the app.
+                completeCaptureIfReady()
+            } catch {
+                let shouldPresentFailure = !(error is CancellationError) && !Task.isCancelled
+                didSaveAllCapturePhotos = false
+                isCompletingCapture = false
+                if shouldPresentFailure {
+                    let saveError = error as? DetailPhotoLibrarySaveError
+                    let explanation = [saveError?.failureReason, saveError?.recoverySuggestion]
+                        .compactMap { $0 }.joined(separator: "\n")
+                    librarySaveFailure = LibrarySaveFailure(
+                        message: explanation.isEmpty ? error.localizedDescription : explanation,
+                        canOpenSettings: saveError?.canOpenSettings == true)
+                }
+            }
         }
         .onChange(of: permission.status) { _, status in
             if status != .authorized {
@@ -146,95 +183,170 @@ struct CameraFlowView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { isMoreOptionsPresented = false }
+            if phase == .active { completeCaptureIfReady() }
         }
         // 화면 이탈은 요청만 취소한다. 사진과 선택 결과는 초기화하지 않는다.
         .onDisappear {
             captureRequested = false
             isMoreOptionsPresented = false
+            isCompletingCapture = false
+            didSaveAllCapturePhotos = false
+            completionTask?.cancel()
+            completionTask = nil
         }
     }
 
+    /// Match the measurement camera's complete canvas and ratio-aware anchors.
+    /// Reading the safe inset outside ignoresSafeArea prevents a second offset.
+    private func cameraCanvas(bottomSafeAreaInset: CGFloat, headerBottom: CGFloat) -> some View {
+        GeometryReader { geometry in
+            let photoTop = max(0, headerBottom - geometry.frame(in: .global).minY + ProductCreationLayoutMetrics.photoGap)
+            ZStack {
+                Color.black
+                ratioPreview(photoTop: photoTop)
+                    .modifier(DetailZoomModifier(options: camera?.options,
+                        enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
+                            && (previewSource != nil || camera?.state == .running),
+                        bottomSafeAreaInset: bottomSafeAreaInset, portraitPhotoTop: photoTop))
+                if !isMoreOptionsPresented {
+                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.30),
+                            value: camera?.options.photoAspectRatio ?? .fourThree)
+                        .animation(nil, value: geometry.size)
+                }
+                captureFeedback(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)
+                cameraOptionsOverlay(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                    .allowsHitTesting(isMoreOptionsPresented)
+                    .accessibilityHidden(!isMoreOptionsPresented)
+                    .zIndex(2)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .ignoresSafeArea()
+    }
+
     @ViewBuilder
-    private var ratioPreview: some View {
+    private func captureFeedback(in size: CGSize, bottomSafeAreaInset: CGFloat, photoTop: CGFloat) -> some View {
+        if let frame = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)?.shutter,
+           failureMessage != nil {
+            Group {
+                if let failureMessage {
+                    Text(failureMessage).multilineTextAlignment(.center)
+                } else {
+                    EmptyView()
+                }
+            }
+            .padding(12)
+            .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 12))
+            .frame(maxWidth: min(380, size.width - 32))
+            .position(x: size.width / 2, y: max(24, frame.y - 34))
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func cameraOptionsOverlay(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
+        ZStack(alignment: .bottom) {
+            let panel = CameraOptionsPanelLayout(containerSize: size, bottomSafeAreaInset: bottomSafeAreaInset)
+            if isMoreOptionsPresented {
+                Button { isMoreOptionsPresented = false } label: { Color.clear.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("촬영 옵션 닫고 미리보기로 돌아가기")
+                    .accessibilityIdentifier("camera.dismissOptions")
+                DetailCaptureOptionsView(options: camera?.options,
+                    exposureSelectionFeedbackEnabled: true,
+                    panelLayout: panel) { isMoreOptionsPresented = false }
+                    .position(x: panel.frame.midX, y: panel.frame.midY)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isMoreOptionsPresented ? .isModal : [])
+    }
+
+    @ViewBuilder
+    private func ratioPreview(photoTop: CGFloat) -> some View {
         let ratio = camera?.options.photoAspectRatio ?? .fourThree
         Group {
             if let previewSource {
-                DetailAspectRatioPreview(aspectRatio: ratio) { _ in
+                DetailAspectRatioPreview(aspectRatio: ratio, prefersBottomAlignedPortrait: true,
+                                         portraitPhotoTop: photoTop) { _ in
                     CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
                 }
             } else if let camera {
-                CameraLivePreviewView(camera: camera, aspectRatio: ratio)
+                CameraLivePreviewView(camera: camera, aspectRatio: ratio, portraitPhotoTop: photoTop,
+                    interactionEnabled: !isMoreOptionsPresented && !isPhotoOperationInProgress
+                        && !isCaptureGuidePresented && !isGalleryPresented && scenePhase == .active)
             } else {
                 ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
             }
         }
     }
 
-    private var photoSelectionControl: some View {
-        Group {
-            if let onSelectPhotos {
-                Button(action: onSelectPhotos) { selectionLabel }
-            } else {
-                NavigationLink {
-                    ProductPhotoSelectionView(model: model, onExit: onExit, onComplete: onComplete)
-                        .onAppear { onSelectionVisibilityChange(true) }
-                        .onDisappear { onSelectionVisibilityChange(false) }
-                } label: { selectionLabel }
-            }
-        }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .tint(Color(red: 0.94, green: 0.24, blue: 0.07))
-        .disabled(isPhotoOperationInProgress)
+    private var completionControl: some View {
+        Button(action: requestCompletion) { completionLabel }
+        .buttonStyle(.plain)
+        .disabled(isPhotoOperationInProgress || model.allPhotosOutput == nil)
+        .opacity(isPhotoOperationInProgress || model.allPhotosOutput == nil ? 0.5 : 1)
+        .accessibilityHidden(isCompletingCapture)
         .accessibilityIdentifier("camera.selectPhotos")
     }
 
-    private var selectionLabel: some View {
-        Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
+    private var completionLabel: some View {
+        Text("다음")
+            .font(.body.weight(.semibold)).foregroundStyle(.white)
+            .frame(width: 76, height: ProductCreationHeaderLayout.toolbarHeight)
+            .glassEffect(.regular.tint(Color(red: 0.94, green: 0.24, blue: 0.07)).interactive(), in: Capsule())
+            .contentShape(.interaction, Capsule())
     }
 
     private var shutter: some View {
-        Button { captureRequested = true } label: {
-            Circle().fill(Color(red: 0.10, green: 0.10, blue: 0.10))
-                .overlay { Circle().stroke(.black.opacity(0.5), lineWidth: 2).padding(12) }
-                .overlay { Circle().fill(Color(red: 0.89, green: 0.35, blue: 0.24)).frame(width: 25, height: 25) }
-                .frame(width: 92, height: 92)
-                .contentShape(Circle())
+        ZStack {
+            CameraShutterControl(isEnabled: canCapture, isCapturing: false,
+                showsReadyState: canCapture, action: { captureRequested = true })
+                .opacity(captureRequested || model.isCapturing ? 0 : 1)
+            if captureRequested || model.isCapturing {
+                MeasurementProcessingIndicator(phase: captureIndicatorPhase)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(!canCapture)
-        .opacity(canCapture ? 1 : 0.5)
-        .accessibilityLabel("상세 사진 촬영")
-        .accessibilityHint(previewSource == nil ? "사진을 촬영하고 상세 사진 목록에 추가합니다." : "표시된 샘플 사진을 목록에 추가합니다.")
-        .accessibilityIdentifier("camera.captureDetail")
+            .accessibilityLabel(isPhotoOperationInProgress ? "상세 사진 처리 중" : "상세 사진 촬영")
+            .accessibilityValue(isPhotoOperationInProgress ? "촬영 중" : canCapture ? "촬영 가능" : "카메라 준비 중")
+            .accessibilityHint(previewSource == nil ? "사진을 촬영하고 상세 사진 목록에 추가합니다."
+                : "표시된 샘플 사진을 목록에 추가합니다.")
+            .accessibilityIdentifier("camera.captureDetail")
     }
 
-    private var captureControls: some View {
-        HStack {
-            Spacer(minLength: 16)
+    private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat,
+                                      photoTop: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
+        DetailCameraPreviewLayout(containerSize: size,
+            aspectRatio: camera?.options.photoAspectRatio ?? .fourThree,
+            prefersBottomAlignedPortrait: true, portraitPhotoTop: photoTop)
+            .controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset)
+    }
+
+    @ViewBuilder
+    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat, photoTop: CGFloat) -> some View {
+        if let controls = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop) {
+            let frame = controls.shutter
+            let centerY = frame.y + frame.height / 2
+            shutter.position(x: frame.x + frame.width / 2, y: centerY)
+            CameraMoreButton(isEnabled: !isPhotoOperationInProgress) { isMoreOptionsPresented = true }
+                .position(x: controls.more.x + controls.more.width / 2,
+                    y: controls.more.y + controls.more.height / 2)
+                .accessibilityLabel("촬영 옵션 더보기")
+                .accessibilityIdentifier("camera.moreOptions")
             Button { isGalleryPresented = true } label: {
-                CameraPhotoView(source: (model.photos.last ?? model.input.measurement).source,
+                CameraPhotoView(source: (model.photos.last ?? model.selectablePhotos.last)?.source ?? .mockPlaceholder,
                                 maximumPixelSize: 192)
                     .frame(width: 48, height: 48).clipShape(Circle())
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .disabled(isPhotoOperationInProgress)
+            .disabled(isPhotoOperationInProgress || model.selectablePhotos.isEmpty)
+            .position(x: controls.accessory.x + controls.accessory.width / 2,
+                y: controls.accessory.y + controls.accessory.height / 2)
             .accessibilityLabel("촬영한 사진 보기")
             .accessibilityIdentifier("camera.openGallery")
-            Spacer(minLength: 16)
-            shutter
-            Spacer(minLength: 16)
-            Button { isMoreOptionsPresented = true } label: {
-                Image("DetailCaptureMore").resizable().frame(width: 48, height: 48)
-            }
-            .buttonStyle(.plain)
-            .disabled(isPhotoOperationInProgress)
-            .accessibilityLabel("촬영 옵션 더보기")
-            .accessibilityIdentifier("camera.moreOptions")
-            Spacer(minLength: 16)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 114)
     }
 
     private var canCapture: Bool {
@@ -242,6 +354,7 @@ struct CameraFlowView: View {
     }
 
     private func updateCaptureGuide() {
+        guard !isCompletingCapture else { return }
         if permission.status != .authorized {
             setCaptureGuidePresented(false)
         } else if !model.hasAcknowledgedCaptureGuide,
@@ -258,6 +371,7 @@ struct CameraFlowView: View {
 
     private var isPhotoOperationInProgress: Bool {
         captureRequested || model.isCapturing || model.isDeleting
+            || isCompletingCapture || librarySaver.isSaving
     }
 
     private var isExitDisabled: Bool {
@@ -270,6 +384,43 @@ struct CameraFlowView: View {
         isMoreOptionsPresented = false
         onExit()
     }
+
+    private func requestCompletion() {
+        guard !isPhotoOperationInProgress, scenePhase == .active else { return }
+        librarySaveFailure = nil
+        failureMessage = nil
+        isMoreOptionsPresented = false
+        guard let output = model.allPhotosOutput else { return }
+        captureOutputToSave = output
+        didSaveAllCapturePhotos = false
+        capturePhotosToSave = output.selectedPhotos
+        hasStartedLibrarySaving = false
+        isCompletingCapture = true
+    }
+
+    private func completeCaptureIfReady() {
+        guard isCompletingCapture, didSaveAllCapturePhotos, scenePhase == .active,
+              completionTask == nil, let output = captureOutputToSave else { return }
+        // Keep the saving overlay and input lock through the app-product handoff.
+        // A second foreground notification must not start another completion.
+        completionTask = Task { @MainActor in
+            defer {
+                completionTask = nil
+                didSaveAllCapturePhotos = false
+                isCompletingCapture = false
+            }
+            do {
+                try Task.checkCancellation()
+                try await onComplete(output)
+            } catch {
+                guard !(error is CancellationError), !Task.isCancelled else { return }
+                librarySaveFailure = LibrarySaveFailure(
+                    message: "사진 앱 저장은 완료했지만 상품 정보를 반영하지 못했어요.\n\(error.localizedDescription)",
+                    canOpenSettings: false)
+            }
+        }
+    }
+
 }
 
 #Preview {

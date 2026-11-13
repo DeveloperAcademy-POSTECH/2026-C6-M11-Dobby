@@ -1,0 +1,20 @@
+{
+  "name": "dobby-garment-ai-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "dev": "npm run dev:mock",
+    "dev:mock": "wrangler dev --config wrangler.mock.toml --local --ip 127.0.0.1",
+    "dev:live": "wrangler dev --config wrangler.toml --local --ip 127.0.0.1",
+    "check:local": "node scripts/check-local.mjs",
+    "check:cloud": "node scripts/check-cloud.mjs",
+    "deploy:dev": "wrangler deploy --config wrangler.dev.toml",
+    "dry-run:dev": "wrangler deploy --config wrangler.dev.toml --dry-run",
+    "deploy": "wrangler deploy --config wrangler.toml",
+    "dry-run": "wrangler deploy --config wrangler.toml --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "4.154.0"
+  }
+}

@@ -3,6 +3,16 @@ import XCTest
 
 @MainActor
 final class WorkflowFailureCauseAdapterTests: XCTestCase {
+    func testUnverifiedOrientationExplainsDirectionBeforeAnyGarmentKind() throws {
+        let error = GarmentOrientationResolutionError(attempts: [])
+        let feedback = try XCTUnwrap(WorkflowFailureFeedback.make(for: .init(stage: .landmarks,
+            code: error.automaticMeasurementFailureCode, message: error.localizedDescription,
+            cause: error.automaticMeasurementFailureCause), hasCapturedPhoto: true))
+        XCTAssertTrue(feedback.title.contains("옷 방향"))
+        XCTAssertTrue(feedback.message.contains("종류 분류를 진행하지 않았"))
+        XCTAssertFalse(feedback.message.contains("하의"))
+    }
+
     func testAutomaticRecognitionErrorsRetainTheirSpecificObservedStage() {
         let scenarios: [(AutoGarmentRecognitionError, AutomaticMeasurementFailureCause)] = [
             (.noDetection, .garmentNotRecognized), (.ambiguous, .ambiguousGarment),

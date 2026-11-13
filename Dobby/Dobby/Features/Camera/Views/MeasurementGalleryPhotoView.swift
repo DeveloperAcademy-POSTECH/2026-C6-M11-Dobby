@@ -37,6 +37,7 @@ struct MeasurementGalleryPhotoView: View {
             editableLandmarks: landmarks, definitions: measurement.visibleDefinitions,
             values: measurement.visibleValues, showLabels: true, isEnabled: false,
             isRecalculating: false, showsEnlargeControl: false,
-            onSelect: { _ in }, onEnlarge: {}, onMove: { _, _ in }, onEditingChanged: { _ in })
+            usesResultPointStyleForEndpoints: true,
+            onEnlarge: {}, onMove: { _, _ in }, onEditingChanged: { _ in })
     }
 }

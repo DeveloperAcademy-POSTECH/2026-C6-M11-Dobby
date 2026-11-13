@@ -8,13 +8,15 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsHeader()
 
-            SettingsContent(
-                onPrivacyPolicy: openPrivacyPolicy,
-                onSupportMail: openSupportMail
-            )
-            .padding(.top, 29)
-
-            Spacer(minLength: 0)
+            ScrollView {
+                SettingsContent(
+                    onPrivacyPolicy: openPrivacyPolicy,
+                    onSupportMail: openSupportMail
+                )
+                .padding(.top, 29)
+                .padding(.bottom, 24)
+            }
+            .scrollIndicators(.hidden)
         }
         .padding(.horizontal, 20)
         .padding(.top, 3)
@@ -67,6 +69,7 @@ private struct SettingsContent: View {
                     SettingsNavigationRow(title: "연결된 계정 관리", systemImage: "chevron.right")
                 }
                 .buttonStyle(.plain)
+
             }
 
             SettingsSectionSeparator()
@@ -98,6 +101,7 @@ private struct SettingsContent: View {
             }
         }
     }
+
 }
 
 #Preview {

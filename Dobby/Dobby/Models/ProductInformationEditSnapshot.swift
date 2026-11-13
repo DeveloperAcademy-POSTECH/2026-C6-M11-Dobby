@@ -6,6 +6,8 @@ struct ProductInformationEditSnapshot: Equatable {
         let id: UUID
         let isSelectedForProduct: Bool?
         let roleRaw: String
+        let order: Int
+        let productRotationQuarterTurns: Int?
     }
 
     private struct MeasurementState: Equatable {
@@ -17,6 +19,8 @@ struct ProductInformationEditSnapshot: Equatable {
     private let name: String
     private let brand: String
     private let detail: String
+    private let aiSourcesData: Data?
+    private let aiInformationGeneratedAt: Date?
     private let price: Int?
     private let updatedAt: Date
     private let lengthCm: Double?
@@ -32,6 +36,8 @@ struct ProductInformationEditSnapshot: Equatable {
         name = garment.name
         brand = garment.brand
         detail = garment.detail
+        aiSourcesData = garment.aiSourcesData
+        aiInformationGeneratedAt = garment.aiInformationGeneratedAt
         price = garment.price
         updatedAt = garment.updatedAt
         lengthCm = garment.lengthCm
@@ -40,7 +46,7 @@ struct ProductInformationEditSnapshot: Equatable {
         sleeveCm = garment.sleeveCm
         waistCm = garment.waistCm
         photos = garment.photos.map {
-            PhotoState(id: $0.id, isSelectedForProduct: $0.isSelectedForProduct, roleRaw: $0.roleRaw)
+            PhotoState(id: $0.id, isSelectedForProduct: $0.isSelectedForProduct, roleRaw: $0.roleRaw, order: $0.order, productRotationQuarterTurns: $0.productRotationQuarterTurns)
         }.sorted { $0.id.uuidString < $1.id.uuidString }
         measurements = garment.measurements.map {
             MeasurementState(id: $0.id, valueBitPattern: $0.valueCm.bitPattern, isEdited: $0.isEdited)
@@ -56,6 +62,8 @@ struct ProductInformationEditSnapshot: Equatable {
         garment.name = name
         garment.brand = brand
         garment.detail = detail
+        garment.aiSourcesData = aiSourcesData
+        garment.aiInformationGeneratedAt = aiInformationGeneratedAt
         garment.price = price
         garment.lengthCm = lengthCm
         garment.shoulderCm = shoulderCm
@@ -64,10 +72,15 @@ struct ProductInformationEditSnapshot: Equatable {
         garment.waistCm = waistCm
 
         let photoStates = Dictionary(uniqueKeysWithValues: photos.map { ($0.id, $0) })
+        // Additions are relationship edits too. Do not leave a detached, rolled-
+        // back imported photo visible after restoring the original snapshot.
+        garment.photos = garment.photos.filter { photoStates[$0.id] != nil }
         for photo in garment.photos {
             guard let state = photoStates[photo.id] else { continue }
             photo.isSelectedForProduct = state.isSelectedForProduct
             photo.roleRaw = state.roleRaw
+            photo.order = state.order
+            photo.productRotationQuarterTurns = state.productRotationQuarterTurns
         }
 
         let measurementStates = Dictionary(uniqueKeysWithValues: measurements.map { ($0.id, $0) })

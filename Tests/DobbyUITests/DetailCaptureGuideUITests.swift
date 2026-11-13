@@ -38,11 +38,12 @@ final class DetailCaptureGuideUITests: XCTestCase {
         app.buttons["camera.dismissOptions"].tap()
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 5))
 
-        // 옵션을 열어 둔 채 뒤로가기를 취소해도 같은 촬영 초안과 컨트롤을 유지한다.
+        // 옵션에서 결과 화면으로 돌아갔다가 재진입해도 안내는 반복하지 않는다.
         more.tap()
-        presentExitConfirmation(in: app)
-        app.buttons["product-flow.exit-cancel"].tap()
-        XCTAssertTrue(exitConfirmation(in: app).waitForNonExistence(timeout: 5))
+        returnToResult(in: app)
+        app.buttons["confirmGarmentMeasurement"].tap()
+        XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 15))
+        XCTAssertFalse(exitConfirmation(in: app).exists)
         XCTAssertFalse(closeOptions.exists)
         XCTAssertFalse(guide.exists)
         XCTAssertTrue(capture.wait(for: \.isHittable, toEqual: true, timeout: 5))
@@ -64,33 +65,33 @@ final class DetailCaptureGuideUITests: XCTestCase {
         let next = app.buttons["camera.selectPhotos"]
         waitEnabled(next)
         next.tap()
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        let selections = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "camera.grid.select."))
-        XCTAssertEqual(selections.count, 2, "안내 닫기는 촬영하지 않고 이후 셔터 한 번만 상세 사진을 추가해야 한다")
-        XCTAssertTrue(app.buttons["camera.grid.select.0"].exists)
-        XCTAssertTrue(app.buttons["camera.grid.select.1"].exists)
-        XCTAssertFalse(app.buttons["camera.grid.select.2"].exists)
-
-        // 확대 사진의 보조 뒤로가기는 임시저장 확인창을 열지 않는다.
-        let preview = app.buttons["camera.grid.preview.1"]
-        waitEnabled(preview)
-        preview.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["camera.selectionPreviewImage"].firstMatch.waitForExistence(timeout: 10))
-        app.buttons["camera.closeSelectionPreview"].tap()
-        XCTAssertTrue(app.scrollViews["camera.selectionGrid"].waitForExistence(timeout: 10))
-        XCTAssertFalse(exitConfirmation(in: app).exists)
-        presentExitConfirmation(in: app)
-        app.buttons["product-flow.exit-cancel"].tap()
-        XCTAssertTrue(exitConfirmation(in: app).waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.navigationBars["제품 사진 선택"].isHittable)
-        XCTAssertEqual(selections.count, 2)
-        XCTAssertEqual(saveDraftViaHome(stage: "제품 사진 선택 단계", app: app), productID)
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-info.photo."))
+        XCTAssertEqual(photos.count, 3, "안내 닫기는 촬영하지 않고 이후 셔터 한 번만 상세 사진을 추가해야 한다")
+        let originalIDs = photos.allElementsBoundByIndex.map(\.identifier)
+        returnToDetails(in: app)
+        XCTAssertFalse(guide.exists)
+        next.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        XCTAssertEqual(photos.allElementsBoundByIndex.map(\.identifier), originalIDs)
+        returnToDetails(in: app)
+        XCTAssertEqual(saveDraftViaHome(stage: "상세 촬영 단계", app: app), productID)
 
         // 새 실측 촬영으로 새 초안을 만들면 안내가 다시 필요하다.
         app.tabBars.buttons["홈"].tap()
         openNewDetailDraft(in: app)
         XCTAssertTrue(guide.waitForExistence(timeout: 10))
         XCTAssertFalse(capture.isHittable)
+    }
+
+    @MainActor
+    private func returnToDetails(in app: XCUIApplication) {
+        let back = app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)
+        XCTAssertNotNil(back)
+        back?.tap()
+        XCTAssertTrue(app.buttons["camera.captureDetail"].waitForExistence(timeout: 10))
+        XCTAssertFalse(exitConfirmation(in: app).exists)
     }
 
     @MainActor
@@ -108,22 +109,28 @@ final class DetailCaptureGuideUITests: XCTestCase {
     }
 
     @MainActor
-    private func presentExitConfirmation(in app: XCUIApplication) {
-        let query = app.buttons.matching(identifier: "product-flow.back")
-        let backs = query.allElementsBoundByIndex.filter(\.isHittable)
-        XCTAssertEqual(backs.count, 1)
-        let back = backs.first ?? query.firstMatch
-        waitEnabled(back)
-        back.tap()
-        XCTAssertTrue(exitConfirmation(in: app).waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["product-flow.exit-cancel"].isEnabled)
-        XCTAssertTrue(app.buttons["product-flow.exit-save"].isEnabled)
+    private func returnToResult(in app: XCUIApplication) {
+        let back = app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)
+        XCTAssertNotNil(back)
+        back?.tap()
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        XCTAssertFalse(exitConfirmation(in: app).exists)
     }
 
     @MainActor
     private func saveDraftViaHome(stage: String, app: XCUIApplication) -> String {
-        presentExitConfirmation(in: app)
-        app.buttons["product-flow.exit-save"].tap()
+        returnToResult(in: app)
+        app.buttons["confirmGarmentMeasurement"].tap()
+        XCTAssertTrue(app.navigationBars["제품 상세 촬영"].waitForExistence(timeout: 15))
+        returnToResult(in: app)
+        app.buttons.matching(identifier: "product-flow.back")
+            .allElementsBoundByIndex.first(where: \.isHittable)?.tap()
+        XCTAssertTrue(app.buttons["closeGarmentCapture"].waitForExistence(timeout: 10))
+        XCTAssertFalse(exitConfirmation(in: app).exists)
+        app.buttons["closeGarmentCapture"].tap()
+        XCTAssertTrue(app.tabBars.buttons["홈"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["홈"].tap()
         let start = app.buttons["product-flow.start"]
         XCTAssertTrue(start.wait(for: \.isHittable, toEqual: true, timeout: 20))
         XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)

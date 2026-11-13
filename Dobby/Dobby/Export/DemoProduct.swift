@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // 상품 편집 화면이 연결되기 전 앱 진입점과 프리뷰에서만 사용하는 제공된 예시.
 extension ProductCopyPayload {
@@ -41,5 +42,25 @@ extension ExportProduct {
         thumbnailData: nil,
         marketplacePayload: .sample(for: .fruits),
         instagramPayload: .sample(for: .instagram)
+    )
+
+    static var instagramPreview: ExportProduct {
+        var product = demo
+        product.photos = [
+            "LaunchSplashJacket",
+            "LaunchSplashStripedTShirt",
+            "LaunchSplashPlaidShirt"
+        ].compactMap { imageName in
+            UIImage(named: imageName)?.jpegData(compressionQuality: 0.9)
+        }
+        return product
+    }
+}
+
+extension InstagramAccount {
+    static let preview = InstagramAccount(
+        id: "preview-instagram-account",
+        username: "dobby_vintage",
+        profilePictureURL: nil
     )
 }

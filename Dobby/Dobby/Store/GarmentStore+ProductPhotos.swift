@@ -2,6 +2,25 @@ import Foundation
 import SwiftData
 
 extension GarmentStore {
+    /// Applies an exact permutation of the visible product photos. Hidden
+    /// measurement originals keep their relative order and remain retained.
+    @MainActor
+    @discardableResult
+    static func reorderProductPhotos(ids: [UUID], in garment: Garment) -> Bool {
+        let visible = garment.productPhotos
+        let currentIDs = visible.map(\.id)
+        guard ids.count == currentIDs.count, Set(ids).count == ids.count,
+              Set(ids) == Set(currentIDs) else { return false }
+        guard ids != currentIDs else { return true }
+        let byID = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
+        let selected = ids.compactMap { byID[$0] }
+        let selectedIDs = Set(ids)
+        let retained = garment.orderedPhotos.filter { !selectedIDs.contains($0.id) }
+        reorder(selected + retained, in: garment)
+        if let first = selected.first { setThumbnail(first, in: garment) }
+        return true
+    }
+
     /// Removes a product photo from display/export while retaining the original
     /// file and measurement evidence. Restore only these edits if saving fails.
     @MainActor

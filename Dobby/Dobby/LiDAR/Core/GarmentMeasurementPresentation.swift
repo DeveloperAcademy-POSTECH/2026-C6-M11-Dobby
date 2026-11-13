@@ -11,6 +11,7 @@ nonisolated enum GarmentMeasurementPresentation {
 
     static let topColumns: [Column] = [
         .init(measurementID: "top.totalLength", productKey: "totalLength", title: "총장"),
+        .init(measurementID: "top.frontLength", productKey: "frontLength", title: "앞판 총장"),
         .init(measurementID: "top.shoulderWidth", productKey: "shoulderWidth", title: "어깨"),
         .init(measurementID: "top.chestWidth", productKey: "chestWidth", title: "가슴"),
         .init(measurementID: "top.sleeveLengthLeft", productKey: "sleeveLengthLeft", title: "소매")

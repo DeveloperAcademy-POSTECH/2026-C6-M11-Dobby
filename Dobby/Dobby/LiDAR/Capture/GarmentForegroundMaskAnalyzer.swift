@@ -6,7 +6,8 @@ import Vision
 
 nonisolated struct GarmentImageRecognition: Sendable {
     var points: [GarmentLandmark]
-    var detectionConfidence: Double
+    /// External landmark providers do not expose a calibrated detector score.
+    var detectionConfidence: Double?
     var modelVersion: String
     var garmentKind: AutomaticGarmentKind? = nil
     var diagnostics: GarmentRecognitionDiagnostics? = nil

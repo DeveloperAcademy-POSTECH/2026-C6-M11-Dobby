@@ -2,9 +2,69 @@ import XCTest
 import UIKit
 
 /// Only the explicitly labelled synthetic flow runs here. Each test uses a new
-/// isolated SwiftData store and never imports Photos, starts a copy activity,
+/// isolated SwiftData store and saves synthetic captures only to a disposable
+/// simulator photo library. It never starts a copy activity,
 /// presses a copy control, or opens a marketplace link.
 final class ProductCreationFlowTests: XCTestCase {
+    @MainActor
+    func testFourStageProgressFollowsProductCreation() {
+        continueAfterFailure = false
+        let app = fixtureApp(token: UUID().uuidString, top: true)
+        app.launch()
+        defer { app.terminate() }
+        openCapture(in: app)
+        assertCreationProgress(stage: 1, title: "실측", app: app)
+        attachScreenshot(app, name: "progress-stage-1-measurement")
+
+        recognizeAndCapture(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        assertCreationProgress(stage: 2, title: "실측 결과", app: app)
+        attachScreenshot(app, name: "progress-stage-2-result")
+        app.buttons["confirmGarmentMeasurement"].tap()
+        acknowledgeDetailCaptureGuide(in: app)
+        assertCreationProgress(stage: 3, title: "제품 상세 촬영", app: app)
+        attachScreenshot(app, name: "progress-stage-3-details")
+
+        let capture = app.buttons["camera.captureDetail"]
+        waitEnabled(capture)
+        capture.tap()
+        let next = app.buttons["camera.selectPhotos"]
+        waitEnabled(next)
+        next.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+        assertCreationProgress(stage: 4, title: "정보 입력", app: app)
+        attachScreenshot(app, name: "progress-stage-4-information")
+
+        app.buttons["product-flow.back"].tap()
+        assertCreationProgress(stage: 3, title: "제품 상세 촬영", app: app)
+        app.buttons["product-flow.back"].tap()
+        assertCreationProgress(stage: 2, title: "실측 결과", app: app)
+        app.buttons["product-flow.back"].tap()
+        assertCreationProgress(stage: 1, title: "실측", app: app)
+        app.buttons["closeGarmentCapture"].tap()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.descendants(matching: .any)["product-flow.progress"].exists)
+    }
+
+    @MainActor
+    private func assertCreationProgress(stage: Int, title: String, app: XCUIApplication) {
+        let identifier = stage == 2 ? "garmentResultProgress" : "product-flow.progress"
+        let progress = app.descendants(matching: .any)[identifier].firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 10))
+        XCTAssertEqual(progress.value as? String, "4단계 중 \(stage)단계, \(title)")
+        XCTAssertEqual(progress.frame.height, 3, accuracy: 0.5)
+        XCTAssertEqual(progress.frame.width, app.frame.width, accuracy: 1)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: identifier).count, 1)
+        let backIdentifier = stage == 1 ? "closeGarmentCapture" : "product-flow.back"
+        let back = app.buttons[backIdentifier].firstMatch
+        XCTAssertTrue(back.exists)
+        let toolbarGap = back.frame.minY - progress.frame.maxY
+        XCTAssertGreaterThanOrEqual(toolbarGap, 12, "프로그레스바와 툴바 사이에 피그마의 여백을 유지한다")
+        XCTAssertLessThanOrEqual(toolbarGap, 18, "화면 이동으로 상단 여백이 중복 적용되지 않는다")
+        let otherIdentifier = stage == 2 ? "product-flow.progress" : "garmentResultProgress"
+        XCTAssertFalse(app.descendants(matching: .any)[otherIdentifier].exists)
+    }
+
     @MainActor
     func testTopAndBottomResultsShowFourShortCompactMeasurementLabels() throws {
         continueAfterFailure = false
@@ -21,12 +81,12 @@ final class ProductCreationFlowTests: XCTestCase {
             openCapture(in: app)
             recognizeAndCapture(in: app)
             XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
-            let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            let labels = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@",
                 "garmentMeasurementLabel_")).allElementsBoundByIndex
             XCTAssertEqual(Set(labels.map(\.identifier)), Set(fixture.labels.map { "garmentMeasurementLabel_" + $0.id }))
             for expected in fixture.labels {
-                let label = app.buttons["garmentMeasurementLabel_" + expected.id]
-                XCTAssertTrue(label.isHittable)
+                let label = app.descendants(matching: .any)["garmentMeasurementLabel_" + expected.id]
+                XCTAssertTrue(label.exists)
                 let parts = label.label.components(separatedBy: ", ")
                 XCTAssertEqual(parts.first, expected.title)
                 XCTAssertFalse(label.label.contains("(") || label.label.contains(")"),
@@ -59,7 +119,7 @@ final class ProductCreationFlowTests: XCTestCase {
         let token = UUID().uuidString
         let name = "Flow top " + String(token.prefix(8))
         let brand = "FlowTestBrand"
-        let description = "A measured product with two selected photos."
+        let description = "A measured product with all three captured photos."
         let app = fixtureApp(token: token, top: true)
         app.launch()
         openCapture(in: app)
@@ -67,10 +127,10 @@ final class ProductCreationFlowTests: XCTestCase {
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["garmentSyntheticResult"].exists)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).count, 4)
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.hemWidth"].exists)
-        XCTAssertTrue(app.buttons["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
-        XCTAssertFalse(app.buttons["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_top.")).count, 4)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.hemWidth"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["garmentMeasurementLabel_top.sleeveLengthLeft"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_top.sleeveLengthRight"].exists)
         XCTAssertTrue(app.buttons["garmentMeasurementPoint_sleeve_end_left"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_sleeve_end_right"].exists)
 
@@ -109,17 +169,6 @@ final class ProductCreationFlowTests: XCTestCase {
         waitEnabled(choose)
         attachScreenshot(app, name: "flow-top-detail-captured-original")
         choose.tap()
-        XCTAssertTrue(app.navigationBars["제품 사진 선택"].waitForExistence(timeout: 10))
-        let detail = app.buttons["camera.grid.select.1"]
-        reveal(detail, in: app)
-        XCTAssertTrue(detail.waitForExistence(timeout: 5))
-        waitEnabled(detail)
-        XCTAssertTrue(app.buttons["camera.grid.preview.1"].exists)
-        detail.tap()
-        XCTAssertEqual(detail.value as? String, "2번째 선택")
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
-        attachScreenshot(app, name: "flow-top-photo-selection-two-photos")
-        app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         attachScreenshot(app, name: "flow-top-info-before-editing")
         replaceText(in: field("name", app: app), with: name, app: app)
@@ -180,49 +229,36 @@ final class ProductCreationFlowTests: XCTestCase {
         // must persist all digits instead of reusing the rounded display value.
         app.buttons["product-info.done"].tap()
         XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 15))
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 2)
+        XCTAssertEqual(app.images.matching(NSPredicate(format: "identifier BEGINSWITH %@", "product-detail.photo.")).count, 3)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 0)
         attachScreenshot(app, name: "flow-top-completion-real-product")
+        reveal(app.buttons["product-complete.export"], in: app)
         app.buttons["product-complete.export"].tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))
         attachScreenshot(app, name: "flow-top-export-current-product")
 
-        let fruitsDetails = app.buttons["후루츠패밀리로 내보내기 (A)"]
-        reveal(fruitsDetails, in: app)
-        fruitsDetails.tap()
-        XCTAssertTrue(app.navigationBars["후루츠패밀리로 내보내기"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["화면 상단부에 있는 다이나믹 아일랜드를 길게 눌러 펼쳐 주세요"].exists)
-        XCTAssertTrue(app.images["export.fruits.guide"].exists)
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "어깨", "복사")).firstMatch.exists)
-        attachScreenshot(app, name: "flow-top-export-dynamic-island-guide-a")
-        tapBack(in: app)
-        let fruitsOverlay = app.buttons["후루츠패밀리로 내보내기 (B)"]
-        reveal(fruitsOverlay, in: app)
-        fruitsOverlay.tap()
-        XCTAssertTrue(app.otherElements["export.fruits.overlay"].waitForExistence(timeout: 5))
-        // SwiftUI exposes the overlay container identifier on both the glass
-        // card and prompt. Verify its actionable controls for this lifecycle
-        // test rather than relying on non-exposed layout wrapper identifiers.
-        let guideOpen = app.buttons["export.fruits.overlay.open"]
-        let guideClose = app.buttons["export.fruits.overlay.close"]
-        XCTAssertTrue(guideOpen.waitForExistence(timeout: 5))
-        XCTAssertTrue(guideOpen.isHittable)
-        XCTAssertTrue(guideClose.isHittable)
-        XCTAssertTrue(app.navigationBars["내보내기"].exists)
-        XCTAssertTrue(app.staticTexts["다이나믹 아일랜드를\n꾹 눌러보세요"].exists)
-        attachScreenshot(app, name: "flow-top-export-dynamic-island-guide-b-overlay")
-        guideClose.tap()
-        XCTAssertFalse(app.otherElements["export.fruits.overlay"].waitForExistence(timeout: 1))
+        let fruits = app.buttons["후르츠패밀리에 업로드하기"]
+        reveal(fruits, in: app)
+        fruits.tap()
+        // Verify the in-app entry and return without saving photos, starting
+        // PiP or opening the external platform.
+        let closeFruits = app.buttons["채널 선택으로 돌아가기"]
+        XCTAssertTrue(closeFruits.waitForExistence(timeout: 10))
+        XCTAssertTrue(closeFruits.isHittable)
+        attachScreenshot(app, name: "flow-top-export-fruits-photo-save")
+        closeFruits.tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 5))
         app.buttons["export.close"].tap()
-        XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
-
-        // Export returns to the completed product with both selected photos;
-        // main registration Back no longer navigates into an earlier stage.
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 2)
-        attachScreenshot(app, name: "flow-top-selected-photos-retained-after-export")
-        app.buttons["product-complete.library"].tap()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
+        app.tabBars.buttons["보관함"].tap()
         openLibraryProduct(named: name, app: app)
+
+        // Closing export returns home. The saved product still owns all three
+        // captured photos and its confirmed measurements when reopened.
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 3)
+        attachScreenshot(app, name: "flow-top-all-photos-retained-after-export")
         assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
         app.terminate()
         app.launch()
@@ -243,15 +279,13 @@ final class ProductCreationFlowTests: XCTestCase {
         assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
         attachScreenshot(app, name: "flow-top-library-after-unchanged-edit-67-display")
 
-        // A saved product keeps pending edits when returning to its detail
-        // page, and commits them only after completing Info again.
+        // 닫기는 편집을 계속하고, 완료할 때만 수정한 실측값을 저장한다.
         app.buttons["library.edit"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         replaceText(in: shoulder, with: "72.19", app: app)
-        tapBack(in: app)
-        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
-        assertSavedValue(key: "shoulderWidth", contains: "67cm", app: app)
-        app.buttons["library.edit"].tap()
+        app.buttons["product-flow.back"].tap()
+        XCTAssertTrue(app.buttons["product-info.discard-cancel"].waitForExistence(timeout: 5))
+        app.buttons["product-info.discard-cancel"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
         reveal(shoulder, in: app)
         XCTAssertEqual(shoulder.value as? String, "72.19")
@@ -260,12 +294,12 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["product-complete.library"].exists)
         XCTAssertTrue(app.buttons["library.edit"].exists)
-        assertSavedValue(key: "shoulderWidth", contains: "72cm", app: app)
+        assertSavedValue(key: "shoulderWidth", contains: "72.1cm", app: app)
         attachScreenshot(app, name: "flow-top-library-saved-restored-draft-72-display")
     }
 
     @MainActor
-    func testBottomFourValuesMeasurementOnlySelectionAndEmptyCopyHomeUseRealProductFlow() throws {
+    func testBottomFourValuesMeasurementOnlyHandoffAndEmptyCopyHomeUseRealProductFlow() throws {
         continueAfterFailure = false
         let token = UUID().uuidString
         let name = "Flow bottom " + String(token.prefix(8))
@@ -290,12 +324,12 @@ final class ProductCreationFlowTests: XCTestCase {
         recognizeAndCapture(in: app)
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 15))
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).count, 4)
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "garmentMeasurementLabel_bottom.")).count, 4)
         for id in ["bottom.hem_left_outer.waist_left", "bottom.hem_left_inner.hem_left_outer"] {
-            XCTAssertTrue(app.buttons["garmentMeasurementLabel_" + id].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["garmentMeasurementLabel_" + id].exists)
         }
         for id in ["bottom.hem_right_outer.waist_right", "bottom.hem_right_inner.hem_right_outer", "bottom.crotch.hem_right_inner", "bottom.crotch.hem_left_inner"] {
-            XCTAssertFalse(app.buttons["garmentMeasurementLabel_" + id].exists)
+            XCTAssertFalse(app.descendants(matching: .any)["garmentMeasurementLabel_" + id].exists)
         }
         XCTAssertTrue(app.buttons["garmentMeasurementPoint_hem_left_inner"].exists)
         XCTAssertFalse(app.buttons["garmentMeasurementPoint_hem_right_inner"].exists)
@@ -305,9 +339,6 @@ final class ProductCreationFlowTests: XCTestCase {
         acknowledgeDetailCaptureGuide(in: app)
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
         app.buttons["camera.selectPhotos"].tap()
-        XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "1장 선택 · 최소 1장 · 최대 10장")
-        app.buttons["camera.completePhotos"].tap()
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
         replaceText(in: field("name", app: app), with: name, app: app)
         replaceText(in: field("detail", app: app), with: "바지 설명", app: app)
@@ -349,6 +380,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertFalse(app.textFields["product-info.measurement.shoulderWidth"].exists)
         app.buttons["product-info.done"].tap()
         XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
+        reveal(app.buttons["product-complete.library"], in: app)
         app.buttons["product-complete.library"].tap()
         openLibraryProduct(named: name, app: app)
         for key in expected {
@@ -380,12 +412,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["camera.selectPhotos"].waitForExistence(timeout: 15))
         waitEnabled(app.buttons["camera.selectPhotos"])
         app.buttons["camera.selectPhotos"].tap()
-        let secondSelection = app.buttons["camera.grid.select.1"]
-        waitEnabled(secondSelection)
-        secondSelection.tap()
-        XCTAssertTrue(app.buttons["camera.completePhotos"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.buttons["camera.completePhotos"].value as? String, "2장 선택 · 최소 1장 · 최대 10장")
-        app.buttons["camera.completePhotos"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
         let done = app.buttons["product-info.done"]
         XCTAssertTrue(done.waitForExistence(timeout: 10))
         XCTAssertFalse(done.isEnabled)
@@ -395,18 +422,18 @@ final class ProductCreationFlowTests: XCTestCase {
         replaceText(in: field("name", app: app), with: "Design validation", app: app)
         let inputPhotos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "product-info.photo."))
-        XCTAssertEqual(inputPhotos.count, 2)
+        XCTAssertEqual(inputPhotos.count, 3)
         let secondInputPhoto = inputPhotos.element(boundBy: 1)
         reveal(secondInputPhoto, in: app)
         secondInputPhoto.tap()
         let inputPager = app.descendants(matching: .any)["product-gallery.pager"].firstMatch
         XCTAssertTrue(inputPager.waitForExistence(timeout: 5))
-        wait(for: NSPredicate(format: "value == %@", "2 / 2"), on: inputPager)
+        wait(for: NSPredicate(format: "value == %@", "2 / 3"), on: inputPager)
         XCTAssertFalse(app.buttons["product-gallery.delete"].exists,
                        "New registration allows photo viewing without enabling saved-product deletion")
         attachScreenshot(app, name: "product-info-expanded-second-photo")
         inputPager.swipeRight()
-        wait(for: NSPredicate(format: "value == %@", "1 / 2"), on: inputPager)
+        wait(for: NSPredicate(format: "value == %@", "1 / 3"), on: inputPager)
         let firstExpandedPhoto = app.descendants(matching: .any)["product-gallery.photo.1"].firstMatch
         XCTAssertTrue(firstExpandedPhoto.waitForExistence(timeout: 5))
         XCTAssertEqual(firstExpandedPhoto.frame.minX, inputPager.frame.minX, accuracy: 1)
@@ -415,7 +442,7 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(inputPager.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 5))
         XCTAssertEqual(field("name", app: app).value as? String, "Design validation")
-        XCTAssertEqual(inputPhotos.count, 2)
+        XCTAssertEqual(inputPhotos.count, 3)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "product-info.delete-photo.")).count, 0)
         XCTAssertTrue(done.isEnabled)
@@ -431,24 +458,24 @@ final class ProductCreationFlowTests: XCTestCase {
         let price = field("price", app: app)
         reveal(price, in: app)
         let priceUnit = app.staticTexts["product-info.price.unit"]
-        XCTAssertTrue(priceUnit.exists)
-        let emptyUnitX = priceUnit.frame.minX
-        XCTAssertLessThan(emptyUnitX - price.frame.minX, 30)
+        XCTAssertFalse(priceUnit.isHittable, "Empty price uses the full-width placeholder")
         price.tap()
         price.typeText("40000")
         wait(for: NSPredicate(format: "value == %@", "40,000"), on: price)
         XCTAssertEqual(price.value as? String, "40,000")
         XCTAssertTrue(priceUnit.exists)
-        XCTAssertGreaterThan(priceUnit.frame.minX, emptyUnitX)
-        XCTAssertEqual(priceUnit.frame.minX - price.frame.maxX, 4, accuracy: 2)
+        attachScreenshot(app, name: "product-info-filled-price-unit")
+        XCTAssertTrue(priceUnit.isHittable)
+        // SwiftUI may expose the whole field as the editable AX target. The
+        // visible currency unit must follow the value inside that target.
+        XCTAssertGreaterThan(priceUnit.frame.minX, price.frame.minX)
         app.swipeDown()
         XCTAssertTrue(priceUnit.exists)
         XCTAssertTrue(done.isEnabled, "Brand is optional")
         price.tap()
         price.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 6))
         XCTAssertTrue(done.isEnabled)
-        XCTAssertTrue(priceUnit.exists)
-        XCTAssertEqual(priceUnit.frame.minX, emptyUnitX, accuracy: 2)
+        XCTAssertFalse(priceUnit.isHittable)
         XCTAssertTrue(app.staticTexts["가격을 입력해주세요"].exists)
         price.typeText("40000")
         XCTAssertTrue(done.isEnabled)
@@ -460,18 +487,15 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", detail)).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["브랜드"].exists, "An omitted brand must not leave an empty section")
         attachScreenshot(app, name: "product-complete-summary")
-        let photoButtons = app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대"))
-        let photo = photoButtons.firstMatch
+        let photo = app.images.matching(NSPredicate(format: "identifier BEGINSWITH %@",
+            "product-detail.photo.")).firstMatch
         reveal(photo, in: app)
-        let photoCount = photoButtons.count
+        XCTAssertTrue(photo.exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "제품 사진 확대")).count, 0)
         photo.tap()
         let pager = app.descendants(matching: .any)["product-gallery.pager"].firstMatch
-        XCTAssertTrue(pager.waitForExistence(timeout: 5))
-        wait(for: NSPredicate(format: "value == %@", "1 / \(photoCount)"), on: pager)
-        XCTAssertFalse(app.buttons["product-gallery.delete"].exists)
-        XCTAssertTrue(app.buttons["product-gallery.close"].exists)
-        app.buttons["product-gallery.close"].tap()
-        XCTAssertTrue(pager.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(pager.exists, "Completion photos are a static summary, not a gallery entry")
+        XCTAssertFalse(app.buttons["product-gallery.close"].exists)
         let measurements = app.descendants(matching: .any)["product-detail.measurements"].firstMatch
         let actions = app.buttons["product-complete.export"]
         for _ in 0..<5 {
@@ -482,12 +506,14 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(measurements.exists)
         XCTAssertLessThanOrEqual(measurements.frame.maxY, actions.frame.minY)
         attachScreenshot(app, name: "product-complete-measurements")
+        reveal(actions, in: app)
         actions.tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Design validation"].exists)
         app.buttons["export.close"].tap()
-        XCTAssertTrue(app.buttons["product-complete.library"].waitForExistence(timeout: 10))
-        app.buttons["product-complete.library"].tap()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
+        app.tabBars.buttons["보관함"].tap()
         openLibraryProduct(named: "Design validation", app: app)
     }
 

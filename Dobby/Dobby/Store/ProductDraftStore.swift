@@ -9,7 +9,8 @@ nonisolated enum ProductDraftStep: String, Codable, Sendable, CaseIterable {
         switch self {
         case .measurementResult: "실측 결과 단계"
         case .details: "상세 촬영 단계"
-        case .photoSelection: "제품 사진 선택 단계"
+        // Keep the stored raw value readable; legacy drafts now resume capture.
+        case .photoSelection: "상세 촬영 단계"
         case .information: "제품 정보 입력 단계"
         }
     }
@@ -22,6 +23,9 @@ nonisolated struct ProductCreationDraft: Codable, Sendable {
     let photoState: ProductPhotoDraftSnapshot?
     let measurementInputData: Data?
     let savedAt: Date
+    /// Optional so existing version-one drafts remain readable.
+    var aiReviewNotes: [String]? = nil
+    var usesProductAutofill: Bool? = nil
 }
 
 /// Captures remain in the camera's stable Application Support store until this
@@ -34,9 +38,14 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
     let selectedPhotoIDs: [UUID]
     /// Older saved drafts omit this session-level guide state.
     let hasAcknowledgedCaptureGuide: Bool?
+    /// Optional for drafts written before gallery deletion was introduced.
+    var deletedPhotoIDs: Set<UUID>? = nil
 
     struct Photo: Codable, Sendable, Equatable {
         let id: UUID
+        /// Retained details may precede a measurement retake. Older drafts use
+        /// the enclosing snapshot's session ID when this field is absent.
+        let sessionID: UUID?
         let capturedAt: Date
         let url: URL
         let pixelWidth: Int
@@ -48,6 +57,7 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
             guard asset.purpose == .detail, case let .localFile(url, metadata) = asset.source,
                   url.isFileURL else { throw ProductDraftStore.DraftError.invalidPhotos }
             id = asset.id
+            sessionID = asset.sessionID
             capturedAt = asset.capturedAt
             self.url = url
             pixelWidth = metadata.pixelWidth
@@ -74,12 +84,12 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
     }
 
     init(input: ProductPhotoInput, detailPhotos: [CapturedAsset], selectedPhotoIDs: [UUID],
-         hasAcknowledgedCaptureGuide: Bool = false) throws {
+         hasAcknowledgedCaptureGuide: Bool = false, deletedPhotoIDs: Set<UUID> = []) throws {
         guard Set(detailPhotos.map(\.id)).count == detailPhotos.count,
-              detailPhotos.allSatisfy({ $0.sessionID == input.sessionID && $0.garmentID == input.garmentID
+              detailPhotos.allSatisfy({ $0.garmentID == input.garmentID
                   && $0.id != input.measurement.id && $0.purpose == .detail }),
               Set(selectedPhotoIDs).count == selectedPhotoIDs.count,
-              Set(selectedPhotoIDs).isSubset(of: Set([input.measurement.id] + detailPhotos.map(\.id))) else {
+              Set(selectedPhotoIDs).isSubset(of: Set(input.measurementPhotos.map(\.id) + detailPhotos.map(\.id))) else {
             throw ProductDraftStore.DraftError.invalidPhotos
         }
         sessionID = input.sessionID
@@ -88,27 +98,32 @@ nonisolated struct ProductPhotoDraftSnapshot: Codable, Sendable, Equatable {
         self.detailPhotos = try detailPhotos.map(Photo.init)
         self.selectedPhotoIDs = selectedPhotoIDs
         self.hasAcknowledgedCaptureGuide = hasAcknowledgedCaptureGuide
+        self.deletedPhotoIDs = deletedPhotoIDs
         _ = try restoredDetailPhotos(for: input)
     }
 
     func restoredDetailPhotos(for input: ProductPhotoInput) throws -> [CapturedAsset] {
-        guard sessionID == input.sessionID, garmentID == input.garmentID,
+        guard (deletedPhotoIDs ?? []).isDisjoint(with: selectedPhotoIDs),
+              (deletedPhotoIDs ?? []).isDisjoint(with: detailPhotos.map(\.id)),
+              sessionID == input.sessionID, garmentID == input.garmentID,
               measurementPhotoID == input.measurement.id,
               Set(detailPhotos.map(\.id)).count == detailPhotos.count,
               Set(detailPhotos.map { $0.url.standardizedFileURL }).count == detailPhotos.count,
               !detailPhotos.contains(where: { $0.id == measurementPhotoID }),
               Set(selectedPhotoIDs).count == selectedPhotoIDs.count,
-              Set(selectedPhotoIDs).isSubset(of: Set([measurementPhotoID] + detailPhotos.map(\.id))) else {
+              Set(selectedPhotoIDs).isSubset(of: Set(input.measurementPhotos.map(\.id) + detailPhotos.map(\.id))) else {
             throw ProductDraftStore.DraftError.invalidPhotos
         }
-        return try detailPhotos.map { try $0.asset(sessionID: sessionID, garmentID: garmentID) }
+        return try detailPhotos.map { try $0.asset(sessionID: $0.sessionID ?? sessionID, garmentID: garmentID) }
     }
 }
 
 @MainActor
 enum ProductDraftStore {
     static func save(garment: Garment, step: ProductDraftStep, measurementRecordID: UUID,
-                     photoModel: ProductPhotoModel?, measurementInputData: Data?, in context: ModelContext,
+                     photoModel: ProductPhotoModel?, measurementInputData: Data?,
+                     aiReviewNotes: [String]? = nil, usesProductAutofill: Bool? = nil,
+                     in context: ModelContext,
                      persist: (ModelContext) throws -> Void = { try $0.save() }) throws {
         guard garment.modelContext === context, garment.informationCompletedAt == nil,
               garment.sourceMeasurementID == measurementRecordID else { throw DraftError.invalidProduct }
@@ -119,7 +134,9 @@ enum ProductDraftStore {
             throw DraftError.invalidPhotos
         }
         let draft = ProductCreationDraft(step: step, measurementRecordID: measurementRecordID,
-            photoState: photoState, measurementInputData: measurementInputData, savedAt: .now)
+            photoState: photoState, measurementInputData: measurementInputData, savedAt: .now,
+            aiReviewNotes: aiReviewNotes ?? garment.creationDraft?.aiReviewNotes,
+            usesProductAutofill: usesProductAutofill ?? garment.creationDraft?.usesProductAutofill)
         let data = try JSONEncoder().encode(draft)
         let previousData = garment.creationDraftData
         let previousUpdatedAt = garment.updatedAt
@@ -149,7 +166,7 @@ enum ProductDraftStore {
         return snapshot.detailPhotos.compactMap { photo in
             guard photo.id != snapshot.measurementPhotoID, photo.url.isFileURL,
                   directories.contains(where: { directory in
-                      directory.appending(path: snapshot.sessionID.uuidString)
+                      directory.appending(path: (photo.sessionID ?? snapshot.sessionID).uuidString)
                           .appending(path: "\(photo.id.uuidString).jpg").standardizedFileURL
                           == photo.url.standardizedFileURL
                   }) else { return nil }

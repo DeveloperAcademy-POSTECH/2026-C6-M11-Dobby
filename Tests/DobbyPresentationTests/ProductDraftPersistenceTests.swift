@@ -34,6 +34,10 @@ final class ProductDraftPersistenceTests: XCTestCase {
                 initialDetailPhotos: [first, second], initialSelectedPhotoIDs: [second.id, input.measurement.id, first.id])
             model.acknowledgeCaptureGuide()
             try ProductDraftStore.save(garment: garment, step: .photoSelection,
+                measurementRecordID: record.id, photoModel: model, measurementInputData: inputData,
+                aiReviewNotes: ["라벨을 실물로 확인해 주세요."], usesProductAutofill: false, in: context)
+            // A save from another entry point must not erase the existing AI guidance.
+            try ProductDraftStore.save(garment: garment, step: .photoSelection,
                 measurementRecordID: record.id, photoModel: model, measurementInputData: inputData, in: context)
         }
 
@@ -43,8 +47,11 @@ final class ProductDraftPersistenceTests: XCTestCase {
             let draft = try XCTUnwrap(garment.creationDraft)
             XCTAssertTrue(garment.isCreationDraft)
             XCTAssertEqual(draft.step, .photoSelection)
+            XCTAssertEqual(draft.step.title, "상세 촬영 단계", "기존 저장 값은 유지하고 이어하기 안내만 새 경로에 맞춘다")
             XCTAssertEqual(draft.measurementRecordID, record.id)
             XCTAssertEqual(draft.measurementInputData, inputData)
+            XCTAssertEqual(draft.aiReviewNotes, ["라벨을 실물로 확인해 주세요."])
+            XCTAssertEqual(draft.usesProductAutofill, false)
             XCTAssertEqual(garment.name, "아직 작성 중인 제품")
             XCTAssertEqual(garment.detail, "마저 적을 설명")
             let input = try ProductPhotoHandoff.makeInput(for: garment, sessionID: record.snapshot.frame.sessionID,
@@ -60,6 +67,8 @@ final class ProductDraftPersistenceTests: XCTestCase {
             XCTAssertEqual(restored.selectedPhotoIDs, [second.id, measuredPhotoID!, first.id])
             XCTAssertEqual(restored.output?.representativePhotoID, second.id)
             XCTAssertEqual(restored.output?.selectedPhotos.map(\.id), restored.selectedPhotoIDs)
+            XCTAssertEqual(restored.allPhotosOutput?.selectedPhotos.map(\.id),
+                [measuredPhotoID!, first.id, second.id], "이전 선택 순서와 관계없이 보존된 전체 촬영 사진을 전달한다")
             var legacyJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
             legacyJSON.removeValue(forKey: "hasAcknowledgedCaptureGuide")
             let legacy = try JSONDecoder().decode(ProductPhotoDraftSnapshot.self,
@@ -84,6 +93,90 @@ final class ProductDraftPersistenceTests: XCTestCase {
         XCTAssertTrue(draft.photoState?.selectedPhotoIDs.isEmpty == true)
         XCTAssertNil(fixture.garment.informationCompletedAt)
         XCTAssertTrue(fixture.garment.isCreationDraft)
+    }
+
+    func testDiskReopenPreservesOverflowInformationOrderExclusionsAndPartialInput() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let record = try GarmentCapturePreview.measurement(kind: .top).makeRecord()
+        let camera = CameraPhotoStore(directory: directory.appending(path: "captures"))
+        var details: [CapturedAsset] = []
+        for _ in 0..<12 {
+            details.append(try await camera.save(record.snapshot.imageJPEG,
+                sessionID: record.snapshot.frame.sessionID, garmentID: record.id, capturedAt: .now))
+        }
+        let excludedID = details[3].id
+        let inputData = Data("{\"partialMeasurement\":\"12.\"}".utf8)
+        let productPhotosDirectory = directory.appending(path: "photos")
+        let databaseURL = directory.appending(path: "products.store")
+        var expectedIDs: [UUID] = []
+        var measurementID: UUID?
+
+        do {
+            let container = try makeContainer(at: databaseURL)
+            let context = ModelContext(container)
+            context.autosaveEnabled = false
+            let garment = try GarmentStore.importMeasurement(record, in: context,
+                photosDirectory: productPhotosDirectory, allowsSynthetic: true)
+            let input = try ProductPhotoHandoff.makeInput(for: garment,
+                sessionID: record.snapshot.frame.sessionID, photosDirectory: productPhotosDirectory)
+            measurementID = input.measurement.id
+            let model = try ProductPhotoModel(input: input, captureProvider: NoCapture(), initialDetailPhotos: details)
+            let output = try XCTUnwrap(model.allPhotosOutput)
+            try await ProductPhotoHandoff.apply(output, to: garment, in: context, input: input,
+                photosDirectory: productPhotosDirectory, includesAllCapturedPhotos: true)
+            XCTAssertTrue(try GarmentStore.removeProductPhoto(id: excludedID, from: garment, in: context,
+                persist: { _ in }))
+            expectedIDs = [details[11].id, input.measurement.id]
+                + details.dropLast().reversed().filter { $0.id != excludedID }.map(\.id)
+            XCTAssertTrue(GarmentStore.reorderProductPhotos(ids: expectedIDs, in: garment))
+            XCTAssertTrue(model.synchronizeSelectedProductPhotos(garment.productPhotos.map(\.id)))
+            garment.name = "사진을 더 정리할 제품"
+            garment.detail = "작성 중인 설명"
+            try ProductDraftStore.save(garment: garment, step: .information,
+                measurementRecordID: record.id, photoModel: model, measurementInputData: inputData, in: context)
+            XCTAssertEqual(garment.productPhotos.count, 12)
+            XCTAssertNil(garment.informationCompletedAt)
+        }
+
+        try autoreleasepool {
+            let container = try makeContainer(at: databaseURL)
+            let context = ModelContext(container)
+            let garment = try XCTUnwrap(context.fetch(FetchDescriptor<Garment>()).first)
+            let draft = try XCTUnwrap(garment.creationDraft)
+            let state = try XCTUnwrap(draft.photoState)
+            let input = try ProductPhotoHandoff.makeInput(for: garment,
+                sessionID: record.snapshot.frame.sessionID, photosDirectory: productPhotosDirectory)
+            let restored = try ProductPhotoModel(input: input, captureProvider: NoCapture(),
+                initialDetailPhotos: state.restoredDetailPhotos(for: input),
+                initialSelectedPhotoIDs: state.selectedPhotoIDs)
+            XCTAssertTrue(garment.isCreationDraft)
+            XCTAssertEqual(draft.step, .information)
+            XCTAssertEqual(draft.measurementInputData, inputData)
+            XCTAssertEqual(garment.name, "사진을 더 정리할 제품")
+            XCTAssertEqual(garment.detail, "작성 중인 설명")
+            XCTAssertNil(garment.price)
+            XCTAssertNil(garment.informationCompletedAt)
+            XCTAssertEqual(garment.productPhotos.map(\.id), expectedIDs)
+            XCTAssertEqual(garment.thumbnail?.id, expectedIDs.first)
+            XCTAssertEqual(garment.measurementPhoto?.id, measurementID)
+            XCTAssertEqual(garment.photos.first { $0.id == excludedID }?.isSelectedForProduct, false)
+            XCTAssertEqual(garment.photos.count, 13)
+            XCTAssertEqual(restored.detailPhotos, details)
+            XCTAssertEqual(restored.selectedPhotoIDs, expectedIDs)
+            XCTAssertEqual(restored.informationOutput?.selectedPhotos.map(\.id), expectedIDs)
+            XCTAssertEqual(restored.informationOutput?.representativePhotoID, expectedIDs.first)
+            XCTAssertNil(restored.output, "The legacy selection output still enforces its ten-photo boundary")
+            XCTAssertEqual(restored.allPhotosOutput?.selectedPhotos.count, 13,
+                "Excluding a product photo must retain its captured original")
+            for photo in garment.photos {
+                XCTAssertTrue(FileManager.default.fileExists(atPath: productPhotosDirectory.appending(path: photo.fileName).path))
+            }
+        }
+        for detail in details {
+            guard case let .localFile(url, _) = detail.source else { return XCTFail("Expected camera original") }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        }
     }
 
     func testSavedDraftRestoresSelectionLimitAndUnselectedOriginals() async throws {

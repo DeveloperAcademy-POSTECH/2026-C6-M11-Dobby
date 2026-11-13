@@ -21,7 +21,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["captureGuidance"].firstMatch.exists)
         XCTAssertTrue(app.buttons["camera.exposureOption"].isEnabled)
         XCTAssertTrue(app.buttons["camera.aspectRatioOption"].isEnabled)
-        XCTAssertTrue(app.buttons["replayGarmentCaptureTutorial"].exists)
+        XCTAssertFalse(app.buttons["replayGarmentCaptureTutorial"].exists)
         attach(name: "measurement-options-menu-over-unchanged-photo")
 
         app.buttons["camera.exposureOption"].tap()
@@ -84,7 +84,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
     }
 
     @MainActor
-    func testExposureIndicatorReturnsAfterReleaseAndSaturatedDragsRemainResponsive() throws {
+    func testDetailStyleExposureIndicatorAndSaturatedDragsRemainResponsive() throws {
         continueAfterFailure = false
         let app = openPreview()
         openOptions(in: app)
@@ -94,11 +94,11 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         let value = app.staticTexts["camera.exposureValue"]
         let idle = XCUIScreen.main.screenshot()
         let idleHeight = try indicatorHeight(in: idle.image, ruler: ruler.frame, screen: app.frame)
-        XCTAssertTrue((14...18).contains(idleHeight), "The inactive marker should stay compact")
+        XCTAssertTrue((26...30).contains(idleHeight), "The marker uses detail capture's fixed 28pt height")
         attach(idle, name: "measurement-exposure-indicator-before-touch")
 
-        // The screen recording retains both the prolonged active marker and
-        // its release. Haptic sensation requires an actual iPhone separately.
+        // Detail capture keeps the marker height fixed during adjustment.
+        // Haptic sensation requires an actual iPhone separately.
         let start = ruler.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.8, thenDragTo: start.withOffset(CGVector(dx: -140, dy: 0)),
                     withVelocity: .slow, thenHoldForDuration: 0.8)
@@ -108,7 +108,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         let released = XCUIScreen.main.screenshot()
         let releasedHeight = try indicatorHeight(in: released.image, ruler: ruler.frame, screen: app.frame)
         XCTAssertEqual(releasedHeight, idleHeight, accuracy: 1,
-                       "After a completed gesture the marker returns independently of the camera receipt")
+                       "The detail-style marker stays the same height after a completed gesture")
         attach(released, name: "measurement-exposure-indicator-released-at-limit")
         drag(ruler, horizontally: 80)
         waitUntil { Self.number(in: value.label).map { $0 < 1.6 } == true }
@@ -184,7 +184,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         let confirm = app.buttons["confirmGarmentMeasurement"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 10))
         let notice = app.descendants(matching: .any)["garmentExpandedPhotoNotice"].firstMatch
-        XCTAssertTrue(notice.exists, "Normal sleeve endpoints outside 9:16 must remain available")
+        XCTAssertFalse(notice.exists, "The expanded photo must not introduce an unsolicited notice")
         XCTAssertFalse(app.descendants(matching: .any)["garmentUnavailableNotice"].firstMatch.exists,
                        "Expanding presentation to retain points is not a measurement failure")
         let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
@@ -199,8 +199,63 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 12, dy: 12)))
         waitUntil { shoulder.value as? String != original && confirm.isEnabled }
         XCTAssertFalse(app.descendants(matching: .any)["garmentPointMagnifier"].firstMatch.exists)
-        XCTAssertTrue(notice.exists)
+        XCTAssertFalse(notice.exists)
         attach(name: "measurement-ratio-expanded-result-points-remain-editable")
+    }
+
+    @MainActor
+    func testResultPanelBodyDragAndHandleRestoreKeepPhotoAndPointsUnchanged() throws {
+        continueAfterFailure = false
+        let app = openPreview(arguments: ["--garment-preview-top", "--garment-preview-no-outline",
+                                           "--garment-preview-matched-framing"])
+        openOptions(in: app)
+        app.buttons["camera.aspectRatioOption"].tap()
+        app.buttons["camera.aspectRatio.16:9"].tap()
+        XCTAssertEqual(app.staticTexts["camera.aspectRatioValue"].label, "16:9")
+        app.buttons["camera.aspectRatioBack"].tap()
+        app.buttons["camera.closeOptions"].tap()
+        armSyntheticGarmentCapture(in: app)
+        app.buttons["captureGarment"].tap()
+        XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.descendants(matching: .any)["garmentExpandedPhotoNotice"].firstMatch.exists)
+        let photo = app.descendants(matching: .any)["garmentMeasurementPhoto"].firstMatch
+        let sheet = app.descendants(matching: .any)["garmentResultMeasurementSheet"].firstMatch
+        let handle = app.descendants(matching: .any)["garmentResultSheetHandle"].firstMatch
+        attach(name: "measurement-result-panel-before-body-scroll")
+        XCTAssertTrue(sheet.exists && handle.exists)
+        let originalPhotoFrame = photo.frame
+        let originalPointValue = app.buttons["garmentMeasurementPoint_shoulder_left"].value as? String
+        let originalHandleFrame = handle.frame
+        // A short pan returns to the same detent. It must leave no transient
+        // translation behind to jump on the next drag or handle tap.
+        let shortStart = sheet.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.5))
+        shortStart.press(forDuration: 0.05, thenDragTo: shortStart.withOffset(CGVector(dx: 0, dy: 12)),
+                         withVelocity: XCUIGestureVelocity(rawValue: 20), thenHoldForDuration: 0.25)
+        XCTAssertEqual(handle.value as? String, "펼쳐짐")
+        waitUntil { Self.framesMatch(handle.frame, originalHandleFrame) }
+        // Start on a card, outside the 28pt grabber, to cover scrolling the
+        // panel body rather than only dragging its narrow handle.
+        let panelStart = sheet.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.5))
+        panelStart.press(forDuration: 0.05, thenDragTo: panelStart.withOffset(CGVector(dx: 0, dy: 150)),
+                         withVelocity: .slow, thenHoldForDuration: 0)
+        waitUntil { handle.value as? String == "접힘" }
+        let handleStart = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        handleStart.press(forDuration: 0.05, thenDragTo: handleStart.withOffset(CGVector(dx: 0, dy: -150)),
+                          withVelocity: .slow, thenHoldForDuration: 0)
+        waitUntil { handle.value as? String == "펼쳐짐" }
+        assertFrame(photo.frame, equals: originalPhotoFrame)
+        XCTAssertEqual(app.buttons["garmentMeasurementPoint_shoulder_left"].value as? String, originalPointValue)
+        let sideways = sheet.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
+        sideways.press(forDuration: 0.05, thenDragTo: sideways.withOffset(CGVector(dx: 100, dy: 0)))
+        XCTAssertEqual(handle.value as? String, "펼쳐짐", "Horizontal scrolling must not collapse the panel")
+        handle.tap()
+        waitUntil { handle.value as? String == "접힘" }
+        handle.tap()
+        waitUntil { Self.framesMatch(handle.frame, originalHandleFrame) }
+        XCTAssertEqual(handle.value as? String, "펼쳐짐")
+        assertFrame(photo.frame, equals: originalPhotoFrame)
+        XCTAssertEqual(app.buttons["garmentMeasurementPoint_shoulder_left"].value as? String, originalPointValue)
+        attach(name: "measurement-result-panel-body-scroll-restored")
     }
 
     @MainActor

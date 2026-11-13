@@ -44,14 +44,23 @@ struct MeasurementRecognitionDetails: View {
         DisclosureGroup("촬영 당시 인식 확인 정보") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("모델 후보점 \(diagnostics.rawPoints.count)개 보존")
-                Text("윤곽과 연결되지 않은 후보점도 사진에서 확인하고 수정할 수 있어요.")
+                Text("AI 원본 후보점과 측정에서 제외한 사유를 기록해요.")
                     .foregroundStyle(.secondary)
                 Text("촬영 방향 \(diagnostics.requestedOrientation.rawValue) · 선택한 추론 방향 \(diagnostics.selectedPoseOrientation.rawValue)")
                 ForEach(Array(diagnostics.pointAssessments.enumerated()), id: \.offset) { _, assessment in
-                    if assessment.status == .outsideMask {
-                        Text("\(MeasurementLandmarkName.title(assessment.landmarkID)): 윤곽 연결 불확실 · 점 유지")
+                    if assessment.status == .outsideMask,
+                       !(diagnostics.centerEstimates ?? []).contains(where: { $0.landmarkID == assessment.landmarkID }) {
+                        Text("\(MeasurementLandmarkName.title(assessment.landmarkID)): 원본 후보점이 옷 윤곽 밖에 있어요.")
                             .foregroundStyle(.orange)
                     }
+                }
+                ForEach(Array((diagnostics.centerEstimates ?? []).enumerated()), id: \.offset) { _, estimate in
+                    Text("\(MeasurementLandmarkName.title(estimate.landmarkID)): 벌어진 양쪽 끝점의 중앙을 추정했어요.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(Array((diagnostics.automaticAdjustments ?? []).enumerated()), id: \.offset) { _, adjustment in
+                    Text("\(MeasurementLandmarkName.title(adjustment.landmarkID)): 옷 윤곽의 가까운 경계로 자동 보정했어요.")
+                        .foregroundStyle(.secondary)
                 }
             }.font(.caption).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
         }.labCard().accessibilityIdentifier("recognitionValidationDetails")
@@ -65,6 +74,8 @@ enum MeasurementLandmarkName {
         case "neck_right": "오른쪽 목점"
         case "neck_center": "목 중앙점"
         case "top_length_start": "총장 상단점"
+        case "top_length_hem": "목옆 기준 밑단 교점"
+        case "front_length_start": "앞판 총장 상단점"
         case "waist_front_center": "앞허리 중앙점"
         case "thigh_right": "오른쪽 허벅지점"
         case "shoulder_left": "왼쪽 어깨점"

@@ -4,6 +4,18 @@ import Foundation
 /// A quarter turn is an exact pixel permutation; interpolation must not fill holes
 /// or move a silhouette relative to the raw depth registered to that RGB frame.
 nonisolated enum GarmentMaskOrientation {
+    static func uprightMask(fromOriginal mask: GarmentMask,
+                            orientation: ImageOrientation) throws -> GarmentMask {
+        let inverse: ImageOrientation
+        switch orientation {
+        case .up: inverse = .up
+        case .right: inverse = .left
+        case .down: inverse = .down
+        case .left: inverse = .right
+        }
+        return try originalMask(fromUpright: mask, orientation: inverse)
+    }
+
     static func originalMask(fromUpright mask: GarmentMask,
                              orientation: ImageOrientation) throws -> GarmentMask {
         guard mask.size.isValid, mask.values.count <= 4_194_304,

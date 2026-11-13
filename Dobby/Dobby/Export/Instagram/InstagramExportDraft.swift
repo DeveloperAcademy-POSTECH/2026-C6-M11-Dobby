@@ -36,8 +36,11 @@ struct InstagramExportDraft {
     init(product: ExportProduct) {
         let photos = product.exportPhotos.map { InstagramDraftPhoto(data: $0) }
         let payload = product.instagramPayload
+        let formattedPrice = Int(payload.price)?.formatted(
+            .number.locale(Locale(identifier: "ko_KR")).grouping(.automatic)
+        ) ?? payload.price
         let caption = [payload.productName, payload.description, payload.brand,
-                       payload.measurements, payload.price.isEmpty ? "" : "가격: \(payload.price)원"]
+                       payload.measurements, formattedPrice.isEmpty ? "" : "가격: \(formattedPrice)원"]
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
         originalCaption = caption

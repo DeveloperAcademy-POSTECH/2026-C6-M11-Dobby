@@ -1,13 +1,16 @@
 import SwiftUI
+import UIKit
 
 struct ProductMeasurementInputTable: View {
     let garment: Garment
     @Binding var measurementInput: GarmentMeasurementInputState
     let focus: FocusState<UUID?>.Binding
+    var usesEditingLayout = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             ProductFieldTitle(title: "실측 사이즈")
+                .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
             let missingValues = garment.visibleMeasurements.filter {
                 !GarmentMeasurementInputText.hasUsableValue($0, drafts: measurementInput.drafts)
             }
@@ -18,7 +21,7 @@ struct ProductMeasurementInputTable: View {
                     .accessibilityIdentifier("product-info.measurement-warning")
             }
             ProductMeasurementScroll(columns: ProductInformationStyle.measurements(for: garment),
-                measurementInput: $measurementInput, focus: focus)
+                measurementInput: $measurementInput, focus: focus, usesEditingLayout: usesEditingLayout)
         }
     }
 }
@@ -27,10 +30,12 @@ private struct ProductMeasurementScroll: View {
     let columns: [MeasuredValue]
     @Binding var measurementInput: GarmentMeasurementInputState
     let focus: FocusState<UUID?>.Binding
+    var usesEditingLayout = false
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            ProductMeasurementRow(columns: columns, measurementInput: $measurementInput, focus: focus)
+            ProductMeasurementRow(columns: columns, measurementInput: $measurementInput, focus: focus, usesEditingLayout: usesEditingLayout)
+                .padding(usesEditingLayout ? 1.5 : 0)
                 .containerRelativeFrame(.horizontal) { width, _ in
                     columns.count <= 5 ? width : max(width, CGFloat(columns.count) * 85 - 1)
                 }
@@ -38,11 +43,12 @@ private struct ProductMeasurementScroll: View {
         }
         .scrollDisabled(columns.count <= 5)
         .background(ProductInformationStyle.background)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).stroke(ProductInformationStyle.field, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 16).stroke(ProductInformationStyle.field, lineWidth: 1.5)
         }
         .accessibilityIdentifier("product-info.measurements")
+        .productInputInteractionArea()
     }
 }
 
@@ -50,6 +56,7 @@ private struct ProductMeasurementRow: View {
     let columns: [MeasuredValue]
     @Binding var measurementInput: GarmentMeasurementInputState
     let focus: FocusState<UUID?>.Binding
+    var usesEditingLayout = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -60,7 +67,7 @@ private struct ProductMeasurementRow: View {
                 SizeColumn(value: value, text: Binding(
                     get: { measurementInput.text(for: value) },
                     set: { measurementInput.setText($0, for: value) }
-                ), focus: focus, isCompact: columns.count <= 5)
+                ), focus: focus, usesEditingLayout: usesEditingLayout, isCompact: columns.count <= 5)
                 .frame(maxWidth: columns.count <= 5 ? .infinity : nil)
             }
         }
@@ -72,20 +79,22 @@ private struct SizeColumn: View {
 
     @Binding var text: String
     let focus: FocusState<UUID?>.Binding
+    var usesEditingLayout = false
     let isCompact: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: usesEditingLayout ? 1 : 0) {
             Text(ProductInformationStyle.measurementTitle(for: value))
-                .font(.headline)
-                .foregroundStyle(Color(white: 0.32))
+                .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
+                .tracking(usesEditingLayout ? -0.43 : 0)
+                .foregroundStyle(Color("BrandNeutral800"))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
                 .frame(height: 42)
                 .background(ProductInformationStyle.field)
 
-            ProductMeasurementNumber(value: value, text: $text, focus: focus)
+            ProductMeasurementNumber(value: value, text: $text, focus: focus, usesEditingLayout: usesEditingLayout)
         }
         .frame(minWidth: isCompact ? 0 : 84)
     }
@@ -95,20 +104,32 @@ private struct ProductMeasurementNumber: View {
     let value: MeasuredValue
     @Binding var text: String
     let focus: FocusState<UUID?>.Binding
+    var usesEditingLayout = false
+
+    @ScaledMetric(relativeTo: .subheadline) private var valueFontSize: CGFloat = 15
+
+    private var inputWidth: CGFloat {
+        guard usesEditingLayout else { return min(58, max(24, CGFloat(text.count) * 10 + 6)) }
+        if text.isEmpty { return 24 }
+        let font = UIFont(name: "Pretendard-Regular", size: valueFontSize) ?? UIFont.systemFont(ofSize: valueFontSize)
+        return min(58, max(1, ceil((text as NSString).size(withAttributes: [.font: font, .kern: -0.23]).width)))
+    }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 1) {
+        HStack(alignment: .firstTextBaseline, spacing: usesEditingLayout ? 0 : 1) {
             TextField("", text: $text)
                 .accessibilityLabel("\(value.displayLabel) 센티미터")
                 .accessibilityIdentifier("product-info.measurement.\(value.key)")
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
                 .focused(focus, equals: value.id)
-                .frame(width: min(58, max(24, CGFloat(text.count) * 10 + 6)))
-                .monospacedDigit()
+                .frame(width: inputWidth)
+                .font(usesEditingLayout ? .custom("Pretendard-Regular", size: 15, relativeTo: .subheadline)
+                    : .custom("Pretendard-Regular", size: 15, relativeTo: .subheadline).monospacedDigit())
             Text("cm")
         }
-        .font(.subheadline)
+        .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
+        .tracking(usesEditingLayout ? -0.23 : 0)
         .frame(maxWidth: .infinity)
         .frame(height: 64)
     }
