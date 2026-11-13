@@ -43,7 +43,8 @@ struct ProductInformationFields: View {
                                          onImportingChange: onPhotoImportingChange)
             }
             ProductInputField(title: "제품명", text: $garment.name,
-                placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name", isRequired: true, usesEditingLayout: allowsPhotoEditing,
+                placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name", isRequired: true,
+                isSingleLine: !allowsPhotoEditing, usesEditingLayout: allowsPhotoEditing,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isNameValid(garment)
                     ? "제품명을 입력해주세요" : nil)
             ProductInputField(title: "상세 설명", text: $garment.detail,
@@ -86,6 +87,7 @@ struct ProductInputField: View {
     let placeholder: String
     let identifier: String
     var isRequired = false
+    var isSingleLine = false
     var isMultiline = false
     var usesEditingLayout = false
     var errorMessage: String? = nil
@@ -94,8 +96,8 @@ struct ProductInputField: View {
         VStack(alignment: .leading, spacing: 12) {
             ProductFieldTitle(title: title, isRequired: isRequired)
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
-            ProductFieldEditor(text: $text, placeholder: placeholder, isMultiline: isMultiline,
-                               usesEditingLayout: usesEditingLayout)
+            ProductFieldEditor(text: $text, placeholder: placeholder, isSingleLine: isSingleLine,
+                               isMultiline: isMultiline, usesEditingLayout: usesEditingLayout)
                 .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
                 .tracking(-0.23)
                 .foregroundStyle(Color("BrandNeutralBlack"))
@@ -126,6 +128,7 @@ struct ProductInputField: View {
 private struct ProductFieldEditor: View {
     @Binding var text: String
     let placeholder: String
+    let isSingleLine: Bool
     let isMultiline: Bool
     let usesEditingLayout: Bool
     @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 15
@@ -153,13 +156,19 @@ private struct ProductFieldEditor: View {
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
+        } else if isSingleLine {
+            TextField("", text: $text, prompt: prompt)
         } else {
-            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color("BrandNeutral300")), axis: .vertical)
+            TextField("", text: $text, prompt: prompt, axis: .vertical)
                 .lineLimit(1...2)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(usesEditingLayout ? max(0, 20 * fontSize / 15 - inputFont.lineHeight) : 0)
                 .padding(.vertical, usesEditingLayout ? max(0, 20 * fontSize / 15 - inputFont.lineHeight) / 2 : 0)
         }
+    }
+
+    private var prompt: Text {
+        Text(placeholder).foregroundStyle(Color("BrandNeutral300"))
     }
 
     private var inputFont: UIFont {
