@@ -19,39 +19,58 @@
 
 ## ✨ 주요 기능
 
-### 📸 촬영하고, 실측을 확인하고
+### 📸 촬영부터 실측까지
 
-옷을 펼쳐 촬영하면 사진 위에서 실측 결과를 확인할 수 있습니다. 측정 위치와 치수는 직접 확인하고 수정할 수 있습니다.
+옷을 촬영해 실측 결과를 확인하고 측정점을 조정합니다. 제품의 디테일까지 추가로 촬영할 수 있습니다.
 
-<!-- 아래 빈칸에 촬영 / 실측 결과 / 측정점 보정 이미지를 순서대로 삽입 -->
-
-| 촬영 | 실측 결과 | 측정점 보정 |
-|:---:|:---:|:---:|
-| | | |
-
----
-
-### ✍️ 사진부터 상품 설명까지
-
-상세 사진을 추가하고 순서를 정리하며 상품 정보를 완성합니다. AI가 만든 제품명·브랜드·설명 초안을 검토하고 수정할 수 있습니다.
-
-<!-- 아래 빈칸에 사진 관리 / AI 생성 / 상품 정보 입력 이미지를 순서대로 삽입 -->
-
-| 상세 사진 | AI 정보 생성 | 상품 정보 |
-|:---:|:---:|:---:|
-| | | |
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/readme/features/measurement-capture.png" width="240" alt="실측 촬영 화면"></td>
+    <td align="center"><img src="assets/readme/features/measurement-result.png" width="240" alt="실측 결과 화면"></td>
+    <td align="center"><img src="assets/readme/features/detail-capture.png" width="240" alt="제품 상세 촬영 화면"></td>
+  </tr>
+  <tr>
+    <td align="center">실측 촬영</td>
+    <td align="center">실측 결과</td>
+    <td align="center">제품 상세 촬영</td>
+  </tr>
+</table>
 
 ---
 
-### 📤 보관하고, 판매 채널로 이어가기
+### ✨ AI로 상품 정보 완성하기
 
-준비 중인 상품은 저장해 이어서 작업하고, 완성한 상품은 보관함에서 관리합니다. 사진과 상품 정보를 채널별 내보내기 흐름으로 전달합니다.
+사진을 바탕으로 AI가 제품명·브랜드·설명 초안을 생성합니다. 생성된 정보를 확인·수정하고, 가격 등 추가 정보를 직접 입력해 상품 정보를 완성합니다.
 
-<!-- 아래 빈칸에 보관함 / 상품 상세 / 채널 선택 이미지를 순서대로 삽입 -->
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/readme/features/ai-product-info.png" width="240" alt="AI 제품 정보 생성 버튼 화면"></td>
+    <td align="center"><img src="assets/readme/features/product-info-edit.png" width="240" alt="AI 생성 정보 확인·수정 및 추가 정보 입력 화면"></td>
+    <td align="center"><img src="assets/readme/features/product-info-complete.png" width="240" alt="상품 정보 완성 화면"></td>
+  </tr>
+  <tr>
+    <td align="center">AI 정보 생성</td>
+    <td align="center">정보 확인·입력</td>
+    <td align="center">상품 정보 완성</td>
+  </tr>
+</table>
 
-| 보관함 | 상품 상세 | 내보내기 |
-|:---:|:---:|:---:|
-| | | |
+---
+
+### 📦 업로드하고, 보관하고
+
+완성한 상품을 판매 채널로 전달하고 보관함에서 관리합니다. 진행 중인 작업도 저장한 단계부터 이어갈 수 있습니다.
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/readme/features/platform-upload.png" width="240" alt="플랫폼별 업로드 및 복사해서 옮기기 화면"></td>
+    <td align="center"><img src="assets/readme/features/archive.png" width="240" alt="저장된 상품과 진행 중인 작업을 보여주는 보관함 화면"></td>
+  </tr>
+  <tr>
+    <td align="center">플랫폼 업로드</td>
+    <td align="center">보관함</td>
+  </tr>
+</table>
 
 ---
 
