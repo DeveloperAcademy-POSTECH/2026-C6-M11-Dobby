@@ -33,10 +33,11 @@ struct Cafe24ConnectionView: View {
                         .font(.body.weight(.semibold))
                 }
                 .frame(maxWidth: .infinity, minHeight: 62)
+                .background(Color(.label), in: RoundedRectangle(cornerRadius: 60))
+                .contentShape(RoundedRectangle(cornerRadius: 60))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
-            .background(Color(.label), in: RoundedRectangle(cornerRadius: 60))
         }
         .frame(maxWidth: 362, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 20)

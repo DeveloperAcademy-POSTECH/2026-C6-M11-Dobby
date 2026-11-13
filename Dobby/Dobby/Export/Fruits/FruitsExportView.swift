@@ -6,23 +6,21 @@ struct FruitsExportView: View {
     let onOpened: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
+    @Environment(ToastPresenter.self) private var toastPresenter
     @State private var pipController = MeasurementPiPController()
-    @State private var isSavingPhotos: Bool
-    @State private var hasSavedPhotos: Bool
+    @State private var hasCopied: Bool
     @State private var opening: Bool
     @State private var alertMessage: String?
 
     init(
         product: ExportProduct,
         onOpened: @escaping () -> Void = { },
-        initialIsSavingPhotos: Bool = false,
-        initialHasSavedPhotos: Bool = false,
+        initialHasCopied: Bool = false,
         initialOpening: Bool = false
     ) {
         self.product = product
         self.onOpened = onOpened
-        _isSavingPhotos = State(initialValue: initialIsSavingPhotos)
-        _hasSavedPhotos = State(initialValue: initialHasSavedPhotos)
+        _hasCopied = State(initialValue: initialHasCopied)
         _opening = State(initialValue: initialOpening)
     }
 
@@ -36,13 +34,10 @@ struct FruitsExportView: View {
                 .accessibilityHidden(true)
             FruitsExportLayout(
                 product: product,
-                isSavingPhotos: isSavingPhotos,
-                hasSavedPhotos: hasSavedPhotos,
-                onSave: savePhotos,
                 onCopy: copy
             )
         }
-        .background(.white)
+        .background(Color(.brandNeutralWhite).ignoresSafeArea())
         .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -60,16 +55,11 @@ struct FruitsExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if hasSavedPhotos {
-                ChakPrimaryButton(title: "후루츠패밀리 열기", isLoading: opening) {
-                    startPiPAndOpenFruits()
-                }
-                .disabled(opening)
-                .accessibilityIdentifier("export.fruits.open")
-                .padding(.horizontal, 33)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                .background(.white)
+            FruitsExportBottomAction(
+                hasCopied: hasCopied,
+                isLoading: opening
+            ) {
+                startPiPAndOpenFruits()
             }
         }
         .onDisappear {
@@ -89,19 +79,8 @@ struct FruitsExportView: View {
 
     private func copy(_ field: ProductCopyField) {
         ClipboardWriter().copyText(product.marketplacePayload.value(for: field))
-    }
-
-    private func savePhotos() {
-        isSavingPhotos = true
-        Task {
-            do {
-                try await FruitsPhotoLibraryWriter().save(photos: product.exportPhotos)
-                hasSavedPhotos = true
-            } catch {
-                alertMessage = error.localizedDescription
-            }
-            isSavingPhotos = false
-        }
+        hasCopied = true
+        toastPresenter.show(field.fruitsToastMessage)
     }
 
     private func startPiPAndOpenFruits() {
@@ -139,36 +118,93 @@ struct FruitsExportView: View {
     }
 }
 
-#Preview("저장 전") {
+private struct FruitsExportBottomAction: View {
+    let hasCopied: Bool
+    let isLoading: Bool
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                action()
+            } label: {
+                HStack(alignment: .center, spacing: 10) {
+                    if isLoading {
+                        ProgressView()
+                            .tint(.white)
+                    }
+                    Text("후루츠패밀리에 붙여넣으러 가기")
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .buttonStyle(FruitsExportButtonStyle())
+            .disabled(!hasCopied || isLoading)
+            .accessibilityIdentifier("export.fruits.open")
+        }
+        .padding(.horizontal, 33)
+        .padding(.top, 16)
+        .padding(.bottom, 34)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(.brandNeutralWhite))
+    }
+}
+
+private struct FruitsExportButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
+            .foregroundStyle(isEnabled ? Color(.brandNeutralWhite) : Color(.brandNeutral100))
+            .padding(.horizontal, 28)
+            .frame(width: 335, height: 62, alignment: .center)
+            .background(
+                isEnabled ? Color(.brandMain500) : Color(.brandNeutral400),
+                in: RoundedRectangle(cornerRadius: 60)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 60))
+    }
+}
+
+#Preview("복사 전") {
     NavigationStack {
         FruitsExportView(product: .fruitsPreview)
     }
+    .toast()
 }
 
-#Preview("저장 중") {
+#Preview("복사 후") {
     NavigationStack {
-        FruitsExportView(product: .fruitsPreview, initialIsSavingPhotos: true)
+        FruitsExportView(product: .fruitsPreview, initialHasCopied: true)
     }
+    .toast()
 }
 
-#Preview("저장 완료") {
+#Preview("긴 내용") {
     NavigationStack {
-        FruitsExportView(product: .fruitsPreview, initialHasSavedPhotos: true)
+        FruitsExportView(product: .fruitsLongPreview)
     }
-}
-
-#Preview("저장 완료 - 긴 내용") {
-    NavigationStack {
-        FruitsExportView(product: .fruitsLongPreview, initialHasSavedPhotos: true)
-    }
+    .toast()
 }
 
 #Preview("앱 여는 중") {
     NavigationStack {
         FruitsExportView(
             product: .fruitsPreview,
-            initialHasSavedPhotos: true,
+            initialHasCopied: true,
             initialOpening: true
         )
+    }
+    .toast()
+}
+
+private extension ProductCopyField {
+    var fruitsToastMessage: String {
+        switch self {
+        case .productName: "제품명을 복사했어요"
+        case .description: "설명을 복사했어요"
+        case .brand: "브랜드를 복사했어요"
+        case .measurements: "실측 사이즈를 복사했어요"
+        }
     }
 }
