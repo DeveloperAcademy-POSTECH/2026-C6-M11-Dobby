@@ -276,12 +276,6 @@ private struct ProductDetailMeasurements: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ProductDetailSectionTitle(title: "실측 사이즈", libraryFont: style == .library ? LibraryDetailTypography.heading : nil)
-            if garment.visibleMeasurements.contains(where: {
-                $0.sourceStatusRaw == MeasurementStatus.uncertain.rawValue && !$0.isEdited
-            }) {
-                Text("불확실한 자동 측정값이 포함되어 있어요.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
             ProductDetailMeasurementScroll(values: ProductInformationStyle.measurements(for: garment),
                                            accessibilityPrefix: accessibilityPrefix, style: style)
         }
