@@ -97,7 +97,8 @@ final class GarmentHiFiUITests: XCTestCase {
         XCTAssertTrue(app.buttons["camera.exposureOption"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["camera.aspectRatioOption"].exists)
         XCTAssertFalse(app.buttons["replayGarmentCaptureTutorial"].exists)
-        app.buttons["camera.closeOptions"].tap()
+        app.buttons["camera.dismissOptions"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.3)).tap()
         waitUntil { !app.descendants(matching: .any)["camera.optionsMenu"].firstMatch.exists }
         XCTAssertFalse(shutter.isEnabled)
         XCTAssertEqual(shutter.value as? String, "옷 인식 대기")
