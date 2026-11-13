@@ -33,7 +33,11 @@ final class DetailCaptureInformationHandoffUITests: XCTestCase {
 
         enterRequiredInformation(in: app)
         let done = app.buttons["product-info.done"]
-        XCTAssertFalse(done.isEnabled, "All required fields cannot override the ten-photo registration limit")
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists,
+                      "An enabled Done button must still enforce the ten-photo registration limit")
+        XCTAssertFalse(app.buttons["product-complete.export"].exists)
         let removedPhotoID = allIDs[0]
         let deleteID = removedPhotoID.replacingOccurrences(of: "product-info.photo.", with: "product-info.delete-photo.")
         reveal(app.buttons[deleteID], in: app, towardStart: true)
@@ -72,7 +76,7 @@ final class DetailCaptureInformationHandoffUITests: XCTestCase {
         tap(app, "home.resume")
         assertInformation(app, count: 3)
         XCTAssertEqual(informationPhotoIDs(app), photoIDs)
-        XCTAssertFalse(app.buttons["product-info.done"].isEnabled)
+        XCTAssertTrue(app.buttons["product-info.done"].isEnabled)
         tap(app, "product-flow.back")
         XCTAssertTrue(app.buttons["camera.captureDetail"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.scrollViews["camera.selectionGrid"].exists)

@@ -56,7 +56,7 @@ struct ProductInformationFields: View {
                     ? "가격을 입력해주세요" : nil)
             ProductInputField(title: "브랜드", text: $garment.brand,
                 placeholder: "브랜드를 입력해주세요", identifier: "brand", usesEditingLayout: allowsPhotoEditing)
-            ProductMeasurementInputTable(garment: garment, measurementInput: $measurementInput, focus: focus, usesEditingLayout: allowsPhotoEditing)
+            ProductMeasurementInputTable(garment: garment, measurementInput: $measurementInput, focus: focus)
                 .id(InfoInputView.measurementTableID)
         }
     }

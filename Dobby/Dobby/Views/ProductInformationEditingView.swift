@@ -6,6 +6,7 @@ struct ProductInformationEditingView: View {
     let onExit: () -> Void
     let onDiscard: () -> Void
     let onComplete: (Garment) -> Void
+    var onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)? = nil
 
     @State private var showsDiscardConfirmation = false
 
@@ -13,7 +14,9 @@ struct ProductInformationEditingView: View {
         InfoInputView(garment: session.garment, measurementInput: $session.measurementInput,
                       allowsPhotoEditing: true, onExit: requestExit,
                       onGenerateAI: { try await session.generateInformation() },
-                      onCancelGeneration: { session.cancelGeneration() }, onComplete: onComplete)
+                      onCancelGeneration: { session.cancelGeneration() },
+                      onAIGenerationPresentationChange: onAIGenerationPresentationChange,
+                      onComplete: onComplete)
             .environment(\.modelContext, session.context)
             .fullScreenCover(isPresented: $showsDiscardConfirmation) {
                 ProductInformationDiscardConfirmation(
