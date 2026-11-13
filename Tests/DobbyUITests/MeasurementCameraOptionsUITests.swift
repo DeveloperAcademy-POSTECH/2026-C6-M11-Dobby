@@ -34,7 +34,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         openOptions(in: app)
         XCTAssertFalse(app.descendants(matching: .any)["camera.exposurePanel"].firstMatch.exists,
                        "Opening More again starts at its menu, not the previous child panel")
-        app.buttons["camera.closeOptions"].tap()
+        closeByOutsideTap(in: app)
         waitUntil { !app.descendants(matching: .any)["camera.optionsMenu"].firstMatch.exists }
         shutter.tap()
         XCTAssertTrue(app.buttons["retakeGarmentMeasurement"].waitForExistence(timeout: 10))
@@ -56,7 +56,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
 
         app.buttons["camera.exposureBack"].tap()
         assertPanel("camera.optionsMenu", fits: app)
-        app.buttons["camera.closeOptions"].tap()
+        closeByOutsideTap(in: app)
         let viewport = photoViewport(in: app)
         viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)).tap()
         let focusExposure = app.descendants(matching: .any)["cameraExposureControl"].firstMatch
@@ -73,8 +73,12 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         let reset = app.buttons["camera.exposureReset"]
         if Self.number(in: value.label) == 0 { drag(ruler, horizontally: -70) }
         XCTAssertTrue(reset.waitForExistence(timeout: 3))
+        XCTAssertTrue(reset.isHittable)
+        XCTAssertGreaterThanOrEqual(reset.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(reset.frame.height, 44)
         reset.tap()
         waitUntil { Self.number(in: value.label) == 0 }
+        XCTAssertTrue(reset.waitForNonExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["camera.exposureError"].exists)
         closeByOutsideTap(in: app)
         openOptions(in: app)
@@ -213,7 +217,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         app.buttons["camera.aspectRatio.16:9"].tap()
         XCTAssertEqual(app.staticTexts["camera.aspectRatioValue"].label, "16:9")
         app.buttons["camera.aspectRatioBack"].tap()
-        app.buttons["camera.closeOptions"].tap()
+        closeByOutsideTap(in: app)
         armSyntheticGarmentCapture(in: app)
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 15))
@@ -277,7 +281,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
             app.buttons["camera.aspectRatioOption"].tap()
             app.buttons["camera.aspectRatio.\(label)"].tap()
             app.buttons["camera.aspectRatioBack"].tap()
-            app.buttons["camera.closeOptions"].tap()
+            closeByOutsideTap(in: app)
             let expected = expectedPhotoRect(in: app.frame, aspect: aspect)
             let expectedZoomY = min(expected.maxY - 40,
                 min(app.frame.maxY - 192 - 12 - 24, fixedShutter.minY - 12 - 24))
@@ -328,7 +332,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         openOptions(in: app)
         XCTAssertTrue(app.buttons["camera.exposureOption"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["camera.aspectRatioPanel"].firstMatch.exists)
-        app.buttons["camera.closeOptions"].tap()
+        closeByOutsideTap(in: app)
         armSyntheticGarmentCapture(in: app)
         app.buttons["captureGarment"].tap()
         XCTAssertTrue(app.buttons["retakeGarmentMeasurement"].waitForExistence(timeout: 10))
@@ -356,6 +360,7 @@ final class MeasurementCameraOptionsUITests: XCTestCase {
         XCTAssertTrue(more.isHittable)
         more.tap()
         assertPanel("camera.optionsMenu", fits: app)
+        XCTAssertFalse(app.buttons["camera.closeOptions"].exists)
     }
 
     @MainActor
