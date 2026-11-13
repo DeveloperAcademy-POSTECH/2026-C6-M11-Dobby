@@ -139,7 +139,7 @@ struct MeasurementResultSummary: View {
 struct MeasurementResultProgress: View {
     var body: some View {
         ProductCreationProgress(stage: .measurementResult)
-        .frame(height: 3)
+        .frame(height: ProductCreationHeaderLayout.progressHeight)
     }
 }
 

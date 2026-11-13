@@ -77,19 +77,20 @@ struct CameraFlowView: View {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { requestExit(onExit) } label: {
-                        Image(systemName: "chevron.left")
+                        GarmentCaptureToolbarIcon(systemName: "chevron.left")
                             .foregroundStyle(.white)
                     }
+                        .buttonStyle(.plain)
                         .disabled(isExitDisabled)
                         .accessibilityHidden(isCompletingCapture)
                         .accessibilityLabel("뒤로가기")
                         .accessibilityIdentifier("product-flow.back")
-                }
+                }.sharedBackgroundVisibility(.hidden)
             }
             ToolbarItem(placement: .confirmationAction) {
                 // 촬영을 마친 전체 사진을 저장한 뒤 상위 흐름에 전달한다.
                 completionControl
-            }
+            }.sharedBackgroundVisibility(.hidden)
         }
         .accessibilityHidden(isCompletingCapture)
         .overlay {
@@ -283,16 +284,19 @@ struct CameraFlowView: View {
 
     private var completionControl: some View {
         Button(action: requestCompletion) { completionLabel }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .tint(Color(red: 0.94, green: 0.24, blue: 0.07))
+        .buttonStyle(.plain)
         .disabled(isPhotoOperationInProgress || model.allPhotosOutput == nil)
+        .opacity(isPhotoOperationInProgress || model.allPhotosOutput == nil ? 0.5 : 1)
         .accessibilityHidden(isCompletingCapture)
         .accessibilityIdentifier("camera.selectPhotos")
     }
 
     private var completionLabel: some View {
-        Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
+        Text("다음")
+            .font(.body.weight(.semibold)).foregroundStyle(.white)
+            .frame(width: 76, height: ProductCreationHeaderLayout.toolbarHeight)
+            .glassEffect(.regular.tint(Color(red: 0.94, green: 0.24, blue: 0.07)).interactive(), in: Capsule())
+            .contentShape(.interaction, Capsule())
     }
 
     private var shutter: some View {

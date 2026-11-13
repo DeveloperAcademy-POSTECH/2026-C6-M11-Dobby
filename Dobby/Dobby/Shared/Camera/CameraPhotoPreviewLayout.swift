@@ -17,23 +17,32 @@ nonisolated struct CameraPhotoPreviewLayout {
         let photoHeight = width / CGFloat(photoAspectRatio)
         // Keep enough room for navigation on compact windows. Other ratios retain
         // the established measurement placement rather than filling the whole screen.
+        let preferredFrame: CGRect
         if prefersBottomAlignedPortrait, abs(photoAspectRatio - 9.0 / 16) < 0.000001,
            width < height, height - photoHeight >= 120 {
-            photoFrame = CGRect(x: 0, y: height - photoHeight, width: width, height: photoHeight)
+            preferredFrame = CGRect(x: 0, y: height - photoHeight, width: width, height: photoHeight)
             isBottomAligned = true
         } else {
             let viewport = MeasurementCameraChromeLayout.photoViewport(
                 containerWidth: Double(width), containerHeight: Double(height),
                 photoAspectRatio: photoAspectRatio)
-            var frame = viewport.map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) } ?? .zero
-            // Move the intact photo below the real navigation header. Keep the
-            // existing fit on compact windows where that placement cannot fit.
-            if width < height, let top = portraitPhotoTop, top.isFinite, top >= 0,
-               frame.height > 0, top + frame.height <= height {
-                frame.origin.y = top
-            }
-            photoFrame = frame
+            preferredFrame = viewport.map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) } ?? .zero
             isBottomAligned = false
+        }
+        // Anchor ordinary portrait ratios below the real navigation header.
+        // Keep the tall photo bottom-aligned when it already clears the header.
+        // Compact windows scale the intact photo to preserve the same clearance.
+        if width < height, let requestedTop = portraitPhotoTop,
+           requestedTop.isFinite, requestedTop >= 0, preferredFrame.height > 0,
+           !isBottomAligned || requestedTop > preferredFrame.minY {
+            let top = min(requestedTop, max(0, height - 1))
+            let fittedHeight = min(preferredFrame.height, height - top)
+            let scale = fittedHeight / preferredFrame.height
+            let fittedSize = CGSize(width: preferredFrame.width * scale, height: fittedHeight)
+            photoFrame = CGRect(x: (width - fittedSize.width) / 2, y: top,
+                                width: fittedSize.width, height: fittedSize.height)
+        } else {
+            photoFrame = preferredFrame
         }
     }
 

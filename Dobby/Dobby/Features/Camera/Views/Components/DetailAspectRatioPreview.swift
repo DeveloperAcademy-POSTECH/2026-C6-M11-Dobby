@@ -19,6 +19,7 @@ struct DetailAspectRatioPreview<Content: View>: View {
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.3, extraBounce: 0), value: aspectRatio)
                 .animation(nil, value: geometry.size)
+                .animation(nil, value: portraitPhotoTop)
                 .animation(nil, value: reduceMotion)
         }
         .clipped()
@@ -45,6 +46,9 @@ private struct DetailPreviewViewport<Content: View>: View, Animatable {
             content(CGRect(origin: .zero, size: rect.size))
                 .frame(width: rect.width, height: rect.height)
                 .clipped()
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("상세 촬영 사진 표시 영역")
+                .accessibilityIdentifier("camera.photoViewport")
                 .position(x: rect.midX, y: rect.midY)
             CameraBlackSurroundings(photoRect: rect)
         }
