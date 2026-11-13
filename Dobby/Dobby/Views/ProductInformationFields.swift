@@ -144,18 +144,8 @@ private struct ProductFieldEditor: View {
                     }
                 }
         } else if isMultiline {
-            TextEditor(text: $text)
-                .scrollContentBackground(.hidden)
-                .contentMargins(.all, 0)
-                .padding(.horizontal, -5)
-                .padding(.vertical, -8)
-                .frame(height: 172)
-                .overlay(alignment: .topLeading) {
-                    if text.isEmpty {
-                        Text(placeholder).foregroundStyle(Color("BrandNeutral300"))
-                            .allowsHitTesting(false).accessibilityHidden(true)
-                    }
-                }
+            TextField("", text: $text, prompt: prompt, axis: .vertical)
+                .textFieldStyle(.plain)
         } else if isSingleLine {
             TextField("", text: $text, prompt: prompt)
         } else {
