@@ -24,6 +24,40 @@ final class CameraPreviewConstructionTests: XCTestCase {
 /// Nil-device receipts cannot establish real autofocus or exposure settling.
 @MainActor
 final class ARKitCameraControlWorkerTests: XCTestCase {
+    func testWideDeviceLimitsRestoredAndRequestedExposureToTwoStops() async throws {
+        let device = ScriptedCameraDevice(capabilities: .init(focusSupported: true, meteringSupported: true,
+            exposureRange: .init(minimum: -8, maximum: 8)))
+        let worker = ARKitCameraControlWorker(), session = UUID()
+        let capabilities = await worker.activate(sessionID: session, hardware: device, exposureBias: 7)
+        XCTAssertEqual(capabilities.exposureRange, CameraExposureRange(minimum: -2, maximum: 2))
+        XCTAssertEqual(device.observation().exposureTargetBias, 2)
+        for (requested, expected) in [(-8.0, -2.0), (8.0, 2.0), (0.1, 0.1), (0.0, 0.0)] {
+            let receipt = try await worker.exposure(requested, sessionID: session)
+            XCTAssertEqual(receipt.exposureBias, expected)
+            XCTAssertEqual(device.observation().exposureTargetBias, expected)
+        }
+        let restarted = UUID()
+        _ = await worker.activate(sessionID: restarted, hardware: device, exposureBias: -7)
+        let capture = try await worker.beginCapture(sessionID: restarted)
+        XCTAssertEqual(capture.exposureBias, -2)
+        XCTAssertEqual(device.observation().exposureTargetBias, -2)
+        worker.endCapture(sessionID: restarted)
+        worker.deactivate()
+    }
+
+    func testNarrowDeviceRangeStillLimitsExposureInsideTwoStops() async throws {
+        let device = ScriptedCameraDevice(capabilities: .init(exposureRange: .init(minimum: -1, maximum: 1.5)))
+        let worker = ARKitCameraControlWorker(), session = UUID()
+        let capabilities = await worker.activate(sessionID: session, hardware: device, exposureBias: 0)
+        XCTAssertEqual(capabilities.exposureRange, CameraExposureRange(minimum: -1, maximum: 1.5))
+        for (requested, expected) in [(-2.0, -1.0), (2.0, 1.5)] {
+            let receipt = try await worker.exposure(requested, sessionID: session)
+            XCTAssertEqual(receipt.exposureBias, expected)
+            XCTAssertEqual(device.observation().exposureTargetBias, expected)
+        }
+        worker.deactivate()
+    }
+
     private enum ExpectedFailure { case unavailable, busy, staleSession }
 
     private nonisolated final class CompletionLog: @unchecked Sendable {

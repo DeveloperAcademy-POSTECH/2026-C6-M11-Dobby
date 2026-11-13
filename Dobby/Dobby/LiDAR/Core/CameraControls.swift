@@ -28,6 +28,13 @@ nonisolated struct CameraExposureRange: Codable, Sendable, Equatable {
         self.maximum = maximum
     }
 
+    /// Shared by measurement and detail capture, including menu and preview
+    /// controls. Never advertise a bias outside either the device or ±2 EV.
+    static func captureRange(minimum: Double, maximum: Double) -> Self? {
+        guard let deviceRange = Self(minimum: minimum, maximum: maximum) else { return nil }
+        return Self(minimum: max(-2, deviceRange.minimum), maximum: min(2, deviceRange.maximum))
+    }
+
     func clamp(_ value: Double) -> Double? {
         guard value.isFinite else { return nil }
         return min(maximum, max(minimum, value))
@@ -98,7 +105,7 @@ nonisolated struct CameraHardwareObservation: Codable, Sendable, Equatable {
 /// A translation from an on-screen drag, independent of preview zoom or sensor
 /// orientation. Moving up brightens. Cap sensitivity at four EV per visible
 /// preview height so wide-range devices do not turn a small drag into a huge
-/// brightness jump. Repeated drags still reach the actual hardware limits.
+/// brightness jump. Repeated drags remain within the supplied control range.
 nonisolated enum CameraExposureGesture {
     static func bias(start: Double, translationY: Double, viewportHeight: Double,
                      range: CameraExposureRange) -> Double? {
