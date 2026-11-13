@@ -5,6 +5,7 @@ struct LibraryHeaderMetrics: Equatable {
     var statusBarHeight: CGFloat = 0
     var height: CGFloat = 0
     var bottomBarHeight: CGFloat = 0
+    var windowHeight: CGFloat = 0
 }
 
 /// Moves and fades the native header without changing the list's viewport or insets.
@@ -256,7 +257,8 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
             let metrics = LibraryHeaderMetrics(
                 statusBarHeight: statusHeight, height: height,
                 bottomBarHeight: navigation.tabBarController?.tabBar.bounds.height
-                    ?? navigation.view.window?.safeAreaInsets.bottom ?? 0
+                    ?? navigation.view.window?.safeAreaInsets.bottom ?? 0,
+                windowHeight: navigation.view.window?.bounds.height ?? navigation.view.bounds.height
             )
             guard reportedMetrics != metrics else { return }
             reportedMetrics = metrics
