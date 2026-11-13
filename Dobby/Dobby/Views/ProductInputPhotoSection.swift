@@ -21,24 +21,27 @@ struct ProductInputPhotoSection: View {
     @State private var importError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: allowsRemoval ? 4 : 8) {
+        VStack(alignment: .leading, spacing: allowsEditing ? 8 : (allowsRemoval ? 4 : 8)) {
             HStack {
                 ProductFieldTitle(title: "제품 사진", isRequired: true)
                 Spacer()
                 HStack(spacing: 0) {
                     Text("\(garment.productPhotos.count)")
                         .foregroundStyle(garment.productPhotos.count > ProductPhotoLimit.maximumCount
-                            ? ProductInformationStyle.error : Color("BrandNeutral800"))
+                            ? ProductInformationStyle.error : Color(allowsEditing ? "BrandNeutral500" : "BrandNeutral800"))
                     Text("/\(ProductPhotoLimit.maximumCount)").foregroundStyle(Color("BrandNeutral500"))
                 }
-                .font(.custom("Pretendard-Regular", size: 14))
+                .font(.custom(allowsEditing ? "Pretendard-Medium" : "Pretendard-Regular", size: allowsEditing ? 16 : 14, relativeTo: .subheadline))
+                .tracking(allowsEditing ? -0.16 : 0)
                 .accessibilityLabel("제품 사진 \(garment.productPhotos.count)장, 최대 \(ProductPhotoLimit.maximumCount)장")
                 .accessibilityIdentifier("product-info.photo-count")
             }
+            .frame(minHeight: allowsEditing ? 22 : nil)
             photoRow.padding(.horizontal, -20)
         }
         .fullScreenCover(item: $expandedPhoto) { photo in
             ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id,
+                                    style: allowsEditing ? .editing : .standard,
                                     onDelete: deletionAction, onRotate: { id in
                                         guard let photo = garment.productPhotos.first(where: { $0.id == id }) else { return false }
                                         try await GarmentStore.rotateProductPhoto(photo, in: garment, clockwise: false)
@@ -127,12 +130,13 @@ struct ProductInputPhotoSection: View {
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: "plus").font(.system(size: 18))
-                Text("사진 추가").font(.custom("Pretendard-Regular", size: 12))
+                Text("사진 추가").font(.custom(allowsEditing ? "Pretendard-Medium" : "Pretendard-Regular", size: 12, relativeTo: .caption))
+                    .tracking(allowsEditing ? -0.12 : 0)
             }
-            .foregroundStyle(Color("BrandNeutral500"))
+            .foregroundStyle(Color(allowsEditing ? "BrandNeutral400" : "BrandNeutral500"))
             .frame(width: 77, height: 108)
             .background(Color("BrandNeutral50"), in: RoundedRectangle(cornerRadius: 16))
-            .overlay { RoundedRectangle(cornerRadius: 16).stroke(Color("BrandNeutral200"), lineWidth: 0.5) }
+            .overlay { RoundedRectangle(cornerRadius: 16).stroke(Color("BrandNeutral200"), lineWidth: allowsEditing ? 1 : 0.5) }
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .disabled(remainingCapacity == 0 || isImporting)

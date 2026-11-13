@@ -11,7 +11,9 @@ struct ProductInformationEditingView: View {
 
     var body: some View {
         InfoInputView(garment: session.garment, measurementInput: $session.measurementInput,
-                      allowsPhotoEditing: true, onExit: requestExit, onComplete: onComplete)
+                      allowsPhotoEditing: true, onExit: requestExit,
+                      onGenerateAI: { try await session.generateInformation() },
+                      onCancelGeneration: { session.cancelGeneration() }, onComplete: onComplete)
             .environment(\.modelContext, session.context)
             .fullScreenCover(isPresented: $showsDiscardConfirmation) {
                 ProductInformationDiscardConfirmation(
