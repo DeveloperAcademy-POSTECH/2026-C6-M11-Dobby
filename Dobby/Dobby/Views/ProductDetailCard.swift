@@ -85,7 +85,9 @@ private struct ProductDetailSections: View {
                 sectionDivider
                 ProductDetailField(title: "브랜드",
                     text: garment.brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No Brand" : garment.brand,
-                    style: style)
+                    style: style,
+                    textColor: style == .library && garment.brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? Color("BrandNeutral500") : nil)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("product-detail.brand")
             }
@@ -143,6 +145,7 @@ private struct ProductDetailField: View {
     let style: ProductDetailCardStyle
     var trailingInset: CGFloat = 0
     var suffix: String? = nil
+    var textColor: Color? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -159,6 +162,7 @@ private struct ProductDetailField: View {
 
     private func fieldText(_ value: String) -> some View {
         Text(value)
+            .foregroundColor(textColor)
             .font(style == .library ? LibraryDetailTypography.body : style == .completion
                 ? .custom("Pretendard-Regular", size: 15, relativeTo: .subheadline)
                 : .system(size: 14))
