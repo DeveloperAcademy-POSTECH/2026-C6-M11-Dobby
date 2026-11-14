@@ -42,6 +42,7 @@ struct ProductInformationFields: View {
     let showsValidationErrors: Bool
     var allowsPhotoEditing = false
     var showsPhotoSection = true
+    var onDescriptionCaretChange: ((CGRect) -> Void)? = nil
     var onPhotoImportingChange: ((Bool) -> Void)? = nil
 
     var body: some View {
@@ -60,6 +61,7 @@ struct ProductInformationFields: View {
                 placeholder: "제품의 상세 설명을 입력해주세요",
                 identifier: "detail", focus: informationFocus, focusValue: .detail,
                 isRequired: true, isMultiline: true, usesEditingLayout: allowsPhotoEditing,
+                onCaretChange: onDescriptionCaretChange,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isDetailValid(garment)
                     ? "설명을 입력해주세요" : nil)
             ProductPriceField(garment: garment, focus: informationFocus, usesEditingLayout: allowsPhotoEditing,
@@ -103,6 +105,7 @@ struct ProductInputField: View {
     var isSingleLine = false
     var isMultiline = false
     var usesEditingLayout = false
+    var onCaretChange: ((CGRect) -> Void)? = nil
     var errorMessage: String? = nil
 
     var body: some View {
@@ -111,7 +114,7 @@ struct ProductInputField: View {
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
             ProductFieldEditor(text: $text, placeholder: placeholder, focus: focus, focusValue: focusValue,
                                isSingleLine: isSingleLine, isMultiline: isMultiline,
-                               usesEditingLayout: usesEditingLayout)
+                               usesEditingLayout: usesEditingLayout, onCaretChange: onCaretChange)
                 .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
                 .tracking(-0.23)
                 .foregroundStyle(Color("BrandNeutralBlack"))
@@ -148,11 +151,13 @@ private struct ProductFieldEditor: View {
     let isSingleLine: Bool
     let isMultiline: Bool
     let usesEditingLayout: Bool
+    let onCaretChange: ((CGRect) -> Void)?
+    @State private var descriptionCaretY: CGFloat = 0
     @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 15
 
     var body: some View {
         if isMultiline && usesEditingLayout {
-            EditingDescriptionTextView(text: $text, fontSize: fontSize)
+            DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: true)
                 .focused(focus, equals: focusValue)
                 .frame(height: 172)
                 .overlay(alignment: .topLeading) {
@@ -162,9 +167,25 @@ private struct ProductFieldEditor: View {
                     }
                 }
         } else if isMultiline {
-            TextField("", text: $text, prompt: prompt, axis: .vertical)
+            DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: false) { caretY, frame in
+                if abs(descriptionCaretY - caretY) > 0.5 {
+                    descriptionCaretY = caretY
+                }
+                onCaretChange?(frame)
+            }
                 .focused(focus, equals: focusValue)
-                .textFieldStyle(.plain)
+                .frame(minHeight: 172)
+                .overlay(alignment: .topLeading) {
+                    Rectangle()
+                        .fill(.clear)
+                        .frame(width: 1, height: 20)
+                        .offset(y: descriptionCaretY)
+                        .id(InfoInputView.descriptionCaretID)
+                    if text.isEmpty {
+                        Text(placeholder).foregroundStyle(Color("BrandNeutral300"))
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                }
         } else if isSingleLine {
             TextField("", text: $text, prompt: prompt)
                 .focused(focus, equals: focusValue)
@@ -188,17 +209,20 @@ private struct ProductFieldEditor: View {
 
 }
 
-/// TextEditor does not consistently apply SwiftUI tracking to editable text.
-/// Specify the paragraph metrics on the backing text itself, without compensating insets.
-private struct EditingDescriptionTextView: UIViewRepresentable {
+/// Applies consistent typography to UIKit text editing. The registration field
+/// expands and reports its caret, while the saved-product editor keeps scrolling.
+private struct DescriptionTextView: UIViewRepresentable {
     @Binding var text: String
     let fontSize: CGFloat
+    let isScrollEnabled: Bool
+    var onCaretChange: ((CGFloat, CGRect) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
         view.delegate = context.coordinator
+        view.isScrollEnabled = isScrollEnabled
         view.backgroundColor = .clear
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
@@ -210,6 +234,7 @@ private struct EditingDescriptionTextView: UIViewRepresentable {
 
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.parent = self
+        view.isScrollEnabled = isScrollEnabled
         guard view.markedTextRange == nil else { return }
         let attributes = textAttributes
         if view.text != text || context.coordinator.appliedFontSize != fontSize {
@@ -217,10 +242,21 @@ private struct EditingDescriptionTextView: UIViewRepresentable {
             let offset = view.contentOffset
             view.attributedText = NSAttributedString(string: text, attributes: attributes)
             view.selectedRange = NSRange(location: min(selection.location, view.text.utf16.count), length: 0)
-            view.setContentOffset(offset, animated: false)
+            if isScrollEnabled {
+                view.setContentOffset(offset, animated: false)
+            }
             context.coordinator.appliedFontSize = fontSize
         }
         view.typingAttributes = attributes
+        if !isScrollEnabled {
+            context.coordinator.reportCaret(in: view, afterLayout: true)
+        }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        guard !isScrollEnabled, let width = proposal.width, width > 0 else { return nil }
+        let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: ceil(size.height))
     }
 
     private var textAttributes: [NSAttributedString.Key: Any] {
@@ -237,15 +273,42 @@ private struct EditingDescriptionTextView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
-        var parent: EditingDescriptionTextView
+        var parent: DescriptionTextView
         var appliedFontSize: CGFloat?
-        init(_ parent: EditingDescriptionTextView) { self.parent = parent }
+
+        init(_ parent: DescriptionTextView) {
+            self.parent = parent
+        }
+
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
+            if !parent.isScrollEnabled {
+                reportCaret(in: textView)
+            }
         }
+
         func textViewDidChangeSelection(_ textView: UITextView) {
-            guard textView.markedTextRange == nil else { return }
             textView.typingAttributes = parent.textAttributes
+            if !parent.isScrollEnabled {
+                reportCaret(in: textView)
+            }
+        }
+
+        func reportCaret(in textView: UITextView, afterLayout: Bool = false) {
+            let report = { [weak textView, self] in
+                guard let textView, let selection = textView.selectedTextRange else { return }
+                textView.layoutIfNeeded()
+                let localFrame = textView.caretRect(for: selection.end)
+                parent.onCaretChange?(max(0, localFrame.minY), textView.convert(localFrame, to: nil))
+            }
+            if afterLayout {
+                Task { @MainActor in
+                    await Task.yield()
+                    report()
+                }
+            } else {
+                report()
+            }
         }
     }
 }
