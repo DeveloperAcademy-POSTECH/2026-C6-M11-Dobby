@@ -47,9 +47,10 @@ struct Cafe24ExportView: View {
                     onOpenLibrary: { onRequestExit(.library) },
                     onContinueToUpload: { showsConnectionCompletion = false }
                 )
-            } else if connectedMallID != nil {
+            } else if let connectedMallID {
                 Cafe24ProductView(
                     draft: $draft,
+                    mallID: connectedMallID,
                     isCompleted: uploadState.isCompleted,
                     isDisabled: uploadState.isUploading
                 )

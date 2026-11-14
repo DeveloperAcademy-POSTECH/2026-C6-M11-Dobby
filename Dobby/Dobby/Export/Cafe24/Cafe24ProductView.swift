@@ -8,6 +8,7 @@ private nonisolated enum Cafe24InputField: Hashable {
 struct Cafe24ProductView: View {
     @Binding var draft: Cafe24ExportDraft
     @FocusState private var focusedField: Cafe24InputField?
+    let mallID: String
     let isCompleted: Bool
     let isDisabled: Bool
 
@@ -17,6 +18,10 @@ struct Cafe24ProductView: View {
                 if isCompleted {
                     Cafe24CompletionHeader()
                 }
+                ExportUploadAccountCard(accountLabel: "@\(mallID).cafe24.com") {
+                    EmptyView()
+                }
+                .onTapGesture(perform: dismissKeyboard)
                 Cafe24ProductPhotos(photos: draft.photos)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: dismissKeyboard)
@@ -37,7 +42,7 @@ struct Cafe24ProductView: View {
                 .disabled(areFieldsDisabled)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 16)
+            .padding(.top, 20)
             .padding(.bottom, 43)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
@@ -266,6 +271,7 @@ private struct Cafe24ResetButton: View {
 
     Cafe24ProductView(
         draft: $draft,
+        mallID: "myshop",
         isCompleted: false,
         isDisabled: false
     )
@@ -276,6 +282,7 @@ private struct Cafe24ResetButton: View {
 
     Cafe24ProductView(
         draft: $draft,
+        mallID: "myshop",
         isCompleted: true,
         isDisabled: false
     )
