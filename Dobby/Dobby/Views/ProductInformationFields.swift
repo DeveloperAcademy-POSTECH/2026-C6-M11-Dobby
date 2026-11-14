@@ -42,7 +42,6 @@ struct ProductInformationFields: View {
     let showsValidationErrors: Bool
     var allowsPhotoEditing = false
     var showsPhotoSection = true
-    var onDescriptionCaretChange: ((CGRect) -> Void)? = nil
     var onPhotoImportingChange: ((Bool) -> Void)? = nil
 
     var body: some View {
@@ -61,7 +60,6 @@ struct ProductInformationFields: View {
                 placeholder: "제품의 상세 설명을 입력해주세요",
                 identifier: "detail", focus: informationFocus, focusValue: .detail,
                 isRequired: true, isMultiline: true, usesEditingLayout: allowsPhotoEditing,
-                onCaretChange: onDescriptionCaretChange,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isDetailValid(garment)
                     ? "설명을 입력해주세요" : nil)
             ProductPriceField(garment: garment, focus: informationFocus, usesEditingLayout: allowsPhotoEditing,
@@ -105,7 +103,6 @@ struct ProductInputField: View {
     var isSingleLine = false
     var isMultiline = false
     var usesEditingLayout = false
-    var onCaretChange: ((CGRect) -> Void)? = nil
     var errorMessage: String? = nil
 
     var body: some View {
@@ -114,7 +111,7 @@ struct ProductInputField: View {
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
             ProductFieldEditor(text: $text, placeholder: placeholder, focus: focus, focusValue: focusValue,
                                isSingleLine: isSingleLine, isMultiline: isMultiline,
-                               usesEditingLayout: usesEditingLayout, onCaretChange: onCaretChange)
+                               usesEditingLayout: usesEditingLayout)
                 .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
                 .tracking(-0.23)
                 .foregroundStyle(Color("BrandNeutralBlack"))
@@ -151,8 +148,6 @@ private struct ProductFieldEditor: View {
     let isSingleLine: Bool
     let isMultiline: Bool
     let usesEditingLayout: Bool
-    let onCaretChange: ((CGRect) -> Void)?
-    @State private var descriptionCaretY: CGFloat = 0
     @State private var descriptionHeight: CGFloat = 172
     @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 15
 
@@ -170,20 +165,10 @@ private struct ProductFieldEditor: View {
                 }
         } else if isMultiline {
             DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: false,
-                                contentHeight: $descriptionHeight) { caretY, frame in
-                if abs(descriptionCaretY - caretY) > 0.5 {
-                    descriptionCaretY = caretY
-                }
-                onCaretChange?(frame)
-            }
+                                contentHeight: $descriptionHeight)
                 .focused(focus, equals: focusValue)
                 .frame(height: descriptionHeight, alignment: .topLeading)
                 .overlay(alignment: .topLeading) {
-                    Rectangle()
-                        .fill(.clear)
-                        .frame(width: 1, height: 20)
-                        .offset(y: descriptionCaretY)
-                        .id(InfoInputView.descriptionCaretID)
                     if text.isEmpty {
                         Text(placeholder).foregroundStyle(Color("BrandNeutral300"))
                             .allowsHitTesting(false).accessibilityHidden(true)
@@ -219,7 +204,6 @@ private struct DescriptionTextView: UIViewRepresentable {
     let fontSize: CGFloat
     let isScrollEnabled: Bool
     let contentHeight: Binding<CGFloat>?
-    var onCaretChange: ((CGFloat, CGRect) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -233,6 +217,7 @@ private struct DescriptionTextView: UIViewRepresentable {
         view.textAlignment = .left
         view.adjustsFontForContentSizeCategory = false
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        context.coordinator.textView = view
         return view
     }
 
@@ -273,9 +258,28 @@ private struct DescriptionTextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: DescriptionTextView
         var appliedFontSize: CGFloat?
+        weak var textView: UITextView?
+        private var keyboardFrame = CGRect.null
 
         init(_ parent: DescriptionTextView) {
             self.parent = parent
+            super.init()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameDidChange),
+                name: UIResponder.keyboardDidChangeFrameNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameDidChange),
+                name: UIResponder.keyboardDidShowNotification,
+                object: nil
+            )
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
         }
 
         func textViewDidChange(_ textView: UITextView) {
@@ -292,11 +296,19 @@ private struct DescriptionTextView: UIViewRepresentable {
             }
         }
 
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            if !parent.isScrollEnabled {
+                updateLayout(in: textView)
+            }
+        }
+
         func updateLayout(in textView: UITextView) {
-            let update = { [weak textView, self] in
-                guard let textView, let selection = textView.selectedTextRange else { return }
+            Task { @MainActor [weak self, weak textView] in
+                await Task.yield()
+                guard let self, let textView, let selection = textView.selectedTextRange else { return }
                 textView.layoutIfNeeded()
                 let width = textView.bounds.width
+                var heightChanged = false
                 if width > 0, let contentHeight = parent.contentHeight {
                     let fittingHeight = ceil(textView.sizeThatFits(
                         CGSize(width: width, height: .greatestFiniteMagnitude)
@@ -304,15 +316,58 @@ private struct DescriptionTextView: UIViewRepresentable {
                     let height = max(172, fittingHeight)
                     if abs(contentHeight.wrappedValue - height) > 0.5 {
                         contentHeight.wrappedValue = height
+                        heightChanged = true
                     }
                 }
-                let localFrame = textView.caretRect(for: selection.end)
-                parent.onCaretChange?(max(0, localFrame.minY), textView.convert(localFrame, to: nil))
+                if heightChanged {
+                    await Task.yield()
+                    textView.window?.layoutIfNeeded()
+                }
+                revealCaret(selection.end, in: textView)
             }
-            Task { @MainActor in
-                await Task.yield()
-                update()
+        }
+
+        @objc private func keyboardFrameDidChange(_ notification: Notification) {
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
+                return
             }
+            keyboardFrame = frame
+            guard let textView, textView.isFirstResponder, !parent.isScrollEnabled else { return }
+            updateLayout(in: textView)
+        }
+
+        @MainActor
+        private func revealCaret(_ position: UITextPosition, in textView: UITextView) {
+            guard textView.isFirstResponder,
+                  let scrollView = enclosingScrollView(of: textView),
+                  !scrollView.isTracking,
+                  !scrollView.isDragging,
+                  !scrollView.isDecelerating else { return }
+
+            let caretFrame = textView.caretRect(for: position)
+            var targetFrame = textView.convert(caretFrame, to: scrollView).insetBy(dx: 0, dy: -12)
+            let keyboardOverlap = uncoveredKeyboardOverlapHeight(scrollView: scrollView)
+            targetFrame.size.height += keyboardOverlap
+            scrollView.scrollRectToVisible(targetFrame, animated: false)
+        }
+
+        private func enclosingScrollView(of textView: UITextView) -> UIScrollView? {
+            var ancestor = textView.superview
+            while let view = ancestor {
+                if let scrollView = view as? UIScrollView {
+                    return scrollView
+                }
+                ancestor = view.superview
+            }
+            return nil
+        }
+
+        private func uncoveredKeyboardOverlapHeight(scrollView: UIScrollView) -> CGFloat {
+            guard !keyboardFrame.isNull, let window = scrollView.window else { return 0 }
+            let keyboardFrameInWindow = window.convert(keyboardFrame, from: window.screen.coordinateSpace)
+            let scrollFrameInWindow = scrollView.convert(scrollView.bounds, to: window)
+            let overlap = scrollFrameInWindow.intersection(keyboardFrameInWindow).height
+            return max(0, overlap - scrollView.adjustedContentInset.bottom)
         }
     }
 }

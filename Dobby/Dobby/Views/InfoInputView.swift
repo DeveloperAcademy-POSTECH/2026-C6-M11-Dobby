@@ -32,11 +32,8 @@ struct InfoInputView: View {
     @State private var generationRequestID: UUID?
     @State private var generationError: String?
     @State private var showsReplacementConfirmation = false
-    @State private var descriptionCaretFrame = CGRect.null
-    @State private var keyboardFrame = CGRect.null
     @FocusState private var focusedInformationField: ProductInformationField?
     @FocusState private var focusedMeasurementID: UUID?
-    static let descriptionCaretID = "product-info.description-caret"
     static let measurementTableID = "product-info.measurement-table"
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
@@ -75,7 +72,6 @@ struct InfoInputView: View {
                             focus: $focusedMeasurementID, informationFocus: $focusedInformationField,
                             showsValidationErrors: hasAttemptedCompletion,
                             allowsPhotoEditing: allowsPhotoEditing, showsPhotoSection: false,
-                            onDescriptionCaretChange: { descriptionCaretFrame = $0 },
                             onPhotoImportingChange: { isImportingPhotos = $0 })
                     }
                     .opacity(generationRequestID == nil ? 1 : 0)
@@ -105,22 +101,9 @@ struct InfoInputView: View {
             .onChange(of: focusedInformationField) { _, _ in
                 revealFocusedInput(using: proxy)
             }
-            .onChange(of: descriptionCaretFrame) { _, frame in
-                revealDescriptionCaret(frame, using: proxy)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) {
-                notification in
-                guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
-                    return
-                }
-                keyboardFrame = frame
-                revealDescriptionCaret(descriptionCaretFrame, keyboardFrame: frame, using: proxy)
-            }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                 // Wait for the resized visible area as well as the focus event.
-                if focusedInformationField == .detail {
-                    revealDescriptionCaret(descriptionCaretFrame, using: proxy)
-                } else {
+                if focusedInformationField != .detail {
                     revealFocusedInput(using: proxy)
                 }
             }
@@ -312,24 +295,10 @@ struct InfoInputView: View {
 
     private func revealFocusedInput(using proxy: ScrollViewProxy) {
         withAnimation(.easeOut(duration: 0.22)) {
-            if let focusedInformationField {
+            if let focusedInformationField, focusedInformationField != .detail {
                 proxy.scrollTo(focusedInformationField)
             } else if focusedMeasurementID != nil {
                 proxy.scrollTo(Self.measurementTableID, anchor: .bottom)
-            }
-        }
-    }
-
-    private func revealDescriptionCaret(_ caretFrame: CGRect, keyboardFrame: CGRect? = nil,
-                                        using proxy: ScrollViewProxy) {
-        let keyboardFrame = keyboardFrame ?? self.keyboardFrame
-        guard focusedInformationField == .detail,
-              !caretFrame.isNull, !keyboardFrame.isNull,
-              caretFrame.maxY > keyboardFrame.minY - 16 else { return }
-        Task { @MainActor in
-            await Task.yield()
-            withAnimation(.easeOut(duration: 0.18)) {
-                proxy.scrollTo(Self.descriptionCaretID, anchor: .center)
             }
         }
     }
