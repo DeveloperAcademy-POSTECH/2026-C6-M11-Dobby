@@ -19,7 +19,7 @@ enum ProductInformationStyle {
 
     static func measurements(for garment: Garment) -> [MeasuredValue] {
         guard garment.group == .top else { return garment.visibleMeasurements }
-        let keys = ["shoulderWidth", "chestWidth", "totalLength", "frontLength", "sleeveLengthLeft", "sleeveLengthRight"]
+        let keys = ["totalLength", "shoulderWidth", "chestWidth", "frontLength", "sleeveLengthLeft", "sleeveLengthRight"]
         return garment.visibleMeasurements.enumerated().sorted { left, right in
             let leftOrder = keys.firstIndex(of: left.element.key) ?? keys.count
             let rightOrder = keys.firstIndex(of: right.element.key) ?? keys.count
