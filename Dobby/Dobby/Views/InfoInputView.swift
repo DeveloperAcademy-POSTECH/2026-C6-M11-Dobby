@@ -32,6 +32,7 @@ struct InfoInputView: View {
     @State private var generationRequestID: UUID?
     @State private var generationError: String?
     @State private var showsReplacementConfirmation = false
+    @FocusState private var focusedInformationField: ProductInformationField?
     @FocusState private var focusedMeasurementID: UUID?
     static let measurementTableID = "product-info.measurement-table"
 
@@ -68,7 +69,8 @@ struct InfoInputView: View {
                             if onGenerateAI != nil { generateInformationButton.productInputInteractionArea() }
                         }
                         ProductInformationFields(garment: garment, measurementInput: measurementInput,
-                            focus: $focusedMeasurementID, showsValidationErrors: hasAttemptedCompletion,
+                            focus: $focusedMeasurementID, informationFocus: $focusedInformationField,
+                            showsValidationErrors: hasAttemptedCompletion,
                             allowsPhotoEditing: allowsPhotoEditing, showsPhotoSection: false,
                             onPhotoImportingChange: { isImportingPhotos = $0 })
                     }
@@ -94,12 +96,16 @@ struct InfoInputView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: focusedMeasurementID) { _, _ in
-                revealMeasurements(using: proxy)
+                revealFocusedInput(using: proxy)
+            }
+            .onChange(of: focusedInformationField) { _, _ in
+                revealFocusedInput(using: proxy)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                 // Wait for the resized visible area as well as the focus event.
-                // The decimal field must stay above the software keyboard.
-                revealMeasurements(using: proxy)
+                if focusedInformationField != .detail {
+                    revealFocusedInput(using: proxy)
+                }
             }
         }
         .background(ProductInformationStyle.background)
@@ -111,6 +117,7 @@ struct InfoInputView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .tint(.primary)
         .onDisappear {
+            focusedInformationField = nil
             focusedMeasurementID = nil
             if generationRequestID != nil { cancelGeneration() }
         }
@@ -260,6 +267,7 @@ struct InfoInputView: View {
             }
             // End editing before navigation so returning from export doesn't
             // restore a decimal keyboard for a field outside the visible area.
+            focusedInformationField = nil
             focusedMeasurementID = nil
             if let onComplete {
                 onComplete(garment)
@@ -283,14 +291,18 @@ struct InfoInputView: View {
         returnFromExport?(to: destination)
     }
 
-    private func revealMeasurements(using proxy: ScrollViewProxy) {
-        guard focusedMeasurementID != nil else { return }
+    private func revealFocusedInput(using proxy: ScrollViewProxy) {
         withAnimation(.easeOut(duration: 0.22)) {
-            proxy.scrollTo(Self.measurementTableID, anchor: .bottom)
+            if let focusedInformationField, focusedInformationField != .detail {
+                proxy.scrollTo(focusedInformationField)
+            } else if focusedMeasurementID != nil {
+                proxy.scrollTo(Self.measurementTableID, anchor: .bottom)
+            }
         }
     }
 
     private func dismissKeyboard() {
+        focusedInformationField = nil
         focusedMeasurementID = nil
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
                                         to: nil, from: nil, for: nil)

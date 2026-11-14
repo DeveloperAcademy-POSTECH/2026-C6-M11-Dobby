@@ -18,7 +18,7 @@ struct MeasurementResultSummary: View {
         // The caller already supplies visible values. Reorder only the known
         // top fields for this screen; preserve every bottom/unknown value and
         // its relative order without changing the shared export presentation.
-        let topOrder = ["top.shoulderWidth", "top.chestWidth", "top.totalLength",
+        let topOrder = ["top.totalLength", "top.shoulderWidth", "top.chestWidth",
                         "top.frontLength", "top.sleeveLengthLeft"]
         return values.enumerated().sorted { lhs, rhs in
             let left = topOrder.firstIndex(of: lhs.element.id) ?? topOrder.count
