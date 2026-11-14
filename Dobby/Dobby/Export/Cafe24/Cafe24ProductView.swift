@@ -1,8 +1,13 @@
 import SwiftUI
 import UIKit
 
+private nonisolated enum Cafe24InputField: Hashable {
+    case productName, productDescription, price
+}
+
 struct Cafe24ProductView: View {
     @Binding var draft: Cafe24ExportDraft
+    @FocusState private var focusedField: Cafe24InputField?
     let isCompleted: Bool
     let isDisabled: Bool
 
@@ -13,15 +18,20 @@ struct Cafe24ProductView: View {
                     Cafe24CompletionHeader()
                 }
                 Cafe24ProductPhotos(photos: draft.photos)
-                Cafe24ProductNameField(text: $draft.productName) {
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismissKeyboard)
+                Cafe24ProductNameField(text: $draft.productName, focus: $focusedField) {
+                    dismissKeyboard()
                     draft.resetProductName()
                 }
                 .disabled(areFieldsDisabled)
-                Cafe24ProductDescriptionField(text: $draft.productDescription) {
+                Cafe24ProductDescriptionField(text: $draft.productDescription, focus: $focusedField) {
+                    dismissKeyboard()
                     draft.resetProductDescription()
                 }
                 .disabled(areFieldsDisabled)
-                Cafe24PriceField(priceText: $draft.priceText) {
+                Cafe24PriceField(priceText: $draft.priceText, focus: $focusedField) {
+                    dismissKeyboard()
                     draft.resetPrice()
                 }
                 .disabled(areFieldsDisabled)
@@ -31,12 +41,29 @@ struct Cafe24ProductView: View {
             .padding(.bottom, 43)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismissKeyboard)
+            }
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color(.brandNeutralWhite).ignoresSafeArea())
+        .background {
+            Color(.brandNeutralWhite)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: dismissKeyboard)
+                .ignoresSafeArea()
+        }
+        .onChange(of: areFieldsDisabled) {
+            if areFieldsDisabled { dismissKeyboard() }
+        }
     }
 
     private var areFieldsDisabled: Bool { isDisabled || isCompleted }
+
+    private func dismissKeyboard() {
+        focusedField = nil
+    }
 }
 
 private struct Cafe24CompletionHeader: View {
@@ -111,12 +138,14 @@ private struct Cafe24ProductPhoto: View {
 
 private struct Cafe24ProductNameField: View {
     @Binding var text: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품명", onReset: onReset)
             TextField("상품명 입력", text: $text)
+                .focused(focus, equals: .productName)
                 .font(.body)
                 .foregroundStyle(Color(.brandNeutralBlack))
                 .padding(.horizontal, 16)
@@ -128,12 +157,14 @@ private struct Cafe24ProductNameField: View {
 
 private struct Cafe24ProductDescriptionField: View {
     @Binding var text: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품 설명", onReset: onReset)
             TextField("상품 설명", text: $text, axis: .vertical)
+                .focused(focus, equals: .productDescription)
                 .textFieldStyle(.plain)
                 .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
                 .foregroundStyle(Color(.brandNeutralBlack))
@@ -148,22 +179,25 @@ private struct Cafe24ProductDescriptionField: View {
 
 private struct Cafe24PriceField: View {
     @Binding var priceText: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "판매가", onReset: onReset)
-            Cafe24PriceInput(priceText: $priceText)
+            Cafe24PriceInput(priceText: $priceText, focus: focus)
         }
     }
 }
 
 private struct Cafe24PriceInput: View {
     @Binding var priceText: String
+    let focus: FocusState<Cafe24InputField?>.Binding
 
     var body: some View {
         HStack(alignment: .center) {
             TextField("판매가 입력", text: formattedPrice)
+                .focused(focus, equals: .price)
                 .keyboardType(.numberPad)
                 .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
                 .foregroundStyle(Color(.brandNeutralBlack))
@@ -282,8 +316,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("상품명 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var text = "빈티지 재킷"
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24ProductNameField(text: $text, onReset: {})
+    Cafe24ProductNameField(text: $text, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))
@@ -291,8 +326,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("상품 설명 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var text = "가볍게 걸치기 좋은 빈티지 재킷입니다."
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24ProductDescriptionField(text: $text, onReset: {})
+    Cafe24ProductDescriptionField(text: $text, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))
@@ -300,8 +336,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("판매가 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var priceText = "89,000"
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24PriceField(priceText: $priceText, onReset: {})
+    Cafe24PriceField(priceText: $priceText, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))
