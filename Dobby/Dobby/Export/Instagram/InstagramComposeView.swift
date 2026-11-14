@@ -115,7 +115,7 @@ private struct InstagramCaptionHeader: View {
     let onReset: () -> Void
 
     var body: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("캡션")
                     .font(.custom("Pretendard-SemiBold", fixedSize: 17))
