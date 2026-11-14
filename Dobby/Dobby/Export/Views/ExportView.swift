@@ -2,6 +2,8 @@ import SwiftData
 import SwiftUI
 
 struct ExportView: View {
+    private static let navigationTitle = "플랫폼 업로드하기"
+
     let product: ExportProduct
     private let onRequestExit: ((ExportReturnDestination) throws -> Void)?
     @Binding var showFruits: Bool
@@ -28,9 +30,12 @@ struct ExportView: View {
                                   onSelectChannel: didSelectChannel)
             }
             .background(Color(.brandNeutralWhite))
-            .navigationTitle("플랫폼 업로드하기")
+            .navigationTitle(Self.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    ExportToolbarTitle(title: Self.navigationTitle)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(
                         systemImage: "xmark",
