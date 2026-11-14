@@ -61,7 +61,7 @@ struct Cafe24ExportView: View {
                 )
             }
         }
-        .navigationTitle("카페24로 내보내기")
+        .navigationTitle("카페24로 업로드하기")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
         .toolbar(showsConnectionCompletion ? .hidden : .visible, for: .navigationBar)
