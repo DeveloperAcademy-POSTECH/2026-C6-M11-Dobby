@@ -81,7 +81,7 @@ private struct InstagramConnectionActions: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color(.brandNeutralWhite))
-            .disabled(isLoading)
+            .allowsHitTesting(!isLoading)
 
             Button("프로페셔널 계정으로 어떻게 설정하나요?") {
                 guard let url = URL(
