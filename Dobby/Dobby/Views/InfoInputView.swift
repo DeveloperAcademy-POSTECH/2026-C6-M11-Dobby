@@ -143,11 +143,9 @@ struct InfoInputView: View {
                         .font(.system(.headline, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(width: 61, height: 44)
-                        .background(GarmentInformationValidation.isValid(garment)
-                            ? ProductInformationStyle.accent : ProductInformationStyle.accentSoft,
-                            in: Capsule())
+                        .background(ProductInformationStyle.accent, in: Capsule())
                 }
-                .disabled(generationRequestID != nil || isImportingPhotos || !GarmentInformationValidation.canAttemptCompletion(garment))
+                .disabled(generationRequestID != nil || isImportingPhotos)
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }

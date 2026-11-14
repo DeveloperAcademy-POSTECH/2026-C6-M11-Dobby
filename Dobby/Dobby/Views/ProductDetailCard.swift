@@ -276,12 +276,6 @@ private struct ProductDetailMeasurements: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ProductDetailSectionTitle(title: "실측 사이즈", libraryFont: style == .library ? LibraryDetailTypography.heading : nil)
-            if garment.visibleMeasurements.contains(where: {
-                $0.sourceStatusRaw == MeasurementStatus.uncertain.rawValue && !$0.isEdited
-            }) {
-                Text("불확실한 자동 측정값이 포함되어 있어요.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
             ProductDetailMeasurementScroll(values: ProductInformationStyle.measurements(for: garment),
                                            accessibilityPrefix: accessibilityPrefix, style: style)
         }
@@ -298,10 +292,14 @@ private struct ProductDetailMeasurementScroll: View {
             ProductDetailMeasurementRow(values: values, accessibilityPrefix: accessibilityPrefix, style: style)
                 .padding(style == .library ? 1.5 : 0)
                 .containerRelativeFrame(.horizontal) { width, _ in
-                    max(width, CGFloat(values.count) * 64)
+                    if style == .library {
+                        return values.count <= 5 ? width : max(width, CGFloat(values.count) * 85 - 1)
+                    }
+                    return max(width, CGFloat(values.count) * 64)
                 }
         }
-        .background(.white)
+        .scrollDisabled(style == .library && values.count <= 5)
+        .background(style == .library ? Color("BrandNeutral100") : .white)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: style == .library ? .circular : .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: style == .library ? .circular : .continuous).strokeBorder(
@@ -319,6 +317,7 @@ private struct ProductDetailMeasurementRow: View {
         HStack(spacing: 1) {
             ForEach(values) { value in
                 ProductDetailMeasurementColumn(value: value, style: style)
+                    .frame(minWidth: style == .library && values.count > 5 ? 84 : 0)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("\(accessibilityPrefix).\(value.key)")
             }
@@ -333,12 +332,12 @@ private struct ProductDetailMeasurementColumn: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            Text(ProductInformationStyle.measurementTitle(for: value))
+            Text(style == .library && value.key == "totalLength" ? "총장" : ProductInformationStyle.measurementTitle(for: value))
                 .font(style.usesMeasurementTokens
                     ? LibraryDetailTypography.photoAndMeasurementHeading
                     : .headline)
                 .tracking(-0.43)
-                .foregroundStyle(Color(red: 83 / 255, green: 79 / 255, blue: 73 / 255))
+                .foregroundStyle(Color("BrandNeutral800"))
                 .lineLimit(1).minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity).frame(height: 42)
                 .background(style.usesMeasurementTokens ? Color("BrandNeutral100") : ProductInformationStyle.field)
@@ -347,10 +346,10 @@ private struct ProductDetailMeasurementColumn: View {
                     ? LibraryDetailTypography.measurementValue
                     : .subheadline)
                 .tracking(-0.23)
-                .foregroundStyle(.black)
+                .foregroundStyle(style == .library ? Color("BrandNeutralBlack") : .black)
                 .lineLimit(1).minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity).frame(height: 64)
-                .background(.white)
+                .background(Color("BrandNeutralWhite"))
         }
     }
 }
