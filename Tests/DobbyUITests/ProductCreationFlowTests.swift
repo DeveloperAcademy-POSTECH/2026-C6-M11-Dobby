@@ -396,6 +396,38 @@ final class ProductCreationFlowTests: XCTestCase {
     }
 
     @MainActor
+    func testFocusedProductInformationStaysVisibleAboveKeyboard() {
+        continueAfterFailure = false
+        let app = fixtureApp(token: UUID().uuidString, top: true)
+        app.launch()
+        defer { app.terminate() }
+        openCapture(in: app)
+        recognizeAndCapture(in: app)
+        let confirm = app.buttons["confirmGarmentMeasurement"]
+        waitEnabled(confirm)
+        confirm.tap()
+        acknowledgeDetailCaptureGuide(in: app)
+        let captureDetail = app.buttons["camera.captureDetail"]
+        waitEnabled(captureDetail)
+        captureDetail.tap()
+        let selectPhotos = app.buttons["camera.selectPhotos"]
+        waitEnabled(selectPhotos)
+        selectPhotos.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+
+        let detail = field("detail", app: app)
+        replaceText(in: detail, with: "키보드 위에서 확인할 여러 줄의 제품 상세 설명입니다.", app: app)
+        assertFocusedInputVisible(detail, in: app, requiresWholeField: false)
+
+        let price = field("price", app: app)
+        reveal(price, in: app)
+        price.tap()
+        price.typeText("40000")
+        wait(for: NSPredicate(format: "value == %@", "40,000"), on: price)
+        assertFocusedInputVisible(price, in: app, requiresWholeField: true)
+    }
+
+    @MainActor
     func testRequiredInformationAndCompletionSummary() throws {
         continueAfterFailure = false
         let app = fixtureApp(token: UUID().uuidString, top: true)
@@ -652,6 +684,27 @@ final class ProductCreationFlowTests: XCTestCase {
         }, evaluatedWith: field)
         wait(for: [visible], timeout: 10)
         XCTAssertTrue(keyboard.exists, "The exact value must be completed while its decimal keyboard is still open")
+    }
+
+    @MainActor
+    private func assertFocusedInputVisible(_ field: XCUIElement, in app: XCUIApplication,
+                                           requiresWholeField: Bool) {
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        let navigationBottom = app.navigationBars.allElementsBoundByIndex.filter(\.isHittable)
+            .map { $0.frame.maxY }.max() ?? 0
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let visibleTop = max(field.frame.minY, navigationBottom + 12)
+            let visibleBottom = min(field.frame.maxY, keyboard.frame.minY - 12)
+            if requiresWholeField {
+                return field.frame.minY >= navigationBottom + 12
+                    && field.frame.maxY <= keyboard.frame.minY - 12
+            }
+            return visibleBottom - visibleTop >= min(18, field.frame.height)
+        }, object: field)
+        let result = XCTWaiter.wait(for: [visible], timeout: 10)
+        XCTAssertEqual(result, .completed,
+                       "Field \(field.frame), keyboard \(keyboard.frame), navigation bottom \(navigationBottom)")
     }
 
     @MainActor
