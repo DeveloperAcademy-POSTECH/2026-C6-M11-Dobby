@@ -396,6 +396,53 @@ final class ProductCreationFlowTests: XCTestCase {
     }
 
     @MainActor
+    func testDoneStaysEnabledAndBlocksIncompleteInformation() {
+        continueAfterFailure = false
+        let app = fixtureApp(token: UUID().uuidString, top: true)
+        app.launch()
+        defer { app.terminate() }
+        openCapture(in: app)
+        recognizeAndCapture(in: app)
+        waitEnabled(app.buttons["confirmGarmentMeasurement"])
+        app.buttons["confirmGarmentMeasurement"].tap()
+        acknowledgeDetailCaptureGuide(in: app)
+        waitEnabled(app.buttons["camera.captureDetail"])
+        app.buttons["camera.captureDetail"].tap()
+        waitEnabled(app.buttons["camera.selectPhotos"])
+        app.buttons["camera.selectPhotos"].tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+
+        let done = app.buttons["product-info.done"]
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
+        XCTAssertTrue(app.staticTexts["제품명을 입력해주세요"].exists)
+        XCTAssertTrue(app.staticTexts["설명을 입력해주세요"].exists)
+        XCTAssertFalse(app.buttons["product-complete.export"].exists)
+
+        replaceText(in: app.textFields["product-info.name"], with: "Required information check", app: app)
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
+        XCTAssertFalse(app.buttons["product-complete.export"].exists)
+
+        replaceText(in: app.textViews["product-info.detail"], with: "완료 버튼 검증용 제품 설명", app: app)
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
+        XCTAssertTrue(app.staticTexts["가격을 입력해주세요"].exists)
+
+        let price = app.textFields["product-info.price"]
+        reveal(price, in: app)
+        price.tap()
+        price.typeText("40000")
+        XCTAssertEqual(price.value as? String, "40,000")
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
     func testRequiredInformationAndCompletionSummary() throws {
         continueAfterFailure = false
         let app = fixtureApp(token: UUID().uuidString, top: true)
@@ -415,7 +462,12 @@ final class ProductCreationFlowTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
         let done = app.buttons["product-info.done"]
         XCTAssertTrue(done.waitForExistence(timeout: 10))
-        XCTAssertFalse(done.isEnabled)
+        XCTAssertTrue(done.isEnabled)
+        done.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
+        XCTAssertTrue(app.staticTexts["제품명을 입력해주세요"].exists)
+        XCTAssertTrue(app.staticTexts["설명을 입력해주세요"].exists)
+        XCTAssertFalse(app.buttons["product-complete.export"].exists)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@",
             "product-info.delete-photo.")).count, 0)
         attachScreenshot(app, name: "product-info-empty")

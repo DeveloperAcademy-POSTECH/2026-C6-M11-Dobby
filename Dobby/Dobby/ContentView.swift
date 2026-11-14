@@ -24,6 +24,7 @@ struct ContentView: View {
     @State private var routeTask: Task<Void, Never>?
     @State private var pendingExportDestination: ExportReturnDestination?
     @State private var exportReturnNavigationID = UUID()
+    @State private var editingAutofillLoadingPresentation: ProductAutofillLoadingPresentation?
 
 #if DEBUG
     init(previewLibrary: Bool = false, previewEditing: Bool = false) {
@@ -72,7 +73,8 @@ struct ContentView: View {
                     .navigationDestination(for: UUID.self) { productID in
                         if let garment = garments.first(where: { $0.id == productID }) {
                             ProductSavedDetailView(garment: garment, controller: controller,
-                                                   onExitToLibrary: { libraryPath.removeAll() })
+                                onExitToLibrary: { libraryPath.removeAll() },
+                                onAIGenerationPresentationChange: { editingAutofillLoadingPresentation = $0 })
                         }
                     }
                 }
@@ -91,6 +93,13 @@ struct ContentView: View {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
                     .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
                     .allowsHitTesting(false)
+            }
+        }
+        .allowsHitTesting(editingAutofillLoadingPresentation == nil)
+        .accessibilityHidden(editingAutofillLoadingPresentation != nil)
+        .overlay {
+            if let presentation = editingAutofillLoadingPresentation {
+                ProductAutofillLoadingView(onCancel: presentation.onCancel)
             }
         }
         .fullScreenCover(item: $creationRequest) { request in
@@ -233,6 +242,7 @@ struct ProductSavedDetailView: View {
     @Bindable var garment: Garment
     let controller: CopyActivityController
     let onExitToLibrary: () -> Void
+    var onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)? = nil
     @State private var showInformation = false
     @State private var editSession: ProductInformationEditSession?
     @State private var editError: String?
@@ -290,7 +300,7 @@ struct ProductSavedDetailView: View {
                     }, onComplete: { _ in
                         editSession.reflectSavedChanges(in: garment)
                         showInformation = false
-                    })
+                    }, onAIGenerationPresentationChange: onAIGenerationPresentationChange)
             }
         }
         .alert("제품 정보를 열 수 없어요", isPresented: Binding(
