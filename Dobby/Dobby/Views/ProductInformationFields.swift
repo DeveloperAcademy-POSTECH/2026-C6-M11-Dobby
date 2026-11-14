@@ -1,6 +1,13 @@
 import SwiftUI
 import UIKit
 
+enum ProductInformationField: Hashable {
+    case name
+    case detail
+    case price
+    case brand
+}
+
 enum ProductInformationStyle {
     static let background = Color(.systemBackground)
     static let field = Color("BrandNeutral50")
@@ -31,6 +38,7 @@ struct ProductInformationFields: View {
     @Bindable var garment: Garment
     @Binding var measurementInput: GarmentMeasurementInputState
     let focus: FocusState<UUID?>.Binding
+    let informationFocus: FocusState<ProductInformationField?>.Binding
     let showsValidationErrors: Bool
     var allowsPhotoEditing = false
     var showsPhotoSection = true
@@ -43,20 +51,23 @@ struct ProductInformationFields: View {
                                          onImportingChange: onPhotoImportingChange)
             }
             ProductInputField(title: "제품명", text: $garment.name,
-                placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name", isRequired: true,
+                placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name",
+                focus: informationFocus, focusValue: .name, isRequired: true,
                 isSingleLine: !allowsPhotoEditing, usesEditingLayout: allowsPhotoEditing,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isNameValid(garment)
                     ? "제품명을 입력해주세요" : nil)
             ProductInputField(title: "상세 설명", text: $garment.detail,
                 placeholder: "제품의 상세 설명을 입력해주세요",
-                identifier: "detail", isRequired: true, isMultiline: true, usesEditingLayout: allowsPhotoEditing,
+                identifier: "detail", focus: informationFocus, focusValue: .detail,
+                isRequired: true, isMultiline: true, usesEditingLayout: allowsPhotoEditing,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isDetailValid(garment)
                     ? "설명을 입력해주세요" : nil)
-            ProductPriceField(garment: garment, usesEditingLayout: allowsPhotoEditing,
+            ProductPriceField(garment: garment, focus: informationFocus, usesEditingLayout: allowsPhotoEditing,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isPriceValid(garment)
                     ? "가격을 입력해주세요" : nil)
             ProductInputField(title: "브랜드", text: $garment.brand,
-                placeholder: "브랜드를 입력해주세요", identifier: "brand", usesEditingLayout: allowsPhotoEditing)
+                placeholder: "브랜드를 입력해주세요", identifier: "brand",
+                focus: informationFocus, focusValue: .brand, usesEditingLayout: allowsPhotoEditing)
             ProductMeasurementInputTable(garment: garment, measurementInput: $measurementInput, focus: focus, usesEditingLayout: allowsPhotoEditing)
                 .id(InfoInputView.measurementTableID)
         }
@@ -86,6 +97,8 @@ struct ProductInputField: View {
     @Binding var text: String
     let placeholder: String
     let identifier: String
+    let focus: FocusState<ProductInformationField?>.Binding
+    let focusValue: ProductInformationField
     var isRequired = false
     var isSingleLine = false
     var isMultiline = false
@@ -96,8 +109,9 @@ struct ProductInputField: View {
         VStack(alignment: .leading, spacing: 12) {
             ProductFieldTitle(title: title, isRequired: isRequired)
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
-            ProductFieldEditor(text: $text, placeholder: placeholder, isSingleLine: isSingleLine,
-                               isMultiline: isMultiline, usesEditingLayout: usesEditingLayout)
+            ProductFieldEditor(text: $text, placeholder: placeholder, focus: focus, focusValue: focusValue,
+                               isSingleLine: isSingleLine, isMultiline: isMultiline,
+                               usesEditingLayout: usesEditingLayout)
                 .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
                 .tracking(-0.23)
                 .foregroundStyle(Color("BrandNeutralBlack"))
@@ -122,12 +136,15 @@ struct ProductInputField: View {
                     .accessibilityIdentifier("product-info.\(identifier).error")
             }
         }
+        .id(focusValue)
     }
 }
 
 private struct ProductFieldEditor: View {
     @Binding var text: String
     let placeholder: String
+    let focus: FocusState<ProductInformationField?>.Binding
+    let focusValue: ProductInformationField
     let isSingleLine: Bool
     let isMultiline: Bool
     let usesEditingLayout: Bool
@@ -136,6 +153,7 @@ private struct ProductFieldEditor: View {
     var body: some View {
         if isMultiline && usesEditingLayout {
             EditingDescriptionTextView(text: $text, fontSize: fontSize)
+                .focused(focus, equals: focusValue)
                 .frame(height: 172)
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
@@ -145,11 +163,14 @@ private struct ProductFieldEditor: View {
                 }
         } else if isMultiline {
             TextField("", text: $text, prompt: prompt, axis: .vertical)
+                .focused(focus, equals: focusValue)
                 .textFieldStyle(.plain)
         } else if isSingleLine {
             TextField("", text: $text, prompt: prompt)
+                .focused(focus, equals: focusValue)
         } else {
             TextField("", text: $text, prompt: prompt, axis: .vertical)
+                .focused(focus, equals: focusValue)
                 .lineLimit(1...2)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(usesEditingLayout ? max(0, 20 * fontSize / 15 - inputFont.lineHeight) : 0)
@@ -231,6 +252,7 @@ private struct EditingDescriptionTextView: UIViewRepresentable {
 
 struct ProductPriceField: View {
     @Bindable var garment: Garment
+    let focus: FocusState<ProductInformationField?>.Binding
     var usesEditingLayout = false
     let errorMessage: String?
 
@@ -238,7 +260,7 @@ struct ProductPriceField: View {
         VStack(alignment: .leading, spacing: 12) {
             ProductFieldTitle(title: "가격", isRequired: true)
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
-            ProductPriceInput(price: $garment.price)
+            ProductPriceInput(price: $garment.price, focus: focus)
                 .productInputInteractionArea()
                 .background(ProductInformationStyle.field, in: RoundedRectangle(cornerRadius: 16))
                 .overlay {
@@ -254,13 +276,14 @@ struct ProductPriceField: View {
                     .accessibilityIdentifier("product-info.price.error")
             }
         }
+        .id(ProductInformationField.price)
     }
 }
 
 private struct ProductPriceInput: View {
     @Binding var price: Int?
+    let focus: FocusState<ProductInformationField?>.Binding
     @State private var priceText = ""
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -272,7 +295,7 @@ private struct ProductPriceInput: View {
                     TextField("", text: $priceText, prompt: Text("제품 가격").foregroundStyle(Color("BrandNeutral300")))
                         .font(.custom("Pretendard-SemiBold", size: 15, relativeTo: .subheadline))
                         .keyboardType(.numberPad)
-                        .focused($isFocused)
+                        .focused(focus, equals: .price)
                         .accessibilityLabel("가격, 원")
                         .accessibilityHint("제품의 판매 가격을 입력해주세요")
                         .accessibilityIdentifier("product-info.price")
@@ -289,7 +312,7 @@ private struct ProductPriceInput: View {
         .padding(.vertical, 16)
         .frame(minHeight: 52)
         .contentShape(Rectangle())
-        .onTapGesture { isFocused = true }
+        .onTapGesture { focus.wrappedValue = .price }
         .onAppear { priceText = formatPrice(price) }
         .onChange(of: priceText) { _, text in updatePriceText(text) }
     }
