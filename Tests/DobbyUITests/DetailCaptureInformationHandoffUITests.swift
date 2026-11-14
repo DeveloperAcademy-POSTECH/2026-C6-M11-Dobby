@@ -224,9 +224,7 @@ final class DetailCaptureInformationHandoffUITests: XCTestCase {
     @MainActor
     private func enterRequiredInformation(in app: XCUIApplication) {
         for (key, text) in [("name", "Overflow jacket"), ("detail", "Captured photos retained"), ("price", "40000")] {
-            let identifier = "product-info.\(key)"
-            let textField = app.textFields[identifier].firstMatch
-            let field = key == "detail" && !textField.exists ? app.textViews[identifier].firstMatch : textField
+            let field = key == "detail" ? app.textViews["product-info.detail"] : app.textFields["product-info.\(key)"]
             XCTAssertTrue(field.waitForExistence(timeout: 10))
             reveal(field, in: app)
             XCTAssertTrue(field.isHittable)
