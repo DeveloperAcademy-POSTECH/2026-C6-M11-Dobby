@@ -25,10 +25,9 @@ struct ExportView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                ExportContentView(product: product, completedChannels: completedChannels,
-                                  onSelectChannel: didSelectChannel)
-            }
+            ExportContentView(product: product, completedChannels: completedChannels,
+                              onSelectChannel: didSelectChannel)
+            .frame(maxHeight: .infinity, alignment: .top)
             .background(Color(.brandNeutralWhite))
             .navigationTitle(Self.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
@@ -135,6 +134,7 @@ private struct ExportContentView: View {
         }
         .frame(maxWidth: 337)
         .padding(.horizontal, 32)
+        .padding(.top, 20)
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity)
     }
