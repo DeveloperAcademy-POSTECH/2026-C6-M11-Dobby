@@ -118,7 +118,7 @@ private struct Cafe24ProductNameField: View {
             Cafe24EditorHeader(title: "상품명", onReset: onReset)
             TextField("상품명 입력", text: $text)
                 .font(.body)
-                .foregroundStyle(Color(.brandNeutral800))
+                .foregroundStyle(Color(.brandNeutralBlack))
                 .padding(.horizontal, 16)
                 .frame(minHeight: 52)
                 .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
