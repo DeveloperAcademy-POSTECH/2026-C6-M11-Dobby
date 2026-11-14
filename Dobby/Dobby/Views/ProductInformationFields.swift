@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 import UIKit
 
@@ -256,6 +257,9 @@ private struct DescriptionTextView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
+#if DEBUG
+        private static let logger = Logger(subsystem: "com.dobby.Dobby", category: "ProductInputScroll")
+#endif
         var parent: DescriptionTextView
         var appliedFontSize: CGFloat?
         weak var textView: UITextView?
@@ -285,24 +289,24 @@ private struct DescriptionTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             if !parent.isScrollEnabled {
-                updateLayout(in: textView)
+                updateLayout(in: textView, reason: "text-change")
             }
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             textView.typingAttributes = parent.textAttributes
             if !parent.isScrollEnabled {
-                updateLayout(in: textView)
+                updateLayout(in: textView, reason: "selection-change")
             }
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
             if !parent.isScrollEnabled {
-                updateLayout(in: textView)
+                updateLayout(in: textView, reason: "begin-editing")
             }
         }
 
-        func updateLayout(in textView: UITextView) {
+        func updateLayout(in textView: UITextView, reason: String = "layout-update") {
             Task { @MainActor [weak self, weak textView] in
                 await Task.yield()
                 guard let self, let textView, let selection = textView.selectedTextRange else { return }
@@ -323,7 +327,7 @@ private struct DescriptionTextView: UIViewRepresentable {
                     await Task.yield()
                     textView.window?.layoutIfNeeded()
                 }
-                revealCaret(selection.end, in: textView)
+                revealCaret(selection.end, in: textView, reason: reason)
             }
         }
 
@@ -333,11 +337,11 @@ private struct DescriptionTextView: UIViewRepresentable {
             }
             keyboardFrame = frame
             guard let textView, textView.isFirstResponder, !parent.isScrollEnabled else { return }
-            updateLayout(in: textView)
+            updateLayout(in: textView, reason: "keyboard-change")
         }
 
         @MainActor
-        private func revealCaret(_ position: UITextPosition, in textView: UITextView) {
+        private func revealCaret(_ position: UITextPosition, in textView: UITextView, reason: String) {
             guard textView.isFirstResponder,
                   let scrollView = enclosingScrollView(of: textView),
                   !scrollView.isTracking,
@@ -348,7 +352,18 @@ private struct DescriptionTextView: UIViewRepresentable {
             var targetFrame = textView.convert(caretFrame, to: scrollView).insetBy(dx: 0, dy: -12)
             let keyboardOverlap = uncoveredKeyboardOverlapHeight(scrollView: scrollView)
             targetFrame.size.height += keyboardOverlap
+            let beforeOffsetY = scrollView.contentOffset.y
+
+#if DEBUG
+            Self.logger.debug("request reason=\(reason, privacy: .public) offsetY=\(Double(beforeOffsetY)) caretY=\(Double(targetFrame.minY)) targetMaxY=\(Double(targetFrame.maxY)) viewportHeight=\(Double(scrollView.bounds.height)) contentHeight=\(Double(scrollView.contentSize.height)) insetBottom=\(Double(scrollView.adjustedContentInset.bottom)) keyboardOverlap=\(Double(keyboardOverlap))")
+#endif
+
             scrollView.scrollRectToVisible(targetFrame, animated: false)
+
+#if DEBUG
+            let afterOffsetY = scrollView.contentOffset.y
+            Self.logger.debug("result reason=\(reason, privacy: .public) offsetY=\(Double(beforeOffsetY)) -> \(Double(afterOffsetY))")
+#endif
         }
 
         private func enclosingScrollView(of textView: UITextView) -> UIScrollView? {
@@ -359,6 +374,9 @@ private struct DescriptionTextView: UIViewRepresentable {
                 }
                 ancestor = view.superview
             }
+#if DEBUG
+            Self.logger.error("Unable to find the product information scroll view.")
+#endif
             return nil
         }
 
