@@ -98,7 +98,8 @@ private func previewAttributes(measurements: [ProductCopyMeasurement]? = nil) ->
             description: "상품 설명",
             brand: "LEVI'S",
             measurements: "총장 59 cm",
-            measurementItems: measurements
+            measurementItems: measurements,
+            price: "56000"
         )
     )
 }
