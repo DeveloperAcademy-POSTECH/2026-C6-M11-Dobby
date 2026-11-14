@@ -7,8 +7,8 @@ struct ExportUploadAccountCard<Profile: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("이 계정으로 게시물을 올릴게요")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
+                .font(.custom("Pretendard-Regular", size: 14))
+                .foregroundStyle(Color(.brandNeutral500))
             ExportUploadAccountRow(accountLabel: accountLabel, profile: profile)
         }
         .padding(.horizontal, 16)
@@ -28,7 +28,7 @@ private struct ExportUploadAccountRow<Profile: View>: View {
         HStack(spacing: 11) {
             profile()
             Text(accountLabel)
-                .font(.title3.weight(.medium))
+                .font(.custom("Pretendard-SemiBold", size: 17))
                 .lineLimit(1)
         }
     }
