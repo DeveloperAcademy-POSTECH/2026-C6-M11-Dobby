@@ -153,11 +153,13 @@ private struct ProductFieldEditor: View {
     let usesEditingLayout: Bool
     let onCaretChange: ((CGRect) -> Void)?
     @State private var descriptionCaretY: CGFloat = 0
+    @State private var descriptionHeight: CGFloat = 172
     @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 15
 
     var body: some View {
         if isMultiline && usesEditingLayout {
-            DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: true)
+            DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: true,
+                                contentHeight: nil)
                 .focused(focus, equals: focusValue)
                 .frame(height: 172)
                 .overlay(alignment: .topLeading) {
@@ -167,14 +169,15 @@ private struct ProductFieldEditor: View {
                     }
                 }
         } else if isMultiline {
-            DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: false) { caretY, frame in
+            DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: false,
+                                contentHeight: $descriptionHeight) { caretY, frame in
                 if abs(descriptionCaretY - caretY) > 0.5 {
                     descriptionCaretY = caretY
                 }
                 onCaretChange?(frame)
             }
                 .focused(focus, equals: focusValue)
-                .frame(minHeight: 172)
+                .frame(height: descriptionHeight, alignment: .topLeading)
                 .overlay(alignment: .topLeading) {
                     Rectangle()
                         .fill(.clear)
@@ -215,6 +218,7 @@ private struct DescriptionTextView: UIViewRepresentable {
     @Binding var text: String
     let fontSize: CGFloat
     let isScrollEnabled: Bool
+    let contentHeight: Binding<CGFloat>?
     var onCaretChange: ((CGFloat, CGRect) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -249,14 +253,8 @@ private struct DescriptionTextView: UIViewRepresentable {
         }
         view.typingAttributes = attributes
         if !isScrollEnabled {
-            context.coordinator.reportCaret(in: view, afterLayout: true)
+            context.coordinator.updateLayout(in: view)
         }
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
-        guard !isScrollEnabled, let width = proposal.width, width > 0 else { return nil }
-        let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        return CGSize(width: width, height: ceil(size.height))
     }
 
     private var textAttributes: [NSAttributedString.Key: Any] {
@@ -283,31 +281,37 @@ private struct DescriptionTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             if !parent.isScrollEnabled {
-                reportCaret(in: textView)
+                updateLayout(in: textView)
             }
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             textView.typingAttributes = parent.textAttributes
             if !parent.isScrollEnabled {
-                reportCaret(in: textView)
+                updateLayout(in: textView)
             }
         }
 
-        func reportCaret(in textView: UITextView, afterLayout: Bool = false) {
-            let report = { [weak textView, self] in
+        func updateLayout(in textView: UITextView) {
+            let update = { [weak textView, self] in
                 guard let textView, let selection = textView.selectedTextRange else { return }
                 textView.layoutIfNeeded()
+                let width = textView.bounds.width
+                if width > 0, let contentHeight = parent.contentHeight {
+                    let fittingHeight = ceil(textView.sizeThatFits(
+                        CGSize(width: width, height: .greatestFiniteMagnitude)
+                    ).height)
+                    let height = max(172, fittingHeight)
+                    if abs(contentHeight.wrappedValue - height) > 0.5 {
+                        contentHeight.wrappedValue = height
+                    }
+                }
                 let localFrame = textView.caretRect(for: selection.end)
                 parent.onCaretChange?(max(0, localFrame.minY), textView.convert(localFrame, to: nil))
             }
-            if afterLayout {
-                Task { @MainActor in
-                    await Task.yield()
-                    report()
-                }
-            } else {
-                report()
+            Task { @MainActor in
+                await Task.yield()
+                update()
             }
         }
     }
