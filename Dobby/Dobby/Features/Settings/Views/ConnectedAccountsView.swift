@@ -4,7 +4,6 @@ struct ConnectedAccountsView: View {
     @State private var model = ConnectedAccountsModel()
     @State private var cafe24MallID = ""
     @State private var isEnteringCafe24MallID = false
-    @State private var disconnectingPlatform: ConnectedAccountPlatform?
 
     var body: some View {
         ConnectedAccountsContent(
@@ -38,23 +37,6 @@ struct ConnectedAccountsView: View {
             }
         } message: {
             Text("카페24 쇼핑몰 관리자 주소의 ID를 입력해 주세요.")
-        }
-        .confirmationDialog(
-            "\(disconnectingPlatform?.title ?? "") 연결을 해제할까요?",
-            isPresented: Binding(
-                get: { disconnectingPlatform != nil },
-                set: { if !$0 { disconnectingPlatform = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("연결 해제", role: .destructive) {
-                guard let platform = disconnectingPlatform else { return }
-                disconnectingPlatform = nil
-                Task { await model.disconnect(platform) }
-            }
-            Button("취소", role: .cancel) {
-                disconnectingPlatform = nil
-            }
         }
         .alert("계정 연결 안내", isPresented: Binding(
             get: { model.message != nil },
@@ -101,13 +83,13 @@ struct ConnectedAccountsView: View {
             if model.instagramAccount == nil {
                 Task { await model.connectInstagram() }
             } else {
-                disconnectingPlatform = .instagram
+                Task { await model.disconnect(.instagram) }
             }
         case .cafe24:
             if model.cafe24MallID == nil {
                 isEnteringCafe24MallID = true
             } else {
-                disconnectingPlatform = .cafe24
+                Task { await model.disconnect(.cafe24) }
             }
         }
     }
