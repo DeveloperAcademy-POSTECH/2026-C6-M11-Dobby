@@ -180,7 +180,7 @@ private struct Cafe24EditorHeader: View {
     let onReset: () -> Void
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        HStack(alignment: .center) {
             Cafe24EditorTitle(title: title)
             Spacer()
             Cafe24ResetButton(action: onReset)
