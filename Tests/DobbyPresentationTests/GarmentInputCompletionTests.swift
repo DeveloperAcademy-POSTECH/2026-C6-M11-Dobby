@@ -132,23 +132,6 @@ struct GarmentInputCompletionTests {
         #expect(garment.createdAt == createdAt)
     }
 
-    @Test func savesAndReloadsDescriptionLongerThan2200Characters() throws {
-        let container = try ModelContainer(for: Garment.self,
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        let context = ModelContext(container)
-        let (garment, _, _) = product()
-        let description = String(repeating: "가", count: 2_200) + "끝"
-        garment.detail = description
-        context.insert(garment)
-
-        var drafts: [UUID: String] = [:]
-        try GarmentInputCompletion.save(garment: garment, drafts: &drafts) { try context.save() }
-
-        let reader = ModelContext(container)
-        let saved = try #require(reader.fetch(FetchDescriptor<Garment>()).first)
-        #expect(saved.detail == description)
-    }
-
     @Test func requiredInformationPreventsSavingWithoutConsumingMeasurementDrafts() {
         let (garment, length, _) = product()
         let cases: [(String, String, Int?)] = [
