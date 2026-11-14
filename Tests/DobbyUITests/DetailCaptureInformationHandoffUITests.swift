@@ -190,8 +190,7 @@ final class DetailCaptureInformationHandoffUITests: XCTestCase {
     private func resetPhotoStripToStart(_ strip: XCUIElement, maximumSwipes: Int) -> Bool {
         let addPhoto = strip.buttons.matching(identifier: "product-info.add-photo").firstMatch
         for pass in 0...maximumSwipes {
-            // Overflow disables Add, so frame visibility identifies the start
-            // without requiring that button to be enabled or hittable.
+            // Frame visibility identifies the start without depending on hit testing.
             if addPhoto.exists, !addPhoto.frame.isEmpty,
                strip.frame.insetBy(dx: -1, dy: -1).contains(addPhoto.frame) { return true }
             if pass < maximumSwipes { dragPhotoStrip(strip, towardStart: true) }
