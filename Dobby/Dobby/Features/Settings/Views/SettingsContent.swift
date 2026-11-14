@@ -14,6 +14,7 @@ struct SettingsContent: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 20)
 
             SettingsSectionSeparator()
 
@@ -23,6 +24,7 @@ struct SettingsContent: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 20)
 
             SettingsSectionSeparator()
 
@@ -36,12 +38,14 @@ struct SettingsContent: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 20)
 
             SettingsSectionSeparator()
 
             SettingsSection(title: "앱 정보", spacing: 12) {
                 SettingsTextGroup(title: SettingsInformation.versionText)
             }
+            .padding(.horizontal, 20)
         }
     }
 }
@@ -52,7 +56,7 @@ struct SettingsContent: View {
             onPrivacyPolicy: {},
             onSupportMail: {}
         )
-        .padding(20)
+        .padding(.vertical, 20)
         .background(SettingsStyle.background)
     }
 }

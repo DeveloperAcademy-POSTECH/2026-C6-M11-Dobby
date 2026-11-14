@@ -7,18 +7,16 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsHeader()
+                .padding(.horizontal, 20)
 
-            ScrollView {
-                SettingsContent(
-                    onPrivacyPolicy: openPrivacyPolicy,
-                    onSupportMail: openSupportMail
-                )
-                .padding(.top, 29)
-                .padding(.bottom, 24)
-            }
-            .scrollIndicators(.hidden)
+            SettingsContent(
+                onPrivacyPolicy: openPrivacyPolicy,
+                onSupportMail: openSupportMail
+            )
+            .padding(.top, 29)
+            .padding(.bottom, 24)
         }
-        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.top, 3)
         .background(SettingsStyle.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
