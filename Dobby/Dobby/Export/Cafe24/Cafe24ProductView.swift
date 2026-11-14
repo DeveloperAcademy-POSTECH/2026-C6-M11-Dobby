@@ -150,7 +150,7 @@ private struct Cafe24ProductNameField: View {
                 .foregroundStyle(Color(.brandNeutralBlack))
                 .padding(.horizontal, 16)
                 .frame(minHeight: 52)
-                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 }
@@ -172,7 +172,7 @@ private struct Cafe24ProductDescriptionField: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 }
