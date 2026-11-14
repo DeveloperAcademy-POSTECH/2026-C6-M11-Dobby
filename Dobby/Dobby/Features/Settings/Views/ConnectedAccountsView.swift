@@ -8,12 +8,8 @@ struct ConnectedAccountsView: View {
 
     var body: some View {
         ConnectedAccountsContent(
-            instagramSubtitle: model.instagramAccount.map { "@\($0.username)" },
-            cafe24Subtitle: model.cafe24MallID.map { "@\($0).cafe24.com" },
-            isLoadingInstagram: model.isLoading(.instagram),
-            isLoadingCafe24: model.isLoading(.cafe24),
-            onInstagramAction: handleInstagramAction,
-            onCafe24Action: handleCafe24Action
+            state: contentState,
+            onAction: handleAccountAction
         )
         .padding(.horizontal, 20)
         .padding(.top, 10)
@@ -70,87 +66,55 @@ struct ConnectedAccountsView: View {
         }
     }
 
-    private func handleInstagramAction() {
-        if model.instagramAccount == nil {
-            Task { await model.connectInstagram() }
+    private var contentState: ConnectedAccountsState {
+        let instagramState: ConnectedAccountState
+        if let account = model.instagramAccount {
+            instagramState = .connected(account: "@\(account.username)")
         } else {
-            disconnectingPlatform = .instagram
+            instagramState = .disconnected
         }
-    }
 
-    private func handleCafe24Action() {
-        if model.cafe24MallID == nil {
-            isEnteringCafe24MallID = true
+        let cafe24State: ConnectedAccountState
+        if let mallID = model.cafe24MallID {
+            cafe24State = .connected(account: "@\(mallID).cafe24.com")
         } else {
-            disconnectingPlatform = .cafe24
+            cafe24State = .disconnected
+        }
+
+        return ConnectedAccountsState(
+            instagram: ConnectedAccountItem(
+                platform: .instagram,
+                state: instagramState,
+                isWorking: model.isLoading(.instagram)
+            ),
+            cafe24: ConnectedAccountItem(
+                platform: .cafe24,
+                state: cafe24State,
+                isWorking: model.isLoading(.cafe24)
+            )
+        )
+    }
+
+    private func handleAccountAction(_ platform: ConnectedAccountPlatform) {
+        switch platform {
+        case .instagram:
+            if model.instagramAccount == nil {
+                Task { await model.connectInstagram() }
+            } else {
+                disconnectingPlatform = .instagram
+            }
+        case .cafe24:
+            if model.cafe24MallID == nil {
+                isEnteringCafe24MallID = true
+            } else {
+                disconnectingPlatform = .cafe24
+            }
         }
     }
 }
 
-struct ConnectedAccountsContent: View {
-    let instagramSubtitle: String?
-    let cafe24Subtitle: String?
-    let isLoadingInstagram: Bool
-    let isLoadingCafe24: Bool
-    let onInstagramAction: () -> Void
-    let onCafe24Action: () -> Void
-
-    var body: some View {
-        VStack(spacing: 20) {
-            ConnectedAccountRow(
-                title: instagramSubtitle == nil ? "인스타그램 계정 연결 전" : "인스타그램 계정 연결 완료",
-                subtitle: instagramSubtitle,
-                imageName: "InstagramLogo",
-                actionState: instagramSubtitle == nil ? .connect : .disconnect,
-                isWorking: isLoadingInstagram,
-                action: onInstagramAction
-            )
-
-            SettingsStyle.separator
-                .frame(height: 1)
-
-            ConnectedAccountRow(
-                title: cafe24Subtitle == nil ? "카페24 계정 연결 전" : "카페24 계정 연결 완료",
-                subtitle: cafe24Subtitle,
-                imageName: "Cafe24Logo",
-                actionState: cafe24Subtitle == nil ? .connect : .disconnect,
-                isWorking: isLoadingCafe24,
-                action: onCafe24Action
-            )
-        }
-    }
-}
-
-#Preview("연결 전") {
+#Preview {
     NavigationStack {
-        ConnectedAccountsContent(
-            instagramSubtitle: nil,
-            cafe24Subtitle: nil,
-            isLoadingInstagram: false,
-            isLoadingCafe24: false,
-            onInstagramAction: {},
-            onCafe24Action: {}
-        )
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .navigationTitle("연결된 계정 관리")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-#Preview("연결 완료") {
-    NavigationStack {
-        ConnectedAccountsContent(
-            instagramSubtitle: "@dlstnaos",
-            cafe24Subtitle: "@dobbyisvintage.cafe24.com",
-            isLoadingInstagram: false,
-            isLoadingCafe24: false,
-            onInstagramAction: {},
-            onCafe24Action: {}
-        )
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .navigationTitle("연결된 계정 관리")
-        .navigationBarTitleDisplayMode(.inline)
+        ConnectedAccountsView()
     }
 }
