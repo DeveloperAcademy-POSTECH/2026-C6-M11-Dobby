@@ -15,7 +15,8 @@ struct AccountConnectionButton: View {
                     .font(SettingsTypography.labelSmall)
                     .tracking(SettingsTypography.labelSmallTracking)
                     .foregroundStyle(state.foregroundStyle)
-                    .padding(8)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, verticalPadding)
             }
         }
         .background(SettingsStyle.surface)
@@ -27,11 +28,30 @@ struct AccountConnectionButton: View {
         .buttonStyle(.plain)
         .disabled(isWorking)
     }
+
+    private var verticalPadding: CGFloat {
+        switch state {
+        case .connect:
+            0
+        case .disconnect:
+            8
+        }
+    }
 }
 
-#Preview {
+#Preview("연결하기") {
     AccountConnectionButton(
         state: .connect,
+        isWorking: false,
+        action: {}
+    )
+    .padding(20)
+    .background(SettingsStyle.background)
+}
+
+#Preview("연결 해제") {
+    AccountConnectionButton(
+        state: .disconnect,
         isWorking: false,
         action: {}
     )
