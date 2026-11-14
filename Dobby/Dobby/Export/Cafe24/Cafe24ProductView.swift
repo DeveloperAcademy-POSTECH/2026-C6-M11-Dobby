@@ -135,8 +135,8 @@ private struct Cafe24ProductDescriptionField: View {
             Cafe24EditorHeader(title: "상품 설명", onReset: onReset)
             TextField("상품 설명", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.body)
-                .foregroundStyle(Color(.brandNeutral800))
+                .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
+                .foregroundStyle(Color(.brandNeutralBlack))
                 .lineLimit(1...)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -162,16 +162,28 @@ private struct Cafe24PriceInput: View {
     @Binding var priceText: String
 
     var body: some View {
-        HStack(spacing: 8) {
-            TextField("판매가 입력", text: $priceText)
+        HStack(alignment: .center) {
+            TextField("판매가 입력", text: formattedPrice)
                 .keyboardType(.numberPad)
-                .multilineTextAlignment(.trailing)
+                .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
+                .foregroundStyle(Color(.brandNeutralBlack))
+            Spacer()
             Text("원")
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 52)
-        .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var formattedPrice: Binding<String> {
+        Binding {
+            guard let price = Int(priceText.filter(\.isNumber)) else { return priceText }
+            return price.formatted(.number.locale(Locale(identifier: "ko_KR")))
+        } set: { text in
+            priceText = String(text.filter(\.isNumber))
+        }
     }
 }
 
