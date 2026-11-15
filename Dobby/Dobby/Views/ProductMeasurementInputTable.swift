@@ -101,12 +101,12 @@ private struct ProductMeasurementNumber: View {
     @Binding var text: String
     let focus: FocusState<UUID?>.Binding
 
-    @ScaledMetric(relativeTo: .subheadline) private var valueFontSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var valueFontSize: CGFloat = 17
 
     private var inputWidth: CGFloat {
         if text.isEmpty { return 24 }
         let font = UIFont(name: "Pretendard-Regular", size: valueFontSize) ?? UIFont.systemFont(ofSize: valueFontSize)
-        return min(58, max(1, ceil((text as NSString).size(withAttributes: [.font: font, .kern: -0.23]).width)))
+        return min(58, max(1, ceil((text as NSString).size(withAttributes: [.font: font, .kern: -0.43]).width)))
     }
 
     var body: some View {
@@ -118,11 +118,11 @@ private struct ProductMeasurementNumber: View {
                 .multilineTextAlignment(.center)
                 .focused(focus, equals: value.id)
                 .frame(width: inputWidth)
-                .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
+                .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
             Text("cm")
         }
-        .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
-        .tracking(-0.23)
+        .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
+        .tracking(-0.43)
         .frame(maxWidth: .infinity)
         .frame(height: 64)
         .foregroundStyle(Color("BrandNeutralBlack"))
