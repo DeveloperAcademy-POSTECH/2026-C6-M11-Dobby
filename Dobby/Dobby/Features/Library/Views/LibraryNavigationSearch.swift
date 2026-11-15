@@ -93,10 +93,14 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
             super.init()
             search.delegate = self
             searchContainer.backgroundColor = UIColor(LibraryStyle.background)
-            searchContainer.clipsToBounds = true
+            // The native search field casts a soft shadow outside this region.
+            // Clipping it at the bottom creates a visible horizontal background seam.
+            searchContainer.clipsToBounds = false
             searchContainer.addSubview(search)
             search.placeholder = "Search"
             search.searchBarStyle = .minimal
+            search.backgroundColor = .clear
+            search.backgroundImage = UIImage()
             let field = search.searchTextField
             statusBackground.backgroundColor = UIColor(LibraryStyle.background)
             statusBackground.isUserInteractionEnabled = false
