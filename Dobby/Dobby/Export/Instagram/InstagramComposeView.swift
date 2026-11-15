@@ -181,6 +181,7 @@ private struct InstagramGrowingCaptionTextView: UIViewRepresentable {
         var parent: InstagramGrowingCaptionTextView
         weak var textView: UITextView?
         private var keyboardFrame = CGRect.null
+        private var layoutTask: Task<Void, Never>?
 
         init(_ parent: InstagramGrowingCaptionTextView) {
             self.parent = parent
@@ -218,9 +219,10 @@ private struct InstagramGrowingCaptionTextView: UIViewRepresentable {
         }
 
         func updateLayout(in textView: UITextView) {
-            Task { @MainActor [weak self, weak textView] in
+            layoutTask?.cancel()
+            layoutTask = Task { @MainActor [weak self, weak textView] in
                 await Task.yield()
-                guard let self, let textView, let selection = textView.selectedTextRange else { return }
+                guard !Task.isCancelled, let self, let textView else { return }
 
                 textView.layoutIfNeeded()
                 let width = textView.bounds.width
@@ -237,9 +239,8 @@ private struct InstagramGrowingCaptionTextView: UIViewRepresentable {
                 }
                 if heightChanged {
                     await Task.yield()
-                    textView.window?.layoutIfNeeded()
                 }
-                revealCaret(selection.end, in: textView)
+                await revealCaret(in: textView)
             }
         }
 
@@ -253,13 +254,25 @@ private struct InstagramGrowingCaptionTextView: UIViewRepresentable {
         }
 
         @MainActor
-        private func revealCaret(_ position: UITextPosition, in textView: UITextView) {
-            guard textView.isFirstResponder,
-                  let scrollView = enclosingScrollView(of: textView),
+        private func revealCaret(in textView: UITextView) async {
+            guard let scrollView = enclosingScrollView(of: textView) else { return }
+
+            // UIKit may report the new selection before the scroll view releases the tap.
+            for _ in 0..<8 {
+                guard !Task.isCancelled, textView.isFirstResponder,
+                      !scrollView.isDragging, !scrollView.isDecelerating else { return }
+                guard scrollView.isTracking else { break }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+
+            guard !Task.isCancelled, textView.isFirstResponder,
                   !scrollView.isTracking,
                   !scrollView.isDragging,
-                  !scrollView.isDecelerating else { return }
+                  !scrollView.isDecelerating,
+                  let window = textView.window else { return }
 
+            window.layoutIfNeeded()
+            guard !Task.isCancelled, let position = textView.selectedTextRange?.end else { return }
             let caretFrame = textView.caretRect(for: position)
             var targetFrame = textView.convert(caretFrame, to: scrollView).insetBy(dx: 0, dy: -12)
             targetFrame.size.height += uncoveredKeyboardOverlapHeight(scrollView: scrollView)
