@@ -15,7 +15,7 @@ struct FruitsExportContent: View {
 
             FruitsCopyCard(product: product, onCopy: onCopy)
 
-            Text("판매 페이지를 열고 제품명, 설명, 브랜드를 붙여넣어 주세요\n · 실측 사이즈는 화면에 뜬 PIP를 보고 입력해 주세요")
+            Text("판매 페이지를 열고 제품명, 설명, 브랜드를 붙여넣어 주세요\n • 실측 사이즈는 화면에 뜬 PIP를 보고 입력해 주세요")
                 .font(.custom("Pretendard-Regular", fixedSize: 14))
                 .foregroundStyle(Color("BrandNeutral500"))
         }

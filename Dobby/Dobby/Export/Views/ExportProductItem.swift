@@ -90,18 +90,24 @@ private struct ExportProductItemMetadata: View {
         VStack(alignment: .leading, spacing: 4) {
             if let brand {
                 Text(brand)
-                    .font(.headline.weight(.semibold))
+                    .font(Font.custom("Pretendard-SemiBold", fixedSize: 17))
                     .lineLimit(1)
+                    .foregroundColor(.brandNeutralBlack)
+            } else {
+                Text("No Brand")
+                    .font(Font.custom("Pretendard-SemiBold", fixedSize: 17))
+                    .lineLimit(1)
+                    .foregroundColor(.brandNeutral500)
             }
 
             Text(name)
-                .font(.subheadline.weight(.regular))
+                .font(Font.custom("Pretendard", fixedSize: 15))
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let priceText {
                 Text(priceText)
-                    .font(.system(size: 14, weight: .regular))
+                    .font(Font.custom("Pretendard", fixedSize: 14))
                     .foregroundStyle(Color(.brandNeutral900))
             }
         }
@@ -156,6 +162,16 @@ private extension String {
     ExportProductItemMetadata(
         name: "베이프 카모플라주 후드 셔츠 재킷",
         brand: "Bape",
+        priceText: "155,000원"
+    )
+    .frame(width: 175)
+    .background(Color(.brandNeutral50))
+}
+
+#Preview("상품 정보 브랜드 없음", traits: .sizeThatFitsLayout) {
+    ExportProductItemMetadata(
+        name: "베이프 카모플라주 후드 셔츠 재킷",
+        brand: nil,
         priceText: "155,000원"
     )
     .frame(width: 175)

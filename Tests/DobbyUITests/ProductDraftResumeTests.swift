@@ -35,12 +35,12 @@ final class ProductDraftResumeTests: XCTestCase {
         openNewInformation(in: app)
 
         let done = app.buttons["product-info.done"]
-        XCTAssertFalse(done.isEnabled)
+        XCTAssertTrue(done.isEnabled)
         returnFromEmptyInformationToDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         assertResumedStage("제품 정보 입력", app: app)
 
-        // One populated field enables Done even while other required fields are missing.
+        // Done stays enabled while required fields are missing, including after resume.
         let name = "QA partial information"
         replaceText(in: field("name", in: app), with: name, app: app)
         XCTAssertTrue(done.isEnabled)
@@ -66,7 +66,7 @@ final class ProductDraftResumeTests: XCTestCase {
 
         // Clearing the last value must restore the detail-return route on a resumed draft too.
         replaceText(in: field("name", in: app), with: "", app: app)
-        XCTAssertFalse(done.isEnabled)
+        XCTAssertTrue(done.isEnabled)
         returnFromEmptyInformationToDetails(in: app)
     }
 

@@ -7,8 +7,7 @@ enum ProductPhotoImportStore {
     /// Writes only a new product copy. Album originals and measurement evidence
     /// remain untouched, and the caller's isolated edit context owns persistence.
     static func append(_ data: Data, to garment: Garment, in context: ModelContext) async throws {
-        guard garment.modelContext === context,
-              garment.productPhotos.count < ProductPhotoModel.maximumSelectionCount else { throw ImportError.limitReached }
+        guard garment.modelContext === context else { throw ImportError.detachedGarment }
         let id = UUID()
         let fileName = "\(garment.id.uuidString)-\(id.uuidString).jpg"
         let destination = GarmentStore.photosDirectory.appending(path: fileName)
@@ -17,8 +16,7 @@ enum ProductPhotoImportStore {
         }.value
         do {
             try Task.checkCancellation()
-            guard garment.modelContext === context,
-                  garment.productPhotos.count < ProductPhotoModel.maximumSelectionCount else { throw ImportError.limitReached }
+            guard garment.modelContext === context else { throw ImportError.detachedGarment }
             let wasEmpty = garment.productPhotos.isEmpty
             let photo = GarmentPhoto(fileName: fileName, role: wasEmpty ? .thumbnail : .detail,
                                      order: (garment.photos.map(\.order).max() ?? -1) + 1)
@@ -82,11 +80,11 @@ enum ProductPhotoImportStore {
     }
 
     nonisolated enum ImportError: LocalizedError {
-        case unreadablePhoto, limitReached
+        case unreadablePhoto, detachedGarment
         var errorDescription: String? {
             switch self {
             case .unreadablePhoto: "사진을 읽을 수 없어요. 다른 사진을 선택해 주세요."
-            case .limitReached: "제품 사진은 최대 10장까지 등록할 수 있어요."
+            case .detachedGarment: "제품 정보를 확인할 수 없어요. 다시 시도해 주세요."
             }
         }
     }

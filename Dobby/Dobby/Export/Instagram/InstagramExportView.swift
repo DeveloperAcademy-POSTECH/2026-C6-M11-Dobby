@@ -16,6 +16,8 @@ private enum InstagramUploadState {
 }
 
 struct InstagramExportView: View {
+    private static let navigationTitle = "인스타그램에 업로드하기"
+
     let product: ExportProduct
     let onRequestExit: (ExportReturnDestination) -> Void
     let onPublished: (InstagramPublishResult) -> Void
@@ -69,11 +71,14 @@ struct InstagramExportView: View {
                 )
             }
         }
-        .navigationTitle("인스타그램에 업로드하기")
+        .navigationTitle(Self.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
         .toolbar(showsCompletion ? .hidden : .visible, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                ExportToolbarTitle(title: Self.navigationTitle)
+            }
             if !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(
