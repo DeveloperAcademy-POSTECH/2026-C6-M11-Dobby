@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct FruitsCopyFieldView: View {
     let field: ProductCopyField
@@ -71,9 +72,16 @@ private struct FruitsCopyFieldContent: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             } else {
                 Text("No Brand")
-                    .font(Font.custom("Pretendard", fixedSize: 17))
+                    .font(.custom("Pretendard-Regular", fixedSize: 17))
+                    .tracking(-0.43)
+                    .lineSpacing(
+                        max(
+                            0,
+                            22 - (UIFont(name: "Pretendard-Regular", size: 17)?.lineHeight ?? 17)
+                        )
+                    )
                     .foregroundColor(Color("BrandNeutral500"))
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 22, alignment: .topLeading)
             }
         }
         .frame(maxWidth: 328, alignment: .topLeading)
