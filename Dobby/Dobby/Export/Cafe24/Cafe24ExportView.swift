@@ -15,6 +15,8 @@ private enum Cafe24UploadState {
 }
 
 struct Cafe24ExportView: View {
+    private static let navigationTitle = "카페24로 업로드하기"
+
     let onRequestExit: (ExportReturnDestination) -> Void
     let onPublished: (Cafe24PublishResult) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -47,9 +49,10 @@ struct Cafe24ExportView: View {
                     onOpenLibrary: { onRequestExit(.library) },
                     onContinueToUpload: { showsConnectionCompletion = false }
                 )
-            } else if connectedMallID != nil {
+            } else if let connectedMallID {
                 Cafe24ProductView(
                     draft: $draft,
+                    mallID: connectedMallID,
                     isCompleted: uploadState.isCompleted,
                     isDisabled: uploadState.isUploading
                 )
@@ -61,11 +64,14 @@ struct Cafe24ExportView: View {
                 )
             }
         }
-        .navigationTitle("카페24로 내보내기")
+        .navigationTitle(Self.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
         .toolbar(showsConnectionCompletion ? .hidden : .visible, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                ExportToolbarTitle(title: Self.navigationTitle)
+            }
             if !uploadState.isUploading && !showsConnectionCompletion {
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(

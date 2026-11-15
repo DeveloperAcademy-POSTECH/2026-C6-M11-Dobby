@@ -205,6 +205,7 @@ private extension ProductCopyField {
         case .description: "설명을 복사했어요"
         case .brand: "브랜드를 복사했어요"
         case .measurements: "실측 사이즈를 복사했어요"
+        case .price: "가격을 복사했어요"
         }
     }
 }

@@ -1,8 +1,14 @@
 import SwiftUI
 import UIKit
 
+private nonisolated enum Cafe24InputField: Hashable {
+    case productName, productDescription, price
+}
+
 struct Cafe24ProductView: View {
     @Binding var draft: Cafe24ExportDraft
+    @FocusState private var focusedField: Cafe24InputField?
+    let mallID: String
     let isCompleted: Bool
     let isDisabled: Bool
 
@@ -12,31 +18,57 @@ struct Cafe24ProductView: View {
                 if isCompleted {
                     Cafe24CompletionHeader()
                 }
+                ExportUploadAccountCard(accountLabel: "@\(mallID).cafe24.com") {
+                    EmptyView()
+                }
+                .onTapGesture(perform: dismissKeyboard)
                 Cafe24ProductPhotos(photos: draft.photos)
-                Cafe24ProductNameField(text: $draft.productName) {
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismissKeyboard)
+                Cafe24ProductNameField(text: $draft.productName, focus: $focusedField) {
+                    dismissKeyboard()
                     draft.resetProductName()
                 }
                 .disabled(areFieldsDisabled)
-                Cafe24ProductDescriptionField(text: $draft.productDescription) {
+                Cafe24ProductDescriptionField(text: $draft.productDescription, focus: $focusedField) {
+                    dismissKeyboard()
                     draft.resetProductDescription()
                 }
                 .disabled(areFieldsDisabled)
-                Cafe24PriceField(priceText: $draft.priceText) {
+                Cafe24PriceField(priceText: $draft.priceText, focus: $focusedField) {
+                    dismissKeyboard()
                     draft.resetPrice()
                 }
                 .disabled(areFieldsDisabled)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 16)
+            .padding(.top, 20)
             .padding(.bottom, 43)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismissKeyboard)
+            }
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color(.brandNeutralWhite).ignoresSafeArea())
+        .background {
+            Color(.brandNeutralWhite)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: dismissKeyboard)
+                .ignoresSafeArea()
+        }
+        .onChange(of: areFieldsDisabled) {
+            if areFieldsDisabled { dismissKeyboard() }
+        }
     }
 
     private var areFieldsDisabled: Bool { isDisabled || isCompleted }
+
+    private func dismissKeyboard() {
+        focusedField = nil
+    }
 }
 
 private struct Cafe24CompletionHeader: View {
@@ -111,67 +143,86 @@ private struct Cafe24ProductPhoto: View {
 
 private struct Cafe24ProductNameField: View {
     @Binding var text: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품명", onReset: onReset)
             TextField("상품명 입력", text: $text)
+                .focused(focus, equals: .productName)
                 .font(.body)
-                .foregroundStyle(Color(.brandNeutral800))
+                .foregroundStyle(Color(.brandNeutralBlack))
                 .padding(.horizontal, 16)
                 .frame(minHeight: 52)
-                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 }
 
 private struct Cafe24ProductDescriptionField: View {
     @Binding var text: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품 설명", onReset: onReset)
             TextField("상품 설명", text: $text, axis: .vertical)
+                .focused(focus, equals: .productDescription)
                 .textFieldStyle(.plain)
-                .font(.body)
-                .foregroundStyle(Color(.brandNeutral800))
+                .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
+                .foregroundStyle(Color(.brandNeutralBlack))
                 .lineLimit(1...)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 }
 
 private struct Cafe24PriceField: View {
     @Binding var priceText: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "판매가", onReset: onReset)
-            Cafe24PriceInput(priceText: $priceText)
+            Cafe24PriceInput(priceText: $priceText, focus: focus)
         }
     }
 }
 
 private struct Cafe24PriceInput: View {
     @Binding var priceText: String
+    let focus: FocusState<Cafe24InputField?>.Binding
 
     var body: some View {
-        HStack(spacing: 8) {
-            TextField("판매가 입력", text: $priceText)
+        HStack(alignment: .center) {
+            TextField("판매가 입력", text: formattedPrice)
+                .focused(focus, equals: .price)
                 .keyboardType(.numberPad)
-                .multilineTextAlignment(.trailing)
+                .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
+                .foregroundStyle(Color(.brandNeutralBlack))
+            Spacer()
             Text("원")
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 52)
-        .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var formattedPrice: Binding<String> {
+        Binding {
+            guard let price = Int(priceText.filter(\.isNumber)) else { return priceText }
+            return price.formatted(.number.locale(Locale(identifier: "ko_KR")))
+        } set: { text in
+            priceText = String(text.filter(\.isNumber))
+        }
     }
 }
 
@@ -180,7 +231,7 @@ private struct Cafe24EditorHeader: View {
     let onReset: () -> Void
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        HStack(alignment: .center) {
             Cafe24EditorTitle(title: title)
             Spacer()
             Cafe24ResetButton(action: onReset)
@@ -220,6 +271,7 @@ private struct Cafe24ResetButton: View {
 
     Cafe24ProductView(
         draft: $draft,
+        mallID: "myshop",
         isCompleted: false,
         isDisabled: false
     )
@@ -230,6 +282,7 @@ private struct Cafe24ResetButton: View {
 
     Cafe24ProductView(
         draft: $draft,
+        mallID: "myshop",
         isCompleted: true,
         isDisabled: false
     )
@@ -270,8 +323,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("상품명 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var text = "빈티지 재킷"
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24ProductNameField(text: $text, onReset: {})
+    Cafe24ProductNameField(text: $text, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))
@@ -279,8 +333,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("상품 설명 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var text = "가볍게 걸치기 좋은 빈티지 재킷입니다."
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24ProductDescriptionField(text: $text, onReset: {})
+    Cafe24ProductDescriptionField(text: $text, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))
@@ -288,8 +343,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("판매가 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var priceText = "89,000"
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24PriceField(priceText: $priceText, onReset: {})
+    Cafe24PriceField(priceText: $priceText, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))

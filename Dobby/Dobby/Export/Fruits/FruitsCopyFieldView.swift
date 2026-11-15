@@ -43,6 +43,7 @@ struct FruitsCopyFieldView: View {
         case .description: "설명"
         case .brand: "브랜드"
         case .measurements: "실측 사이즈"
+        case .price: "가격"
         }
     }
 }

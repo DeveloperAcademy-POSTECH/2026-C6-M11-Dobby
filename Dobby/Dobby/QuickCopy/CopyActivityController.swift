@@ -65,7 +65,8 @@ final class CopyActivityController {
                                              description: product.marketplacePayload.description,
                                              brand: product.marketplacePayload.brand,
                                              measurements: product.marketplacePayload.measurements,
-                                             measurementItems: measurementItems
+                                             measurementItems: measurementItems,
+                                             price: product.marketplacePayload.price
                                          )
                                      ),
                                      content: ActivityContent(state: .init(), staleDate: next.createdAt.addingTimeInterval(8 * 3600)), pushType: nil)
