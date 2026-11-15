@@ -31,7 +31,6 @@ struct InfoInputView: View {
     @State private var isImportingPhotos = false
     @State private var generationRequestID: UUID?
     @State private var generationError: String?
-    @State private var showsReplacementConfirmation = false
     @FocusState private var focusedInformationField: ProductInformationField?
     @FocusState private var focusedMeasurementID: UUID?
     static let measurementTableID = "product-info.measurement-table"
@@ -194,15 +193,6 @@ struct InfoInputView: View {
         } message: {
             Text(generationError ?? "잠시 후 다시 시도하거나 직접 입력해 주세요.")
         }
-        .confirmationDialog("작성한 정보를 AI 내용으로 바꿀까요?", isPresented: $showsReplacementConfirmation,
-                            titleVisibility: .visible) {
-            Button("AI로 바꾸기", action: requestGeneration)
-                .accessibilityIdentifier("product-ai.replace")
-            Button("취소", role: .cancel) { }
-                .accessibilityIdentifier("product-ai.replace-cancel")
-        } message: {
-            Text("제품명, 설명, 브랜드가 새로 생성됩니다. 가격과 실측 사이즈는 유지돼요.")
-        }
         .overlay {
             if generationRequestID != nil, onAIGenerationPresentationChange == nil {
                 ProductAutofillLoadingView(onCancel: cancelGeneration)
@@ -211,14 +201,7 @@ struct InfoInputView: View {
     }
 
     private var generateInformationButton: some View {
-        Button {
-            dismissKeyboard()
-            if ProductAutofillInputSnapshot(garment: garment).hasInformation {
-                showsReplacementConfirmation = true
-            } else {
-                requestGeneration()
-            }
-        } label: {
+        Button(action: requestGeneration) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 16, weight: .medium))

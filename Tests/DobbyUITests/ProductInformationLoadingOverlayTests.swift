@@ -32,6 +32,11 @@ final class ProductInformationLoadingOverlayTests: XCTestCase {
         XCTAssertTrue(generate.isEnabled)
         XCTAssertTrue(app.buttons["product-info.done"].isEnabled)
         XCTAssertEqual(app.textFields["product-info.name"].value as? String, "AI 테스트 네이비 집업 후드")
+        XCTAssertEqual(generate.label, "다시 정보 생성하기")
+        startGeneration(in: app)
+        XCTAssertTrue(loading.waitForExistence(timeout: 5))
+        XCTAssertTrue(generate.waitForExistence(timeout: 12))
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 5))
     }
 
     func testGenerationFailureRestoresErrorActionsAndManualEditing() {
@@ -68,9 +73,8 @@ final class ProductInformationLoadingOverlayTests: XCTestCase {
 
     private func startGeneration(in app: XCUIApplication) {
         app.buttons["product-ai.generate"].tap()
-        let replace = app.buttons["product-ai.replace"].firstMatch
-        XCTAssertTrue(replace.waitForExistence(timeout: 5))
-        replace.tap()
+        XCTAssertFalse(app.buttons["product-ai.replace"].firstMatch.exists)
+        XCTAssertFalse(app.sheets["작성한 정보를 AI 내용으로 바꿀까요?"].exists)
     }
 
     private func brightness(of image: UIImage, at point: CGPoint, screenWidth: CGFloat) throws -> Double {
