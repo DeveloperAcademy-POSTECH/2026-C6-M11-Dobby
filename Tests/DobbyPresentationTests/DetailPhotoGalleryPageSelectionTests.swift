@@ -40,6 +40,38 @@ struct DetailPhotoGalleryPageSelectionTests {
     }
 
     @MainActor
+    @Test func systemRetainedPageKeepsItsIdentityAfterFilmstripNavigationPrunesTheCache() throws {
+        struct Photo: Identifiable { let id: String }
+        let photos = ["a", "b", "c", "d", "e", "f"].map { Photo(id: $0) }
+        var focusedID = "a"
+        let selection = Binding(get: { focusedID }, set: { focusedID = $0 })
+        let pager = DetailPhotoGalleryPager(items: photos, focusedID: selection,
+            reduceMotion: true, onTransitionChanged: { _ in }) { Text($0.id) }
+        let coordinator = pager.makeCoordinator()
+        let controller = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal)
+        controller.dataSource = coordinator
+        controller.delegate = coordinator
+        coordinator.update(pager, in: controller)
+        let retainedA = try #require(controller.viewControllers?.first)
+        for id in ["d", "f"] {
+            focusedID = id
+            coordinator.update(pager, in: controller)
+        }
+
+        let afterA = try #require(coordinator.pageViewController(controller, viewControllerAfter: retainedA))
+        #expect((afterA as? DetailPhotoGalleryPageController<Text>)?.photoID == "b",
+            "A's identity must not disappear when its decoded-page cache entry is pruned")
+
+        // A late UIKit swipe-completion callback must likewise restore the
+        // actual visible photo's selection, even for a controller outside cache.
+        let previous = try #require(controller.viewControllers?.first)
+        controller.setViewControllers([retainedA], direction: .reverse, animated: false)
+        coordinator.pageViewController(controller, didFinishAnimating: true,
+            previousViewControllers: [previous], transitionCompleted: true)
+        #expect(focusedID == "a")
+    }
+
+    @MainActor
     @Test func cancelledNativeSwipeKeepsSelectionAndDeletionReusesTheAdjacentPage() throws {
         struct Photo: Identifiable { let id: String }
         var focusedID = "b"

@@ -29,7 +29,7 @@ struct DetailPhotoGalleryPager<Item: Identifiable, Page: View>: UIViewController
     final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
         private var parent: DetailPhotoGalleryPager
         private var previousIDs: [String] = []
-        private var controllers: [String: UIHostingController<Page>] = [:]
+        private var controllers: [String: DetailPhotoGalleryPageController<Page>] = [:]
         private var currentID: String?
         private var isTransitioning = false
         private var transitionRevision = 0
@@ -108,10 +108,10 @@ struct DetailPhotoGalleryPager<Item: Identifiable, Page: View>: UIViewController
             return pageController(for: ids[index + offset])
         }
 
-        private func pageController(for id: String) -> UIHostingController<Page>? {
+        private func pageController(for id: String) -> DetailPhotoGalleryPageController<Page>? {
             if let cached = controllers[id] { return cached }
             guard let item = parent.items.first(where: { $0.id == id }) else { return nil }
-            let controller = UIHostingController(rootView: parent.page(item))
+            let controller = DetailPhotoGalleryPageController(photoID: id, rootView: parent.page(item))
             controller.safeAreaRegions = []
             controller.view.backgroundColor = .clear
             controllers[id] = controller
@@ -119,8 +119,7 @@ struct DetailPhotoGalleryPager<Item: Identifiable, Page: View>: UIViewController
         }
 
         private func id(for controller: UIViewController?) -> String? {
-            guard let controller else { return nil }
-            return controllers.first { $0.value === controller }?.key
+            (controller as? DetailPhotoGalleryPageController<Page>)?.photoID
         }
 
         private func pruneControllers() {
@@ -141,6 +140,22 @@ struct DetailPhotoGalleryPager<Item: Identifiable, Page: View>: UIViewController
                 callback(transitioning)
             }
         }
+    }
+}
+
+/// UIKit may retain a page after it leaves our decoded-page cache. Its identity
+/// must remain available for later data-source and completed-swipe callbacks.
+@MainActor
+final class DetailPhotoGalleryPageController<Page: View>: UIHostingController<Page> {
+    let photoID: String
+
+    init(photoID: String, rootView: Page) {
+        self.photoID = photoID
+        super.init(rootView: rootView)
+    }
+
+    required dynamic init?(coder: NSCoder) {
+        fatalError("Gallery pages are created with a photo identity and SwiftUI content")
     }
 }
 
