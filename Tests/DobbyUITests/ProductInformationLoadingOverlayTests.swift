@@ -54,6 +54,41 @@ final class ProductInformationLoadingOverlayTests: XCTestCase {
         XCTAssertEqual(app.textFields["product-info.name"].value as? String, "90s 나이키 트랙탑")
     }
 
+    func testCloseCancelsGenerationPreservesInformationAndAllowsRetry() {
+        continueAfterFailure = false
+        let app = openEditing(result: "delay")
+        defer { app.terminate() }
+        let name = app.textFields["product-info.name"].value as? String
+        let detail = app.textViews["product-info.detail"].value as? String
+        let brand = app.textFields["product-info.brand"].value as? String
+        startGeneration(in: app)
+        let cancel = app.buttons["product-ai.cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "ai-loading-with-close-button"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        cancel.tap()
+        let loading = app.descendants(matching: .any)["product-ai.loading"].firstMatch
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["product-ai.generate"].isEnabled)
+        XCTAssertTrue(app.buttons["product-info.done"].isEnabled)
+        XCTAssertEqual(app.textFields["product-info.name"].value as? String, name)
+        XCTAssertEqual(app.textViews["product-info.detail"].value as? String, detail)
+        XCTAssertEqual(app.textFields["product-info.brand"].value as? String, brand)
+        let unchanged = NSPredicate { _, _ in
+            (app.textFields["product-info.name"].value as? String) != name
+        }
+        let lateResult = XCTNSPredicateExpectation(predicate: unchanged, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [lateResult], timeout: 6), .timedOut)
+        XCTAssertFalse(app.buttons["product-ai.retry"].firstMatch.exists)
+        startGeneration(in: app)
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["product-ai.generate"].waitForExistence(timeout: 12))
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["product-info.name"].value as? String, "AI 테스트 네이비 집업 후드")
+    }
+
     private func openEditing(result: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
