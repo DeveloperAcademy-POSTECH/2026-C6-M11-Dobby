@@ -62,7 +62,8 @@ struct ProductInputPhotoSection: View {
         .photosPicker(isPresented: $showsPhotoPicker, selection: photoPickerSelection,
                       maxSelectionCount: nil, matching: .images)
         .fullScreenCover(isPresented: $showsCamera) {
-            ProductInputCameraPicker(garmentID: garment.id, fixtureSource: fixtureCameraSource,
+            ProductInputCameraPicker(garmentID: garment.id,
+                captureSessionID: garment.measurementPhoto?.measurementSessionID, fixtureSource: fixtureCameraSource,
                 onCancel: { showsCamera = false }) { photos in
                 pendingPhotoCount = photos.count
                 setImporting(true)

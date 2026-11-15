@@ -11,7 +11,7 @@ struct ProductInputCameraPicker: View {
     private let onComplete: ([CapturedAsset]) async throws -> Void
     @State private var hasFinished = false
 
-    init(garmentID: UUID, fixtureSource: CapturedAsset.Source? = nil,
+    init(garmentID: UUID, captureSessionID: UUID? = nil, fixtureSource: CapturedAsset.Source? = nil,
          onCancel: @escaping () -> Void,
          onComplete: @escaping ([CapturedAsset]) async throws -> Void) {
         self.onCancel = onCancel
@@ -19,6 +19,7 @@ struct ProductInputCameraPicker: View {
 #if DEBUG
         if ProductAppStorage.fixtureDirectory != nil, let fixtureSource {
             _model = State(initialValue: AdditionalProductPhotoModel(garmentID: garmentID,
+                sessionID: captureSessionID ?? UUID(),
                 captureProvider: ProductPhotoFixtureCaptureProvider(seed: fixtureSource,
                     directory: ProductAppStorage.fixtureDirectory?.appending(path: "input-captures"))))
             _permission = State(initialValue: CameraPermission(authorizer: MockCameraAuthorization()))
@@ -28,7 +29,8 @@ struct ProductInputCameraPicker: View {
         }
 #endif
         let session = CameraPreviewSession()
-        _model = State(initialValue: AdditionalProductPhotoModel(garmentID: garmentID, captureProvider: session))
+        _model = State(initialValue: AdditionalProductPhotoModel(garmentID: garmentID,
+            sessionID: captureSessionID ?? UUID(), captureProvider: session))
         _camera = State(initialValue: session)
         _permission = State(initialValue: CameraPermission(authorizer: SystemCameraAuthorization()))
         previewSource = nil

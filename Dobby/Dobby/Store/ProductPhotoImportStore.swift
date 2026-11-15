@@ -13,6 +13,7 @@ enum ProductPhotoImportStore {
         try Task.checkCancellation()
         guard garment.modelContext === context,
               !photos.isEmpty, Set(photos.map(\.id)).count == photos.count,
+              Set(photos.map(\.id)).isDisjoint(with: garment.photos.map(\.id)),
               Set(photos.map(\.sessionID)).count == 1,
               photos.allSatisfy({ $0.garmentID == garment.id && $0.purpose == .detail }) else {
             throw CameraFailure.mismatchedCapture
@@ -27,7 +28,10 @@ enum ProductPhotoImportStore {
                     guard case let .localFile(source, _) = photo.source, source.isFileURL else {
                         throw ImportError.unreadablePhoto
                     }
-                    let id = UUID()
+                    // Preserve capture identity for the existing Photos saving
+                    // receipt when the creation flow revisits detail capture.
+                    // The file is still a separate product-owned JPEG copy.
+                    let id = photo.id
                     let destination = directory.appending(path: "\(garmentID.uuidString)-\(id.uuidString).jpg")
                     let size = try autoreleasepool {
                         try writeJPEG(Data(contentsOf: source), to: destination)

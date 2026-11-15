@@ -62,8 +62,9 @@ struct AdditionalProductPhotoCaptureTests {
         #expect(!GarmentInformationValidation.canAttemptCompletion(f.garment))
         #expect(Set(photos.map(\.id)).count == 13)
         // Canceling the camera's temp files after the handoff cannot remove any
-        // of the product copies, whose filenames/IDs are independently owned.
-        #expect(photos.dropFirst(2).allSatisfy { $0.id != captures[0].id })
+        // of the product copies, whose files are independently owned.
+        #expect(Array(photos.dropFirst(2)).map(\.id) == captures.map(\.id))
+        #expect(photos.dropFirst(2).allSatisfy { GarmentStore.url(for: $0) != f.captureURL })
         try FileManager.default.removeItem(at: f.captureURL)
         #expect(photos.allSatisfy { FileManager.default.fileExists(atPath: GarmentStore.url(for: $0).path) })
     }
@@ -87,6 +88,35 @@ struct AdditionalProductPhotoCaptureTests {
         #expect(Array(f.garment.productPhotos.prefix(2)).map(\.id) == beforeIDs)
         #expect(f.importedFileNames.count == 1)
         #expect(try Data(contentsOf: f.captureURL) == f.bytes)
+    }
+
+    @Test func captureIdentitySurvivesProductCopyAndCreationSessionSynchronization() async throws {
+        let f = try Fixture()
+        defer { f.removeFiles() }
+        let measurementPhoto = try #require(f.garment.productPhotos.first)
+        let measurement = CapturedAsset(id: measurementPhoto.id, sessionID: f.captureSessionID,
+            garmentID: f.garment.id, purpose: .measurement, capturedAt: .now,
+            source: .localFile(GarmentStore.url(for: measurementPhoto), metadata: f.metadata))
+        let originalFlow = try ProductPhotoModel(input: .init(sessionID: f.captureSessionID,
+            garmentID: f.garment.id, measurement: measurement), captureProvider: Provider())
+        let captured = f.capture(at: 0)
+        try await ProductPhotoImportStore.appendCapturedPhotos([captured], to: f.garment, in: f.context)
+        try originalFlow.synchronizeStoredProductPhotos(f.garment.productPhotos)
+        let synchronized = try #require(originalFlow.detailPhotos.first { $0.id == captured.id })
+        let receipt = DetailPhotoLibraryReceipt(schemaVersion: 1, captureID: captured.id,
+            captureSessionID: captured.sessionID, photoLibraryIdentifier: "fixture-only",
+            savedAt: .now, visualizationRenderVersion: nil)
+        #expect(receipt.matches(synchronized, visualizationRenderVersion: nil),
+                "Returning through the creation camera must not save an added capture to Photos twice")
+        #expect(synchronized.source != captured.source, "Product files and camera originals have distinct ownership")
+        let previousIDs = f.garment.productPhotos.map(\.id)
+        let originalCopy = try #require(f.garment.photos.first { $0.id == captured.id })
+        let originalCopyBytes = try Data(contentsOf: GarmentStore.url(for: originalCopy))
+        await #expect(throws: CameraFailure.mismatchedCapture) {
+            try await ProductPhotoImportStore.appendCapturedPhotos([captured], to: f.garment, in: f.context)
+        }
+        #expect(f.garment.productPhotos.map(\.id) == previousIDs)
+        #expect(try Data(contentsOf: GarmentStore.url(for: originalCopy)) == originalCopyBytes)
     }
 
     @Test func libraryEditDiscardRestoresExistingOrderAndCleansOnlyNewProductCopies() async throws {
