@@ -8,7 +8,7 @@ struct LibraryHeaderMetrics: Equatable {
     var windowHeight: CGFloat = 0
 }
 
-/// Moves and fades the native header without changing the list's viewport or insets.
+/// Keeps the navigation toolbar fixed while independently collapsing the search field.
 struct LibraryNavigationSearch: UIViewControllerRepresentable {
     @Binding var text: String
     /// The committed query; composing text stays visible without changing the results.
@@ -68,9 +68,10 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, UISearchResultsUpdating, UISearchBarDelegate {
+    final class Coordinator: NSObject, UISearchBarDelegate {
         var configuration: LibraryNavigationSearch
-        private let search = UISearchController(searchResultsController: nil)
+        private let search = UISearchBar()
+        private let searchContainer = UIView()
         private weak var navigation: UINavigationController?
         private weak var owner: UIViewController?
         private weak var previousScrollView: UIScrollView?
@@ -84,22 +85,19 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
         private var reportedMetrics: LibraryHeaderMetrics?
         private var animator: UIViewPropertyAnimator?
         private var pendingSearch: Task<Void, Never>?
-        private var originalBarTransform = CGAffineTransform.identity
-        private var originalBarAlpha: CGFloat = 1
         private let statusBackground = UIView()
         private var previousInsetAdjustment: UIScrollView.ContentInsetAdjustmentBehavior = .automatic
 
         init(configuration: LibraryNavigationSearch) {
             self.configuration = configuration
             super.init()
-            search.obscuresBackgroundDuringPresentation = false
-            search.hidesNavigationBarDuringPresentation = false
-            search.automaticallyShowsCancelButton = false
-            search.searchResultsUpdater = self
-            search.searchBar.delegate = self
-            search.searchBar.placeholder = "Search"
-            search.searchBar.searchBarStyle = .minimal
-            let field = search.searchBar.searchTextField
+            search.delegate = self
+            searchContainer.backgroundColor = UIColor(LibraryStyle.background)
+            searchContainer.clipsToBounds = true
+            searchContainer.addSubview(search)
+            search.placeholder = "Search"
+            search.searchBarStyle = .minimal
+            let field = search.searchTextField
             statusBackground.backgroundColor = UIColor(LibraryStyle.background)
             statusBackground.isUserInteractionEnabled = false
             statusBackground.accessibilityElementsHidden = true
@@ -125,23 +123,14 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
                 self.owner = owner
                 previousScrollView = owner.contentScrollView(for: .top)
                 previousHidesBarsOnSwipe = navigation.hidesBarsOnSwipe
-                originalBarTransform = navigation.navigationBar.transform
-                originalBarAlpha = navigation.navigationBar.alpha
                 owner.definesPresentationContext = true
                 navigation.setNavigationBarHidden(false, animated: false)
             }
-            let item = owner.navigationItem
-            if item.searchController !== search {
-                item.searchController = search
-                DispatchQueue.main.async { [weak self, weak presenter] in
-                    guard let presenter else { return }
-                    self?.attach(from: presenter)
-                }
+            // Search owns only the area below the toolbar. Neither collapsing
+            // nor focusing it transforms the navigation bar or its buttons.
+            if searchContainer.superview !== navigation.view {
+                navigation.view.insertSubview(searchContainer, belowSubview: navigation.navigationBar)
             }
-            if item.preferredSearchBarPlacement != .stacked { item.preferredSearchBarPlacement = .stacked }
-            if item.hidesSearchBarWhenScrolling { item.hidesSearchBarWhenScrolling = false }
-            // SwiftUI owns the hosting scroll view, so drive the native header from
-            // its pan gesture instead of allowing two independent bar hide gestures.
             if navigation.hidesBarsOnSwipe { navigation.hidesBarsOnSwipe = false }
             if let scroll = findContentScrollView(in: owner.view), contentScrollView !== scroll {
                 contentScrollView?.panGestureRecognizer.removeTarget(self, action: #selector(didPan(_:)))
@@ -155,9 +144,9 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
 
             reportHeaderMetrics(in: navigation)
 
-            if search.searchBar.text != configuration.text { search.searchBar.text = configuration.text }
-            if !configuration.isFocused && search.searchBar.searchTextField.isFirstResponder {
-                search.searchBar.resignFirstResponder()
+            if search.text != configuration.text { search.text = configuration.text }
+            if !configuration.isFocused && search.searchTextField.isFirstResponder {
+                search.resignFirstResponder()
             }
             if lastRevealID != configuration.revealID {
                 let animated = lastRevealID != nil
@@ -175,22 +164,14 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
             animator?.stopAnimation(true)
             animator = nil
             statusBackground.removeFromSuperview()
-            if let bar = navigation?.navigationBar {
-                bar.transform = originalBarTransform
-                bar.alpha = originalBarAlpha
-                bar.isUserInteractionEnabled = true
-                bar.accessibilityElementsHidden = false
-            }
+            searchContainer.removeFromSuperview()
             collapseOffset = 0
             headerHeight = 0
             reportedMetrics = nil
             isRestoringSearch = true
-            search.isActive = false
+            search.resignFirstResponder()
             contentScrollView?.panGestureRecognizer.removeTarget(self, action: #selector(didPan(_:)))
             contentScrollView?.contentInsetAdjustmentBehavior = previousInsetAdjustment
-            if owner?.navigationItem.searchController === search {
-                owner?.navigationItem.searchController = nil
-            }
             navigation?.hidesBarsOnSwipe = previousHidesBarsOnSwipe
             navigation?.setNavigationBarHidden(false, animated: false)
             if let contentScrollView, owner?.contentScrollView(for: .top) === contentScrollView {
@@ -240,7 +221,7 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
         }
 
         private func reportHeaderMetrics(in navigation: UINavigationController) {
-            guard search.searchBar.window != nil, search.searchBar.bounds.height > 0 else { return }
+            guard searchContainer.window != nil else { return }
             let statusHeight = navigation.view.window?.safeAreaInsets.top ?? 0
             // The list scrolls behind the header, but never over the clock or Dynamic Island.
             if statusBackground.superview !== navigation.view {
@@ -248,12 +229,17 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
             }
             statusBackground.frame = CGRect(x: 0, y: 0, width: navigation.view.bounds.width, height: statusHeight)
             let bar = navigation.navigationBar
-            // Undo our own translation when measuring the expanded header.
-            let barBottom = bar.convert(bar.bounds, to: navigation.view).maxY + collapseOffset
-            let searchBottom = search.searchBar.convert(search.searchBar.bounds, to: navigation.view).maxY + collapseOffset
-            let height = (max(barBottom, searchBottom) - statusHeight).rounded()
+            let barBottom = bar.convert(bar.bounds, to: navigation.view).maxY
+            let searchHeight = max(56, search.sizeThatFits(CGSize(width: navigation.view.bounds.width, height: 0)).height)
+            headerHeight = searchHeight
+            // UISearchBar supplies eight points internally. Keep the original
+            // navigation search field's sixteen-point horizontal inset.
+            search.bounds = CGRect(x: 0, y: 0, width: max(0, navigation.view.bounds.width - 16), height: searchHeight)
+            search.center = CGPoint(x: navigation.view.bounds.width / 2, y: searchHeight / 2)
+            searchContainer.frame = CGRect(x: 0, y: barBottom, width: navigation.view.bounds.width,
+                                           height: max(0, searchHeight - collapseOffset))
+            let height = (barBottom - statusHeight + searchHeight).rounded()
             guard height > 0 else { return }
-            headerHeight = height
             let metrics = LibraryHeaderMetrics(
                 statusBarHeight: statusHeight, height: height,
                 bottomBarHeight: navigation.tabBarController?.tabBar.bounds.height
@@ -269,22 +255,23 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
         }
 
         private func apply(offset: CGFloat) {
-            guard let bar = navigation?.navigationBar else { return }
+            guard navigation != nil else { return }
             collapseOffset = min(max(0, offset), headerHeight)
             let progress = headerHeight > 0 ? collapseOffset / headerHeight : 0
-            let reducesMotion = UIAccessibility.isReduceMotionEnabled
-            bar.transform = originalBarTransform.translatedBy(
-                x: 0, y: reducesMotion ? 0 : -collapseOffset
-            )
-            bar.alpha = originalBarAlpha * (1 - progress)
-            bar.isUserInteractionEnabled = progress < 0.95
-            bar.accessibilityElementsHidden = progress >= 0.95
+            search.transform = CGAffineTransform(translationX: 0,
+                y: UIAccessibility.isReduceMotionEnabled ? 0 : -collapseOffset)
+            search.alpha = 1 - progress
+            var frame = searchContainer.frame
+            frame.size.height = max(0, headerHeight - collapseOffset)
+            searchContainer.frame = frame
+            searchContainer.isUserInteractionEnabled = progress < 0.95
+            searchContainer.accessibilityElementsHidden = progress >= 0.95
         }
 
         private func interruptAnimation() {
             guard let animator else { return }
-            let currentOffset = -(navigation?.navigationBar.layer.presentation()?.affineTransform().ty
-                ?? navigation?.navigationBar.transform.ty ?? 0)
+            let currentOffset = headerHeight - (searchContainer.layer.presentation()?.bounds.height
+                ?? searchContainer.bounds.height)
             animator.stopAnimation(true)
             self.animator = nil
             apply(offset: currentOffset)
@@ -321,13 +308,13 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
             return nil
         }
 
-        func updateSearchResults(for searchController: UISearchController) {
+        func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
             guard !isRestoringSearch, owner != nil else { return }
-            let text = searchController.searchBar.text ?? ""
+            let text = search.text ?? ""
             if configuration.text != text { configuration.text = text }
             pendingSearch?.cancel()
             pendingSearch = nil
-            let field = searchController.searchBar.searchTextField
+            let field = search.searchTextField
             guard field.markedTextRange == nil else { return }
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 commitSearch()
@@ -337,8 +324,8 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
                 do { try await Task.sleep(for: .milliseconds(300)) }
                 catch { return }
                 guard !Task.isCancelled, let self,
-                      self.search.searchBar.text == text,
-                      self.search.searchBar.searchTextField.markedTextRange == nil else { return }
+                      self.search.text == text,
+                      self.search.searchTextField.markedTextRange == nil else { return }
                 self.commitSearch()
             }
         }
@@ -347,8 +334,8 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
             pendingSearch?.cancel()
             pendingSearch = nil
             guard !isRestoringSearch, owner != nil,
-                  search.searchBar.searchTextField.markedTextRange == nil else { return }
-            let text = search.searchBar.text ?? ""
+                  search.searchTextField.markedTextRange == nil else { return }
+            let text = search.text ?? ""
             if configuration.text != text { configuration.text = text }
             if configuration.query != text { configuration.query = text }
         }
