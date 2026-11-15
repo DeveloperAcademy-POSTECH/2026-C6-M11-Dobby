@@ -31,7 +31,6 @@ struct InstagramExportView: View {
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
     @State private var isShowingUploadFailure = false
-    @State private var isKeyboardCoveringBottom = false
     @State private var message: String?
     @State private var requestID = UUID().uuidString
 
@@ -104,7 +103,7 @@ struct InstagramExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if account != nil && !showsCompletion && !isKeyboardCoveringBottom {
+            if account != nil && !showsCompletion {
                 ExportBottomAction(title: "업로드하기") {
                     dismissKeyboard()
                     Task { await publish() }
@@ -130,11 +129,6 @@ struct InstagramExportView: View {
             }
         }
         .interactiveDismissDisabled(uploadState.isUploading)
-        .onReceive(NotificationCenter.default.publisher(
-            for: UIResponder.keyboardWillChangeFrameNotification
-        )) { notification in
-            updateKeyboardCoverage(notification)
-        }
         .task {
             guard account == nil else { return }
             await loadAccount()
@@ -149,18 +143,6 @@ struct InstagramExportView: View {
 
     private var showsCompletion: Bool {
         showsConnectionCompletion || uploadState.isCompleted
-    }
-
-    private func updateKeyboardCoverage(_ notification: Notification) {
-        guard let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
-            return
-        }
-        guard let screenFrame = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive })?
-            .screen.bounds else { return }
-        isKeyboardCoveringBottom = keyboardFrame.intersects(screenFrame)
-            && keyboardFrame.maxY >= screenFrame.maxY
     }
 
     private func dismissKeyboard() {
