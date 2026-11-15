@@ -54,7 +54,7 @@ struct FruitsExportView: View {
                 FruitsTransferIndicator()
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .safeAreaInset(edge: .bottom, spacing: 43) {
             FruitsExportBottomAction(
                 hasCopied: hasCopied,
                 isLoading: opening
