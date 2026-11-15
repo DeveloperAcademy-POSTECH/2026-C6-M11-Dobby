@@ -61,7 +61,8 @@ struct InstagramExportView: View {
                 InstagramComposeView(
                     account: account,
                     draft: $draft,
-                    isDisabled: busy
+                    isDisabled: busy,
+                    onDismissKeyboard: dismissKeyboard
                 )
             } else {
                 InstagramConnectionView(

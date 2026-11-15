@@ -5,14 +5,19 @@ struct InstagramComposeView: View {
     let account: InstagramAccount
     @Binding var draft: InstagramExportDraft
     let isDisabled: Bool
+    let onDismissKeyboard: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .trailing, spacing: 24) {
                 InstagramAccountCard(account: account)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismissKeyboard)
                 InstagramPhotoEditor(photos: draft.photos)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismissKeyboard)
                     .disabled(isDisabled)
-                InstagramCaptionEditor(draft: $draft)
+                InstagramCaptionEditor(draft: $draft, onDismissKeyboard: onDismissKeyboard)
                     .disabled(isDisabled)
                     .frame(maxWidth: 363)
                     .frame(maxWidth: .infinity)
@@ -20,9 +25,19 @@ struct InstagramComposeView: View {
             .padding(.top, 20)
             .padding(.bottom, 44)
             .frame(maxWidth: .infinity)
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismissKeyboard)
+            }
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color(.brandNeutralWhite).ignoresSafeArea())
+        .background {
+            Color(.brandNeutralWhite)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onDismissKeyboard)
+                .ignoresSafeArea()
+        }
     }
 }
 
@@ -82,10 +97,14 @@ private struct InstagramDraftPhotoCell: View {
 
 private struct InstagramCaptionEditor: View {
     @Binding var draft: InstagramExportDraft
+    let onDismissKeyboard: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            InstagramCaptionHeader(onReset: { draft.resetCaption() })
+            InstagramCaptionHeader(onDismissKeyboard: onDismissKeyboard) {
+                onDismissKeyboard()
+                draft.resetCaption()
+            }
             InstagramCaptionInput(text: $draft.caption)
 
             if let validationMessage = draft.validationMessage,
@@ -93,12 +112,14 @@ private struct InstagramCaptionEditor: View {
                 Text(validationMessage)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .onTapGesture(perform: onDismissKeyboard)
             }
         }
     }
 }
 
 private struct InstagramCaptionHeader: View {
+    let onDismissKeyboard: () -> Void
     let onReset: () -> Void
 
     var body: some View {
@@ -111,6 +132,8 @@ private struct InstagramCaptionHeader: View {
                     .font(.custom("Pretendard-Regular", fixedSize: 14))
                     .foregroundStyle(Color(.brandNeutral700))
             }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onDismissKeyboard)
             Spacer()
             InstagramResetButton(action: onReset)
         }
@@ -130,7 +153,12 @@ private struct InstagramCaptionInput: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 14))
+        .background {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.brandNeutral50))
+                // Keep taps on the editor padding from reaching the dismissal background.
+                .onTapGesture { }
+        }
     }
 }
 
@@ -343,7 +371,8 @@ struct InstagramProfileImage: View {
     InstagramComposeView(
         account: .preview,
         draft: $draft,
-        isDisabled: false
+        isDisabled: false,
+        onDismissKeyboard: {}
     )
 }
 
@@ -381,14 +410,14 @@ struct InstagramProfileImage: View {
 #Preview("캡션 편집", traits: .sizeThatFitsLayout) {
     @Previewable @State var draft = InstagramExportDraft(product: .instagramPreview)
 
-    InstagramCaptionEditor(draft: $draft)
+    InstagramCaptionEditor(draft: $draft, onDismissKeyboard: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutralWhite))
 }
 
 #Preview("캡션 제목", traits: .sizeThatFitsLayout) {
-    InstagramCaptionHeader(onReset: {})
+    InstagramCaptionHeader(onDismissKeyboard: {}, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutralWhite))
