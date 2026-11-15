@@ -144,7 +144,8 @@ struct InfoInputView: View {
                         .frame(width: 61, height: 44)
                         .background(ProductInformationStyle.accent, in: Capsule())
                 }
-                .disabled(generationRequestID != nil || isImportingPhotos)
+                .disabled(generationRequestID != nil || isImportingPhotos
+                    || garment.productPhotos.count > ProductPhotoLimit.maximumCount)
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("product-info.done")
             }

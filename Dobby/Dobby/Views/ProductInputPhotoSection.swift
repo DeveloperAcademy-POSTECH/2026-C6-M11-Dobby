@@ -18,7 +18,6 @@ struct ProductInputPhotoSection: View {
     @State private var pickedItems: [PhotosPickerItem] = []
     @State private var isImporting = false
     @State private var pendingPhotoCount = 0
-    @State private var importTask: Task<Void, Never>?
     @State private var importError: String?
 
     var body: some View {
@@ -63,17 +62,16 @@ struct ProductInputPhotoSection: View {
         .photosPicker(isPresented: $showsPhotoPicker, selection: photoPickerSelection,
                       maxSelectionCount: nil, matching: .images)
         .fullScreenCover(isPresented: $showsCamera) {
-            ProductInputCameraPicker { data in
-                showsCamera = false
-                guard let data else { return }
-                pendingPhotoCount = 1
+            ProductInputCameraPicker(garmentID: garment.id, fixtureSource: fixtureCameraSource,
+                onCancel: { showsCamera = false }) { photos in
+                pendingPhotoCount = photos.count
                 setImporting(true)
-                importTask = Task { await importPhotos([data]) }
+                defer { setImporting(false) }
+                try await ProductPhotoImportStore.appendCapturedPhotos(photos, to: garment, in: context)
+                showsCamera = false
             }
-            .ignoresSafeArea()
         }
         .onDisappear {
-            importTask?.cancel()
             onImportingChange?(false)
         }
         .task(id: pickedItems) {
@@ -124,6 +122,18 @@ struct ProductInputPhotoSection: View {
         isImporting = busy
     }
 
+    private var fixtureCameraSource: CapturedAsset.Source? {
+#if DEBUG
+        guard ProductAppStorage.fixtureDirectory != nil,
+              let photo = garment.productPhotos.first ?? garment.photos.first else { return nil }
+        let url = GarmentStore.url(for: photo)
+        guard let metadata = try? ProductPhotoHandoff.metadata(for: url) else { return nil }
+        return .localFile(url, metadata: metadata)
+#else
+        return nil
+#endif
+    }
+
     private var photoRow: some View {
         ProductPhotoReorderStrip(photos: garment.productPhotos, spacing: 16,
             topInset: allowsRemoval ? 4 : 0,
@@ -141,7 +151,7 @@ struct ProductInputPhotoSection: View {
     private var addPhotoButton: some View {
         Menu {
             Button("사진 촬영하기", systemImage: "camera.fill") { showsCamera = true }
-                .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+                .accessibilityIdentifier("product-info.take-photos")
             Button("앨범에서 선택하기", systemImage: "photo") { showsPhotoPicker = true }
         } label: {
             VStack(spacing: 4) {
@@ -158,12 +168,6 @@ struct ProductInputPhotoSection: View {
         .disabled(isImporting)
         .accessibilityLabel("제품 사진 추가")
         .accessibilityIdentifier("product-info.add-photo")
-    }
-
-    private func importPhotos(_ data: [Data]) async {
-        defer { setImporting(false) }
-        do { for bytes in data { try await appendPhoto(bytes) } }
-        catch is CancellationError { } catch { importError = error.localizedDescription }
     }
 
     private func appendPhoto(_ data: Data) async throws {
