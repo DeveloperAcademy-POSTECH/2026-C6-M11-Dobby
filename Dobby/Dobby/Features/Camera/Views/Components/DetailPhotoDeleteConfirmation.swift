@@ -39,12 +39,14 @@ struct DetailPhotoDeleteConfirmation: View {
             .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.22), value: isPresented)
         }
         .allowsHitTesting(isPresented)
-        .accessibilityHidden(!isPresented)
         .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(.isModal)
+        .accessibilityAddTraits(isPresented ? .isModal : [])
         .accessibilityAction(.escape) { if !isDeleting { onCancel() } }
         .accessibilityIdentifier("camera.galleryDeleteConfirmation")
         .onChange(of: isPresented, initial: true) { _, presented in titleFocused = presented }
+        // Apply last: the persistent transition host must not recreate an
+        // empty accessibility alert while the confirmation is closed.
+        .accessibilityHidden(!isPresented)
     }
 
     private var panel: some View {
