@@ -104,6 +104,7 @@ struct InstagramExportView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if account != nil && !showsCompletion {
                 ExportBottomAction(title: "업로드하기") {
+                    dismissKeyboard()
                     Task { await publish() }
                 }
                 .padding(.horizontal, 33)
@@ -141,6 +142,15 @@ struct InstagramExportView: View {
 
     private var showsCompletion: Bool {
         showsConnectionCompletion || uploadState.isCompleted
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     private func requestLibraryExit() {
