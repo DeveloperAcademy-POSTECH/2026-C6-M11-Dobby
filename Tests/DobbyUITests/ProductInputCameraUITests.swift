@@ -59,7 +59,11 @@ final class ProductInputCameraUITests: XCTestCase {
         let app = fixtureApp()
         app.launch()
         defer { app.terminate() }
-        app.tabBars.buttons["보관함"].tap()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 15))
+        let library = app.tabBars.buttons["보관함"]
+        XCTAssertTrue(library.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        library.tap()
+        XCTAssertTrue(library.wait(for: \.isSelected, toEqual: true, timeout: 10))
         tap(app, "debug.export-sample")
         tap(app, "library.edit")
         let initialCount = photoCount(app)
