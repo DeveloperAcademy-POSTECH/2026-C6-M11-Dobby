@@ -224,8 +224,10 @@ nonisolated final class CameraPreviewDriver: DetailCameraControlling, DetailCame
         return device
     }
     private func exposureRange(_ device: AVCaptureDevice) -> DetailCameraControlRange? {
-        guard device.isExposureModeSupported(.continuousAutoExposure) else { return nil }
-        return .init(minimum: Double(device.minExposureTargetBias), maximum: Double(device.maxExposureTargetBias))
+        guard device.isExposureModeSupported(.continuousAutoExposure),
+              let range = CameraExposureRange.captureRange(minimum: Double(device.minExposureTargetBias),
+                                                           maximum: Double(device.maxExposureTargetBias)) else { return nil }
+        return .init(minimum: range.minimum, maximum: range.maximum)
     }
 
     private func zoomRange(_ device: AVCaptureDevice) -> DetailCameraControlRange? {
