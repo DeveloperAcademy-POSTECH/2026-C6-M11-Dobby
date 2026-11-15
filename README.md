@@ -1,116 +1,211 @@
-# Dobby · LiDAR 측정 모듈
+![착(chak) — 찍고, 재고, 올리는 일을 한 번에 착!](assets/readme/banner.png)
 
-`feat/3-LiDAR-Module`에 LiDAR 거리 계산 엔진과 직접 테스트할 수 있는 iPhone·iPad 화면을 구현했습니다.
+<h1>
+  chak(착)&nbsp;
+  <a href="https://apps.apple.com/kr/app/chak-%EC%B0%A9/id6823445800"><img src="assets/readme/app-store-badge.svg" height="40" align="center" alt="Download on the App Store"></a>&nbsp;
+  <img src="https://img.shields.io/badge/iOS-26.0%2B-000000?style=flat&amp;logo=apple&amp;logoColor=white&amp;labelColor=000000" align="center" alt="iOS 26.0 이상">
+  <img src="https://img.shields.io/badge/App-1.2.1-E34825?style=flat&amp;labelColor=E34825" align="center" alt="App 1.2.1">
+</h1>
 
-## 직접 실행하기
+<!-- Apple 공식 다운로드 배지 원본: https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg -->
+<!-- iOS 지원 버전과 앱 버전 배지는 App Store 공개 배포 버전 기준 -->
 
-1. `Dobby/Dobby.xcodeproj`를 Xcode에서 엽니다.
-2. `Dobby` 타깃 → Signing & Capabilities에서 본인의 Team을 선택합니다.
-3. iOS/iPadOS 26.4 이상인 LiDAR 기기를 연결하고 `Dobby` scheme으로 실행합니다.
-4. 홈의 **옷 촬영 · 실측 → 실측 촬영**을 엽니다. 옷 한 벌을 펼치면 상의·하의를 자동 판별하고 윤곽과 촬영 준비 상태를 표시합니다. 촬영 후 해당 종류의 치수가 사진 위에 표시됩니다.
-5. **확인**으로 사진·깊이·측정점·결과를 저장합니다. 줄자 비교와 사진 위 A/B 직접 확인은 결과의 항목 상세나 측정 실험실에서 가능합니다.
+### 빈티지 의류의 촬영부터 판매 준비까지
 
-새 체크아웃에서는 의류 분류 모델을 받기 위해 `git lfs install`과 `git lfs pull`을 먼저 실행합니다. 분류 모델 원본 패키지는 약 172MB입니다.
+착은 빈티지숍 운영자를 위한 iOS 앱입니다.<br>
+한 벌의 사진과 실측, 상품 정보를 정리하고 판매 채널로 전달하는 과정을 돕습니다.
 
-LiDAR가 없는 기기와 시뮬레이터에서는 **50cm 데모 실험**을 사용합니다. 평면·기울기·잡음·깊이 결손 조건을 선택할 수 있습니다. 데모는 합성 데이터이며 실제 센서 정확도를 증명하지 않습니다.
+---
 
-측정 실험실에서 점을 직접 지정하는 기능은 LiDAR 엔진을 독립적으로 검증하기 위한 것입니다. 제공된 상의·하의 Core ML 모델을 연결했습니다. **모델별 사진 진단**은 각 모델의 사진 속 점을 확인하고, **실측 촬영**은 같은 사진에서 종류와 측정점을 판별해 해당 LiDAR 치수를 계산합니다. [자동 판별 기준·검증](Docs/Automatic-Garment-Recognition.md)을 참고하세요. [하의 모델 사용·검증 안내](Docs/Bottom-Recognition.md)를 참고하세요. 메이슨의 카메라 모듈은 `CaptureSnapshotProviding` 계약으로 교체할 수 있습니다.
+## ✨ 주요 기능
 
-팀의 **MV 구조**를 사용합니다. View가 입력·화면 상태를 관리하고, `ManualMeasurement`·`AutomaticMeasurement` 값 모델이 측정 데이터와 변경 규칙을 담당합니다. 촬영·계산·저장·취소는 화면과 독립적인 서비스로 분리했습니다. [MV 구조와 개발 규칙](Docs/LiDAR-Architecture.md)을 참고하세요.
+### 📸 촬영부터 실측까지
 
-**실측 촬영**은 상·하의 자동 판별 → 실제 옷 모양의 파란 실루엣 → 촬영 후 사진 위 실측값 → 확인 저장으로 연결됩니다. **촬영 화면 미리보기**에서 LiDAR 없이 합성 화면으로 전환·저장을 확인할 수 있습니다. [새 촬영 화면 안내](Docs/Garment-Capture-Flow.md)를 참고하세요.
+옷을 촬영해 실측 결과를 확인하고 측정점을 조정합니다. 제품의 디테일까지 추가로 촬영할 수 있습니다.
 
-**실시간 안내 미리보기**에서는 촬영 가능·깊이 없음·움직임·여러 대상 등의 안내를 확인할 수 있습니다. 실제 카메라의 실루엣은 종류 판별과 모델 점·전경 마스크 확인을 통과한 옷이며, 이 상태가 치수 정확도를 보증하지는 않습니다.
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/readme/features/measurement-capture.png" width="240" alt="실측 촬영 화면"></td>
+    <td align="center"><img src="assets/readme/features/measurement-result.png" width="240" alt="실측 결과 화면"></td>
+    <td align="center"><img src="assets/readme/features/detail-capture.png" width="240" alt="제품 상세 촬영 화면"></td>
+  </tr>
+  <tr>
+    <td align="center">실측 촬영</td>
+    <td align="center">실측 결과</td>
+    <td align="center">제품 상세 촬영</td>
+  </tr>
+</table>
 
-## 구현한 기능
+---
 
-- 실시간 상·하의 자동 판별·실루엣과 영역/경계 깊이 확보율, 움직임·잘림·다중 대상·안정화 안내. 오래된 성공 상태 해제.
-- 짧은 후보 구간에서 깊이·신뢰도·움직임을 비교해 촬영 프레임 선택. 동일 ARFrame의 원본 RGB·sceneDepth·보정 정보와 선택 근거 저장.
-- 지원 시 같은 프레임의 smoothedSceneDepth도 저장하고, 같은 측정점으로 원본·평활화 깊이 비교.
-- 원본 이미지의 정규화 좌표에서 깊이를 읽고, 역투영으로 3D 위치를 복원하여 직선/명시된 다점 경로의 길이 계산.
-- 의류 마스크 내부 표본, 깊이 군집, 이상치 제거, 기울기 보존 국소 평면 추정.
-- 프레임 불일치·깊이 결손·가림·낮은 ML 점수 등을 항목별 실패로 반환. 부분 성공 보존.
-- 신뢰도 누락, 경계가 모호한 표본, 중앙값 대체는 `uncertain`으로 반환.
-- 네 방향 좌표 변환, 촬영 취소·중단·4초 시간 제한, 백그라운드 계산 및 오래된 결과 폐기.
-- 촬영 기록 저장·복원·JSON 가져오기·공유와 줄자 비교.
-- 상의·아우터·바지·치마·원피스·기타의 수동 측정 프리셋과 위치 안내.
-- 실측 조건 기록, 동일 데이터의 중앙값/평면 보정 비교, 원본/평활화의 공통 표본 비교, 오차·실패 집계 및 CSV 공유.
-- 기록을 폴더 단위로 저장 완료 처리. 불완전 저장은 보고서에서 제외하고 기존 기록 보존.
+### ✨ AI로 상품 정보 완성하기
 
-## 자동 흐름과 최종 검증
+사진을 바탕으로 AI가 제품명·브랜드·설명 초안을 생성합니다. 생성된 정보를 확인·수정하고, 가격 등 추가 정보를 직접 입력해 상품 정보를 완성합니다.
 
-**합성 자동 연결 테스트**에서 촬영→측정점→계산→부분 실패·전체 저장을 실행할 수 있습니다. 50cm·25cm와 의도적인 미검출 항목이 함께 나오며, 실제 의류 ML 인식으로 표시하지 않습니다. 실제 자동 촬영에는 제공된 상의·하의 모델이 연결되어 있으며, 합성 테스트와 별도로 실행합니다.
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/readme/features/ai-product-info.png" width="240" alt="AI 제품 정보 생성 버튼 화면"></td>
+    <td align="center"><img src="assets/readme/features/product-info-edit.png" width="240" alt="AI 생성 정보 확인·수정 및 추가 정보 입력 화면"></td>
+    <td align="center"><img src="assets/readme/features/product-info-complete.png" width="240" alt="상품 정보 완성 화면"></td>
+  </tr>
+  <tr>
+    <td align="center">AI 정보 생성</td>
+    <td align="center">정보 확인·입력</td>
+    <td align="center">상품 정보 완성</td>
+  </tr>
+</table>
 
-**최종 검증 · 시도 기록**은 수동/자동 점 평가, 조건별 오차와 반복 편차, 촬영 전 실패·취소·처리시간을 분리해서 보여줍니다. CSV와 Markdown으로 내보낼 수 있습니다. 같은 사진의 수동점 비교는 자동 결과 화면에서 시작합니다.
+---
 
-팀 모듈 주입과 남은 인수 조건은 [LiDAR 인수·연결 안내](Docs/LiDAR-Handoff.md)를 참고하세요.
+### 📦 업로드하고, 보관하고
 
-## 아우터 AI 랜드마크
+완성한 상품을 판매 채널로 전달하고 보관함에서 관리합니다. 진행 중인 작업도 저장한 단계부터 이어갈 수 있습니다.
 
-### model-test: 왼쪽 목옆 기준 총장 실험
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/readme/features/platform-upload.png" width="240" alt="플랫폼별 업로드 및 복사해서 옮기기 화면"></td>
+    <td align="center"><img src="assets/readme/features/archive.png" width="240" alt="저장된 상품과 진행 중인 작업을 보여주는 보관함 화면"></td>
+  </tr>
+  <tr>
+    <td align="center">플랫폼 업로드</td>
+    <td align="center">보관함</td>
+  </tr>
+</table>
 
-새 아우터 실측은 아래 로컬 목옆점 모델로 보완한 Luna v4 스키마의 `neck_left`(정렬한 사진 기준 왼쪽 목옆점)에서 정렬 사진의 세로 방향으로 내려가 몸판 밑단 마스크와 만나는 교점까지를 총장으로 계산합니다. 방향을 원본 RGB 좌표로 복원한 뒤 같은 LiDAR 의류 평면 위에서 탐색·거리 계산을 수행합니다. 닫힌 마스크 구멍은 통과하고, 진입 실패·몸판 하단에 못 미친 외부 경계·사진 밖으로 잘린 밑단은 총장만 실패 처리합니다. 좌우를 자동 교체하거나 앞목 중앙·밑단 중앙으로 대체하지 않습니다.
+---
 
-총장 정의는 `neck_left → top_length_hem`이며 `top_length_hem`은 마스크에서 계산하는 별도 교점입니다. 현재 기본 앱 경로는 Luna가 의류 크롭의 기존 점을 반환한 후, 앱에 포함된 `NeckSidePilot.mlpackage`가 같은 정렬된 의류 크롭에서 좌우 목옆점만 예측합니다. 마스크·배치 검증을 통과한 두 점을 함께 교체하고 기존 목·어깨/좌우 확대 API 3회는 생략합니다. 로컬 추론 실패 또는 검증 탈락 시 첫 Luna 목옆점을 유지하며 실패 원인을 기록합니다. 나머지 랜드마크와 깊이·총장 계산은 유지합니다.
+## 🏗 Architecture
 
-적용 대상은 기존 Luna 분류 목록 `Blazer`, `Jacket`, `Coat`, `Denim Jacket`, `Sports Jacket`, `Hoodie`, `Sweater`, `Polo`이며, 다른 상의·하의 모델에는 연결하지 않습니다. 서버 배포는 추가로 필요하지 않고 앱 재빌드가 필요합니다. 모델은 테스트용 `model-test` 브랜치 기본 실측에 포함되며 사진 A/B/C 비교 실험의 원격 경로는 기존대로입니다. API 키는 나머지 Luna 점 요청에 계속 필요하고, 목옆점 자체는 기기 내에서 처리합니다.
+착은 **MV(Model–View) 패턴을 기반으로 화면과 데이터를 분리**하고, 촬영·실측·AI 작업과 저장 책임을 별도로 구성했습니다.
 
-기록의 `localNeckLandmarks`에는 모델 버전·입력 크롭 범위·전체 정렬 사진 기준 원본 예측·채택 ID·실패가 남습니다. `remoteGarmentCrop.localResponse`의 Luna 원본은 유지합니다. 결과 화면에서 목옆점을 움직이면 밑단 교점을 다시 계산합니다. 총장 기준은 `left-side-neck-to-vertical-hem-mask-v1`이며, 이전 기록은 당시 정의대로 엽니다. 원본 사진·깊이 좌표로는 크롭 복원 후 회전을 한 번만 되돌립니다. 검증 실패 시에도 기존 수동 확인 기능은 유지합니다.
+![chak 아키텍처: 화면·데이터, 작업 실행, 의존성 주입, 저장 영역의 관계](assets/readme/architecture.svg)
 
-파일·변환 검증·학습 한계는 [목옆점 모델 안내](Tools/neck-side-pilot/README.md)를 참고하세요.
+| 설계 방식 | 주요 책임 |
+|---|---|
+| **MV 패턴** | View: 화면·입력<br/>Model: 상품·측정 데이터와 변경 규칙 |
+| **작업 실행 분리** | Workflow·Session: 촬영·실측·AI 작업의 실행과 취소 |
+| **의존성 주입** | Protocol: 촬영·인식·AI 기능의 계약<br/>구현체: 실제 기능 또는 테스트용 구현 |
+| **저장 분리** | Store·Archive: 상품·사진·실측 기록의 저장과 복원 |
 
-아래는 기존 중앙 기준 API·비교 실험과 이전 기록의 설명입니다.
+---
 
-촬영 확정 사진에 기기 방향을 적용한 뒤, 기존 방향 모델의 회전 보정과 정방향(0°) 재확인을 최대 3회 수행합니다. 방향이 일치한 최종 사진을 기존 의류 분류기로 한 번 판별한 뒤 `Blazer`, `Jacket`, `Coat`, `Denim Jacket`, `Sports Jacket`, `Hoodie`(후드티), `Sweater`(스웨터·니트), `Polo`(폴로)만 기존 Luna Worker의 `/v3/garments/landmarks`로 한 번 요청합니다. 그 외 상의·하의와 촬영 전 윤곽 미리보기는 기기 내 모델을 사용합니다. AI 대상 종류와 그 외 상의 분류 점수가 비슷하면 원격 요청을 보류합니다. 실제 실측은 비교 실험 B와 같은 옷 영역 크롭을 사용합니다. 방향을 보정한 원본 사진에서 의류 마스크를 한 번 생성하고, 경계에 6% 여백을 둔 영역을 원본 해상도에서 픽셀 단위로 잘라 최대 2048px·2MiB JPEG로 Luna에 전달합니다. 기기 내 분석용 960px 축소본은 재사용하지 않습니다. 응답 좌표는 크롭 → 전체 정렬 사진 → 원본 RGB/깊이 좌표 순서로 복원하고, 같은 마스크로 검증한 뒤 기존 LiDAR 치수 계산에 사용합니다. 마스크가 없거나 유효한 전경이 여러 개이면 AI 요청 전에 중단합니다. 저장 진단의 `remoteGarmentCrop`에는 원본·정렬 사진 크기, 실제 크롭 사각형·래스터 크기, 복원 전 AI 응답을 남깁니다. 촬영 안내 화면은 추가하지 않습니다.
+## 🛠 Tech Stack
 
-기존 상의 11점의 ID·번호를 유지합니다. 새 v3 측정은 앞면 전용이며 `frontNeckSeamCenter` 하나만 총장 보조점으로 반환합니다. 이 점을 `top_length_start`에 연결해 앞목 몸판 연결/마감 봉제선 중앙부터 앞면 밑단 중앙까지를 기본 **총장**(`top.totalLength`, 제품 키 `totalLength`)으로 표시·저장·수동 보정합니다. 후드·카라 높이는 제외합니다. 뒷목은 요청하지 않으며 비교 화면에도 앞뒤 두 상단점을 나열하지 않습니다. 앞목 중앙이 열린 공간이거나 가려져 보이지 않으면 null을 유지하고 뒷목·목옆 평균·지퍼의 임의 높이로 대체하지 않습니다. 원본 사진 밖 좌표는 사용하지 않습니다. v3의 보이는 밑단 중앙 후보가 윤곽 바로 아래로 벗어난 경우에만, AI의 가로 위치를 유지하고 몸판 중앙의 연속된 마스크에서 아래쪽 첫 경계를 확인해 보정합니다. 양 겨드랑이·한쪽 이상 밑단의 독립 관측, 주변 열의 연속 경계, 의류 높이 2.5% 이내 이동을 모두 요구합니다. 열린 앞판·중앙 구멍·큰 트임·멀리 떨어진 후보·null 관측은 채우지 않습니다. 몸판·배치 검증을 통과한 Luna 직접 관측점(목·어깨·겨드랑이·소맷단·좌우 밑단·보이는 총장 상단)은 기존 모델과 같은 근거리 마스크 보정을 사용합니다. 의류 마스크 바운딩 박스 대각선의 3% 이내에 있는 가장 가까운 마스크 픽셀 중심으로 이동하고, 보정 좌표로 부위 위치를 다시 검증합니다. 이미 마스크 안인 점은 그대로 두며, 멀리 떨어진 점·null 관측·부위 검증에서 탈락한 점은 측정에서 제외합니다. 밑단 중앙은 앞서 설명한 몸판 열 경계 보정을 유지하고, v4의 지퍼 틈 등 빈 공간 중앙 추정점은 좌우 어느 한쪽으로 붙이지 않습니다. 마스크는 확장하지 않으며, 원본 후보와 실제로 채택한 보정점은 `rawPoints`·`automaticAdjustments`에 각각 보존합니다. 총장 상단의 좌우 범위를 확인할 때 목점이 한쪽만 남으면 양 어깨를 사용하며, 상단이 누락돼도 밑단은 독립적으로 유지합니다. 오류 안내는 AI 위치 불확실·윤곽 밖·부위 위치 검증 실패·가려짐을 구분합니다. 원격 결과에 가상의 YOLO 신뢰도를 넣지 않으며, 결과는 위치 확인이 필요한 상태로 표시합니다. v3 모델 버전과 앞목 기준을 보존하고, 기존 CoreML·Luna v1/v2 기록은 당시 총장 ID·측정 기준 그대로 다시 엽니다.
+### Core Frameworks
 
-기존 앱 인증과 Worker를 재사용합니다. 원격 요청 제한은 25초, 제품 실측 흐름의 전체 제한은 45초이며 취소·재촬영 후 응답은 폐기합니다. Luna v1은 2026-11-02(KST) 버전 `f2c7131b-e490-497b-88bd-a0483fcd7464`로 배포됐습니다. **v2 경로·개정 프롬프트는 2026-11-02 01:43(KST) `dobby-openai`에 배포 완료됐으며, 당시 배포 버전은 `6045afbc-f1e2-4b50-899d-2a6864578cc2`입니다.** 원격에서 `/health` 200, v2 경로의 `OPTIONS` 405·`Allow: POST`, 무인증 빈 JSON `POST` 401을 확인해 이전 v2 404가 해소됐습니다. 이 확인은 경로·인증 거절까지만 검증하며 실제 Luna 사진 요청은 보내지 않았습니다. 현재 v2 앱에서 재촬영해 연결을 시험할 수 있습니다.
+![SwiftUI](https://img.shields.io/badge/SwiftUI-007AFF?style=flat&logo=swift&logoColor=white)
+![UIKit](https://img.shields.io/badge/UIKit-2396F3?style=flat&logo=apple&logoColor=white)
+![Observation](https://img.shields.io/badge/Observation-5856D6?style=flat&logo=swift&logoColor=white)
+![Combine](https://img.shields.io/badge/Combine-FF9500?style=flat&logo=swift&logoColor=white)
+![SwiftData](https://img.shields.io/badge/SwiftData-5856D6?style=flat&logo=apple&logoColor=white)
 
-사용자의 실제 v1 Hoodie 저장 기록에서 Luna가 반환한 양 어깨·소매끝 네 점이 실제 배경에 놓여 검증에서 제외된 사례를 확인했습니다. v2 프롬프트는 실제 봉제선 교차점·커프 모서리·앞뒤 총장 정의와 좌표 재확인을 명시하며, 검증을 느슨하게 하거나 점을 임의로 옮겨 통과시키지 않습니다. 새 프롬프트의 위치 정확도와 LiDAR cm 오차 개선은 아직 실사진으로 검증하지 않았습니다. 응답 계약·배포 기록은 [의류 AI Worker 안내](Backend/garment-ai-worker/README.md)를 참고하세요.
+### Camera & Photos
 
-## 검증 실행
+![AVFoundation](https://img.shields.io/badge/AVFoundation-34C759?style=flat&logo=apple&logoColor=white)
+![Photos](https://img.shields.io/badge/Photos-FF2D55?style=flat&logo=apple&logoColor=white)
+![PhotosUI](https://img.shields.io/badge/PhotosUI-FF9500?style=flat&logo=apple&logoColor=white)
 
-### Luna 사진 입력 A/B/C 비교
+### Vision & Measurement
 
-Xcode **Debug** 빌드의 실행 인자에 `--show-measurement-lab`을 추가하고 **홈 → 측정 실험실 → 모델별 사진 진단 → 아우터 AI 비교 실험**을 엽니다. 일반 설정에는 개발 실험 항목을 표시하지 않습니다. 사진 한 장을 선택한 뒤 비교 버튼을 누르면 같은 방향·의류 분류·마스크로 다음 세 방식을 순차 실행합니다.
+![Vision](https://img.shields.io/badge/Vision-5856D6?style=flat&logo=apple&logoColor=white)
+![Core ML](https://img.shields.io/badge/Core_ML-007AFF?style=flat&logo=apple&logoColor=white)
+![ARKit](https://img.shields.io/badge/ARKit-000000?style=flat&logo=apple&logoColor=white)
+![LiDAR](https://img.shields.io/badge/LiDAR-34C759?style=flat&logo=apple&logoColor=white)
 
-- A: 기존 전체 사진 한 장, v3 앞면 총장 프롬프트.
-- B: 마스크 경계에 6% 여백을 둔 옷 영역 크롭, A와 동일한 v3 프롬프트.
-- C: B 응답으로 넉넉한 목·어깨/겨드랑이/좌우 소맷단/밑단 확대 영역을 잡고, 옷 전체 참고 사진과 5개 확대 사진을 한 번에 재관측. 점 정의·Luna 모델·`high` detail·`low` reasoning·2048 출력 토큰 한도는 동일합니다. 누락된 기준점은 넓은 겹침 영역으로 재관측하며 중립 위치를 실제 점으로 취급하지 않습니다.
+### Concurrency & Networking
 
-사진은 EXIF 방향을 반영해 최대 4096px로 디코딩하고 기존 방향 분류기로 정렬합니다. 각 실제 업로드는 기존 최대 2048px·2MiB 인코더를 사용하며 원본 해상도에서 각 부위를 잘라 인코딩합니다. 반환 좌표는 실제 픽셀에 맞춘 크롭 사각형으로 원본 정규화 좌표에 복원하고 동일 검증 정책에 통과시킵니다. 비교 화면 자체는 LiDAR/cm를 계산하지 않습니다. 제품 실측에는 B의 크롭 방식을 적용하며, C의 추가 부위 확대 요청은 비교 화면에서만 사용합니다.
+![Swift Concurrency](https://img.shields.io/badge/Swift_Concurrency-F05138?style=flat&logo=swift&logoColor=white)
+![URLSession](https://img.shields.io/badge/URLSession-007AFF?style=flat&logo=apple&logoColor=white)
 
-비교 대상은 기존 분류기의 `Blazer`, `Jacket`, `Coat`, `Denim Jacket`, `Sports Jacket`, `Hoodie`, `Sweater`, `Polo`입니다. 후드가 달린 아우터도 이 범주에 포함되며 별도 수동 종류 선택은 없습니다. 실제 실측과 사진 비교는 같은 방향 검증 코드를 사용합니다. 실제 실측은 촬영 기기 방향에서, EXIF를 적용한 사진 비교는 `.up`에서 시작해 예측한 회전을 적용한 뒤 방향 모델이 정방향(0°)으로 판단하는지 재확인합니다. 최대 3회 로컬 추론 안에 일치하지 않거나 같은 방향을 다시 방문하면 중단합니다. 정렬한 사진에 기존 분류 점수·마진 기준을 그대로 적용하고, 통과한 경우에만 Luna에 요청합니다. 분류가 애매하거나 다른 종류로 인식되면 실제 분류명·상위 점수와 함께 비교 중단 사유를 표시합니다. 이 메시지는 자동 실측 자체의 지원 여부와 구분됩니다.
+### Interaction & Animation
 
-AI 원본 좌표(마스크 밖 포함), `null` 관측의 visibility, 변환 후 좌표, 마스크, 검증 사유, 실제 전송 이미지/크롭 영역, 원본 파일 SHA-256, 각 요청 UUID와 처리 시간을 `Documents/OuterwearComparisons/<UUID>.json`에 단계마다 자동 저장합니다. 공유 버튼으로 내보낼 수 있습니다. `sourceJPEG`는 정렬된 전체 사진의 업로드용 미리보기이고 `sourceSize`는 크롭 전 작업 래스터 크기입니다. 각 업로드의 실제 크기는 `inputs.width/height`에 따로 저장합니다. C 시간은 B 처리시간+추가 확대 처리시간이며 A 시간은 포함하지 않습니다. A/B 실패는 다른 결과를 지우지 않고, B 응답 자체가 없으면 C를 실행하지 않습니다. 취소 시 완료된 단계의 기록은 남습니다.
+![AVKit](https://img.shields.io/badge/AVKit-34C759?style=flat&logo=apple&logoColor=white)
+![ActivityKit](https://img.shields.io/badge/ActivityKit-FF9500?style=flat&logo=apple&logoColor=white)
+![WidgetKit](https://img.shields.io/badge/WidgetKit-007AFF?style=flat&logo=apple&logoColor=white)
+![Lottie](https://img.shields.io/badge/Lottie-00BFA5?style=flat)
 
-새 비교 기록과 실제 실측의 `recognitionDiagnostics.orientationResolution`에는 최종 적용 방향과 각 방향 예측 원본을, `classifierScores`·`classifierRoute`에는 자동 대상 판정 근거를 보관합니다. 기존 `orientationPrediction`은 첫 예측을 그대로 유지하므로 최종 적용 방향은 `orientationResolution.orientation`으로 확인합니다. 회전값이 순환하거나 정방향을 확인하지 못하면 분류·상의/하의 모델·AI 요청을 시작하지 않고 방향 확인 실패로 안내합니다. 분류 점수로 회전을 선택하거나 특정 종류로 강제 변경하지 않습니다.
+### Backend
 
-비교 1회는 최대 3개의 AI 요청을 사용하며 기존 설치별 분당 5회 제한과 합산됩니다. 색상과 마스크 통과 수는 수동 정답점에 대한 정확도 지표가 아닙니다. 보이는 점의 누락률·독립 검수 좌표 오차·소요 시간을 실제 사진에서 비교하세요. 새 측정은 앞목 중앙을 총장 상단점으로 사용합니다. 열린 앞목/중앙 밑단처럼 실제 지점이 보이지 않으면 `null`일 수 있습니다. 2026-11-02(KST) 앞면 전용 `/v3/garments/landmarks`·`/v3/garments/landmark-refinement`를 배포했고 현재 Worker 버전은 `6f03b6f9-db31-40e4-947d-0bbc9193a85d`입니다. health 200 및 두 v3 경로의 무인증 요청 401을 확인했습니다. 실제 Luna 사진 응답의 정확도는 사용자가 비교 실행하여 평가해야 합니다.
+![OpenAI API](https://img.shields.io/badge/OpenAI_API-412991?style=flat)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020?style=flat&logo=cloudflareworkers&logoColor=white)
 
-```bash
-# 계산·좌표·실패 처리·저장/복원·ML 계약 검증
-swift test --scratch-path /tmp/dobby-lidar-spm-tests
+### Environment
 
-# 기존 앱 프로젝트 빌드
-xcodebuild -project Dobby/Dobby.xcodeproj -scheme Dobby \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath /tmp/dobby-lidar-build CODE_SIGNING_ALLOWED=NO build
+![Swift 6.4](https://img.shields.io/badge/Swift-6.4-F05138?style=flat&logo=swift&logoColor=white&labelColor=F05138)
+![Xcode 27.0](https://img.shields.io/badge/Xcode-27.0-147EFB?style=flat&logo=xcode&logoColor=white&labelColor=147EFB)
+![Git](https://img.shields.io/badge/Git-F05032?style=flat&logo=git&logoColor=white)
+![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)
 
-# 화면 흐름 검증: XcodeGen 설치 필요
-Tools/run-ui-tests.sh 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4'
-```
+<sub>Xcode와 Swift 컴파일러 버전은 현재 로컬 개발 환경 기준입니다.</sub>
 
-화면 테스트는 `/tmp`에 임시 프로젝트를 만들며 팀의 기존 Xcode 프로젝트 설정을 재생성하지 않습니다. 시뮬레이터 목록에 맞춰 기기와 OS를 바꿀 수 있습니다.
+### Communication & Design
 
-- [iPhone 17 Pro 실측 기준선 수집](Docs/LiDAR-Baseline-Protocol.md)
-- [직접 테스트 안내](Docs/LiDAR-Testing-Guide.md)
-- [메이슨·이치 연동 안내](Docs/LiDAR-Integration.md)
-- [개발 로드맵](Docs/LiDAR-Module-Roadmap.md)
+![Figma](https://img.shields.io/badge/Figma-F24E1E?style=flat&logo=figma&logoColor=white)
+![Discord](https://img.shields.io/badge/Discord-5865F2?style=flat&logo=discord&logoColor=white)
+![Notion](https://img.shields.io/badge/Notion-000000?style=flat&logo=notion&logoColor=white)
+![Miro](https://img.shields.io/badge/Miro-FFD02F?style=flat&logo=miro&logoColor=050038)
 
-실제 옷의 cm 오차, 기기별 지속 성능, 소재·촬영 거리별 지원 조건은 실물 촬영 후 확인해야 합니다. 화면의 ‘계산 완료’는 입력 데이터와 계산이 유효하다는 뜻이며 오차 보증이 아닙니다.
+---
 
-### 이전 model-test 원격 목옆점 확대 실험
+## 👥 Team
 
-로컬 목옆점 모델 적용 전에는 새 목옆점 정의(어깨 윗라인–카라 뿌리 연결점)를 적용하며, 기존 목·어깨 통합 확대 뒤에 좌우 목옆점 개별 확대를 한 번씩 추가합니다. 한 촬영당 AI 요청 최대 4회, 개별 확대 각 20초, 전체 처리 최대 100초입니다. 확대 실패·null·마스크 검증 탈락 시 기존 점을 유지합니다. 실제 사진 실측 결과를 저장하면 `remoteNeckSideRefinements`에서 좌우 확대 입력 범위와 원본 점·채택 여부를 확인할 수 있습니다. 서버 배포와 앱 재빌드가 모두 필요합니다.
+<table width="100%">
+  <tr>
+    <td width="320" align="center"><img src="assets/readme/mason.png" width="80" alt="이민혁 Mason 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/ddoechii.png" width="80" alt="윤현주 Ddoechii 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/iris.png" width="80" alt="박채은 Iris 프로필"></td>
+  </tr>
+  <tr>
+    <th align="center"><a href="https://github.com/decl5th">이민혁</a></th>
+    <th align="center"><a href="https://github.com/qoqoqle">윤현주</a></th>
+    <th align="center"><a href="https://github.com/takechaens">박채은</a></th>
+  </tr>
+  <tr>
+    <td align="center">Mason&nbsp;·&nbsp;메&#8288;이&#8288;슨</td>
+    <td align="center">Ddoechii&nbsp;·&nbsp;또&#8288;치</td>
+    <td align="center">Iris&nbsp;·&nbsp;아&#8288;이&#8288;리&#8288;스</td>
+  </tr>
+  <tr>
+    <td align="center">🎯&nbsp;PM&nbsp;·&nbsp;💻&nbsp;Developer</td>
+    <td align="center">🎨&nbsp;Product&nbsp;Designer</td>
+    <td align="center">🎨&nbsp;Product&nbsp;Designer</td>
+  </tr>
+</table>
+
+<table width="100%">
+  <tr>
+    <td width="320" align="center"><img src="assets/readme/tobae.png" width="80" alt="박지원 Tobae 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/mugu.png" width="80" alt="정무구 Mugu 프로필"></td>
+    <td width="320" align="center"><img src="assets/readme/ichi.png" width="80" alt="오하나 Ichi 프로필"></td>
+  </tr>
+  <tr>
+    <th align="center"><a href="https://github.com/tobae-time">박지원</a></th>
+    <th align="center"><a href="https://github.com/moogoochung">정무구</a></th>
+    <th align="center"><a href="https://github.com/hana5111">오하나</a></th>
+  </tr>
+  <tr>
+    <td align="center">Tobae&nbsp;·&nbsp;토&#8288;바&#8288;에</td>
+    <td align="center">Mugu&nbsp;·&nbsp;무&#8288;구</td>
+    <td align="center">Ichi&nbsp;·&nbsp;이&#8288;치</td>
+  </tr>
+  <tr>
+    <td align="center">💻&nbsp;Developer</td>
+    <td align="center">💻&nbsp;Developer</td>
+    <td align="center">💻&nbsp;Developer</td>
+  </tr>
+</table>
+
+---
+
+## 🔗 Links
+
+[프로젝트 소개](https://developeracademy-postech.github.io/2026-C6-M11-Dobby-Web/) · [고객 지원](https://app.notion.com/p/chak-407b4b9ddf0c802f9886dfa23ab61269?source=copy_link) · [개인정보 처리방침](https://app.notion.com/p/chak-404b4b9ddf0c806aa4f2ce677c724b0b?source=copy_link)
+
+<!-- 시연 영상 URL이 준비되면 링크 추가 -->
+
+<!--
+게시 전 확인
+- 기능별 화면 이미지 추가
+- 공개 빌드의 기능 범위와 기술 스택 대조
+- 시연 영상 URL 연결
+-->
