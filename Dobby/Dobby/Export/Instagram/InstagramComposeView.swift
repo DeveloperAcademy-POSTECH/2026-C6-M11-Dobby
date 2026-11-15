@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct InstagramComposeView: View {
     let account: InstagramAccount
@@ -119,19 +120,170 @@ private struct InstagramCaptionHeader: View {
 
 private struct InstagramCaptionInput: View {
     @Binding var text: String
+    @State private var contentHeight: CGFloat = 22
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            TextField("", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.custom("Pretendard-Regular", fixedSize: 17))
-                .foregroundStyle(Color(.label))
-                .lineLimit(1...)
+            InstagramGrowingCaptionTextView(text: $text, contentHeight: $contentHeight)
+                .frame(height: contentHeight, alignment: .topLeading)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+/// Expands with the caption and keeps the active caret above the keyboard.
+private struct InstagramGrowingCaptionTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var contentHeight: CGFloat
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.adjustsFontForContentSizeCategory = false
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        context.coordinator.textView = textView
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.parent = self
+        guard textView.markedTextRange == nil else { return }
+
+        if textView.text != text {
+            let selection = textView.selectedRange
+            textView.attributedText = NSAttributedString(string: text, attributes: textAttributes)
+            textView.selectedRange = NSRange(
+                location: min(selection.location, textView.text.utf16.count),
+                length: 0
+            )
+        }
+        textView.typingAttributes = textAttributes
+        context.coordinator.updateLayout(in: textView)
+    }
+
+    private var textAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: UIFont(name: "Pretendard-Regular", size: 17) ?? UIFont.systemFont(ofSize: 17),
+            .foregroundColor: UIColor.label
+        ]
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: InstagramGrowingCaptionTextView
+        weak var textView: UITextView?
+        private var keyboardFrame = CGRect.null
+
+        init(_ parent: InstagramGrowingCaptionTextView) {
+            self.parent = parent
+            super.init()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameDidChange),
+                name: UIResponder.keyboardDidChangeFrameNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameDidChange),
+                name: UIResponder.keyboardDidShowNotification,
+                object: nil
+            )
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
+            updateLayout(in: textView)
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            textView.typingAttributes = parent.textAttributes
+            updateLayout(in: textView)
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            updateLayout(in: textView)
+        }
+
+        func updateLayout(in textView: UITextView) {
+            Task { @MainActor [weak self, weak textView] in
+                await Task.yield()
+                guard let self, let textView, let selection = textView.selectedTextRange else { return }
+
+                textView.layoutIfNeeded()
+                let width = textView.bounds.width
+                var heightChanged = false
+                if width > 0 {
+                    let fittingHeight = ceil(textView.sizeThatFits(
+                        CGSize(width: width, height: .greatestFiniteMagnitude)
+                    ).height)
+                    let height = max(22, fittingHeight)
+                    if abs(parent.contentHeight - height) > 0.5 {
+                        parent.contentHeight = height
+                        heightChanged = true
+                    }
+                }
+                if heightChanged {
+                    await Task.yield()
+                    textView.window?.layoutIfNeeded()
+                }
+                revealCaret(selection.end, in: textView)
+            }
+        }
+
+        @objc private func keyboardFrameDidChange(_ notification: Notification) {
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
+                return
+            }
+            keyboardFrame = frame
+            guard let textView, textView.isFirstResponder else { return }
+            updateLayout(in: textView)
+        }
+
+        @MainActor
+        private func revealCaret(_ position: UITextPosition, in textView: UITextView) {
+            guard textView.isFirstResponder,
+                  let scrollView = enclosingScrollView(of: textView),
+                  !scrollView.isTracking,
+                  !scrollView.isDragging,
+                  !scrollView.isDecelerating else { return }
+
+            let caretFrame = textView.caretRect(for: position)
+            var targetFrame = textView.convert(caretFrame, to: scrollView).insetBy(dx: 0, dy: -12)
+            targetFrame.size.height += uncoveredKeyboardOverlapHeight(scrollView: scrollView)
+            scrollView.scrollRectToVisible(targetFrame, animated: false)
+        }
+
+        private func enclosingScrollView(of textView: UITextView) -> UIScrollView? {
+            var ancestor = textView.superview
+            while let view = ancestor {
+                if let scrollView = view as? UIScrollView {
+                    return scrollView
+                }
+                ancestor = view.superview
+            }
+            return nil
+        }
+
+        private func uncoveredKeyboardOverlapHeight(scrollView: UIScrollView) -> CGFloat {
+            guard !keyboardFrame.isNull, let window = scrollView.window else { return 0 }
+            let keyboardFrameInWindow = window.convert(keyboardFrame, from: window.screen.coordinateSpace)
+            let scrollFrameInWindow = scrollView.convert(scrollView.bounds, to: window)
+            let overlap = scrollFrameInWindow.intersection(keyboardFrameInWindow).height
+            return max(0, overlap - scrollView.adjustedContentInset.bottom)
+        }
     }
 }
 
