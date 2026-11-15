@@ -54,7 +54,7 @@ struct FruitsExportView: View {
                 FruitsTransferIndicator()
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .safeAreaInset(edge: .bottom, spacing: 43) {
             FruitsExportBottomAction(
                 hasCopied: hasCopied,
                 isLoading: opening
@@ -78,7 +78,12 @@ struct FruitsExportView: View {
     }
 
     private func copy(_ field: ProductCopyField) {
-        ClipboardWriter().copyText(product.marketplacePayload.value(for: field))
+        let value = product.marketplacePayload.value(for: field)
+        guard field != .brand || !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        ClipboardWriter().copyText(value)
         hasCopied = true
         toastPresenter.show(field.fruitsToastMessage)
     }
