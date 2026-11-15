@@ -3,12 +3,12 @@
 <h1>
   chak(착)&nbsp;
   <a href="https://apps.apple.com/kr/app/chak-%EC%B0%A9/id6823445800"><img src="assets/readme/app-store-badge.svg" height="40" align="center" alt="Download on the App Store"></a>&nbsp;
-  <img src="https://img.shields.io/badge/iOS-26.4%2B-000000?style=flat&amp;logo=apple&amp;logoColor=white&amp;labelColor=000000" align="center" alt="iOS 26.4 이상">
-  <img src="https://img.shields.io/badge/App-1.0.0-E34825?style=flat&amp;labelColor=E34825" align="center" alt="App 1.0.0">
+  <img src="https://img.shields.io/badge/iOS-26.0%2B-000000?style=flat&amp;logo=apple&amp;logoColor=white&amp;labelColor=000000" align="center" alt="iOS 26.0 이상">
+  <img src="https://img.shields.io/badge/App-1.2.1-E34825?style=flat&amp;labelColor=E34825" align="center" alt="App 1.2.1">
 </h1>
 
 <!-- Apple 공식 다운로드 배지 원본: https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg -->
-<!-- 앱 버전 배지는 현재 프로젝트의 MARKETING_VERSION 기준 -->
+<!-- iOS 지원 버전과 앱 버전 배지는 App Store 공개 배포 버전 기준 -->
 
 ### 빈티지 의류의 촬영부터 판매 준비까지
 
