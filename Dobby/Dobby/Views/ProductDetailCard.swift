@@ -1,10 +1,14 @@
 import SwiftUI
+import UIKit
 
 enum ProductDetailCardStyle {
     case standard
     case completion
+    case library
 
-    var allowsPhotoExpansion: Bool { self == .standard }
+    var allowsPhotoExpansion: Bool { self != .completion }
+    var usesSpacedSections: Bool { self != .standard }
+    var usesMeasurementTokens: Bool { self != .standard }
 }
 
 enum ProductDetailPhotoPresentation {
@@ -45,7 +49,7 @@ struct ProductDetailCard: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 17))
+            .clipShape(RoundedRectangle(cornerRadius: 17, style: style == .library ? .circular : .continuous))
             .foregroundStyle(Color(red: 26 / 255, green: 26 / 255, blue: 26 / 255))
     }
 }
@@ -57,7 +61,7 @@ private struct ProductDetailSections: View {
     let style: ProductDetailCardStyle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: style == .completion ? 0 : 18) {
+        VStack(alignment: .leading, spacing: style.usesSpacedSections ? 0 : 18) {
             if style == .completion {
                 productName
                 sectionDivider
@@ -66,20 +70,26 @@ private struct ProductDetailSections: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("product-detail.photos")
             sectionDivider
-            if style == .standard {
+            if style != .completion {
                 productName
                 sectionDivider
             }
-            ProductDetailField(title: "설명", text: garment.detail, style: style)
+            ProductDetailField(title: "설명", text: garment.detail, style: style, trailingInset: style == .library ? 6 : 0)
             sectionDivider
             ProductDetailField(title: "가격", text: garment.price.map {
-                $0.formatted(.number.locale(Locale(identifier: "ko_KR"))) + (style == .completion ? "" : " 원")
-            } ?? "", style: style)
+                $0.formatted(.number.locale(Locale(identifier: "ko_KR"))) + (style == .standard ? " 원" : "")
+            } ?? "", style: style, suffix: style == .library && garment.price != nil ? "원" : nil)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("product-detail.price")
-            if !garment.brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if style == .library || !garment.brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 sectionDivider
-                ProductDetailField(title: "브랜드", text: garment.brand, style: style)
+                ProductDetailField(title: "브랜드",
+                    text: garment.brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No Brand" : garment.brand,
+                    style: style,
+                    textColor: style == .library && garment.brand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? Color("BrandNeutral500") : nil)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("product-detail.brand")
             }
             sectionDivider
             ProductDetailMeasurements(garment: garment, accessibilityPrefix: measurementAccessibilityPrefix,
@@ -87,15 +97,19 @@ private struct ProductDetailSections: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("product-detail.measurements")
         }
-        .frame(minHeight: style == .completion ? 832 : nil, alignment: .leading)
+        .frame(minHeight: style.usesSpacedSections ? 832 : nil, alignment: .leading)
     }
 
     @ViewBuilder
     private var sectionDivider: some View {
-        if style == .completion {
-            Spacer(minLength: 16)
-            Divider().overlay(Color("BrandNeutral100"))
-            Spacer(minLength: 16)
+        if style.usesSpacedSections {
+            Spacer(minLength: style == .library ? 24 : 16)
+            if style == .library {
+                Color("BrandNeutral200").frame(height: 1)
+            } else {
+                Divider().overlay(Color("BrandNeutral100"))
+            }
+            Spacer(minLength: style == .library ? 24 : 16)
         } else {
             Divider()
         }
@@ -110,9 +124,16 @@ private struct ProductDetailSections: View {
 
 private struct ProductDetailSectionTitle: View {
     let title: String
+    var libraryFont: Font? = nil
 
     var body: some View {
-        ProductFieldTitle(title: title)
+        Group {
+            if let libraryFont {
+                Text(title).font(libraryFont)
+            } else {
+                ProductFieldTitle(title: title)
+            }
+        }
             .tracking(-0.43)
             .frame(minHeight: 22, alignment: .leading)
     }
@@ -122,19 +143,34 @@ private struct ProductDetailField: View {
     let title: String
     let text: String
     let style: ProductDetailCardStyle
+    var trailingInset: CGFloat = 0
+    var suffix: String? = nil
+    var textColor: Color? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ProductDetailSectionTitle(title: title)
-            Text(text)
-                .font(style == .completion
-                    ? .custom("Pretendard-Regular", size: 15, relativeTo: .subheadline)
-                    : .system(size: 14))
-                .tracking(-0.23)
-                .lineSpacing(3)
-                .frame(minHeight: 20, alignment: .topLeading)
-                .fixedSize(horizontal: false, vertical: true)
+            ProductDetailSectionTitle(title: title, libraryFont: style == .library ? LibraryDetailTypography.heading : nil)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                fieldText(text)
+                if let suffix { fieldText(suffix) }
+            }
+            .padding(.trailing, trailingInset)
+            .frame(maxWidth: style == .library ? .infinity : nil, alignment: .leading)
         }
+        .frame(maxWidth: style == .library ? .infinity : nil, alignment: .leading)
+    }
+
+    private func fieldText(_ value: String) -> some View {
+        Text(value)
+            .foregroundColor(textColor)
+            .font(style == .library ? LibraryDetailTypography.body : style == .completion
+                ? .custom("Pretendard-Regular", size: 15, relativeTo: .subheadline)
+                : .system(size: 14))
+            .tracking(-0.23)
+            .lineSpacing(style == .library ? max(0, 20 - UIFont.systemFont(ofSize: 14).lineHeight) : 3)
+            .multilineTextAlignment(.leading)
+            .frame(minHeight: 20, alignment: .topLeading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -145,7 +181,8 @@ private struct ProductDetailPhotoSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ProductDetailSectionTitle(title: "제품 사진")
+            ProductDetailSectionTitle(title: "제품 사진",
+                libraryFont: style == .library ? LibraryDetailTypography.photoAndMeasurementHeading : nil)
             ProductDetailPhotos(garment: garment, presentation: presentation, style: style)
                 .padding(.trailing, -16)
         }
@@ -186,7 +223,8 @@ private struct ProductDetailPhotoRow: View {
             }
         }
         .fullScreenCover(item: $expandedPhoto) { photo in
-            ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id)
+            ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id,
+                                    style: style == .library ? .library : .standard)
                 .presentationBackground(.clear)
         }
     }
@@ -237,13 +275,7 @@ private struct ProductDetailMeasurements: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ProductDetailSectionTitle(title: "실측 사이즈")
-            if garment.visibleMeasurements.contains(where: {
-                $0.sourceStatusRaw == MeasurementStatus.uncertain.rawValue && !$0.isEdited
-            }) {
-                Text("불확실한 자동 측정값이 포함되어 있어요.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
+            ProductDetailSectionTitle(title: "실측 사이즈", libraryFont: style == .library ? LibraryDetailTypography.heading : nil)
             ProductDetailMeasurementScroll(values: ProductInformationStyle.measurements(for: garment),
                                            accessibilityPrefix: accessibilityPrefix, style: style)
         }
@@ -258,15 +290,20 @@ private struct ProductDetailMeasurementScroll: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             ProductDetailMeasurementRow(values: values, accessibilityPrefix: accessibilityPrefix, style: style)
+                .padding(style == .library ? 1.5 : 0)
                 .containerRelativeFrame(.horizontal) { width, _ in
-                    max(width, CGFloat(values.count) * 64)
+                    if style == .library {
+                        return values.count <= 5 ? width : max(width, CGFloat(values.count) * 85 - 1)
+                    }
+                    return max(width, CGFloat(values.count) * 64)
                 }
         }
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .scrollDisabled(style == .library && values.count <= 5)
+        .background(style == .library ? Color("BrandNeutral100") : .white)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: style == .library ? .circular : .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).strokeBorder(
-                style == .completion ? Color("BrandNeutral100") : ProductInformationStyle.field, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 14, style: style == .library ? .circular : .continuous).strokeBorder(
+                style.usesMeasurementTokens ? Color("BrandNeutral100") : ProductInformationStyle.field, lineWidth: 1.5)
         }
     }
 }
@@ -280,11 +317,12 @@ private struct ProductDetailMeasurementRow: View {
         HStack(spacing: 1) {
             ForEach(values) { value in
                 ProductDetailMeasurementColumn(value: value, style: style)
+                    .frame(minWidth: style == .library && values.count > 5 ? 84 : 0)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("\(accessibilityPrefix).\(value.key)")
             }
         }
-        .background(style == .completion ? Color("BrandNeutral100") : ProductInformationStyle.field)
+        .background(style.usesMeasurementTokens ? Color("BrandNeutral100") : ProductInformationStyle.field)
     }
 }
 
@@ -294,24 +332,24 @@ private struct ProductDetailMeasurementColumn: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            Text(ProductInformationStyle.measurementTitle(for: value))
-                .font(style == .completion
-                    ? .custom("Pretendard-SemiBold", size: 17, relativeTo: .headline)
+            Text(style == .library && value.key == "totalLength" ? "총장" : ProductInformationStyle.measurementTitle(for: value))
+                .font(style.usesMeasurementTokens
+                    ? LibraryDetailTypography.photoAndMeasurementHeading
                     : .headline)
                 .tracking(-0.43)
-                .foregroundStyle(Color(red: 83 / 255, green: 79 / 255, blue: 73 / 255))
+                .foregroundStyle(Color("BrandNeutral800"))
                 .lineLimit(1).minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity).frame(height: 42)
-                .background(style == .completion ? Color("BrandNeutral100") : ProductInformationStyle.field)
+                .background(style.usesMeasurementTokens ? Color("BrandNeutral100") : ProductInformationStyle.field)
             Text(MeasurementDisplayText.centimeters(value.valueCm) + "cm")
-                .font(style == .completion
-                    ? .custom("Pretendard-Regular", size: 15, relativeTo: .subheadline)
+                .font(style.usesMeasurementTokens
+                    ? LibraryDetailTypography.measurementValue
                     : .subheadline)
                 .tracking(-0.23)
-                .foregroundStyle(.black)
+                .foregroundStyle(style == .library ? Color("BrandNeutralBlack") : .black)
                 .lineLimit(1).minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity).frame(height: 64)
-                .background(.white)
+                .background(Color("BrandNeutralWhite"))
         }
     }
 }

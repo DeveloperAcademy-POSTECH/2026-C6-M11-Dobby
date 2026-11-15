@@ -86,7 +86,6 @@ final class ProductAutofillBFlowTests: XCTestCase {
         replaceText(in: field("name", in: app), with: manualName, app: app)
         dismissKeyboard(in: app)
         tap(app, "product-ai.generate")
-        tap(app, "product-ai.replace")
         tap(app, "product-ai.cancel")
         XCTAssertTrue(app.navigationBars["제품 정보 입력"].exists)
         XCTAssertTrue(app.buttons["product-ai.generate"].isEnabled)
@@ -102,7 +101,7 @@ final class ProductAutofillBFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testBReplacingInformationRequiresConfirmationAndPreservesPriceAndMeasurement() {
+    func testBReplacingInformationStartsImmediatelyAndPreservesPriceAndMeasurement() {
         let app = openInformation(result: "success")
         defer { app.terminate() }
         screenshot(app, name: "b-flow-information-idle-before-manual-input")
@@ -115,20 +114,8 @@ final class ProductAutofillBFlowTests: XCTestCase {
         replaceText(in: field("measurement.shoulderWidth", in: app), with: "67.25", app: app)
         dismissKeyboard(in: app)
         tap(app, "product-ai.generate")
-        let replacementDialog = app.sheets["작성한 정보를 AI 내용으로 바꿀까요?"].firstMatch
-        XCTAssertTrue(replacementDialog.waitForExistence(timeout: 5))
-        // In its popover presentation, the native dialog cancels by tapping
-        // outside rather than displaying a separate Cancel action.
-        let dismissalRegion = app.otherElements["PopoverDismissRegion"].firstMatch
-        XCTAssertTrue(dismissalRegion.waitForExistence(timeout: 5))
-        dismissalRegion.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-        XCTAssertTrue(replacementDialog.waitForNonExistence(timeout: 5))
-        XCTAssertEqual(field("name", in: app).value as? String, "My product name")
-        XCTAssertEqual(field("detail", in: app).value as? String, "My product description")
-        XCTAssertEqual(field("brand", in: app).value as? String, "MY BRAND")
-        XCTAssertFalse(app.descendants(matching: .any)["product-ai.loading"].exists)
-        tap(app, "product-ai.generate")
-        tap(app, "product-ai.replace")
+        XCTAssertFalse(app.sheets["작성한 정보를 AI 내용으로 바꿀까요?"].exists)
+        XCTAssertFalse(app.buttons["product-ai.replace"].firstMatch.exists)
         waitForGeneratedFields(in: app)
         XCTAssertEqual(field("price", in: app).value as? String, "40,000")
         XCTAssertEqual(measurementValue(in: app), "67.25")
@@ -233,7 +220,8 @@ final class ProductAutofillBFlowTests: XCTestCase {
 
     @MainActor
     private func field(_ key: String, in app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any)["product-info.\(key)"].firstMatch
+        let identifier = "product-info.\(key)"
+        return key == "detail" ? app.textViews[identifier].firstMatch : app.textFields[identifier].firstMatch
     }
 
     @MainActor

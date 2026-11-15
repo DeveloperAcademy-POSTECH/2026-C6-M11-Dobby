@@ -5,27 +5,25 @@ struct FruitsExportContent: View {
     let onCopy: (ProductCopyField) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("복사 버튼을 누르고\n후루츠패밀리 판매 페이지를 열어주세요")
-                .font(.custom("Pretendard-Bold", fixedSize: 22))
-                .foregroundStyle(.labelPrimary)
+                .font(.custom("Pretendard-Bold", size: 22, relativeTo: .title2))
+                .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 14)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.bottom, 41)
 
             FruitsCopyCard(product: product, onCopy: onCopy)
 
-            Text("판매 페이지를 열고 제품명, 설명, 브랜드를 붙여 넣어주세요")
-                .padding(.top, 14)
-            Text("· 실측 사이즈는 화면에 뜬 PiP를 보고 입력해 주세요")
-                .padding(.top, 4)
+            Text("판매 페이지를 열고 제품명, 설명, 브랜드를 붙여넣어 주세요\n • 실측 사이즈는 화면에 뜬 PIP를 보고 입력해 주세요")
+                .font(.custom("Pretendard-Regular", fixedSize: 14))
+                .foregroundStyle(Color("BrandNeutral500"))
         }
-        .font(.custom("Pretendard-Medium", fixedSize: 14))
-        .foregroundStyle(Color("BrandNeutral500"))
-        .padding(.horizontal, 21)
-        .padding(.bottom, 24)
-        .frame(maxWidth: 640)
+        .padding(.top, 25)
+        .padding(.horizontal, 20)
+        .frame(maxWidth: 402)
         .frame(maxWidth: .infinity)
-        .background(.white)
+        .background(Color(.brandNeutralWhite))
     }
 }
 

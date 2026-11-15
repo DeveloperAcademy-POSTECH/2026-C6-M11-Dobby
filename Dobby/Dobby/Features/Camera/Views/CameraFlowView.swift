@@ -57,7 +57,8 @@ struct CameraFlowView: View {
     var body: some View {
         CameraPermissionGate(permission: permission) {
             GeometryReader { safeGeometry in
-                cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom)
+                cameraCanvas(bottomSafeAreaInset: safeGeometry.safeAreaInsets.bottom,
+                    headerBottom: safeGeometry.frame(in: .global).minY)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -68,26 +69,28 @@ struct CameraFlowView: View {
         .productCreationProgress(isCompletingCapture ? nil : .details)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil || isCompletingCapture)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarBackground(.black, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar(isCompletingCapture ? .hidden : .automatic, for: .navigationBar)
         .toolbar {
             if let onExit {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { requestExit(onExit) } label: {
-                        Image(systemName: "chevron.left")
+                        GarmentCaptureToolbarIcon(systemName: "chevron.left")
                             .foregroundStyle(.white)
                     }
+                        .buttonStyle(.plain)
                         .disabled(isExitDisabled)
                         .accessibilityHidden(isCompletingCapture)
                         .accessibilityLabel("뒤로가기")
                         .accessibilityIdentifier("product-flow.back")
-                }
+                }.sharedBackgroundVisibility(.hidden)
             }
             ToolbarItem(placement: .confirmationAction) {
                 // 촬영을 마친 전체 사진을 저장한 뒤 상위 흐름에 전달한다.
                 completionControl
-            }
+            }.sharedBackgroundVisibility(.hidden)
         }
         .accessibilityHidden(isCompletingCapture)
         .overlay {
@@ -195,22 +198,23 @@ struct CameraFlowView: View {
 
     /// Match the measurement camera's complete canvas and ratio-aware anchors.
     /// Reading the safe inset outside ignoresSafeArea prevents a second offset.
-    private func cameraCanvas(bottomSafeAreaInset: CGFloat) -> some View {
+    private func cameraCanvas(bottomSafeAreaInset: CGFloat, headerBottom: CGFloat) -> some View {
         GeometryReader { geometry in
+            let photoTop = max(0, headerBottom - geometry.frame(in: .global).minY + ProductCreationLayoutMetrics.photoGap)
             ZStack {
                 Color.black
-                ratioPreview
+                ratioPreview(photoTop: photoTop)
                     .modifier(DetailZoomModifier(options: camera?.options,
                         enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
                             && (previewSource != nil || camera?.state == .running),
-                        bottomSafeAreaInset: bottomSafeAreaInset))
+                        bottomSafeAreaInset: bottomSafeAreaInset, portraitPhotoTop: photoTop))
                 if !isMoreOptionsPresented {
-                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                    captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)
                         .animation(reduceMotion ? nil : .smooth(duration: 0.30),
                             value: camera?.options.photoAspectRatio ?? .fourThree)
                         .animation(nil, value: geometry.size)
                 }
-                captureFeedback(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                captureFeedback(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)
                 cameraOptionsOverlay(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
                     .allowsHitTesting(isMoreOptionsPresented)
                     .accessibilityHidden(!isMoreOptionsPresented)
@@ -222,8 +226,8 @@ struct CameraFlowView: View {
     }
 
     @ViewBuilder
-    private func captureFeedback(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
-        if let frame = shutterFrame(in: size, bottomSafeAreaInset: bottomSafeAreaInset),
+    private func captureFeedback(in size: CGSize, bottomSafeAreaInset: CGFloat, photoTop: CGFloat) -> some View {
+        if let frame = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)?.shutter,
            failureMessage != nil {
             Group {
                 if let failureMessage {
@@ -260,15 +264,16 @@ struct CameraFlowView: View {
     }
 
     @ViewBuilder
-    private var ratioPreview: some View {
+    private func ratioPreview(photoTop: CGFloat) -> some View {
         let ratio = camera?.options.photoAspectRatio ?? .fourThree
         Group {
             if let previewSource {
-                DetailAspectRatioPreview(aspectRatio: ratio, prefersBottomAlignedPortrait: true) { _ in
+                DetailAspectRatioPreview(aspectRatio: ratio, prefersBottomAlignedPortrait: true,
+                                         portraitPhotoTop: photoTop) { _ in
                     CameraPhotoView(source: previewSource).accessibilityLabel("샘플 카메라 미리보기")
                 }
             } else if let camera {
-                CameraLivePreviewView(camera: camera, aspectRatio: ratio,
+                CameraLivePreviewView(camera: camera, aspectRatio: ratio, portraitPhotoTop: photoTop,
                     interactionEnabled: !isMoreOptionsPresented && !isPhotoOperationInProgress
                         && !isCaptureGuidePresented && !isGalleryPresented && scenePhase == .active)
             } else {
@@ -279,16 +284,19 @@ struct CameraFlowView: View {
 
     private var completionControl: some View {
         Button(action: requestCompletion) { completionLabel }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .tint(Color(red: 0.94, green: 0.24, blue: 0.07))
+        .buttonStyle(.plain)
         .disabled(isPhotoOperationInProgress || model.allPhotosOutput == nil)
+        .opacity(isPhotoOperationInProgress || model.allPhotosOutput == nil ? 0.5 : 1)
         .accessibilityHidden(isCompletingCapture)
         .accessibilityIdentifier("camera.selectPhotos")
     }
 
     private var completionLabel: some View {
-        Text("다음").font(.body.weight(.semibold)).foregroundStyle(.white).frame(minWidth: 44)
+        Text("다음")
+            .font(.body.weight(.semibold)).foregroundStyle(.white)
+            .frame(width: 76, height: ProductCreationHeaderLayout.toolbarHeight)
+            .glassEffect(.regular.tint(Color(red: 0.94, green: 0.24, blue: 0.07)).interactive(), in: Capsule())
+            .contentShape(.interaction, Capsule())
     }
 
     private var shutter: some View {
@@ -307,20 +315,17 @@ struct CameraFlowView: View {
             .accessibilityIdentifier("camera.captureDetail")
     }
 
-    private func shutterFrame(in size: CGSize, bottomSafeAreaInset: CGFloat) -> CameraPhotoViewport? {
-        captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset)?.shutter
-    }
-
-    private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
+    private func captureControlLayout(in size: CGSize, bottomSafeAreaInset: CGFloat,
+                                      photoTop: CGFloat) -> MeasurementCameraChromeLayout.Controls? {
         DetailCameraPreviewLayout(containerSize: size,
             aspectRatio: camera?.options.photoAspectRatio ?? .fourThree,
-            prefersBottomAlignedPortrait: true)
+            prefersBottomAlignedPortrait: true, portraitPhotoTop: photoTop)
             .controls(in: size, bottomSafeAreaInset: bottomSafeAreaInset)
     }
 
     @ViewBuilder
-    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat) -> some View {
-        if let controls = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset) {
+    private func captureControls(in size: CGSize, bottomSafeAreaInset: CGFloat, photoTop: CGFloat) -> some View {
+        if let controls = captureControlLayout(in: size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop) {
             let frame = controls.shutter
             let centerY = frame.y + frame.height / 2
             shutter.position(x: frame.x + frame.width / 2, y: centerY)

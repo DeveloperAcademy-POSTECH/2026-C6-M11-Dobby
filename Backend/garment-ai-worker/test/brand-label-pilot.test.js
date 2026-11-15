@@ -119,10 +119,10 @@ test("bounded OCR observations reach only the isolated cropped-label reader as u
 });
 
 
-test("model-authored transcription cannot certify a brand without matching multi-angle OCR", () => {
+test("model-authored transcription cannot certify a brand without a complete matching OCR word", () => {
   const response = payload({ readings: [reading], brand });
   assert.equal(parseCroppedLabelReadings(response, photos).brand, null);
-  for (const ocrText of ["45°: PALACE", "45°: PALACE\n45°: PALACE", "45°: OTHER\n90°: OTHER"]) {
+  for (const ocrText of ["45°: PALA", "45°: OTHER\n90°: OTHER"]) {
     assert.equal(parseCroppedLabelReadings(response, [{ ...photos[0], ocrText }]).brand, null);
   }
   const wrong = { ...brand, originalName: "PEAK PERFORMANCE", observedText: "PEAK PERFORMANCE" };
@@ -182,4 +182,17 @@ test("OCR words from separate incomplete rotations cannot be combined into proof
   [{ ...photos[0], ocrText: "0°: POLO\n90°: RALPH LAUREN" }]);
   assert.equal(result.brand, null);
   assert.equal(result.brandRejection, "ocr_mismatch");
+});
+
+
+test("one complete OCR direction and independent clear high-confidence crop reading are sufficient", () => {
+  const evidence = [{ ...photos[0], ocrText: "135°: PALACE\n225°: S\n315°: РАVACE" }];
+  const result = parseCroppedLabelReadings(payload({ readings: [reading], brand }), evidence);
+  assert.equal(result.brand.originalName, "PALACE");
+  assert.equal(result.brandRejection, null);
+  for (const changed of [
+    { readings: [{ ...reading, legibility: "partial" }], brand },
+    { readings: [reading], brand: { ...brand, confidence: "medium" } },
+    { readings: [{ ...reading, text: "OTHER" }], brand },
+  ]) assert.equal(parseCroppedLabelReadings(payload(changed), evidence).brand, null);
 });

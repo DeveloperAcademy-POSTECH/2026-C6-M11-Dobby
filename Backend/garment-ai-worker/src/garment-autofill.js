@@ -1,3 +1,4 @@
+import { runDetailedResearch } from "./garment-detailed-research.js";
 import { readCroppedBrandLabels } from "./brand-label-pilot.js";
 import { buildBrandDiscoveryRequest, parseBrandDiscoveryResponse, applyDiscoveredBrand, buildBrandReadbackRequest, parseBrandReadbackResponse } from "./garment-brand-discovery.js";
 import {
@@ -52,7 +53,7 @@ function applyResearch(baseline, research) {
   return { ...draft, sources: [...sources.values()].slice(0, 3) };
 }
 
-export async function runProductAutofill(photos, { requestResponse, verifyKnownBrand = false, labelCrops, onBrandDecision }) {
+export async function runProductAutofill(photos, { requestResponse, verifyKnownBrand = false, labelCrops, onBrandDecision, detailedResearch = false }) {
   // Photo features and independent label reading do not depend on each other.
   // Await both settlements so a failed baseline cannot leave a request running.
   const initialRequest = requestResponse(buildIdentificationRequest(photos));
@@ -103,6 +104,8 @@ export async function runProductAutofill(photos, { requestResponse, verifyKnownB
       baseline.draft = withReviewNote(baseline.draft, "브랜드 독립 라벨 판독을 완료하지 못했습니다. 실물 라벨과 대조해 주세요.");
     }
   }
+
+  if (detailedResearch) return runDetailedResearch(baseline, photos, { requestResponse });
 
   let previousQuery = null;
   let followUpQuery = null;

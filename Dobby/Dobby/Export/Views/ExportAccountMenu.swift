@@ -62,11 +62,11 @@ private struct ExportAccountMenuButton: View {
                     .font(.custom("Pretendard", fixedSize: 17))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .contentShape(Rectangle())
             .padding(.leading, 6)
             .padding(.trailing, 8)
             .padding(.vertical, 10)
             .frame(width: 206, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(tint)

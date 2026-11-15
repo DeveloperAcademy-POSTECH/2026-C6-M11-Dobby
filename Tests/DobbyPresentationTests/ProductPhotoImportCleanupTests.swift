@@ -6,6 +6,30 @@ import UIKit
 
 @MainActor
 struct ProductPhotoImportCleanupTests {
+    @Test func importsContinuePastTenAndDiscardRemovesEveryAddedFile() async throws {
+        let f = try Fixture()
+        defer { f.removeFiles() }
+        let session = try ProductInformationEditSession(garmentID: f.garment.id, container: f.container)
+        for _ in 0..<11 {
+            try await ProductPhotoImportStore.append(f.bytes, to: session.garment, in: session.context)
+        }
+        let photos = session.garment.productPhotos
+        #expect(photos.count == 12)
+        #expect(photos.first?.id == f.original.id)
+        #expect(Set(photos.map(\.id)).count == 12)
+        #expect(photos.map(\.order) == Array(0..<12))
+        for photo in photos {
+            #expect(FileManager.default.fileExists(atPath: GarmentStore.photosDirectory.appending(path: photo.fileName).path))
+        }
+        // Overflow is editable; final registration still validates its own limit.
+        #expect(!GarmentInformationValidation.isValid(session.garment))
+        let cleanup = ProductPhotoImportStore.uncommittedFileURLs(for: session.garment, in: session.context)
+        session.discard()
+        #expect(session.garment.productPhotos.count == 1)
+        #expect(cleanup.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+        #expect(FileManager.default.fileExists(atPath: f.originalURL.path))
+    }
+
     @Test func cancellingAnEditRemovesOnlyItsUnsavedImportsAndDerivedVariants() async throws {
         let f = try Fixture()
         defer { f.removeFiles() }

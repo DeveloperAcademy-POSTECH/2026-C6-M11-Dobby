@@ -8,6 +8,7 @@ struct ProductLibraryView: View {
     let onStartMeasurement: () -> Void
     let onResumeDraft: (UUID) -> Void
     @State private var searchText = ""
+    @State private var searchQuery = ""
     @State private var showsOnlyDrafts: Bool
     @State private var isSearchFocused = false
     @State private var pendingDeletion: UUID?
@@ -36,7 +37,7 @@ struct ProductLibraryView: View {
     }
 
     private var filteredGarments: [Garment] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return garments }
         return garments.filter {
             $0.name.localizedStandardContains(query) || $0.brand.localizedStandardContains(query)
@@ -60,18 +61,27 @@ struct ProductLibraryView: View {
         filteredGarments.filter { !$0.isCreationDraft }
     }
 
+    private var hasNoSearchResults: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (showsOnlyDrafts ? filteredDraftGarments.isEmpty : filteredGarments.isEmpty)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Group {
-                if garments.isEmpty {
+                if hasNoSearchResults {
+                    emptySearchResults
+                        .overlay(alignment: .topLeading) {
+                            if showsOnlyDrafts {
+                                draftFilter
+                                    .padding(.horizontal, 20)
+                                    .padding(.top, headerMetrics.statusBarHeight + headerMetrics.height + 16)
+                            }
+                        }
+                } else if garments.isEmpty {
                     Group {
                         if showsOnlyDrafts { emptyDrafts } else { emptyLibrary }
                     }
-                        .overlay(alignment: .topLeading) { draftFilter.padding(.horizontal, 20) }
-                        .padding(.top, headerMetrics.statusBarHeight + headerMetrics.height + 16)
-                        .padding(.bottom, headerMetrics.bottomBarHeight)
-                } else if filteredGarments.isEmpty && !showsOnlyDrafts {
-                    ContentUnavailableView.search(text: searchText.trimmingCharacters(in: .whitespacesAndNewlines))
                         .overlay(alignment: .topLeading) { draftFilter.padding(.horizontal, 20) }
                         .padding(.top, headerMetrics.statusBarHeight + headerMetrics.height + 16)
                         .padding(.bottom, headerMetrics.bottomBarHeight)
@@ -92,10 +102,7 @@ struct ProductLibraryView: View {
                                     if draftGarments.isEmpty {
                                         emptyDrafts
                                     } else {
-                                        ContentUnavailableView.search(
-                                            text: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        )
-                                        .frame(maxWidth: .infinity)
+                                        emptySearchResults
                                     }
                                 } else {
                                     LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
@@ -170,7 +177,7 @@ struct ProductLibraryView: View {
                     }
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(LibraryStyle.primary)
-                    .disabled(garments.isEmpty)
+                    .disabled(garments.isEmpty || hasNoSearchResults)
                     .accessibilityIdentifier("library.edit-mode")
                 }
             }
@@ -179,6 +186,7 @@ struct ProductLibraryView: View {
         .background {
             LibraryNavigationSearch(
                 text: $searchText,
+                query: $searchQuery,
                 isFocused: Binding(get: { isSearchFocused }, set: { isSearchFocused = $0 }),
                 allowsHiding: !garments.isEmpty,
                 revealID: searchRevealID,
@@ -219,16 +227,57 @@ struct ProductLibraryView: View {
             .accessibilityIdentifier("library.drafts.empty")
     }
 
+    private var emptySearchResults: some View {
+        GeometryReader { geometry in
+            // Figma positions the message 297pt below the 62pt status bar on an 874pt screen.
+            let screenHeight = geometry.size.height + geometry.safeAreaInsets.bottom
+            let designTop = headerMetrics.statusBarHeight
+                + max(0, screenHeight - headerMetrics.statusBarHeight) * (297.0 / 812.0)
+            let topSpacing = max(headerMetrics.statusBarHeight + headerMetrics.height + 24, designTop)
+
+            ScrollView {
+                VStack(spacing: 8) {
+                    Text("해당되는 제품이 없어요")
+                        .font(.custom("Pretendard-Bold", size: 22, relativeTo: .title2))
+                        .tracking(-0.26)
+                        .foregroundStyle(LibraryStyle.primary)
+                        .frame(minHeight: emptyTitleLineHeight)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("library.search.empty.title")
+
+                    Text("제대로 입력했는지 다시 한 번 확인해주세요")
+                        .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
+                        .tracking(-0.43)
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: emptyDescriptionLineHeight)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.top, topSpacing)
+                .padding(.bottom, 20)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
+            .scrollEdgeEffectHidden(true, for: .top)
+        }
+        .accessibilityIdentifier("library.search.empty")
+    }
+
     private var emptyLibrary: some View {
         GeometryReader { geometry in
+            // Figma starts the message 297pt below the status bar on an 874pt window.
+            let messageTop = headerMetrics.statusBarHeight
+                + max(0, headerMetrics.windowHeight - headerMetrics.statusBarHeight) * (297.0 / 812.0)
             let contentHeight = emptyTitleLineHeight + emptyDescriptionLineHeight + emptyButtonHeight + 32
-            // Keep the design's position above center while adapting to the available height.
-            let topSpacing = max(0, geometry.size.height - contentHeight) * 0.37
+            // Keep the entire message and button inside the viewport as the keyboard reduces it.
+            let maximumTopSpacing = max(0, geometry.size.height - contentHeight - 20)
+            let topSpacing = min(maximumTopSpacing, max(0, messageTop - geometry.frame(in: .global).minY))
 
             ScrollView {
                 VStack(spacing: 0) {
                     Text("보관함이 비어있어요")
-                        .font(.title2.bold())
+                        .font(.custom("Pretendard-Bold", size: 22, relativeTo: .title2))
                         .tracking(-0.26)
                         .foregroundStyle(LibraryStyle.primary)
                         .frame(minHeight: emptyTitleLineHeight)
@@ -236,7 +285,7 @@ struct ProductLibraryView: View {
                         .accessibilityIdentifier("library.empty.title")
 
                     Text("작업을 시작해보세요")
-                        .font(.body)
+                        .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
                         .tracking(-0.43)
                         .foregroundStyle(.secondary)
                         .frame(minHeight: emptyDescriptionLineHeight)
@@ -244,12 +293,12 @@ struct ProductLibraryView: View {
 
                     Button(action: onStartMeasurement) {
                         Text("실측 시작하기")
-                            .font(.callout.weight(.semibold).italic())
+                            .font(.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout))
                             .tracking(-0.31)
                             .foregroundStyle(LibraryStyle.background)
                             .padding(.horizontal, 24)
                             .frame(minWidth: 146, minHeight: emptyButtonHeight)
-                            .background(Color("HomeAccent"), in: Capsule())
+                            .background(Color("BrandMain500"), in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 24)

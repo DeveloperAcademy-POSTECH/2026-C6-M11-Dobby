@@ -117,8 +117,6 @@ struct CameraCaptureOptionsView: View {
         Group {
             if panelLayout != nil {
                 menuContent
-                    .padding(.top, 44)
-                    .overlay(alignment: .topTrailing) { closeButton }
             } else {
                 standaloneMenu
             }
@@ -136,7 +134,16 @@ struct CameraCaptureOptionsView: View {
             }
             option("비율", identifier: "camera.aspectRatioOption", enabled: !state.aspectRatios.isEmpty,
                    action: { navigate(to: .aspectRatio) }) {
-                Text(state.selectedAspectRatio).font(.headline).monospacedDigit()
+                ZStack {
+                    Image(systemName: "viewfinder")
+                        .font(.system(size: 28, weight: .regular))
+                    Text(state.selectedAspectRatio)
+                        .font(.system(size: 11, weight: .regular)).monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                        .frame(width: 24)
+                }
+                .frame(width: 32, height: 32)
+                .accessibilityHidden(true)
             }
         }
     }
@@ -144,29 +151,13 @@ struct CameraCaptureOptionsView: View {
     private var standaloneMenu: some View {
         menuContent
         .padding(.horizontal, presentation == .measurement ? 12 : 52)
-        // Reserve the close button's complete row in narrow landscape panels.
-        .padding(.top, presentation == .measurement ? 52 : 24)
+        .padding(.top, presentation == .measurement ? 12 : 24)
         .padding(.bottom, presentation == .measurement ? 12 : 16)
         .frame(maxWidth: .infinity)
         .glassEffect(.clear.tint(.black.opacity(0.15)), in: RoundedRectangle(cornerRadius: 32))
-        .overlay(alignment: .topTrailing) {
-            closeButton.padding(4)
-        }
         .padding(.horizontal, presentation == .measurement ? 8 : 16)
         .padding(.bottom, presentation == .measurement ? 16 : 24)
         .frame(minHeight: 148, alignment: .bottom)
-    }
-
-    private var closeButton: some View {
-        Button(action: onClose) {
-            Image(systemName: "xmark")
-                .font(.body.weight(.semibold))
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("촬영 옵션 닫기")
-        .accessibilityIdentifier("camera.closeOptions")
     }
 
     private func option<Icon: View>(_ title: String, identifier: String,

@@ -16,6 +16,8 @@ private enum InstagramUploadState {
 }
 
 struct InstagramExportView: View {
+    private static let navigationTitle = "인스타그램에 업로드하기"
+
     let product: ExportProduct
     let onRequestExit: (ExportReturnDestination) -> Void
     let onPublished: (InstagramPublishResult) -> Void
@@ -69,13 +71,14 @@ struct InstagramExportView: View {
                 )
             }
         }
-        .navigationTitle("인스타그램에 업로드하기")
+        .navigationTitle(Self.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
-        .toolbarBackground(Color(.brandNeutralWhite), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(showsCompletion ? .hidden : .visible, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                ExportToolbarTitle(title: Self.navigationTitle)
+            }
             if !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(
@@ -100,12 +103,7 @@ struct InstagramExportView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if account != nil && !showsCompletion {
-                ExportBottomAction(
-                    title: "업로드하기",
-                    isWorking: uploadState.isUploading,
-                    isComplete: false,
-                    isEnabled: canPublish
-                ) {
+                ExportBottomAction(title: "업로드하기") {
                     Task { await publish() }
                 }
                 .padding(.horizontal, 33)
@@ -143,10 +141,6 @@ struct InstagramExportView: View {
 
     private var showsCompletion: Bool {
         showsConnectionCompletion || uploadState.isCompleted
-    }
-
-    private var canPublish: Bool {
-        !busy && !uploadState.isUploading && account != nil && draft.canPublish
     }
 
     private func requestLibraryExit() {
@@ -203,6 +197,11 @@ struct InstagramExportView: View {
     }
 
     private func publish() async {
+        guard !busy, !uploadState.isUploading else { return }
+        if let validationMessage = draft.validationMessage {
+            message = validationMessage
+            return
+        }
         guard let expected = account else { return }
         uploadState = .uploading
         do {

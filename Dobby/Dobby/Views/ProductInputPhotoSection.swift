@@ -17,28 +17,42 @@ struct ProductInputPhotoSection: View {
     @State private var showsCamera = false
     @State private var pickedItems: [PhotosPickerItem] = []
     @State private var isImporting = false
+    @State private var pendingPhotoCount = 0
     @State private var importTask: Task<Void, Never>?
     @State private var importError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: allowsRemoval ? 4 : 8) {
+        VStack(alignment: .leading, spacing: allowsEditing ? 8 : (allowsRemoval ? 4 : 8)) {
             HStack {
                 ProductFieldTitle(title: "제품 사진", isRequired: true)
                 Spacer()
                 HStack(spacing: 0) {
-                    Text("\(garment.productPhotos.count)")
-                        .foregroundStyle(garment.productPhotos.count > ProductPhotoLimit.maximumCount
-                            ? ProductInformationStyle.error : Color("BrandNeutral800"))
+                    Text("\(displayedPhotoCount)")
+                        .foregroundStyle(displayedPhotoCount > ProductPhotoLimit.maximumCount
+                            ? ProductInformationStyle.error : Color(allowsEditing ? "BrandNeutral500" : "BrandNeutral800"))
                     Text("/\(ProductPhotoLimit.maximumCount)").foregroundStyle(Color("BrandNeutral500"))
                 }
-                .font(.custom("Pretendard-Regular", size: 14))
-                .accessibilityLabel("제품 사진 \(garment.productPhotos.count)장, 최대 \(ProductPhotoLimit.maximumCount)장")
+                .font(.custom(allowsEditing ? "Pretendard-Medium" : "Pretendard-Regular", size: allowsEditing ? 16 : 14, relativeTo: .subheadline))
+                .tracking(allowsEditing ? -0.16 : 0)
+                .accessibilityLabel("제품 사진 \(displayedPhotoCount)장, 최대 \(ProductPhotoLimit.maximumCount)장")
                 .accessibilityIdentifier("product-info.photo-count")
             }
-            photoRow.padding(.horizontal, -20)
+            .frame(minHeight: allowsEditing ? 22 : nil)
+            if isImporting {
+                ProductPhotoSkeletonStrip(photoCount: displayedPhotoCount)
+                    .contentMargins(.horizontal, 20, for: .scrollContent)
+                    .padding(.top, allowsRemoval ? 4 : 0)
+                    .padding(.horizontal, -20)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("제품 사진을 불러오고 있어요")
+                    .accessibilityIdentifier("product-info.photos.importing")
+            } else {
+                photoRow.padding(.horizontal, -20)
+            }
         }
         .fullScreenCover(item: $expandedPhoto) { photo in
             ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id,
+                                    style: allowsEditing ? .editing : .standard,
                                     onDelete: deletionAction, onRotate: { id in
                                         guard let photo = garment.productPhotos.first(where: { $0.id == id }) else { return false }
                                         try await GarmentStore.rotateProductPhoto(photo, in: garment, clockwise: false)
@@ -47,11 +61,12 @@ struct ProductInputPhotoSection: View {
                 .presentationBackground(.clear)
         }
         .photosPicker(isPresented: $showsPhotoPicker, selection: photoPickerSelection,
-                      maxSelectionCount: max(1, remainingCapacity), matching: .images)
+                      maxSelectionCount: nil, matching: .images)
         .fullScreenCover(isPresented: $showsCamera) {
             ProductInputCameraPicker { data in
                 showsCamera = false
                 guard let data else { return }
+                pendingPhotoCount = 1
                 setImporting(true)
                 importTask = Task { await importPhotos([data]) }
             }
@@ -91,25 +106,29 @@ struct ProductInputPhotoSection: View {
         Binding(get: { pickedItems }, set: { items in
             // Lock the parent before PhotosPicker dismisses, not in a later
             // view update that could let Done race the asynchronous import.
-            if !items.isEmpty { setImporting(true) }
+            if !items.isEmpty {
+                pendingPhotoCount = items.count
+                setImporting(true)
+            }
             pickedItems = items
         })
     }
 
-    private func setImporting(_ busy: Bool) {
-        onImportingChange?(busy)
-        isImporting = busy
+    private var displayedPhotoCount: Int {
+        garment.productPhotos.count + pendingPhotoCount
     }
 
-    private var remainingCapacity: Int {
-        max(0, ProductPhotoModel.maximumSelectionCount - garment.productPhotos.count)
+    private func setImporting(_ busy: Bool) {
+        if !busy { pendingPhotoCount = 0 }
+        onImportingChange?(busy)
+        isImporting = busy
     }
 
     private var photoRow: some View {
         ProductPhotoReorderStrip(photos: garment.productPhotos, spacing: 16,
             topInset: allowsRemoval ? 4 : 0,
             onReorder: { GarmentStore.reorderProductPhotos(ids: $0, in: garment) },
-            leadingContent: AnyView(addPhotoButton)) { photo in
+            includesRemovalButton: allowsRemoval, leadingContent: AnyView(addPhotoButton)) { photo in
                 photoCell(photo)
                     .accessibilityHint("길게 누른 뒤 좌우로 드래그해 순서를 바꿀 수 있어요")
                     .accessibilityAction(named: "앞으로 이동") { movePhoto(photo.id, offset: -1) }
@@ -127,15 +146,16 @@ struct ProductInputPhotoSection: View {
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: "plus").font(.system(size: 18))
-                Text("사진 추가").font(.custom("Pretendard-Regular", size: 12))
+                Text("사진 추가").font(.custom(allowsEditing ? "Pretendard-Medium" : "Pretendard-Regular", size: 12, relativeTo: .caption))
+                    .tracking(allowsEditing ? -0.12 : 0)
             }
-            .foregroundStyle(Color("BrandNeutral500"))
+            .foregroundStyle(Color(allowsEditing ? "BrandNeutral400" : "BrandNeutral500"))
             .frame(width: 77, height: 108)
             .background(Color("BrandNeutral50"), in: RoundedRectangle(cornerRadius: 16))
-            .overlay { RoundedRectangle(cornerRadius: 16).stroke(Color("BrandNeutral200"), lineWidth: 0.5) }
+            .overlay { RoundedRectangle(cornerRadius: 16).stroke(Color("BrandNeutral200"), lineWidth: allowsEditing ? 1 : 0.5) }
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
-        .disabled(remainingCapacity == 0 || isImporting)
+        .disabled(isImporting)
         .accessibilityLabel("제품 사진 추가")
         .accessibilityIdentifier("product-info.add-photo")
     }
@@ -148,6 +168,7 @@ struct ProductInputPhotoSection: View {
 
     private func appendPhoto(_ data: Data) async throws {
         try await ProductPhotoImportStore.append(data, to: garment, in: context)
+        pendingPhotoCount = max(0, pendingPhotoCount - 1)
     }
 
     @ViewBuilder private func photoCell(_ photo: GarmentPhoto) -> some View {
@@ -213,7 +234,7 @@ private struct ProductInputEditablePhoto: View {
                     Image(systemName: "minus")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 17, height: 17)
+                        .frame(width: ProductPhotoRemovalBadgeLayout.diameter, height: ProductPhotoRemovalBadgeLayout.diameter)
                         .background(Color("BrandNeutral700"), in: Circle())
                 }
                 .frame(width: 44, height: 44)
@@ -224,7 +245,7 @@ private struct ProductInputEditablePhoto: View {
             .accessibilityIdentifier("product-info.delete-photo.\(photo.id)")
             // The visible badge overhangs by four points, while the hit area
             // stays out of the next thumbnail (including the eight-point gap).
-            .offset(x: 4, y: -3)
+            .offset(x: ProductPhotoRemovalBadgeLayout.trailingOverflow, y: -ProductPhotoRemovalBadgeLayout.topOverflow)
         }
     }
 }

@@ -302,7 +302,10 @@ nonisolated final class ARKitCameraControlWorker: @unchecked Sendable {
                 self.lastFocusRequestUptime = -.infinity
                 guard let hardware else { continuation.resume(returning: .unavailable); return }
                 do {
-                    let capabilities = hardware.capabilities
+                    var capabilities = hardware.capabilities
+                    capabilities.exposureRange = capabilities.exposureRange.flatMap {
+                        CameraExposureRange.captureRange(minimum: $0.minimum, maximum: $0.maximum)
+                    }
                     self.deviceCapabilities = capabilities
                     let target = capabilities.exposureRange?.clamp(exposureBias) ?? 0
                     try hardware.restoreAutomatic(exposureBias: target)

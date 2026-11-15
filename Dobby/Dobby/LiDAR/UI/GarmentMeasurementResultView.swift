@@ -105,7 +105,7 @@ struct GarmentMeasurementResultView: View {
     }
 
     private var resultNavigation: some View {
-        VStack(spacing: 13) {
+        VStack(spacing: ProductCreationHeaderLayout.progressToToolbar) {
             MeasurementResultProgress()
             MeasurementResultNavigationBar(
                 canGoBack: allowsRetake && !isSaving && !isEditingPoint && !model.needsRecalculation,
@@ -114,7 +114,7 @@ struct GarmentMeasurementResultView: View {
                 busyDescription: isSaving ? "저장 중" : "다시 측정 중",
                 backIdentifier: onConfirmedRecord == nil ? "retakeGarmentMeasurement" : "product-flow.back",
                 onBack: retakeIfAllowed, onContinue: { Task { await confirm() } })
-                .frame(height: 54)
+                .frame(height: ProductCreationHeaderLayout.navigationHeight)
         }
         .frame(maxWidth: .infinity)
         .background(Color.white)
@@ -206,7 +206,7 @@ struct GarmentMeasurementResultView: View {
                     photoEditor(showsEnlargeControl: false)
                     resultSummary(overlaysPhoto: false).padding(.horizontal, 20)
                     auxiliaryContent.padding(.horizontal, 20)
-                }.padding(.top, 16).padding(.bottom, 24)
+                }.padding(.top, ProductCreationLayoutMetrics.photoGap).padding(.bottom, 24)
                     .frame(maxWidth: 700).frame(maxWidth: .infinity)
             }
         }

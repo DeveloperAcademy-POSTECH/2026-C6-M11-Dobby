@@ -17,14 +17,7 @@ struct ProductInformationSkeletonView: View {
                      + Text("/10").foregroundStyle(Color("BrandNeutral500")))
                         .font(.custom("Pretendard-Medium", size: 16, relativeTo: .callout))
                 }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(0..<max(4, min(photoCount, 10)), id: \.self) { _ in
-                            placeholder(height: 108, radius: 8).frame(width: 77)
-                        }
-                    }
-                }
-                .scrollDisabled(true)
+                ProductPhotoSkeletonStrip(photoCount: photoCount)
             }
 
             field("제품명", height: 52, isRequired: true)
@@ -77,5 +70,24 @@ struct ProductInformationSkeletonView: View {
         RoundedRectangle(cornerRadius: radius)
             .fill(Color("BrandNeutral50"))
             .frame(height: height)
+    }
+}
+
+/// Shared photo placeholders for AI generation and album/camera imports.
+struct ProductPhotoSkeletonStrip: View {
+    let photoCount: Int
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 16) {
+                ForEach(0..<max(4, min(photoCount, 10)), id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color("BrandNeutral50"))
+                        .frame(width: 77, height: 108)
+                }
+            }
+        }
+        .scrollDisabled(true)
+        .allowsHitTesting(false)
     }
 }

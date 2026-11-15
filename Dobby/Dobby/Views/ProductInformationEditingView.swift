@@ -6,16 +6,21 @@ struct ProductInformationEditingView: View {
     let onExit: () -> Void
     let onDiscard: () -> Void
     let onComplete: (Garment) -> Void
+    var onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)? = nil
 
     @State private var showsDiscardConfirmation = false
 
     var body: some View {
         InfoInputView(garment: session.garment, measurementInput: $session.measurementInput,
-                      allowsPhotoEditing: true, onExit: requestExit, onComplete: onComplete)
+                      allowsPhotoEditing: true, onExit: requestExit,
+                      onGenerateAI: { try await session.generateInformation() },
+                      onCancelGeneration: { session.cancelGeneration() },
+                      onAIGenerationPresentationChange: onAIGenerationPresentationChange,
+                      onComplete: onComplete)
             .environment(\.modelContext, session.context)
             .fullScreenCover(isPresented: $showsDiscardConfirmation) {
                 ProductInformationDiscardConfirmation(
-                    onCancel: { showsDiscardConfirmation = false },
+                    onCancel: { setDiscardConfirmationVisible(false) },
                     onDiscard: discardChangesAndExit
                 )
                 .presentationBackground(.clear)
@@ -28,13 +33,21 @@ struct ProductInformationEditingView: View {
             onExit()
             return
         }
-        showsDiscardConfirmation = true
+        setDiscardConfirmationVisible(true)
     }
 
     private func discardChangesAndExit() {
-        showsDiscardConfirmation = false
+        setDiscardConfirmationVisible(false)
         session.discard()
         onDiscard()
+    }
+
+    private func setDiscardConfirmationVisible(_ isVisible: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            showsDiscardConfirmation = isVisible
+        }
     }
 }
 

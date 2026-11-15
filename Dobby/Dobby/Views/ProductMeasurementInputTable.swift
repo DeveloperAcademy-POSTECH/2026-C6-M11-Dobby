@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ProductMeasurementInputTable: View {
     let garment: Garment
@@ -6,8 +7,9 @@ struct ProductMeasurementInputTable: View {
     let focus: FocusState<UUID?>.Binding
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             ProductFieldTitle(title: "실측 사이즈")
+                .frame(minHeight: 22, alignment: .leading)
             let missingValues = garment.visibleMeasurements.filter {
                 !GarmentMeasurementInputText.hasUsableValue($0, drafts: measurementInput.drafts)
             }
@@ -31,18 +33,20 @@ private struct ProductMeasurementScroll: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             ProductMeasurementRow(columns: columns, measurementInput: $measurementInput, focus: focus)
+                .padding(1.5)
                 .containerRelativeFrame(.horizontal) { width, _ in
                     columns.count <= 5 ? width : max(width, CGFloat(columns.count) * 85 - 1)
                 }
                 .fixedSize(horizontal: false, vertical: true)
         }
         .scrollDisabled(columns.count <= 5)
-        .background(ProductInformationStyle.background)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(Color("BrandNeutral100"))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 16).stroke(ProductInformationStyle.field, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 14).strokeBorder(Color("BrandNeutral100"), lineWidth: 1.5)
         }
         .accessibilityIdentifier("product-info.measurements")
+        .productInputInteractionArea()
     }
 }
 
@@ -55,7 +59,7 @@ private struct ProductMeasurementRow: View {
         HStack(spacing: 0) {
             ForEach(Array(columns.enumerated()), id: \.element.id) { index, value in
                 if index > 0 {
-                    Rectangle().fill(ProductInformationStyle.field).frame(width: 1)
+                    Rectangle().fill(Color("BrandNeutral100")).frame(width: 1)
                 }
                 SizeColumn(value: value, text: Binding(
                     get: { measurementInput.text(for: value) },
@@ -75,15 +79,16 @@ private struct SizeColumn: View {
     let isCompact: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text(ProductInformationStyle.measurementTitle(for: value))
+        VStack(spacing: 1) {
+            Text(value.key == "totalLength" ? "총장" : ProductInformationStyle.measurementTitle(for: value))
                 .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
+                .tracking(-0.43)
                 .foregroundStyle(Color("BrandNeutral800"))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
                 .frame(height: 42)
-                .background(ProductInformationStyle.field)
+                .background(Color("BrandNeutral100"))
 
             ProductMeasurementNumber(value: value, text: $text, focus: focus)
         }
@@ -96,20 +101,31 @@ private struct ProductMeasurementNumber: View {
     @Binding var text: String
     let focus: FocusState<UUID?>.Binding
 
+    @ScaledMetric(relativeTo: .subheadline) private var valueFontSize: CGFloat = 15
+
+    private var inputWidth: CGFloat {
+        if text.isEmpty { return 24 }
+        let font = UIFont(name: "Pretendard-Regular", size: valueFontSize) ?? UIFont.systemFont(ofSize: valueFontSize)
+        return min(58, max(1, ceil((text as NSString).size(withAttributes: [.font: font, .kern: -0.23]).width)))
+    }
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 1) {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
             TextField("", text: $text)
                 .accessibilityLabel("\(value.displayLabel) 센티미터")
                 .accessibilityIdentifier("product-info.measurement.\(value.key)")
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
                 .focused(focus, equals: value.id)
-                .frame(width: min(58, max(24, CGFloat(text.count) * 10 + 6)))
-                .monospacedDigit()
+                .frame(width: inputWidth)
+                .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
             Text("cm")
         }
         .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
+        .tracking(-0.23)
         .frame(maxWidth: .infinity)
         .frame(height: 64)
+        .foregroundStyle(Color("BrandNeutralBlack"))
+        .background(Color("BrandNeutralWhite"))
     }
 }

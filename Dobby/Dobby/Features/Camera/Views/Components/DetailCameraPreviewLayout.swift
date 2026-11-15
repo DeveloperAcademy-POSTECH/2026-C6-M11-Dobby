@@ -10,10 +10,11 @@ nonisolated struct DetailCameraPreviewLayout {
     private let layout: CameraPhotoPreviewLayout
 
     init(containerSize: CGSize, aspectRatio: DetailPhotoAspectRatio,
-         prefersBottomAlignedPortrait: Bool = false) {
+         prefersBottomAlignedPortrait: Bool = false, portraitPhotoTop: CGFloat? = nil) {
         layout = CameraPhotoPreviewLayout(containerSize: containerSize,
             photoAspectRatio: aspectRatio.previewRatio(isLandscape: containerSize.width > containerSize.height),
-            prefersBottomAlignedPortrait: prefersBottomAlignedPortrait && aspectRatio == .sixteenNine)
+            prefersBottomAlignedPortrait: prefersBottomAlignedPortrait && aspectRatio == .sixteenNine,
+            portraitPhotoTop: portraitPhotoTop)
         photoFrame = layout.photoFrame
         isBottomAligned = layout.isBottomAligned
         previewFrame = photoFrame

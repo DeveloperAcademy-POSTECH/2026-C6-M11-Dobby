@@ -5,11 +5,14 @@ struct LibraryHeaderMetrics: Equatable {
     var statusBarHeight: CGFloat = 0
     var height: CGFloat = 0
     var bottomBarHeight: CGFloat = 0
+    var windowHeight: CGFloat = 0
 }
 
 /// Moves and fades the native header without changing the list's viewport or insets.
 struct LibraryNavigationSearch: UIViewControllerRepresentable {
     @Binding var text: String
+    /// The committed query; composing text stays visible without changing the results.
+    @Binding var query: String
     @Binding var isFocused: Bool
     let allowsHiding: Bool
     let revealID: Int
@@ -80,6 +83,7 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
         private var headerHeight: CGFloat = 0
         private var reportedMetrics: LibraryHeaderMetrics?
         private var animator: UIViewPropertyAnimator?
+        private var pendingSearch: Task<Void, Never>?
         private var originalBarTransform = CGAffineTransform.identity
         private var originalBarAlpha: CGFloat = 1
         private let statusBackground = UIView()
@@ -166,6 +170,8 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
         }
 
         func restore() {
+            pendingSearch?.cancel()
+            pendingSearch = nil
             animator?.stopAnimation(true)
             animator = nil
             statusBackground.removeFromSuperview()
@@ -251,7 +257,8 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
             let metrics = LibraryHeaderMetrics(
                 statusBarHeight: statusHeight, height: height,
                 bottomBarHeight: navigation.tabBarController?.tabBar.bounds.height
-                    ?? navigation.view.window?.safeAreaInsets.bottom ?? 0
+                    ?? navigation.view.window?.safeAreaInsets.bottom ?? 0,
+                windowHeight: navigation.view.window?.bounds.height ?? navigation.view.bounds.height
             )
             guard reportedMetrics != metrics else { return }
             reportedMetrics = metrics
@@ -318,6 +325,32 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
             guard !isRestoringSearch, owner != nil else { return }
             let text = searchController.searchBar.text ?? ""
             if configuration.text != text { configuration.text = text }
+            pendingSearch?.cancel()
+            pendingSearch = nil
+            let field = searchController.searchBar.searchTextField
+            guard field.markedTextRange == nil else { return }
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                commitSearch()
+                return
+            }
+            pendingSearch = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(300)) }
+                catch { return }
+                guard !Task.isCancelled, let self,
+                      self.search.searchBar.text == text,
+                      self.search.searchBar.searchTextField.markedTextRange == nil else { return }
+                self.commitSearch()
+            }
+        }
+
+        private func commitSearch() {
+            pendingSearch?.cancel()
+            pendingSearch = nil
+            guard !isRestoringSearch, owner != nil,
+                  search.searchBar.searchTextField.markedTextRange == nil else { return }
+            let text = search.searchBar.text ?? ""
+            if configuration.text != text { configuration.text = text }
+            if configuration.query != text { configuration.query = text }
         }
 
         func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
@@ -328,9 +361,12 @@ struct LibraryNavigationSearch: UIViewControllerRepresentable {
 
         func searchBarTextDidEndEditing(_ searchBar: UISearchBar) {
             configuration.isFocused = false
+            commitSearch()
         }
 
         func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+            searchBar.searchTextField.unmarkText()
+            commitSearch()
             searchBar.resignFirstResponder()
         }
     }

@@ -93,7 +93,9 @@ struct GarmentMeasurementPhotoEditor: View {
                 }.frame(width: size.width, height: size.height)
                 if usesResultPointStyleForEndpoints {
                     ForEach(Array(uniqueEndpoints(in: annotations).enumerated()), id: \.offset) { _, endpoint in
-                        MeasurementPointMarker().position(endpoint)
+                        MeasurementPointMarker()
+                            .scaleEffect(viewport.scale)
+                            .position(endpoint)
                     }
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -339,29 +341,33 @@ struct GarmentMeasurementPhotoEditor: View {
                 var path = Path()
                 path.move(to: item.start)
                 path.addLine(to: item.end)
-                context.stroke(path, with: .color(.black.opacity(0.5)), lineWidth: 3)
+                // Photo annotations grow as one image: stroke thickness and
+                // dash spacing use the same display scale as their endpoints.
+                let scale = viewport.scale
+                context.stroke(path, with: .color(.black.opacity(0.5)), lineWidth: 3 * scale)
                 context.stroke(path, with: .color(.white.opacity(0.95)),
-                    style: .init(lineWidth: 1.5, lineCap: .round, dash: [4, 5]))
+                    style: .init(lineWidth: 1.5 * scale, lineCap: .round, dash: [4 * scale, 5 * scale]))
                 // Endpoint indicators accompany the measurement line; editable
                 // physical and contour handles are drawn separately above it.
                 if !usesResultPointStyleForEndpoints {
                     for endpoint in [item.start, item.end] {
-                        let marker = Path(ellipseIn: CGRect(x: endpoint.x - 3, y: endpoint.y - 3, width: 6, height: 6))
+                        let marker = Path(ellipseIn: CGRect(x: endpoint.x - 3 * scale, y: endpoint.y - 3 * scale,
+                            width: 6 * scale, height: 6 * scale))
                         context.fill(marker, with: .color(.white))
                     }
                 }
                 let middle = CGPoint(x: (item.start.x + item.end.x) / 2, y: (item.start.y + item.end.y) / 2)
                 if showLabels, item.isCallout, let center = item.labelCenter {
-                    let labelRect = CGRect(x: center.x - item.labelSize.width / 2,
-                        y: center.y - item.labelSize.height / 2,
-                        width: item.labelSize.width, height: item.labelSize.height)
+                    let labelRect = CGRect(x: center.x - item.labelSize.width * scale / 2,
+                        y: center.y - item.labelSize.height * scale / 2,
+                        width: item.labelSize.width * scale, height: item.labelSize.height * scale)
                     let edge = CGPoint(x: min(labelRect.maxX, max(labelRect.minX, middle.x)),
                         y: min(labelRect.maxY, max(labelRect.minY, middle.y)))
                     var leader = Path()
                     leader.move(to: middle)
                     leader.addLine(to: edge)
-                    context.stroke(leader, with: .color(.black.opacity(0.45)), lineWidth: 2)
-                    context.stroke(leader, with: .color(.white.opacity(0.55)), lineWidth: 0.75)
+                    context.stroke(leader, with: .color(.black.opacity(0.45)), lineWidth: 2 * scale)
+                    context.stroke(leader, with: .color(.white.opacity(0.55)), lineWidth: 0.75 * scale)
                 }
             }
         }.allowsHitTesting(false).accessibilityHidden(true)
@@ -374,19 +380,23 @@ struct GarmentMeasurementPhotoEditor: View {
     }
 
     private func measurementLabel(_ item: Annotation) -> some View {
-        HStack(spacing: 4) {
+        // Render at the enlarged font size instead of magnifying a small text
+        // bitmap. Geometry still uses the same uniform photo scale.
+        let scale = viewport.scale
+        return HStack(spacing: 4 * scale) {
             Text(GarmentMeasurementText.shortTitle(item.definition))
-                .font(.custom("Pretendard-Regular", size: labelFontSize))
-                .tracking(0.06)
+                .font(.custom("Pretendard-Regular", size: labelFontSize * scale))
+                .tracking(0.06 * scale)
                 .fixedSize(horizontal: true, vertical: false)
             Text(drag != nil || isRecalculating ? "…" : visibleMeasurementValue(item.value))
-                .font(.custom("Pretendard-SemiBold", size: labelFontSize))
-                .tracking(0.06)
+                .font(.custom("Pretendard-SemiBold", size: labelFontSize * scale))
+                .tracking(0.06 * scale)
                 .fixedSize(horizontal: true, vertical: false)
         }.foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.25), radius: 4, y: 4)
-            .lineLimit(1).padding(.horizontal, 4)
-            .frame(width: item.labelSize.width, height: item.labelSize.height)
+            .shadow(color: .black.opacity(0.25), radius: 4 * scale, y: 4 * scale)
+            .lineLimit(1).padding(.horizontal, 4 * scale)
+            .frame(width: item.labelSize.width * scale, height: item.labelSize.height * scale)
+            .fixedSize(horizontal: true, vertical: true)
             .modifier(MeasurementValueCapsule(reduceTransparency: reduceTransparency))
             .allowsHitTesting(false)
             .accessibilityElement(children: .ignore)
@@ -407,6 +417,9 @@ struct GarmentMeasurementPhotoEditor: View {
             UISelectionFeedbackGenerator().selectionChanged()
         } label: {
             MeasurementPointMarker(isPending: pending)
+                // Enlarge the visible dot, preserving the surrounding 56pt hit
+                // target so adjacent points and empty-space pans stay usable.
+                .scaleEffect(viewport.scale)
                 .frame(width: MeasurementPointMarkerStyle.touchTargetDiameter,
                     height: MeasurementPointMarkerStyle.touchTargetDiameter)
                 .contentShape(MeasurementPointHitShape(neighborOffsets: neighbors))
@@ -542,8 +555,8 @@ struct GarmentMeasurementPhotoEditor: View {
     }
 
     private func displayedAnnotation(_ item: Annotation) -> Annotation {
-        // Text keeps its readable size while its anchor, both endpoints and
-        // the photograph follow exactly the same presentation-only transform.
+        // The capsule's dimensions scale at its transformed center, matching
+        // the photo, line and point visuals without changing source coordinates.
         .init(definition: item.definition, value: item.value,
             start: viewport.screenPoint(for: item.start), end: viewport.screenPoint(for: item.end),
             labelCenter: item.labelCenter.map { viewport.screenPoint(for: $0) },
