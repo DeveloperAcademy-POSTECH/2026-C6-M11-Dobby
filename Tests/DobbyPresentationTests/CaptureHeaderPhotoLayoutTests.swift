@@ -10,11 +10,11 @@ final class CaptureHeaderPhotoLayoutTests: XCTestCase {
         XCTAssertFalse(layout.isBottomAligned)
     }
 
-    func testSquareStartsBelowHeaderWhileTallPhotoKeepsBottomAlignment() {
+    func testSquareCentersBelowHeaderWhileTallPhotoKeepsBottomAlignment() {
         let size = CGSize(width: 402, height: 874)
         let square = CameraPhotoPreviewLayout(containerSize: size,
             photoAspectRatio: 1, portraitPhotoTop: 146)
-        assertRect(square.photoFrame, CGRect(x: 0, y: 146, width: 402, height: 402))
+        assertRect(square.photoFrame, CGRect(x: 0, y: 236, width: 402, height: 402))
 
         let tall = CameraPhotoPreviewLayout(containerSize: size,
             photoAspectRatio: 9.0 / 16, prefersBottomAlignedPortrait: true, portraitPhotoTop: 146)

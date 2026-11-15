@@ -4,6 +4,62 @@ import XCTest
 /// These checks cover screen composition, not physical camera accuracy.
 final class CaptureProgressLayoutUITests: XCTestCase {
     @MainActor
+    func testSquareMeasurementUsesDetailPlacementAndKeepsItsPhotoFrameDuringCapture() throws {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        let app = fixtureApp()
+        app.launchArguments += ["--garment-preview-processing", "--garment-preview-no-outline"]
+        app.launch()
+        defer { app.terminate() }
+        openCapture(in: app)
+
+        app.buttons["garmentCaptureOptions"].tap()
+        let ratios = app.buttons["camera.aspectRatioOption"]
+        XCTAssertTrue(ratios.waitForExistence(timeout: 5))
+        ratios.tap()
+        app.buttons["camera.aspectRatio.1:1"].tap()
+        app.buttons["camera.aspectRatioBack"].tap()
+        app.buttons["camera.dismissOptions"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.3)).tap()
+        XCTAssertTrue(app.descendants(matching: .any)["camera.optionsMenu"].firstMatch
+            .waitForNonExistence(timeout: 5))
+
+        let photo = app.descendants(matching: .any)["garmentCameraViewport"].firstMatch
+        let centered = expectation(for: NSPredicate { _, _ in
+            photo.exists && abs(photo.frame.width - app.frame.width) < 1
+                && abs(photo.frame.height - app.frame.width) < 1
+                && abs(photo.frame.midY - app.frame.midY) < 1
+        }, evaluatedWith: photo)
+        wait(for: [centered], timeout: 10)
+        let photoFrame = photo.frame
+        let zoom = app.buttons["cameraZoomSelector"]
+        let shutter = app.buttons["captureGarment"]
+        let more = app.buttons["garmentCaptureOptions"]
+        XCTAssertTrue(zoom.isHittable && more.isHittable)
+        XCTAssertEqual(zoom.frame.width, 48, accuracy: 1)
+        XCTAssertEqual(zoom.frame.midY, photoFrame.maxY - 40, accuracy: 1)
+        XCTAssertEqual(shutter.frame.width, 98, accuracy: 1)
+        XCTAssertEqual(shutter.frame.midY, more.frame.midY, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(shutter.frame.minY, photoFrame.maxY + 16)
+        XCTAssertFalse(shutter.frame.intersects(more.frame))
+        if abs(app.frame.width - 402) < 1 && abs(app.frame.height - 874) < 1 {
+            XCTAssertEqual(photoFrame.minY, app.frame.minY + 236, accuracy: 1)
+            XCTAssertEqual(shutter.frame.minY, app.frame.minY + 712, accuracy: 1)
+        }
+        armSyntheticGarmentCapture(in: app)
+        screenshot("square-measurement-centered-photo-and-controls")
+        shutter.tap()
+        let frozen = app.descendants(matching: .any)["garmentProcessingPhoto"].firstMatch
+        XCTAssertTrue(frozen.waitForExistence(timeout: 5))
+        XCTAssertEqual(frozen.frame.minX, photoFrame.minX, accuracy: 1)
+        XCTAssertEqual(frozen.frame.minY, photoFrame.minY, accuracy: 1)
+        XCTAssertEqual(frozen.frame.width, photoFrame.width, accuracy: 1)
+        XCTAssertEqual(frozen.frame.height, photoFrame.height, accuracy: 1)
+        screenshot("square-measurement-processing-keeps-photo-frame")
+        waitUntilEnabled(app.buttons["confirmGarmentMeasurement"])
+    }
+
+    @MainActor
     func testAMeasurementHeaderMatchesFigmaWithoutTheFlowFixtureBanner() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

@@ -7,7 +7,7 @@ import XCTest
 /// 실제 카메라 프레임 대신 UIKit 프리뷰 레이어의 배치를 계측한다.
 @MainActor
 final class DetailAspectRatioPreviewTests: XCTestCase {
-    func testViewportMatchesSavedCropAndPreservesNonSquareMeasurementPlacementAcrossSizes() throws {
+    func testViewportMatchesMeasurementPlacementAndSavedCropAcrossContainerSizes() throws {
         for size in [CGSize(width: 400, height: 800), CGSize(width: 800, height: 400),
                      CGSize(width: 320, height: 320), CGSize(width: 320, height: 480)] {
             for ratio in DetailPhotoAspectRatio.allCases {
@@ -20,6 +20,12 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(frame.minY, -0.001)
                 XCTAssertLessThanOrEqual(frame.maxX, size.width + 0.001)
                 XCTAssertLessThanOrEqual(frame.maxY, size.height + 0.001)
+                let measurement = CameraPhotoPreviewLayout(containerSize: size,
+                    photoAspectRatio: ratio.previewRatio(isLandscape: size.width > size.height)).photoFrame
+                XCTAssertEqual(frame.minX, measurement.minX, accuracy: 0.001)
+                XCTAssertEqual(frame.minY, measurement.minY, accuracy: 0.001)
+                XCTAssertEqual(frame.width, measurement.width, accuracy: 0.001)
+                XCTAssertEqual(frame.height, measurement.height, accuracy: 0.001)
                 if ratio == .square, size.width < size.height {
                     XCTAssertEqual(frame.minX, 0, accuracy: 0.001)
                     XCTAssertEqual(frame.minY, (size.height - size.width) / 2, accuracy: 0.001)
@@ -175,13 +181,19 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         XCTAssertEqual(fixture.samples.creations, 1)
     }
 
-    func testPortraitSquareCentersItsPhotoWhileOtherRatiosKeepMeasurementPlacementAndAllMasksStayClear() throws {
+    func testPortraitRatiosShareMeasurementPhotoWindowsAndKeepTheirMasksClear() throws {
         for size in [CGSize(width: 375, height: 667), CGSize(width: 390, height: 844),
                      CGSize(width: 440, height: 956)] {
             let standard = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .fourThree).frame
             let tall = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .sixteenNine).frame
             let square = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .square).frame
             for (ratio, frame) in [(DetailPhotoAspectRatio.fourThree, standard), (.sixteenNine, tall), (.square, square)] {
+                let measurement = CameraPhotoPreviewLayout(containerSize: size,
+                    photoAspectRatio: ratio.previewRatio(isLandscape: false)).photoFrame
+                XCTAssertEqual(frame.minX, measurement.minX, accuracy: 0.001)
+                XCTAssertEqual(frame.minY, measurement.minY, accuracy: 0.001)
+                XCTAssertEqual(frame.width, measurement.width, accuracy: 0.001)
+                XCTAssertEqual(frame.height, measurement.height, accuracy: 0.001)
                 if ratio == .square {
                     XCTAssertEqual(frame.midX, size.width / 2, accuracy: 0.001)
                     XCTAssertEqual(frame.midY, size.height / 2, accuracy: 0.001)

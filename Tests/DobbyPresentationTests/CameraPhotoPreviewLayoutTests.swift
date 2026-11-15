@@ -73,7 +73,7 @@ final class CameraPhotoPreviewLayoutTests: XCTestCase {
         }
     }
 
-    func testSourceCropStaysConsistentWhileOnlyPortraitSquareDetailPlacementChanges() throws {
+    func testMeasurementSourceCropAndDetailSharePhotoAndControlPlacementForEveryRatio() throws {
         for size in [CGSize(width: 375, height: 667), CGSize(width: 390, height: 844),
                      CGSize(width: 402, height: 874), CGSize(width: 440, height: 956),
                      CGSize(width: 874, height: 402)] {
@@ -92,10 +92,6 @@ final class CameraPhotoPreviewLayoutTests: XCTestCase {
                 assertRect(detail.previewFrame, detail.photoFrame)
                 XCTAssertEqual(Double(detail.photoFrame.width / detail.photoFrame.height),
                     sourceRatio * crop.width / crop.height, accuracy: 0.000001)
-                if ratio == .square, !landscape {
-                    XCTAssertEqual(detail.photoFrame.midY, size.height / 2, accuracy: 0.001)
-                    continue
-                }
                 assertRect(measurement.photoFrame, detail.photoFrame)
                 let lhs = try XCTUnwrap(measurement.controls(in: size, bottomSafeAreaInset: 34))
                 let rhs = try XCTUnwrap(detail.controls(in: size, bottomSafeAreaInset: 34))
@@ -109,7 +105,7 @@ final class CameraPhotoPreviewLayoutTests: XCTestCase {
         }
     }
 
-    func testSquareDetailMatchesFigmaPhotoAndControlsWithoutMovingMeasurementPhoto() throws {
+    func testMeasurementAndDetailSquareMatchTheSameFigmaPhotoAndControls() throws {
         let size = CGSize(width: 402, height: 874)
         let detail = DetailCameraPreviewLayout(containerSize: size, aspectRatio: .square,
             prefersBottomAlignedPortrait: true, portraitPhotoTop: 146)
@@ -120,9 +116,12 @@ final class CameraPhotoPreviewLayoutTests: XCTestCase {
 
         let measurement = CameraPhotoPreviewLayout(containerSize: size,
             photoAspectRatio: 1, portraitPhotoTop: 146)
-        assertRect(measurement.photoFrame, CGRect(x: 0, y: 146, width: 402, height: 402))
+        assertRect(measurement.photoFrame, CGRect(x: 0, y: 236, width: 402, height: 402))
+        XCTAssertFalse(measurement.isBottomAligned)
 
         let controls = try XCTUnwrap(detail.controls(in: size, bottomSafeAreaInset: 34))
+        let measurementControls = try XCTUnwrap(measurement.controls(in: size, bottomSafeAreaInset: 34))
+        XCTAssertEqual(measurementControls, controls)
         func rect(_ frame: CameraPhotoViewport) -> CGRect {
             CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
         }
@@ -138,13 +137,16 @@ final class CameraPhotoPreviewLayoutTests: XCTestCase {
         assertRect(rect(chrome.zoomFrame), CGRect(x: 177, y: 574, width: 48, height: 48))
     }
 
-    func testSquareDetailAdaptsToHeadersAndSafeAreasWithoutChangingItsAspect() throws {
+    func testBothSquareCamerasAdaptToHeadersAndSafeAreasWithoutChangingTheirAspect() throws {
         for size in [CGSize(width: 320, height: 568), CGSize(width: 375, height: 667),
                      CGSize(width: 402, height: 874), CGSize(width: 440, height: 956)] {
             for headerTop in [CGFloat(108), 146, 180] {
                 let detail = DetailCameraPreviewLayout(containerSize: size, aspectRatio: .square,
                     portraitPhotoTop: headerTop)
+                let measurement = CameraPhotoPreviewLayout(containerSize: size, photoAspectRatio: 1,
+                    portraitPhotoTop: headerTop)
                 let photo = detail.photoFrame
+                assertRect(measurement.photoFrame, photo)
                 XCTAssertGreaterThanOrEqual(photo.minY, headerTop)
                 XCTAssertTrue(CGRect(origin: .zero, size: size).contains(photo))
                 XCTAssertEqual(photo.midX, size.width / 2, accuracy: 0.001)
@@ -155,6 +157,9 @@ final class CameraPhotoPreviewLayoutTests: XCTestCase {
                 }
                 for inset in [CGFloat(0), 34] {
                     let controls = try XCTUnwrap(detail.controls(in: size, bottomSafeAreaInset: inset))
+                    let measurementControls = try XCTUnwrap(measurement.controls(in: size,
+                        bottomSafeAreaInset: inset))
+                    XCTAssertEqual(measurementControls, controls)
                     let frames = [controls.shutter, controls.more, controls.accessory].map {
                         CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
                     }
@@ -178,9 +183,32 @@ final class CameraPhotoPreviewLayoutTests: XCTestCase {
         assertRect(compact.photoFrame, CGRect(x: 26, y: 300, width: 268, height: 268))
     }
 
+    func testSourceDerivedSquareRoundingKeepsTheSameCenteredPhotoAndControls() throws {
+        let size = CGSize(width: 402, height: 874)
+        let detail = DetailCameraPreviewLayout(containerSize: size, aspectRatio: .square,
+            portraitPhotoTop: 146)
+        let detailControls = try XCTUnwrap(detail.controls(in: size, bottomSafeAreaInset: 34))
+        // Measurement derives its ratio from sensor dimensions and crop
+        // fractions. A floating-point residual must not select an older layout.
+        for aspect in [1.0, 1 - 1e-12, 1 + 1e-12] {
+            let measurement = CameraPhotoPreviewLayout(containerSize: size, photoAspectRatio: aspect,
+                portraitPhotoTop: 146)
+            assertRect(measurement.photoFrame, detail.photoFrame)
+            XCTAssertEqual(Double(measurement.photoFrame.width / measurement.photoFrame.height),
+                aspect, accuracy: 1e-9)
+            let controls = try XCTUnwrap(measurement.controls(in: size, bottomSafeAreaInset: 34))
+            XCTAssertEqual(controls.shutter.x, detailControls.shutter.x, accuracy: 0.001)
+            XCTAssertEqual(controls.shutter.y, detailControls.shutter.y, accuracy: 0.001)
+            XCTAssertEqual(controls.more.y, detailControls.more.y, accuracy: 0.001)
+        }
+    }
+
     func testCenteredSquareKeepsTheSameSensorCropAndSavedPhotoAspect() throws {
         let detail = DetailCameraPreviewLayout(containerSize: CGSize(width: 402, height: 874),
             aspectRatio: .square, portraitPhotoTop: 146)
+        let measurement = CameraPhotoPreviewLayout(containerSize: CGSize(width: 402, height: 874),
+            photoAspectRatio: 1, portraitPhotoTop: 146)
+        assertRect(measurement.photoFrame, detail.previewFrame)
         let source = CGSize(width: 3024, height: 4032)
         let scale = max(detail.previewFrame.width / source.width, detail.previewFrame.height / source.height)
         let visible = CGSize(width: detail.previewFrame.width / scale, height: detail.previewFrame.height / scale)
