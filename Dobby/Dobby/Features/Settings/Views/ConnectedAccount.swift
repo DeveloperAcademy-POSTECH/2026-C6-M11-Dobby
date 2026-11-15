@@ -1,24 +1,5 @@
 import SwiftUI
 
-enum AccountConnectionState {
-    case connect
-    case disconnect
-
-    var title: String {
-        switch self {
-        case .connect: "연결하기"
-        case .disconnect: "연결 해제"
-        }
-    }
-
-    var foregroundStyle: Color {
-        switch self {
-        case .connect: SettingsStyle.buttonText
-        case .disconnect: SettingsStyle.destructive
-        }
-    }
-}
-
 struct ConnectedAccount: View {
     let item: ConnectedAccountItem
     let action: () -> Void
@@ -33,8 +14,7 @@ struct ConnectedAccount: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             AccountConnectionButton(
-                state: actionState,
-                isWorking: item.isWorking,
+                state: buttonState,
                 action: action
             )
         }
@@ -66,8 +46,17 @@ struct ConnectedAccount: View {
         }
     }
 
-    private var actionState: AccountConnectionState {
-        item.state.isConnected ? .disconnect : .connect
+    private var buttonState: AccountConnectionButtonState {
+        switch (item.state.isConnected, item.isWorking) {
+        case (false, false):
+            .connect
+        case (false, true):
+            .connecting
+        case (true, false):
+            .disconnect
+        case (true, true):
+            .disconnecting
+        }
     }
 }
 

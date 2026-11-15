@@ -1,40 +1,26 @@
 import SwiftUI
 
+enum AccountConnectionButtonState {
+    case connect
+    case connecting
+    case disconnect
+    case disconnecting
+}
+
 struct AccountConnectionButton: View {
-    let state: AccountConnectionState
-    let isWorking: Bool
+    let state: AccountConnectionButtonState
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            if isWorking {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Text(state.title)
-                    .font(SettingsTypography.labelSmall)
-                    .tracking(SettingsTypography.labelSmallTracking)
-                    .foregroundStyle(state.foregroundStyle)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, verticalPadding)
-            }
-        }
-        .background(SettingsStyle.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(SettingsStyle.separator, lineWidth: 1)
-        }
-        .buttonStyle(.plain)
-        .disabled(isWorking)
-    }
-
-    private var verticalPadding: CGFloat {
         switch state {
         case .connect:
-            0
+            ConnectAccountButton(action: action)
+        case .connecting:
+            ConnectingAccountButton()
         case .disconnect:
-            8
+            DisconnectAccountButton(action: action)
+        case .disconnecting:
+            DisconnectingAccountButton()
         }
     }
 }
@@ -42,7 +28,15 @@ struct AccountConnectionButton: View {
 #Preview("연결하기") {
     AccountConnectionButton(
         state: .connect,
-        isWorking: false,
+        action: {}
+    )
+    .padding(20)
+    .background(SettingsStyle.background)
+}
+
+#Preview("연결 중") {
+    AccountConnectionButton(
+        state: .connecting,
         action: {}
     )
     .padding(20)
@@ -52,7 +46,15 @@ struct AccountConnectionButton: View {
 #Preview("연결 해제") {
     AccountConnectionButton(
         state: .disconnect,
-        isWorking: false,
+        action: {}
+    )
+    .padding(20)
+    .background(SettingsStyle.background)
+}
+
+#Preview("연결 해제 중") {
+    AccountConnectionButton(
+        state: .disconnecting,
         action: {}
     )
     .padding(20)

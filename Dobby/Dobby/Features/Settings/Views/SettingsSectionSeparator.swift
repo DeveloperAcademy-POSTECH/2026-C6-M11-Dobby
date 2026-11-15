@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsSectionSeparator: View {
     var body: some View {
-        SettingsStyle.sectionSeparator
+        Color("BrandNeutral100")
             .frame(height: 6)
     }
 }
