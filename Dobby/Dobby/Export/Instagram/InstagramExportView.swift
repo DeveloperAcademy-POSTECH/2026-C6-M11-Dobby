@@ -112,6 +112,7 @@ struct InstagramExportView: View {
                 .background(Color(.brandNeutralWhite))
             }
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .overlay {
             if uploadState.isUploading {
                 PlatformUploadingOverlay(platformName: "인스타그램")
