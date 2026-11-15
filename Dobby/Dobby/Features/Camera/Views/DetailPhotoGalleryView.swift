@@ -13,9 +13,11 @@ struct DetailPhotoGalleryView: View {
     let model: ProductPhotoModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var focusedID: String
     @State private var deletionTarget: UUID?
     @State private var isDeletingPhoto = false
+    @State private var isChangingPhoto = false
     @State private var deletionError: String?
 
     init(model: ProductPhotoModel) {
@@ -54,18 +56,17 @@ struct DetailPhotoGalleryView: View {
             VStack(spacing: 0) {
                 Spacer().frame(height: min(max(0, geometry.size.height - height - stripHeight - stripGap),
                     max(0, 169 * geometry.size.width / 402 - geometry.frame(in: .global).minY)))
-                TabView(selection: $focusedID) {
-                    ForEach(items) { item in
-                        photoView(item)
-                            .tag(item.id)
-                            .accessibilityLabel(item.label)
-                    }
+                DetailPhotoGalleryPager(items: items, focusedID: $focusedID, reduceMotion: reduceMotion,
+                    onTransitionChanged: { isChangingPhoto = $0 }) { item in
+                    photoView(item).accessibilityLabel(item.label)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
                 .frame(height: height)
+                .allowsHitTesting(deletionTarget == nil && !isDeletingPhoto)
                 .accessibilityIdentifier("camera.galleryPager")
                 .accessibilityValue("\((items.firstIndex { $0.id == focusedID } ?? 0) + 1) / \(items.count)")
-                thumbnailStrip(width: geometry.size.width).padding(.top, stripGap)
+                thumbnailStrip(width: geometry.size.width)
+                    .allowsHitTesting(deletionTarget == nil && !isDeletingPhoto && !isChangingPhoto)
+                    .padding(.top, stripGap)
                 Spacer(minLength: 0)
             }
         }
@@ -87,7 +88,7 @@ struct DetailPhotoGalleryView: View {
                             .glassEffect(.regular.interactive(), in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(model.isDeleting || model.isCapturing || items.isEmpty)
+                    .disabled(isDeletingPhoto || isChangingPhoto || model.isDeleting || model.isCapturing || items.isEmpty)
                     .accessibilityLabel("현재 사진 삭제")
                     .accessibilityIdentifier("camera.galleryDelete")
                     .padding(.trailing, 28).offset(y: 8)
@@ -95,10 +96,10 @@ struct DetailPhotoGalleryView: View {
         }
         .background(Color(.systemBackground).ignoresSafeArea())
         .overlayPreferenceValue(GalleryDeleteBarBounds.self) { bounds in
-            if deletionTarget != nil, let bounds {
+            if let bounds {
                 GeometryReader { geometry in
                     // 확인창 하단을 구분선에 맞추고 취소 영역은 하단 버튼까지 덮는다.
-                    DetailPhotoDeleteConfirmation(isDeleting: isDeletingPhoto,
+                    DetailPhotoDeleteConfirmation(isPresented: deletionTarget != nil, isDeleting: isDeletingPhoto,
                         bottomInset: max(0, geometry.size.height - geometry[bounds].minY),
                         onCancel: { deletionTarget = nil }, onDelete: deletePhoto)
                 }
@@ -111,14 +112,14 @@ struct DetailPhotoGalleryView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("촬영으로 돌아가기", systemImage: "chevron.left") {
-                    if deletionTarget == nil { dismiss() }
+                    if deletionTarget == nil && !isDeletingPhoto && !isChangingPhoto { dismiss() }
                 }
                 .labelStyle(.iconOnly)
                 .accessibilityHidden(deletionTarget != nil)
             }
         }
         .tint(.primary)
-        .interactiveDismissDisabled(deletionTarget != nil)
+        .interactiveDismissDisabled(deletionTarget != nil || isDeletingPhoto || isChangingPhoto)
         .alert("사진을 삭제하지 못했어요", isPresented: Binding(
             get: { deletionError != nil }, set: { if !$0 { deletionError = nil } })) {
             Button("확인", role: .cancel) { deletionError = nil }
