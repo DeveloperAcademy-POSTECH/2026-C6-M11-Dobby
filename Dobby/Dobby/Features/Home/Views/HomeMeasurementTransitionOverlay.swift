@@ -120,8 +120,8 @@ struct HomeMeasurementBody: View {
     }
 }
 
-/// The dynamic tape geometry comes directly from Chak's draw(extension,t).
-/// Only its housing is a supplied static asset; the strip must stretch with drag.
+/// Keep Chak's dynamic strip length, with the Figma tip's 8pt corners and 5° tilt.
+/// Both strip edges reach the rounded tip, including while dragging.
 struct HomeMeasurementTapeArtwork: View {
     let seed: HomeMeasurementTransitionSeed
     let progress: Double
@@ -137,29 +137,54 @@ struct HomeMeasurementTapeArtwork: View {
             let top = 275 + drop
             let base = 411.5 + pull + drop * (enter * 0.9 + 0.1)
             let length = max(130, base - top)
+            let tipRadius: CGFloat = 8
+            let tipAngle = CGFloat.pi / 36
+            let tipTransform = CGAffineTransform(translationX: 157, y: top + length - 1)
+                .rotated(by: tipAngle)
+            let leftJoin = tipJoin(from: CGPoint(x: 176, y: top),
+                center: CGPoint(x: tipRadius, y: tipRadius).applying(tipTransform),
+                radius: tipRadius, leading: true)
+            let rightJoin = tipJoin(from: CGPoint(x: 233, y: top),
+                center: CGPoint(x: 92 - tipRadius, y: tipRadius).applying(tipTransform),
+                radius: tipRadius, leading: false)
             fill(&context, color: Color(red: 224 / 255, green: 223 / 255, blue: 221 / 255),
                  points: [CGPoint(x: 176, y: top), CGPoint(x: 233, y: top),
-                          CGPoint(x: 245.5, y: top + length + 7.5), CGPoint(x: 157, y: top + length)])
+                          rightJoin, leftJoin])
             fill(&context, color: Color(red: 171 / 255, green: 168 / 255, blue: 163 / 255),
                  points: [CGPoint(x: 209.5, y: top), CGPoint(x: 233, y: top),
-                          CGPoint(x: 245.5, y: top + length + 7.5)])
+                          rightJoin])
             var offset: CGFloat = 9
             while offset < length - 2 {
-                let x = 176 - 19 * offset / length
+                let x = 176 + (leftJoin.x - 176) * offset / (leftJoin.y - top)
                 let longMark = Int(((length - offset) / 8).rounded()) % 5 == 0
                 var tick = Path()
                 tick.move(to: CGPoint(x: x, y: top + offset))
-                tick.addLine(to: CGPoint(x: x + (longMark ? 29 : 17), y: top + offset + 2))
+                let width: CGFloat = longMark ? 29 : 17
+                tick.addLine(to: CGPoint(x: x + width, y: top + offset + width * tan(tipAngle)))
                 context.stroke(tick, with: .color(Color(white: 20 / 255)), lineWidth: 0.95)
                 offset += 8
             }
-            context.translateBy(x: 157, y: top + length - 1)
-            context.rotate(by: .radians(0.083))
-            context.fill(Path(roundedRect: CGRect(x: 0, y: 0, width: 92, height: 68), cornerRadius: 8.5),
-                with: .color(Color(red: 111 / 255, green: 106 / 255, blue: 98 / 255)))
+            // Paint the tip over the strip's joining chord so there is no empty
+            // wedge at either rounded corner or at the shading's lower end.
+            context.concatenate(tipTransform)
+            context.fill(Path(roundedRect: CGRect(x: 0, y: 0, width: 92, height: 68), cornerRadius: tipRadius),
+                with: .color(Color("BrandNeutral600")))
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
+    }
+
+    private func tipJoin(from anchor: CGPoint, center: CGPoint, radius: CGFloat, leading: Bool) -> CGPoint {
+        let dx = anchor.x - center.x
+        let dy = anchor.y - center.y
+        let distanceSquared = dx * dx + dy * dy
+        let along = radius * radius / distanceSquared
+        let across = radius * sqrt(distanceSquared - radius * radius) / distanceSquared
+        let first = CGPoint(x: center.x + along * dx - across * dy,
+                            y: center.y + along * dy + across * dx)
+        let second = CGPoint(x: center.x + along * dx + across * dy,
+                             y: center.y + along * dy - across * dx)
+        return leading == (first.x < second.x) ? first : second
     }
 
     private func fill(_ context: inout GraphicsContext, color: Color, points: [CGPoint]) {
