@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="780" viewBox="0 0 1000 780" role="img" aria-labelledby="title desc">
+<title id="title">chak 아키텍처 — MV 패턴, 작업 실행, 의존성 주입, 저장</title>
+<desc id="desc">View와 Model은 조회와 변경으로 연결됩니다. View는 Workflow와 Session에 작업을 요청하고 Store와 Archive에 저장과 복원을 요청합니다. Workflow와 Session은 Protocol을 호출하며 실제 또는 테스트 구현체가 이 프로토콜을 구현합니다. Store와 Archive는 SwiftData와 파일을 사용합니다. 실선은 호출과 데이터 접근, 점선은 프로토콜 구현 관계입니다.</desc>
+<defs>
+<marker id="orange" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#DC9B78" stroke-width="1.5"/></marker>
+<marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#91ABC8" stroke-width="1.5"/></marker>
+<marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#8FB8AC" stroke-width="1.5"/></marker>
+<marker id="purple" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#91ABC8" stroke-width="1.5"/></marker>
+</defs>
+<rect width="1000" height="780" rx="8" fill="#101720"/>
+<g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif">
+
+<text x="32" y="42" font-size="21" fill="#E9EEF5" font-weight="600" text-anchor="start">MV Pattern</text>
+<rect x="32" y="72" width="936" height="198" rx="8" fill="#201E20" stroke="#624437"/>
+<text x="56" y="107" font-size="14" fill="#DC9B78" font-weight="650" text-anchor="start">View &amp; Model</text>
+<rect x="32" y="350" width="568" height="360" rx="8" fill="#151E2A" stroke="#30435D"/>
+<text x="56" y="380" font-size="13" fill="#91ABC8" font-weight="650" text-anchor="start">작업 실행</text>
+<rect x="632" y="350" width="336" height="360" rx="8" fill="#132322" stroke="#2B514C"/>
+<text x="656" y="380" font-size="13" fill="#8FB8AC" font-weight="650" text-anchor="start">데이터 저장</text>
+<path d="M344 195 H656" fill="none" stroke="#DC9B78" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#orange)" marker-start="url(#orange)"/>
+<text x="500" y="179" font-size="14" fill="#D8AF96" font-weight="400" text-anchor="middle">조회 · 변경</text>
+<path d="M208 240 V410" fill="none" stroke="#91ABC8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#blue)"/>
+<text x="222" y="317" font-size="14" fill="#A6B9CE" font-weight="400" text-anchor="start">작업 요청</text>
+<path d="M300 240 V300 Q300 310 310 310 H790 Q800 310 800 320 V410" fill="none" stroke="#8FB8AC" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#teal)"/>
+<text x="580" y="297" font-size="14" fill="#AAC8BD" font-weight="400" text-anchor="middle">저장 · 복원</text>
+<path d="M184 500 V580" fill="none" stroke="#91ABC8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#blue)"/>
+<text x="198" y="546" font-size="14" fill="#A6B9CE" font-weight="400" text-anchor="start">호출</text>
+<path d="M344 625 H304" fill="none" stroke="#91ABC8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#purple)" stroke-dasharray="6 5"/>
+<text x="456" y="551" font-size="13" fill="#91ABC8" font-weight="400" text-anchor="middle">프로토콜 구현</text>
+<path d="M800 500 V580" fill="none" stroke="#8FB8AC" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#teal)"/>
+<text x="814" y="546" font-size="14" fill="#AAC8BD" font-weight="400" text-anchor="start">읽기 · 쓰기</text>
+<rect x="64" y="150" width="280" height="90" rx="7" fill="#2B2520" stroke="#795D49"/>
+<text x="84" y="186" font-size="20" fill="#E9EEF5" font-weight="600" text-anchor="start">View</text>
+<text x="84" y="215" font-size="15" fill="#B9C6D6" font-weight="400" text-anchor="start">SwiftUI · 화면 상태 · 입력</text>
+<rect x="656" y="150" width="280" height="90" rx="7" fill="#2B2520" stroke="#795D49"/>
+<text x="676" y="186" font-size="20" fill="#E9EEF5" font-weight="600" text-anchor="start">Model</text>
+<text x="676" y="215" font-size="15" fill="#B9C6D6" font-weight="400" text-anchor="start">상품 · 측정 데이터 · 변경 규칙</text>
+<rect x="64" y="410" width="240" height="90" rx="7" fill="#202D3A" stroke="#55739F"/>
+<text x="84" y="446" font-size="20" fill="#E9EEF5" font-weight="600" text-anchor="start">Workflow · Session</text>
+<text x="84" y="475" font-size="15" fill="#B9C6D6" font-weight="400" text-anchor="start">촬영 · 실측 · AI 작업 실행</text>
+<rect x="64" y="580" width="240" height="90" rx="7" fill="#202D3A" stroke="#526B85"/>
+<text x="84" y="616" font-size="20" fill="#E9EEF5" font-weight="600" text-anchor="start">Protocol</text>
+<text x="84" y="645" font-size="15" fill="#B9C6D6" font-weight="400" text-anchor="start">촬영 · 인식 · AI 기능 계약</text>
+<rect x="344" y="580" width="224" height="90" rx="7" fill="#202D3A" stroke="#526B85"/>
+<text x="364" y="616" font-size="20" fill="#E9EEF5" font-weight="600" text-anchor="start">구현체</text>
+<text x="364" y="645" font-size="15" fill="#B9C6D6" font-weight="400" text-anchor="start">실제 구현 / 테스트 구현</text>
+<rect x="664" y="410" width="272" height="90" rx="7" fill="#20332E" stroke="#53766B"/>
+<text x="684" y="446" font-size="20" fill="#E9EEF5" font-weight="600" text-anchor="start">Store · Archive</text>
+<text x="684" y="475" font-size="15" fill="#B9C6D6" font-weight="400" text-anchor="start">상품 · 사진 · 실측 기록 관리</text>
+<rect x="664" y="580" width="272" height="90" rx="7" fill="#20332E" stroke="#53766B"/>
+<text x="684" y="616" font-size="20" fill="#E9EEF5" font-weight="600" text-anchor="start">SwiftData · 파일</text>
+<text x="684" y="645" font-size="15" fill="#B9C6D6" font-weight="400" text-anchor="start">데이터와 이미지 저장</text>
+<path d="M32 735 H968" stroke="#2B3745"/>
+<path d="M40 756 H74" fill="none" stroke="#91ABC8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#blue)"/>
+<text x="86" y="761" font-size="13" fill="#AAB8C9" font-weight="400" text-anchor="start">호출 · 데이터 접근</text>
+<path d="M276 756 H310" fill="none" stroke="#91ABC8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#purple)" stroke-dasharray="6 5"/>
+<text x="322" y="761" font-size="13" fill="#AAB8C9" font-weight="400" text-anchor="start">프로토콜 구현</text>
+</g></svg>

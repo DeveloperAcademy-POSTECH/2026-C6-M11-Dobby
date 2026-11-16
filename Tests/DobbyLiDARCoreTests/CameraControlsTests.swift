@@ -4,6 +4,39 @@ import XCTest
 
 /// Pure request/range contracts, not evidence of hardware focus or exposure behavior.
 final class CameraControlsTests: XCTestCase {
+    func testCaptureRangeIntersectsTwoStopLimitWithDeviceSupport() throws {
+        for (minimum, maximum, lower, upper) in [(-8.0, 8.0, -2.0, 2.0),
+                                                (-1.5, 1.0, -1.5, 1.0),
+                                                (-1.0, 4.0, -1.0, 2.0),
+                                                (0.0, 0.0, 0.0, 0.0)] {
+            let range = try XCTUnwrap(CameraExposureRange.captureRange(minimum: minimum, maximum: maximum))
+            XCTAssertEqual(range.minimum, lower)
+            XCTAssertEqual(range.maximum, upper)
+            XCTAssertEqual(range.clamp(-100), lower)
+            XCTAssertEqual(range.clamp(100), upper)
+            XCTAssertEqual(range.clamp(0), 0)
+        }
+        for (minimum, maximum) in [(3.0, 4.0), (-4.0, -3.0), (2.0, -2.0),
+                                   (Double.nan, 2), (-2, Double.infinity)] {
+            XCTAssertNil(CameraExposureRange.captureRange(minimum: minimum, maximum: maximum))
+        }
+    }
+
+    func testCaptureDragKeepsSensitivityAndCannotEscapeTwoStopsAcrossRepeatedDrags() throws {
+        let deviceRange = try XCTUnwrap(CameraExposureRange(minimum: -8, maximum: 8))
+        let captureRange = try XCTUnwrap(CameraExposureRange.captureRange(minimum: -8, maximum: 8))
+        XCTAssertEqual(CameraExposureGesture.bias(start: 0, translationY: -100, viewportHeight: 400, range: captureRange),
+                       CameraExposureGesture.bias(start: 0, translationY: -100, viewportHeight: 400, range: deviceRange))
+        for (translation, expected) in [(-400.0, 2.0), (400.0, -2.0)] {
+            var bias = 0.0
+            for _ in 0..<5 {
+                bias = try XCTUnwrap(CameraExposureGesture.bias(start: bias, translationY: translation,
+                                                                viewportHeight: 400, range: captureRange))
+                XCTAssertEqual(bias, expected)
+            }
+        }
+    }
+
     func testExposureLimitsClampFiniteRequestsWithoutInventingADeviceRange() throws {
         let range = try XCTUnwrap(CameraExposureRange(minimum: -1.5, maximum: 2.25))
         XCTAssertEqual(range.clamp(-2), -1.5)
