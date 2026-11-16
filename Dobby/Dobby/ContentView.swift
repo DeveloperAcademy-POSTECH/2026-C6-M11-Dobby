@@ -12,6 +12,7 @@ struct ContentView: View {
         var homeSnapshot: UIImage? = nil
     }
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
     @State private var tab: HomeTab = .capture
     @State private var libraryPath: [UUID] = []
@@ -30,6 +31,7 @@ struct ContentView: View {
     @State private var homeSnapshotSource = HomeMeasurementSnapshotSource()
     @State private var preparedHomeSnapshot: UIImage?
     @State private var homeMeasurementIdentity = UUID()
+    @State private var homeMeasurementHaptics = HomeMeasurementHaptics()
 
 #if DEBUG
     init(previewLibrary: Bool = false, previewEditing: Bool = false) {
@@ -45,7 +47,8 @@ struct ContentView: View {
                     onResumeDraft: { startCreation(resuming: $0) },
                     onStartCapture: { startCreation() },
                     onPrepareMeasurementTransition: prepareHomeMeasurementTransition,
-                    onBeginMeasurementTransition: startHomeMeasurementTransition)
+                    onBeginMeasurementTransition: startHomeMeasurementTransition,
+                    measurementHaptics: homeMeasurementHaptics)
                     .id(homeMeasurementIdentity)
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
@@ -125,11 +128,15 @@ struct ContentView: View {
         }
         .onChange(of: creationRequest?.id) { previous, current in
             if previous != nil && current == nil {
+                homeMeasurementHaptics.stop()
                 // TabView can keep Home mounted underneath a full-screen cover.
                 // Reset its held gesture/card opacity explicitly on every exit.
                 homeMeasurementIdentity = UUID()
                 preparedHomeSnapshot = nil
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { homeMeasurementHaptics.stop() }
         }
         .fullScreenCover(isPresented: $showLiDAR) {
             LiDARLabView().safeAreaInset(edge: .top, spacing: 0) {
@@ -190,6 +197,7 @@ struct ContentView: View {
 
     private func startCreation(resuming productID: UUID? = nil) {
         guard creationRequest == nil else { return }
+        homeMeasurementHaptics.stop()
         preparedHomeSnapshot = nil
         libraryIsEditing = false
         creationRequest = CreationRequest(productID: productID)
@@ -214,6 +222,7 @@ struct ContentView: View {
         // Resume and library entry keep their existing presentation behaviour.
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
+        homeMeasurementHaptics.finishPull()
         withTransaction(transaction) { creationRequest = request }
     }
 

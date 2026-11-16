@@ -121,7 +121,7 @@ struct HomeMeasurementBody: View {
 }
 
 /// Keep Chak's dynamic strip length, with the Figma tip's 8pt corners and 5° tilt.
-/// Both strip edges reach the rounded tip, including while dragging.
+/// The strip enters an inset slot; the wider handle keeps its visible shoulders.
 struct HomeMeasurementTapeArtwork: View {
     let seed: HomeMeasurementTransitionSeed
     let progress: Double
@@ -141,27 +141,25 @@ struct HomeMeasurementTapeArtwork: View {
             let tipAngle = CGFloat.pi / 36
             let tipTransform = CGAffineTransform(translationX: 157, y: top + length - 1)
                 .rotated(by: tipAngle)
-            let leftJoin = tipJoin(from: CGPoint(x: 176, y: top),
-                center: CGPoint(x: tipRadius, y: tipRadius).applying(tipTransform),
-                radius: tipRadius, leading: true)
-            let rightJoin = tipJoin(from: CGPoint(x: 233, y: top),
-                center: CGPoint(x: 92 - tipRadius, y: tipRadius).applying(tipTransform),
-                radius: tipRadius, leading: false)
-            fill(&context, color: Color(red: 224 / 255, green: 223 / 255, blue: 221 / 255),
-                 points: [CGPoint(x: 176, y: top), CGPoint(x: 233, y: top),
+            // Figma's ribbon is narrower than the 92pt handle. Keep these
+            // attachment points inside the handle rather than on its outer arc.
+            let leftJoin = CGPoint(x: 4.8, y: tipRadius).applying(tipTransform)
+            let rightJoin = CGPoint(x: 90.35, y: tipRadius).applying(tipTransform)
+            fill(&context, color: Color("BrandNeutral200"),
+                 points: [CGPoint(x: 179.2, y: top), CGPoint(x: 231.7, y: top),
                           rightJoin, leftJoin])
-            fill(&context, color: Color(red: 171 / 255, green: 168 / 255, blue: 163 / 255),
-                 points: [CGPoint(x: 209.5, y: top), CGPoint(x: 233, y: top),
+            fill(&context, color: Color("BrandNeutral400"),
+                 points: [CGPoint(x: 208.8, y: top), CGPoint(x: 231.7, y: top),
                           rightJoin])
             var offset: CGFloat = 9
             while offset < length - 2 {
-                let x = 176 + (leftJoin.x - 176) * offset / (leftJoin.y - top)
+                let x = 179.2 + (leftJoin.x - 179.2) * offset / (leftJoin.y - top)
                 let longMark = Int(((length - offset) / 8).rounded()) % 5 == 0
                 var tick = Path()
                 tick.move(to: CGPoint(x: x, y: top + offset))
                 let width: CGFloat = longMark ? 29 : 17
                 tick.addLine(to: CGPoint(x: x + width, y: top + offset + width * tan(tipAngle)))
-                context.stroke(tick, with: .color(Color(white: 20 / 255)), lineWidth: 0.95)
+                context.stroke(tick, with: .color(.black), lineWidth: 1)
                 offset += 8
             }
             // Paint the tip over the strip's joining chord so there is no empty
@@ -172,19 +170,6 @@ struct HomeMeasurementTapeArtwork: View {
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
-    }
-
-    private func tipJoin(from anchor: CGPoint, center: CGPoint, radius: CGFloat, leading: Bool) -> CGPoint {
-        let dx = anchor.x - center.x
-        let dy = anchor.y - center.y
-        let distanceSquared = dx * dx + dy * dy
-        let along = radius * radius / distanceSquared
-        let across = radius * sqrt(distanceSquared - radius * radius) / distanceSquared
-        let first = CGPoint(x: center.x + along * dx - across * dy,
-                            y: center.y + along * dy + across * dx)
-        let second = CGPoint(x: center.x + along * dx + across * dy,
-                             y: center.y + along * dy - across * dx)
-        return leading == (first.x < second.x) ? first : second
     }
 
     private func fill(_ context: inout GraphicsContext, color: Color, points: [CGPoint]) {

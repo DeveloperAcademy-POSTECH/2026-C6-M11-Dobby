@@ -10,6 +10,7 @@ struct HomeTapeMeasure: View {
     var onPullChanged: ((CGFloat) -> Void)? = nil
     var showsResumeCard = false
     var canvasSize: CGSize? = nil
+    var measurementHaptics: HomeMeasurementHaptics? = nil
     @Environment(\.accessibilityReduceMotion) private var reducedMotion
     @Environment(\.scenePhase) private var scenePhase
     @GestureState private var gestureActive = false
@@ -62,7 +63,10 @@ struct HomeTapeMeasure: View {
             }
         }
         .onAppear { idleStart = .now }
-        .onDisappear(perform: resetInteraction)
+        .onDisappear {
+            // ContentView retains the short rolling tail across this cover.
+            resetInteraction(stoppingHaptics: phase != .committed)
+        }
         .onChange(of: scenePhase) { _, value in
             if value != .active { resetInteraction() }
             else { idleStart = .now }
@@ -78,11 +82,14 @@ struct HomeTapeMeasure: View {
                     // Take the real window snapshot before changing any artwork,
                     // card opacity or arrow phase on the first touch update.
                     onPrepareMeasurementTransition?()
+                    measurementHaptics?.startPull()
                     operationID = UUID()
                     phase = .dragging
                 }
-                setPull(HomeMeasurementMotion.normalizedPull(translation: value.translation.height,
-                    canvasWidth: size.width))
+                let distance = HomeMeasurementMotion.normalizedPull(translation: value.translation.height,
+                    canvasWidth: size.width)
+                setPull(distance)
+                measurementHaptics?.updatePull(distance)
             }
             .onEnded { _ in
                 guard scenePhase == .active, phase == .dragging else { return }
@@ -105,6 +112,7 @@ struct HomeTapeMeasure: View {
     }
 
     private func returnHome() {
+        measurementHaptics?.stop()
         animationTask?.cancel()
         let token = UUID()
         operationID = token
@@ -125,6 +133,7 @@ struct HomeTapeMeasure: View {
         guard phase == .idle, scenePhase == .active else { return }
         guard onBeginMeasurementTransition != nil else { onStartCapture(); return }
         onPrepareMeasurementTransition?()
+        measurementHaptics?.startPull()
         phase = .accessiblePull
         let token = UUID()
         operationID = token
@@ -145,10 +154,11 @@ struct HomeTapeMeasure: View {
         phase = .committed
         let seed = HomeMeasurementTransitionSeed(pull: pull, canvasSize: size)
         if let onBeginMeasurementTransition { onBeginMeasurementTransition(seed) }
-        else { onStartCapture() }
+        else { measurementHaptics?.finishPull(); onStartCapture() }
     }
 
-    private func resetInteraction() {
+    private func resetInteraction(stoppingHaptics: Bool = true) {
+        if stoppingHaptics { measurementHaptics?.stop() }
         animationTask?.cancel()
         animationTask = nil
         operationID = UUID()

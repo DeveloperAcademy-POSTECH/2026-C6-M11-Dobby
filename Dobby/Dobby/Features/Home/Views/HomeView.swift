@@ -7,6 +7,7 @@ struct HomeView: View {
     let onStartCapture: () -> Void
     var onPrepareMeasurementTransition: (() -> Void)? = nil
     var onBeginMeasurementTransition: ((HomeMeasurementTransitionSeed) -> Void)? = nil
+    var measurementHaptics: HomeMeasurementHaptics? = nil
     @State private var measurementPull: CGFloat = 0
     @ScaledMetric(relativeTo: .title3) private var guidanceLineHeight = 29
 
@@ -26,7 +27,8 @@ struct HomeView: View {
                         onBeginMeasurementTransition: onBeginMeasurementTransition,
                         onPullChanged: { measurementPull = $0 }, showsResumeCard: showsResumeCard,
                         canvasSize: CGSize(width: geometry.size.width,
-                            height: max(geometry.frame(in: .global).maxY, geometry.size.height)))
+                            height: max(geometry.frame(in: .global).maxY, geometry.size.height)),
+                        measurementHaptics: measurementHaptics)
                         .frame(width: reference.width * scale, height: reference.height * scale)
                         .zIndex(1)
                     HomeMeasurementLowerContent(pull: measurementPull) {
