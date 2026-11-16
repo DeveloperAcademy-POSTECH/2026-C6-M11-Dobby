@@ -98,7 +98,7 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(Color.primary)
+        .tint(Color("BrandNeutralBlack"))
         .background { HomeMeasurementSnapshotAnchor(source: homeSnapshotSource).allowsHitTesting(false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {

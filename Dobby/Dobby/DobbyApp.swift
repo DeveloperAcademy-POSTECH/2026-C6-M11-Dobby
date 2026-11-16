@@ -2,6 +2,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 @main
 struct DobbyApp: App {
@@ -10,6 +11,7 @@ struct DobbyApp: App {
     @State private var showsLaunchSplash = true
 
     init() {
+        UITabBar.appearance().unselectedItemTintColor = UIColor(named: "BrandNeutral600")
 #if DEBUG
         if ProcessInfo.processInfo.environment["DOBBY_AI_AUTH_TOKEN"] != nil {
             ProductAutofillDevelopmentAuth.bootstrapAtLaunch()
