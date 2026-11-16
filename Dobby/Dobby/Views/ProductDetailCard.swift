@@ -104,11 +104,7 @@ private struct ProductDetailSections: View {
     private var sectionDivider: some View {
         if style.usesSpacedSections {
             Spacer(minLength: style == .library ? 24 : 16)
-            if style == .library {
-                Color("BrandNeutral200").frame(height: 1)
-            } else {
-                Divider().overlay(Color("BrandNeutral100"))
-            }
+            Color("BrandNeutral100").frame(height: 1)
             Spacer(minLength: style == .library ? 24 : 16)
         } else {
             Divider()
@@ -299,11 +295,11 @@ private struct ProductDetailMeasurementScroll: View {
                 }
         }
         .scrollDisabled(style == .library && values.count <= 5)
-        .background(style == .library ? Color("BrandNeutral100") : .white)
+        .background(style == .library ? Color("BrandNeutral50") : .white)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: style == .library ? .circular : .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: style == .library ? .circular : .continuous).strokeBorder(
-                style.usesMeasurementTokens ? Color("BrandNeutral100") : ProductInformationStyle.field, lineWidth: 1.5)
+                style.usesMeasurementTokens ? Color("BrandNeutral50") : ProductInformationStyle.field, lineWidth: 1.5)
         }
     }
 }
@@ -322,7 +318,7 @@ private struct ProductDetailMeasurementRow: View {
                     .accessibilityIdentifier("\(accessibilityPrefix).\(value.key)")
             }
         }
-        .background(style.usesMeasurementTokens ? Color("BrandNeutral100") : ProductInformationStyle.field)
+        .background(style.usesMeasurementTokens ? Color("BrandNeutral50") : ProductInformationStyle.field)
     }
 }
 
@@ -340,7 +336,7 @@ private struct ProductDetailMeasurementColumn: View {
                 .foregroundStyle(Color("BrandNeutral800"))
                 .lineLimit(1).minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity).frame(height: 42)
-                .background(style.usesMeasurementTokens ? Color("BrandNeutral100") : ProductInformationStyle.field)
+                .background(style.usesMeasurementTokens ? Color("BrandNeutral50") : ProductInformationStyle.field)
             Text(MeasurementDisplayText.centimeters(value.valueCm) + "cm")
                 .font(style.usesMeasurementTokens
                     ? LibraryDetailTypography.measurementValue
