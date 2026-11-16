@@ -59,28 +59,28 @@ struct InfoInputView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                ZStack(alignment: .topLeading) {
-                    VStack(alignment: .leading, spacing: 40) {
-                        VStack(alignment: .leading, spacing: 24) {
-                            ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing,
-                                onImportingChange: { isImportingPhotos = $0 })
-                                .productInputInteractionArea()
-                            if onGenerateAI != nil { generateInformationButton.productInputInteractionArea() }
-                        }
+                VStack(alignment: .leading, spacing: 40) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing,
+                            onImportingChange: { isImportingPhotos = $0 })
+                            .productInputInteractionArea()
+                        if onGenerateAI != nil { generateInformationButton.productInputInteractionArea() }
+                    }
+                    // Keep the same photo strip mounted and visible during generation.
+                    // Only the editable information is covered by placeholders.
+                    ZStack(alignment: .topLeading) {
                         ProductInformationFields(garment: garment, measurementInput: measurementInput,
                             focus: $focusedMeasurementID, informationFocus: $focusedInformationField,
                             showsValidationErrors: hasAttemptedCompletion,
                             allowsPhotoEditing: allowsPhotoEditing, showsPhotoSection: false,
                             onPhotoImportingChange: { isImportingPhotos = $0 })
-                    }
-                    .opacity(generationRequestID == nil ? 1 : 0)
-                    .accessibilityHidden(generationRequestID != nil)
+                            .opacity(generationRequestID == nil ? 1 : 0)
+                            .accessibilityHidden(generationRequestID != nil)
 
-                    if generationRequestID != nil {
-                        ProductInformationSkeletonView(photoCount: garment.productPhotos.count,
-                            measurementColumnCount: garment.visibleMeasurements.count)
+                        if generationRequestID != nil {
+                            ProductInformationSkeletonView(measurementColumnCount: garment.visibleMeasurements.count)
+                        }
                     }
-
                 }
                     .disabled(generationRequestID != nil || isImportingPhotos)
                     .padding(.horizontal, 20)
