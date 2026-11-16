@@ -8,6 +8,8 @@ struct ContentView: View {
     private struct CreationRequest: Identifiable {
         let id = UUID()
         let productID: UUID?
+        var homeTransition: HomeMeasurementTransitionSeed? = nil
+        var homeSnapshot: UIImage? = nil
     }
     @Environment(\.modelContext) private var context
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
@@ -25,6 +27,9 @@ struct ContentView: View {
     @State private var pendingExportDestination: ExportReturnDestination?
     @State private var exportReturnNavigationID = UUID()
     @State private var editingAutofillLoadingPresentation: ProductAutofillLoadingPresentation?
+    @State private var homeSnapshotSource = HomeMeasurementSnapshotSource()
+    @State private var preparedHomeSnapshot: UIImage?
+    @State private var homeMeasurementIdentity = UUID()
 
 #if DEBUG
     init(previewLibrary: Bool = false, previewEditing: Bool = false) {
@@ -38,7 +43,10 @@ struct ContentView: View {
             Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: HomeTab.capture) {
                 HomeView(resumeCandidate: HomeResumeCandidate.latest(in: garments),
                     onResumeDraft: { startCreation(resuming: $0) },
-                    onStartCapture: { startCreation() })
+                    onStartCapture: { startCreation() },
+                    onPrepareMeasurementTransition: prepareHomeMeasurementTransition,
+                    onBeginMeasurementTransition: startHomeMeasurementTransition)
+                    .id(homeMeasurementIdentity)
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
                         if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
@@ -88,6 +96,7 @@ struct ContentView: View {
             }
         }
         .tint(Color.primary)
+        .background { HomeMeasurementSnapshotAnchor(source: homeSnapshotSource).allowsHitTesting(false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
@@ -103,14 +112,24 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(item: $creationRequest) { request in
-            ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
-                copyHomeProduct: $creationCopyHomeProduct,
-                resumeProductID: request.productID,
-                onDraftSaved: returnHomeFromCreation,
-                onDraftDiscarded: returnHomeFromCreation,
-                onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
-                onCancel: { creationRequest = nil })
-                .tint(Color("HomeAccent"))
+            HomeMeasurementPresentation(seed: request.homeTransition, snapshot: request.homeSnapshot) {
+                ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
+                    copyHomeProduct: $creationCopyHomeProduct,
+                    resumeProductID: request.productID,
+                    onDraftSaved: returnHomeFromCreation,
+                    onDraftDiscarded: returnHomeFromCreation,
+                    onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
+                    onCancel: { creationRequest = nil })
+            }
+            .tint(Color("HomeAccent"))
+        }
+        .onChange(of: creationRequest?.id) { previous, current in
+            if previous != nil && current == nil {
+                // TabView can keep Home mounted underneath a full-screen cover.
+                // Reset its held gesture/card opacity explicitly on every exit.
+                homeMeasurementIdentity = UUID()
+                preparedHomeSnapshot = nil
+            }
         }
         .fullScreenCover(isPresented: $showLiDAR) {
             LiDARLabView().safeAreaInset(edge: .top, spacing: 0) {
@@ -170,8 +189,32 @@ struct ContentView: View {
     }
 
     private func startCreation(resuming productID: UUID? = nil) {
+        guard creationRequest == nil else { return }
+        preparedHomeSnapshot = nil
         libraryIsEditing = false
         creationRequest = CreationRequest(productID: productID)
+    }
+
+    private func prepareHomeMeasurementTransition() {
+        guard creationRequest == nil, tab == .capture else { return }
+        // Capture the live home, including its current draft card and native
+        // tab bar, before the first drag changes its appearance.
+        preparedHomeSnapshot = homeSnapshotSource.snapshot()
+    }
+
+    private func startHomeMeasurementTransition(_ seed: HomeMeasurementTransitionSeed) {
+        guard creationRequest == nil, tab == .capture else { return }
+        libraryIsEditing = false
+        let snapshot = preparedHomeSnapshot ?? homeSnapshotSource.snapshot()
+        let canvasSize = homeSnapshotSource.canvasSize ?? seed.canvasSize
+        let request = CreationRequest(productID: nil,
+            homeTransition: .init(pull: seed.pull, canvasSize: canvasSize), homeSnapshot: snapshot)
+        preparedHomeSnapshot = nil
+        // Only this entry replaces UIKit's cover slide with the designed wipe.
+        // Resume and library entry keep their existing presentation behaviour.
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { creationRequest = request }
     }
 
     private var creationIsPresented: Binding<Bool> {
