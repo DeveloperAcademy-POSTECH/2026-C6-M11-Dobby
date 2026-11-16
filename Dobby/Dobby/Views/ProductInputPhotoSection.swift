@@ -14,9 +14,17 @@ struct ProductInputPhotoSection: View {
     @State private var expandedPhoto: GarmentPhoto?
     @State private var showsDeletionError = false
     @State private var showsPhotoPicker = false
-    @State private var showsCamera = false
-    @State private var existingCameraPhotos: [CapturedAsset] = []
-    @State private var cameraSessionID = UUID()
+    // Presentation and its payload share one identity. A separate Bool cover
+    // can build its first content from the previous render's empty photo state.
+    @State private var cameraPresentation: CameraPresentation?
+
+    private struct CameraPresentation: Identifiable {
+        let id = UUID()
+        let garmentID: UUID
+        let sessionID: UUID
+        let photos: [CapturedAsset]
+        let fixtureSource: CapturedAsset.Source?
+    }
     @State private var pickedItems: [PhotosPickerItem] = []
     @State private var isImporting = false
     @State private var pendingPhotoCount = 0
@@ -63,17 +71,17 @@ struct ProductInputPhotoSection: View {
         }
         .photosPicker(isPresented: $showsPhotoPicker, selection: photoPickerSelection,
                       maxSelectionCount: nil, matching: .images)
-        .fullScreenCover(isPresented: $showsCamera) {
-            ProductInputCameraPicker(garmentID: garment.id,
-                captureSessionID: cameraSessionID, existingPhotos: existingCameraPhotos,
-                fixtureSource: fixtureCameraSource,
-                onCancel: { showsCamera = false }) { photos, removedPhotoIDs in
+        .fullScreenCover(item: $cameraPresentation) { presentation in
+            ProductInputCameraPicker(garmentID: presentation.garmentID,
+                captureSessionID: presentation.sessionID, existingPhotos: presentation.photos,
+                fixtureSource: presentation.fixtureSource,
+                onCancel: { cameraPresentation = nil }) { photos, removedPhotoIDs in
                 pendingPhotoCount = photos.count
                 setImporting(true)
                 defer { setImporting(false) }
                 try await ProductPhotoImportStore.applyAdditionalCapture(photos, removing: removedPhotoIDs,
                     to: garment, in: context)
-                showsCamera = false
+                cameraPresentation = nil
             }
         }
         .onDisappear {
@@ -132,9 +140,9 @@ struct ProductInputPhotoSection: View {
             let sessionID = garment.measurementPhoto?.measurementSessionID ?? UUID()
             // Snapshot once per presentation, preserving the draft's exact visible
             // order/IDs and product-only rotations without lending file ownership.
-            existingCameraPhotos = try ProductPhotoImportStore.capturePreviewPhotos(for: garment, sessionID: sessionID)
-            cameraSessionID = sessionID
-            showsCamera = true
+            let photos = try ProductPhotoImportStore.capturePreviewPhotos(for: garment, sessionID: sessionID)
+            cameraPresentation = CameraPresentation(garmentID: garment.id, sessionID: sessionID,
+                photos: photos, fixtureSource: fixtureCameraSource)
         } catch { importError = error.localizedDescription }
     }
 
