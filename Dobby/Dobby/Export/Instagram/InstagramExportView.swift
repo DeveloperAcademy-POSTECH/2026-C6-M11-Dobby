@@ -31,6 +31,7 @@ struct InstagramExportView: View {
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
     @State private var isShowingUploadFailure = false
+    @State private var keyboardButtonBottomPadding: CGFloat = 0
     @State private var message: String?
     @State private var requestID = UUID().uuidString
 
@@ -110,6 +111,7 @@ struct InstagramExportView: View {
                 }
                 .padding(.horizontal, 33)
                 .padding(.top, 16)
+                .padding(.bottom, keyboardButtonBottomPadding)
                 .background(Color(.brandNeutralWhite))
             }
         }
@@ -129,6 +131,14 @@ struct InstagramExportView: View {
             }
         }
         .interactiveDismissDisabled(uploadState.isUploading)
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIResponder.keyboardWillChangeFrameNotification
+        ), perform: updateKeyboardButtonBottomPadding)
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIResponder.keyboardDidHideNotification
+        )) { _ in
+            keyboardButtonBottomPadding = 0
+        }
         .task {
             guard account == nil else { return }
             await loadAccount()
@@ -143,6 +153,24 @@ struct InstagramExportView: View {
 
     private var showsCompletion: Bool {
         showsConnectionCompletion || uploadState.isCompleted
+    }
+
+    private func updateKeyboardButtonBottomPadding(_ notification: Notification) {
+        let keyboardScreen = notification.object as? UIScreen
+        guard let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+              let window = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .filter({ $0.activationState == .foregroundActive })
+                .compactMap(\.keyWindow)
+                .first(where: { keyboardScreen == nil || $0.screen === keyboardScreen }) else { return }
+
+        let frameInWindow = window.convert(keyboardFrame, from: window.screen.coordinateSpace)
+        // The window inset describes the device area independently of the keyboard.
+        let deviceBottomInset = window.safeAreaInsets.bottom
+        let coversBottom = frameInWindow.intersects(window.bounds)
+            && frameInWindow.maxY >= window.bounds.maxY
+            && frameInWindow.minY < window.bounds.maxY - deviceBottomInset
+        keyboardButtonBottomPadding = coversBottom ? deviceBottomInset : 0
     }
 
     private func dismissKeyboard() {
