@@ -32,7 +32,10 @@ final class ProductInputCompletionUITests: XCTestCase {
             enter("67", into: measurement, app: app)
             tap(app, "product-info.done")
             XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 15))
-            XCTAssertTrue(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
+            XCTAssertTrue(app.staticTexts["제품 정보 입력 완료 🎉"].exists)
+            XCTAssertFalse(app.navigationBars.firstMatch.isHittable)
+            let exportFrame = app.buttons["product-complete.export"].frame
+            XCTAssertTrue(app.buttons["product-complete.library"].isHittable)
 
             let photoQuery = NSPredicate(format: "identifier BEGINSWITH %@", "product-detail.photo.")
             let photos = app.images.matching(photoQuery)
@@ -71,6 +74,8 @@ final class ProductInputCompletionUITests: XCTestCase {
             let corrected = app.descendants(matching: .any)["product-detail.measurement." + measurementKey].firstMatch
             XCTAssertTrue(corrected.staticTexts["67cm"].exists,
                           "Completion must preserve the confirmed value instead of showing the design sample")
+            XCTAssertEqual(app.buttons["product-complete.export"].frame.minY, exportFrame.minY, accuracy: 1,
+                           "Completion actions remain fixed while the summary scrolls")
             screenshot(named: isTop ? "completion-top-measurements" : "completion-bottom-measurements")
 
             if isTop {
@@ -146,6 +151,16 @@ final class ProductInputCompletionUITests: XCTestCase {
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<16 {
+            let details = app.scrollViews["product-complete.details-scroll"]
+            if details.exists {
+                let viewport = details.frame
+                if element.isHittable, element.frame.minY >= viewport.minY,
+                   element.frame.maxY <= viewport.maxY { return }
+                let above = element.frame.minY < viewport.minY
+                details.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.25 : 0.75))
+                    .press(forDuration: 0.05, thenDragTo: details.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.75 : 0.25)))
+                continue
+            }
             let top = (app.navigationBars.allElementsBoundByIndex.filter(\.isHittable)
                 .map { $0.frame.maxY }.max() ?? 68) + 12
             let bottom = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY - 12 : app.frame.maxY - 40
