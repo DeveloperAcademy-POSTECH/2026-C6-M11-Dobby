@@ -40,10 +40,10 @@ private struct ProductMeasurementScroll: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .scrollDisabled(columns.count <= 5)
-        .background(Color("BrandNeutral100"))
+        .background(Color("BrandNeutral50"))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).strokeBorder(Color("BrandNeutral100"), lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 14).strokeBorder(Color("BrandNeutral50"), lineWidth: 1.5)
         }
         .accessibilityIdentifier("product-info.measurements")
         .productInputInteractionArea()
@@ -59,7 +59,7 @@ private struct ProductMeasurementRow: View {
         HStack(spacing: 0) {
             ForEach(Array(columns.enumerated()), id: \.element.id) { index, value in
                 if index > 0 {
-                    Rectangle().fill(Color("BrandNeutral100")).frame(width: 1)
+                    Rectangle().fill(Color("BrandNeutral50")).frame(width: 1)
                 }
                 SizeColumn(value: value, text: Binding(
                     get: { measurementInput.text(for: value) },
@@ -88,7 +88,7 @@ private struct SizeColumn: View {
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
                 .frame(height: 42)
-                .background(Color("BrandNeutral100"))
+                .background(Color("BrandNeutral50"))
                 .accessibilityHidden(true)
 
             ProductMeasurementNumber(value: value, text: $text, focus: focus)
@@ -102,12 +102,12 @@ private struct ProductMeasurementNumber: View {
     @Binding var text: String
     let focus: FocusState<UUID?>.Binding
 
-    @ScaledMetric(relativeTo: .subheadline) private var valueFontSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .body) private var valueFontSize: CGFloat = 17
 
     private var inputWidth: CGFloat {
         if text.isEmpty { return 24 }
         let font = UIFont(name: "Pretendard-Regular", size: valueFontSize) ?? UIFont.systemFont(ofSize: valueFontSize)
-        return min(58, max(1, ceil((text as NSString).size(withAttributes: [.font: font, .kern: -0.23]).width)))
+        return min(58, max(1, ceil((text as NSString).size(withAttributes: [.font: font, .kern: -0.43]).width)))
     }
 
     var body: some View {
@@ -124,11 +124,11 @@ private struct ProductMeasurementNumber: View {
                 .multilineTextAlignment(.center)
                 .focused(focus, equals: value.id)
                 .frame(width: inputWidth)
-                .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
+                .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
             Text("cm").accessibilityHidden(true)
         }
-        .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
-        .tracking(-0.23)
+        .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
+        .tracking(-0.43)
         .frame(maxWidth: .infinity)
         .frame(height: 64)
         .foregroundStyle(Color("BrandNeutralBlack"))

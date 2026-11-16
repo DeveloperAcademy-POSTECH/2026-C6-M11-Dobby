@@ -171,7 +171,7 @@ private struct ProductFieldEditor: View {
                 .frame(height: 172)
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
-                        Text(placeholder).foregroundStyle(Color("BrandNeutral300"))
+                        prompt
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
@@ -183,7 +183,7 @@ private struct ProductFieldEditor: View {
                 .frame(height: descriptionHeight, alignment: .topLeading)
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
-                        Text(placeholder).foregroundStyle(Color("BrandNeutral300"))
+                        prompt
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
@@ -205,7 +205,9 @@ private struct ProductFieldEditor: View {
     }
 
     private var prompt: Text {
-        Text(placeholder).foregroundStyle(Color("BrandNeutral300"))
+        Text(placeholder)
+            .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
+            .foregroundStyle(Color("BrandNeutral300"))
     }
 
     private var inputFont: UIFont {
@@ -453,11 +455,15 @@ private struct ProductPriceInput: View {
     var body: some View {
         HStack(spacing: 10) {
             Text(priceText.isEmpty ? "제품 가격" : priceText)
-                .font(.custom("Pretendard-SemiBold", size: 15, relativeTo: .subheadline))
+                .font(.custom(priceText.isEmpty ? "Pretendard-Regular" : "Pretendard-SemiBold",
+                              size: priceText.isEmpty ? 17 : 15,
+                              relativeTo: priceText.isEmpty ? .body : .subheadline))
                 .hidden()
                 .padding(.trailing, 2)
                 .overlay {
-                    TextField("", text: $priceText, prompt: Text("제품 가격").foregroundStyle(Color("BrandNeutral300")))
+                    TextField("", text: $priceText, prompt: Text("제품 가격")
+                        .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
+                        .foregroundStyle(Color("BrandNeutral300")))
                         .font(.custom("Pretendard-SemiBold", size: 15, relativeTo: .subheadline))
                         .keyboardType(.numberPad)
                         .focused(focus, equals: .price)

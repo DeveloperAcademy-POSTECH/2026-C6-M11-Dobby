@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum Cafe24UploadState {
     case idle
@@ -98,6 +99,7 @@ struct Cafe24ExportView: View {
             if connectedMallID != nil && !showsConnectionCompletion {
                 ExportBottomActionBar {
                     ExportBottomAction(title: "업로드하기") {
+                        dismissKeyboard()
                         if uploadState.isCompleted {
                             isConfirmingRepublish = true
                         } else {
@@ -128,6 +130,15 @@ struct Cafe24ExportView: View {
             } message: {
                 Text(message ?? "")
             }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     private func loadStatus() async {

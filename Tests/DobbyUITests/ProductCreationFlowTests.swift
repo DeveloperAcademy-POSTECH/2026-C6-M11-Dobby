@@ -534,7 +534,7 @@ final class ProductCreationFlowTests: XCTestCase {
         attachScreenshot(app, name: "product-info-valid")
         done.tap()
         XCTAssertTrue(app.buttons["product-complete.export"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
+        XCTAssertTrue(app.staticTexts["제품 정보 입력 완료 🎉"].exists)
         XCTAssertTrue(app.staticTexts["Design validation"].exists)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", detail)).firstMatch.exists)
         XCTAssertFalse(app.staticTexts["브랜드"].exists, "An omitted brand must not leave an empty section")

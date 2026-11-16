@@ -204,7 +204,7 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(app.navigationBars[editedName].waitForExistence(timeout: 10))
         XCTAssertFalse(information.exists)
         XCTAssertFalse(app.descendants(matching: .any)["product-complete.screen"].firstMatch.exists)
-        XCTAssertFalse(app.staticTexts["제품 정보 입력 완료! 🎉"].exists)
+        XCTAssertFalse(app.staticTexts["제품 정보 입력 완료 🎉"].exists)
         XCTAssertFalse(app.buttons["product-complete.library"].exists)
         XCTAssertTrue(app.buttons["library.edit"].isHittable)
         XCTAssertTrue(exportButton.isHittable)
