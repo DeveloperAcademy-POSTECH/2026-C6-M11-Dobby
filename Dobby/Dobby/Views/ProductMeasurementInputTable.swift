@@ -40,10 +40,10 @@ private struct ProductMeasurementScroll: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .scrollDisabled(columns.count <= 5)
-        .background(Color("BrandNeutral100"))
+        .background(Color("BrandNeutral50"))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).strokeBorder(Color("BrandNeutral100"), lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 14).strokeBorder(Color("BrandNeutral50"), lineWidth: 1.5)
         }
         .accessibilityIdentifier("product-info.measurements")
         .productInputInteractionArea()
@@ -59,7 +59,7 @@ private struct ProductMeasurementRow: View {
         HStack(spacing: 0) {
             ForEach(Array(columns.enumerated()), id: \.element.id) { index, value in
                 if index > 0 {
-                    Rectangle().fill(Color("BrandNeutral100")).frame(width: 1)
+                    Rectangle().fill(Color("BrandNeutral50")).frame(width: 1)
                 }
                 SizeColumn(value: value, text: Binding(
                     get: { measurementInput.text(for: value) },
@@ -88,7 +88,7 @@ private struct SizeColumn: View {
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
                 .frame(height: 42)
-                .background(Color("BrandNeutral100"))
+                .background(Color("BrandNeutral50"))
 
             ProductMeasurementNumber(value: value, text: $text, focus: focus)
         }
