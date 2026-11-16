@@ -324,9 +324,23 @@ struct GarmentMeasurementPhotoEditor: View {
                     .accessibilityAddTraits(.isImage)
                     .accessibilityLabel("촬영한 옷과 측정점")
                     .accessibilityIdentifier("garmentMeasurementPhoto")
+                    .accessibilityValue(!isEnabled ? "처리 중, 사진 조절 불가"
+                        : allowsViewportZoom ? String(format: "사진 확대 %.1f배", viewport.scale) : "")
                     .accessibilityHint(allowsViewportZoom
-                        ? "두 손가락으로 확대하고, 빈 곳을 끌어 사진을 이동할 수 있어요. 측정점은 한 손가락으로 움직여요."
-                        : "")
+                        ? "위아래로 쓸어 사진 배율을 조절하고, 세 손가락으로 쓸어 확대된 사진을 이동할 수 있어요. 측정점은 각각 선택해 조절해 주세요."
+                        : "각 측정점을 선택하면 방향별로 위치를 조절할 수 있어요")
+                    .modifier(MeasurementPhotoAccessibilityActions(isEnabled: allowsViewportZoom && isEnabled,
+                        onAdjust: { direction in
+                            switch direction {
+                            case .increment: adjustAccessibleZoom(by: 0.5, size: size)
+                            case .decrement: adjustAccessibleZoom(by: -0.5, size: size)
+                            @unknown default: break
+                            }
+                        }, onReset: {
+                            guard isEnabled, scenePhase == .active else { return }
+                            resetViewport()
+                            VoiceOverAnnouncement.post("사진을 원래 크기로 되돌렸어요")
+                        }, onScroll: { scrollAccessiblePhoto($0, size: size) }))
             } else {
                 ContentUnavailableView("사진을 불러올 수 없어요", systemImage: "photo")
                     .frame(width: size.width, height: size.height)
@@ -484,8 +498,17 @@ struct GarmentMeasurementPhotoEditor: View {
                 .accessibilityHidden(true)
             }
             .accessibilityLabel(GarmentPointName.title(point.id))
-            .accessibilityValue((pending ? "위치 확인 필요, " : "") + String(format: "x %.4f, y %.4f", previewPoint(point).x, previewPoint(point).y))
-            .accessibilityHint("끌어 이동하는 동안 화면의 반대쪽 모서리에 확대됩니다. 위치 이동 동작으로도 조절할 수 있어요")
+            .accessibilityValue(accessiblePointValue(point, pending: pending))
+            .accessibilityCustomContent(Text("관련 실측값"), Text(accessiblePointMeasurements(point)), importance: .high)
+            .accessibilityHint(MeasurementPointAccessibilityText.movementHint)
+            .accessibilityAddTraits(selectedPointID == point.id ? .isSelected : [])
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: nudge(point, dx: 2, dy: 0, size: size)
+                case .decrement: nudge(point, dx: -2, dy: 0, size: size)
+                @unknown default: break
+                }
+            }
             .accessibilityAction(named: "왼쪽으로 이동") { nudge(point, dx: -2, dy: 0, size: size) }
             .accessibilityAction(named: "오른쪽으로 이동") { nudge(point, dx: 2, dy: 0, size: size) }
             .accessibilityAction(named: "위로 이동") { nudge(point, dx: 0, dy: -2, size: size) }
@@ -494,13 +517,64 @@ struct GarmentMeasurementPhotoEditor: View {
     }
 
     private func nudge(_ point: GarmentLandmark, dx: CGFloat, dy: CGFloat, size: CGSize) {
-        guard isEnabled else { return }
+        guard isEnabled, image != nil, scenePhase == .active, drag == nil,
+              !nativePointDragIsActive, size.width > 0, size.height > 0 else { return }
         selectedPointID = point.id
         let current = viewport.screenPoint(for: screenPoint(point.point, size: size))
         let photoPoint = viewport.photoPoint(for: .init(x: current.x + dx, y: current.y + dy))
         guard let original = GarmentPhotoGeometry.originalPoint(at: photoPoint,
-            photoSize: size, orientation: snapshot.frame.orientation, displayCrop: displayCrop) else { return }
-        if original != point.point { onMove(point.id, original) }
+            photoSize: size, orientation: snapshot.frame.orientation, displayCrop: displayCrop) else {
+            VoiceOverAnnouncement.post("사진 가장자리예요. 더 이동할 수 없어요")
+            return
+        }
+        guard original != point.point else {
+            VoiceOverAnnouncement.post("사진 가장자리예요. 더 이동할 수 없어요")
+            return
+        }
+        onMove(point.id, original)
+        let displayed = ImageCoordinateTransform.originalToDisplay(original, orientation: snapshot.frame.orientation)
+        VoiceOverAnnouncement.post("\(GarmentPointName.title(point.id)), \(MeasurementPointAccessibilityText.direction(dx: dx, dy: dy)). \(MeasurementPointAccessibilityText.position(displayed, crop: displayCrop))")
+    }
+
+    private func accessiblePointValue(_ point: GarmentLandmark, pending: Bool) -> String {
+        let display = ImageCoordinateTransform.originalToDisplay(previewPoint(point), orientation: snapshot.frame.orientation)
+        return "\(pending ? "위치 확인 필요" : "위치 지정됨"). \(MeasurementPointAccessibilityText.position(display, crop: displayCrop))"
+    }
+
+    private func accessiblePointMeasurements(_ point: GarmentLandmark) -> String {
+        let related = Set(definitions.filter { $0.landmarkIDs.contains(point.id) }.map(\.id))
+        if isRecalculating { return "치수 다시 계산 중" }
+        let measurements = values.filter { related.contains($0.id) }.map {
+            "\($0.title), \(GarmentMeasurementText.value($0).replacingOccurrences(of: " cm", with: " 센티미터"))"
+        }
+        return measurements.isEmpty ? "전체 치수는 실측값 패널에서 확인할 수 있어요" : measurements.joined(separator: ". ")
+    }
+
+    private func adjustAccessibleZoom(by amount: CGFloat, size: CGSize) {
+        guard allowsViewportZoom, isEnabled, image != nil, scenePhase == .active else { return }
+        let target = min(MeasurementPhotoViewport.maximumScale, max(1, viewport.scale + amount))
+        guard target != viewport.scale else { return }
+        cancelDrag()
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        setViewport(viewport.applyingPinch(magnification: target / viewport.scale, from: center, to: center, in: size))
+    }
+
+    private func scrollAccessiblePhoto(_ edge: Edge, size: CGSize) {
+        guard allowsViewportZoom, viewport.isZoomed, isEnabled, image != nil, scenePhase == .active else { return }
+        let translation: CGSize
+        let direction: String
+        switch edge {
+        case .top: translation = CGSize(width: 0, height: size.height * 0.35); direction = "위쪽"
+        case .bottom: translation = CGSize(width: 0, height: -size.height * 0.35); direction = "아래쪽"
+        case .leading: translation = CGSize(width: size.width * 0.35, height: 0); direction = "왼쪽"
+        case .trailing: translation = CGSize(width: -size.width * 0.35, height: 0); direction = "오른쪽"
+        @unknown default: return
+        }
+        cancelDrag()
+        let next = viewport.applyingPan(translation, in: size)
+        guard next != viewport else { VoiceOverAnnouncement.post("사진 가장자리예요"); return }
+        setViewport(next)
+        VoiceOverAnnouncement.post("사진의 \(direction) 영역")
     }
 
     private func magnifier(image: UIImage, point: GarmentLandmark, photoSize: CGSize) -> some View {
@@ -661,6 +735,23 @@ struct GarmentMeasurementPhotoEditor: View {
         // display frame; it never changes the source point or the photo viewport.
         return MeasurementMagnifierPlacement.avoidingBottomOcclusion(initialRect,
             photoSize: size, bottomInset: magnifierBottomInset)
+    }
+}
+
+private struct MeasurementPhotoAccessibilityActions: ViewModifier {
+    let isEnabled: Bool
+    let onAdjust: (AccessibilityAdjustmentDirection) -> Void
+    let onReset: () -> Void
+    let onScroll: (Edge) -> Void
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if isEnabled {
+            content.accessibilityAdjustableAction(onAdjust)
+                .accessibilityAction(named: "사진을 원래 크기로 보기", onReset)
+                .accessibilityScrollAction(onScroll)
+        } else {
+            content
+        }
     }
 }
 

@@ -64,6 +64,7 @@ struct Cafe24ExportView: View {
                 )
             }
         }
+        .accessibilityHidden(uploadState.isUploading)
         .navigationTitle(Self.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
@@ -71,6 +72,7 @@ struct Cafe24ExportView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 ExportToolbarTitle(title: Self.navigationTitle)
+                    .accessibilityHidden(uploadState.isUploading)
             }
             if !uploadState.isUploading && !showsConnectionCompletion {
                 ToolbarItem(placement: .topBarLeading) {
@@ -103,6 +105,7 @@ struct Cafe24ExportView: View {
                         }
                     }
                 }
+                .accessibilityHidden(uploadState.isUploading)
             }
         }
         .overlay {

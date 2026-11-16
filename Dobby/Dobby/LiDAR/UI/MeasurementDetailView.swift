@@ -29,7 +29,8 @@ struct MeasurementDetailView: View {
                     Label(model.snapshot.frame.source == .synthetic ? "합성 데이터 · 센서 정확도 검증용이 아닙니다" : "동일 프레임의 원본 사진 + LiDAR 깊이", systemImage: model.snapshot.frame.source == .synthetic ? "cube.transparent" : "checkmark.shield")
                         .font(.caption.weight(.semibold)).foregroundStyle(model.snapshot.frame.source == .synthetic ? .orange : .teal)
                     MeasurementImageView(snapshot: model.snapshot, landmarks: model.displayLandmarks, image: image,
-                        activePointIndex: activePointIndex, placePoint: placePoint)
+                        activePointIndex: activePointIndex, placePoint: placePoint,
+                        pointTitles: model.definition.landmarkIDs.map(GarmentPointName.title))
                         .aspectRatio(SnapshotPresentation.aspectRatio(for: model.snapshot), contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                     Text("A와 B를 차례로 누르거나 점을 끌어 위치를 바꾸세요. 옷의 경계가 사진 밖으로 잘리면 측정할 수 없습니다.")
@@ -40,6 +41,8 @@ struct MeasurementDetailView: View {
                                 Label("\(index == 0 ? "A" : "B") \(point.isVisible ? "지정됨" : "위치 지정")", systemImage: point.isVisible ? "checkmark.circle.fill" : "plus.circle")
                                     .frame(maxWidth: .infinity)
                             }.buttonStyle(.bordered).tint(activePointIndex == index ? .teal : .gray)
+                                .accessibilityAddTraits(activePointIndex == index ? .isSelected : [])
+                                .accessibilityHint("사진에서 조절할 측정점을 선택합니다")
                         }
                     }
                     Picker("옷 종류", selection: Binding(get: { model.testContext.category }, set: { selectCategory($0) })) {
@@ -274,14 +277,24 @@ struct MeasurementImageView: View {
     let activePointIndex: Int
     let placePoint: (ImagePoint, Int) -> Void
     var pendingPointIDs: Set<String> = []
+    var pointTitles: [String] = []
+    @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                if let image = image { Image(uiImage: image).resizable().scaledToFill() }
+                if let image = image { Image(uiImage: image).resizable().scaledToFill().accessibilityHidden(true) }
                 else { Color.gray.opacity(0.2) }
                 Color.clear.contentShape(Rectangle()).gesture(SpatialTapGesture().onEnded { event in
                     placePoint(normalized(event.location, size: geometry.size), activePointIndex)
                 })
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits([.isImage, .isButton])
+                .accessibilityLabel("선택한 측정점 \(activePointIndex == 0 ? "A" : "B")의 위치를 지정할 사진")
+                .accessibilityHint("두 번 탭하면 선택한 점을 사진 중앙에 놓습니다. 각 측정점의 방향 동작으로 위치를 조절할 수 있어요")
+                .accessibilityAction {
+                    confirmAccessiblePoint(.init(x: 0.5, y: 0.5), index: activePointIndex)
+                }
+                .accessibilityIdentifier("measurementEditorPhoto")
                 Canvas { context, size in
                     let visible = landmarks.points.filter { $0.isVisible && !pendingPointIDs.contains($0.id) }
                     if visible.count == 2 {
@@ -290,7 +303,7 @@ struct MeasurementImageView: View {
                         context.stroke(path, with: .color(.black.opacity(0.6)), lineWidth: 5)
                         context.stroke(path, with: .color(.yellow), style: .init(lineWidth: 2, dash: [7, 4]))
                     }
-                }.allowsHitTesting(false)
+                }.allowsHitTesting(false).accessibilityHidden(true)
                 ForEach(Array(landmarks.points.enumerated()), id: \.offset) { index, point in
                     if point.isVisible {
                         Text(index == 0 ? "A" : "B").font(.caption.bold()).foregroundStyle(.black)
@@ -302,8 +315,24 @@ struct MeasurementImageView: View {
                             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("measurementImage")).onChanged { value in
                                 placePoint(normalized(value.location, size: geometry.size), index)
                             })
-                            .accessibilityLabel("측정점 \(index == 0 ? "A" : "B")")
-                            .accessibilityValue(pendingPointIDs.contains(point.id) ? "위치 확인 필요" : "표시 중")
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAddTraits(activePointIndex == index ? .isSelected : [])
+                            .accessibilityLabel(accessiblePointName(point, index: index))
+                            .accessibilityValue("\(pendingPointIDs.contains(point.id) ? "위치 확인 필요" : "위치 지정됨"). \(MeasurementPointAccessibilityText.position(displayPoint(point)))")
+                            .accessibilityHint("두 번 탭하면 현재 위치를 확정합니다. \(MeasurementPointAccessibilityText.movementHint)")
+                            .accessibilityAction { confirmAccessiblePoint(displayPoint(point), index: index) }
+                            .accessibilityAdjustableAction { direction in
+                                switch direction {
+                                case .increment: nudge(point, index: index, dx: 2, dy: 0, size: geometry.size)
+                                case .decrement: nudge(point, index: index, dx: -2, dy: 0, size: geometry.size)
+                                @unknown default: break
+                                }
+                            }
+                            .accessibilityAction(named: "왼쪽으로 이동") { nudge(point, index: index, dx: -2, dy: 0, size: geometry.size) }
+                            .accessibilityAction(named: "오른쪽으로 이동") { nudge(point, index: index, dx: 2, dy: 0, size: geometry.size) }
+                            .accessibilityAction(named: "위로 이동") { nudge(point, index: index, dx: 0, dy: -2, size: geometry.size) }
+                            .accessibilityAction(named: "아래로 이동") { nudge(point, index: index, dx: 0, dy: 2, size: geometry.size) }
                             .accessibilityIdentifier("measurementEditorPoint_\(point.id)")
                     }
                 }
@@ -316,6 +345,32 @@ struct MeasurementImageView: View {
     private func screen(_ p: ImagePoint, size: CGSize) -> CGPoint {
         let display = ImageCoordinateTransform.originalToDisplay(p, orientation: snapshot.frame.orientation)
         return CGPoint(x: display.x * size.width, y: display.y * size.height)
+    }
+
+    private func displayPoint(_ point: GarmentLandmark) -> ImagePoint {
+        ImageCoordinateTransform.originalToDisplay(point.point, orientation: snapshot.frame.orientation)
+    }
+
+    private func accessiblePointName(_ point: GarmentLandmark, index: Int) -> String {
+        let title = pointTitles.indices.contains(index) ? pointTitles[index] : GarmentPointName.title(point.id)
+        return "측정점 \(index == 0 ? "A" : "B"), \(title)"
+    }
+
+    private func confirmAccessiblePoint(_ display: ImagePoint, index: Int) {
+        guard image != nil, scenePhase == .active, landmarks.points.indices.contains(index),
+              display.x.isFinite, display.y.isFinite else { return }
+        let bounded = ImagePoint(x: min(0.999999, max(0, display.x)), y: min(0.999999, max(0, display.y)))
+        placePoint(bounded, index)
+        VoiceOverAnnouncement.post("측정점 \(index == 0 ? "A" : "B") 위치 확인. \(MeasurementPointAccessibilityText.position(bounded))")
+    }
+
+    private func nudge(_ point: GarmentLandmark, index: Int, dx: CGFloat, dy: CGFloat, size: CGSize) {
+        guard image != nil, scenePhase == .active, size.width > 0, size.height > 0 else { return }
+        let current = screen(point.point, size: size)
+        let next = normalized(CGPoint(x: current.x + dx, y: current.y + dy), size: size)
+        guard next != displayPoint(point) else { VoiceOverAnnouncement.post("사진 가장자리예요"); return }
+        placePoint(next, index)
+        VoiceOverAnnouncement.post("\(accessiblePointName(point, index: index)), \(MeasurementPointAccessibilityText.direction(dx: dx, dy: dy)). \(MeasurementPointAccessibilityText.position(next))")
     }
 }
 

@@ -14,9 +14,9 @@ struct FruitsCopyFieldView: View {
                     value: "No Brand",
                     showsCopyIcon: false
                 )
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel("브랜드")
-                .accessibilityValue("No Brand")
+                .accessibilityValue("브랜드 없음")
             } else {
                 Button {
                     onCopy(field)
@@ -28,8 +28,10 @@ struct FruitsCopyFieldView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(title) 복사")
                 .accessibilityValue(value)
+                .accessibilityHint("클립보드에 복사합니다.")
             }
         }
     }

@@ -34,8 +34,8 @@ struct GarmentShutterButton: View {
             showsReadyState: showsRecognizedState, action: action, forceReduceMotion: forceReduceMotion)
             .accessibilityLabel(isCapturing ? "실측 계산 중" : "실측 사진 촬영")
             .accessibilityValue(isCapturing ? "촬영 중" : isReady ? "촬영 가능" : "옷 인식 대기")
-            .accessibilityHint(isReady ? "주황색 점이 표시되어 촬영할 수 있습니다"
-                : "옷 윤곽이 인식되어 주황색 점이 나타나면 촬영할 수 있습니다")
+            .accessibilityHint(isReady ? "옷 윤곽을 인식했어요. 두 번 탭하면 실측 사진을 촬영합니다"
+                : "촬영 안내에서 옷 인식 상태를 확인하고 옷 전체를 화면 안에 맞춰 주세요")
             .accessibilityIdentifier("captureGarment")
     }
 }

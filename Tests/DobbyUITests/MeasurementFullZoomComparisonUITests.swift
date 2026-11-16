@@ -219,10 +219,7 @@ final class MeasurementFullZoomComparisonUITests: XCTestCase {
     }
 
     private static func coordinates(in text: String) -> CGPoint? {
-        let pieces = text.split { $0 == " " || $0 == "," }
-        guard pieces.count == 4, pieces[0] == "x", pieces[2] == "y",
-              let x = Double(pieces[1]), let y = Double(pieces[3]) else { return nil }
-        return CGPoint(x: x, y: y)
+        measurementPhotoCoordinates(in: text)
     }
 
     private func assertFrame(_ actual: CGRect, equals expected: CGRect,

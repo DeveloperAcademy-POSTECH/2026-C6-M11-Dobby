@@ -105,8 +105,17 @@ struct ProductLibraryCard: View {
     }
 
     private var cardAccessibilityLabel: String {
-        var values = [displayBrand, displayName]
-        values.append(displayPrice)
+        var values = [garment.name.isBlank ? "이름 없는 상품" : garment.name,
+                      garment.brand.isBlank ? "브랜드 없음" : "브랜드 \(garment.brand)"]
+        if let price = garment.price {
+            values.append("가격 \(price.formatted(.number.locale(Locale(identifier: "ko_KR"))))원")
+        } else {
+            values.append("가격 미입력")
+        }
+        values.append("사진 \(garment.productPhotos.count)장")
+        if showsDraftPlaceholders, let draft = garment.creationDraft {
+            values.append("임시저장, 현재 \(draft.step.title)")
+        }
         if !garment.selectedExportChannels.isEmpty {
             values.append("선택한 내보내기 플랫폼: " + garment.selectedExportChannels.map(\.title).joined(separator: ", "))
         }

@@ -12,7 +12,6 @@ struct DetailPhotoDeleteConfirmation: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric private var titleSize: CGFloat = 17
     @ScaledMetric private var bodySize: CGFloat = 17
-    @AccessibilityFocusState private var titleFocused: Bool
 
     var body: some View {
         GeometryReader { geometry in
@@ -43,7 +42,6 @@ struct DetailPhotoDeleteConfirmation: View {
         .accessibilityAddTraits(isPresented ? .isModal : [])
         .accessibilityAction(.escape) { if !isDeleting { onCancel() } }
         .accessibilityIdentifier("camera.galleryDeleteConfirmation")
-        .onChange(of: isPresented, initial: true) { _, presented in titleFocused = presented }
         // Apply last: the persistent transition host must not recreate an
         // empty accessibility alert while the confirmation is closed.
         .accessibilityHidden(!isPresented)
@@ -56,7 +54,11 @@ struct DetailPhotoDeleteConfirmation: View {
                     .font(.system(size: titleSize, weight: .semibold))
                     .tracking(-0.43)
                     .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-                    .accessibilityFocused($titleFocused)
+                    .accessibilityModalHeading()
+                    .accessibilityHint("동작 메뉴에서 삭제를 취소할 수 있습니다.")
+                    .accessibilityAction(named: Text("삭제 취소")) {
+                        if !isDeleting { onCancel() }
+                    }
                 Text("삭제된 사진은 복구할 수 없어요")
                     .font(.system(size: bodySize, weight: .regular))
                     .tracking(-0.43)

@@ -331,6 +331,7 @@ struct ProductLibraryView: View {
             .buttonStyle(.plain)
             .modifier(LibraryCardEditGesture(onEdit: { setEditing(true) }))
             .accessibilityIdentifier("library.product.\(garment.id.uuidString)")
+            .accessibilityHint("상품 상세 정보를 엽니다. 동작 메뉴에서 보관함 수정을 선택할 수 있습니다.")
         }
     }
 
@@ -355,7 +356,7 @@ struct ProductLibraryView: View {
                 .buttonStyle(.plain)
                 .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
                 .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
-                .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다. 길게 누르면 보관함을 수정합니다.")
+                .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다. 동작 메뉴에서 보관함 수정을 선택할 수 있습니다.")
             }
         }
     }
@@ -379,7 +380,7 @@ struct ProductLibraryView: View {
             .buttonStyle(.plain)
             .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
             .accessibilityIdentifier("library.draft-product.\(garment.id.uuidString)")
-            .accessibilityHint("임시저장한 상품 작업을 이어갑니다.")
+            .accessibilityHint("임시저장한 상품 작업을 이어갑니다. 동작 메뉴에서 보관함 수정을 선택할 수 있습니다.")
         }
     }
 
@@ -423,6 +424,7 @@ struct ProductLibraryView: View {
         .buttonStyle(.plain)
         .offset(x: -17.5, y: -19.5)
         .accessibilityLabel("\(garment.name.isEmpty ? "상품" : garment.name) 삭제")
+        .accessibilityHint("삭제하기 전에 확인 창을 엽니다.")
         .accessibilityIdentifier("\(identifierPrefix).\(garment.id.uuidString)")
     }
 

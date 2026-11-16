@@ -30,6 +30,7 @@ private struct InstagramConnectionHeader: View {
                 .foregroundStyle(Color(.brandNeutralBlack))
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
 
             InstagramConnectionInstructions()
         }
@@ -82,6 +83,9 @@ private struct InstagramConnectionActions: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color(.brandNeutralWhite))
             .allowsHitTesting(!isLoading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("인스타그램 계정 연결하기")
+            .accessibilityValue(isLoading ? "연결 중" : "연결 전")
 
             Button("프로페셔널 계정으로 어떻게 설정하나요?") {
                 guard let url = URL(
@@ -94,6 +98,7 @@ private struct InstagramConnectionActions: View {
             .multilineTextAlignment(.center)
             .foregroundStyle(Color(.brandNeutral700))
             .frame(maxWidth: .infinity, alignment: .top)
+            .accessibilityHint("프로페셔널 계정 설정 안내 웹페이지를 엽니다.")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
 

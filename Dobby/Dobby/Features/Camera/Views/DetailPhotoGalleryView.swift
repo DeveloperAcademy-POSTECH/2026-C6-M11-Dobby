@@ -58,7 +58,20 @@ struct DetailPhotoGalleryView: View {
                     max(0, 169 * geometry.size.width / 402 - geometry.frame(in: .global).minY)))
                 DetailPhotoGalleryPager(items: items, focusedID: $focusedID, reduceMotion: reduceMotion,
                     onTransitionChanged: { isChangingPhoto = $0 }) { item in
-                    photoView(item).accessibilityLabel(item.label)
+                    photoView(item)
+                        .accessibilityLabel(item.label)
+                        .accessibilityHint("위아래로 쓸어 사진을 바꾸거나 동작 메뉴에서 이전 사진, 다음 사진, 삭제를 선택합니다.")
+                        .accessibilityAdjustableAction { direction in
+                            switch direction {
+                            case .increment: movePhoto(by: 1)
+                            case .decrement: movePhoto(by: -1)
+                            @unknown default: break
+                            }
+                        }
+                        .accessibilityAction(named: Text("이전 사진")) { movePhoto(by: -1) }
+                        .accessibilityAction(named: Text("다음 사진")) { movePhoto(by: 1) }
+                        .accessibilityAction(named: Text("현재 사진 삭제"), requestPhotoDeletion)
+                        .accessibilityAction(.escape, closeGallery)
                 }
                 .frame(height: height)
                 .allowsHitTesting(deletionTarget == nil && !isDeletingPhoto)
@@ -69,6 +82,7 @@ struct DetailPhotoGalleryView: View {
                     .padding(.top, stripGap)
                 Spacer(minLength: 0)
             }
+            .accessibilityHidden(deletionTarget != nil)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // 사진 탐색 영역과 하단 동작 영역을 분리한다.
@@ -78,9 +92,7 @@ struct DetailPhotoGalleryView: View {
                     Rectangle().fill(Color(.separator)).frame(height: 1 / displayScale)
                 }
                 .overlay(alignment: .trailing) {
-                    Button {
-                        deletionTarget = UUID(uuidString: focusedID)
-                    } label: {
+                    Button(action: requestPhotoDeletion) {
                         Image(systemName: "trash.fill")
                             .font(.system(size: 24, weight: .semibold))
                             .foregroundStyle(.black)
@@ -90,6 +102,7 @@ struct DetailPhotoGalleryView: View {
                     .buttonStyle(.plain)
                     .disabled(isDeletingPhoto || isChangingPhoto || model.isDeleting || model.isCapturing || items.isEmpty)
                     .accessibilityLabel("현재 사진 삭제")
+                    .accessibilityHidden(deletionTarget != nil)
                     .accessibilityIdentifier("camera.galleryDelete")
                     .padding(.trailing, 28).offset(y: 8)
                 }
@@ -112,10 +125,11 @@ struct DetailPhotoGalleryView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("촬영으로 돌아가기", systemImage: "chevron.left") {
-                    if deletionTarget == nil && !isDeletingPhoto && !isChangingPhoto { dismiss() }
+                    closeGallery()
                 }
                 .labelStyle(.iconOnly)
                 .accessibilityHidden(deletionTarget != nil)
+                .accessibilityIdentifier("camera.galleryClose")
             }
         }
         .tint(.primary)
@@ -134,6 +148,26 @@ struct DetailPhotoGalleryView: View {
         }
     }
 
+    private func movePhoto(by offset: Int) {
+        guard deletionTarget == nil, !isDeletingPhoto, !isChangingPhoto,
+              let index = items.firstIndex(where: { $0.id == focusedID }),
+              items.indices.contains(index + offset) else { return }
+        let destination = items[index + offset]
+        focusedID = destination.id
+        VoiceOverAnnouncement.post("\(items.count)장 중 \(index + offset + 1)번째, \(destination.label)")
+    }
+
+    private func requestPhotoDeletion() {
+        guard deletionTarget == nil, !isDeletingPhoto, !isChangingPhoto,
+              !model.isDeleting, !model.isCapturing, !items.isEmpty else { return }
+        deletionTarget = UUID(uuidString: focusedID)
+    }
+
+    private func closeGallery() {
+        guard deletionTarget == nil, !isDeletingPhoto, !isChangingPhoto else { return }
+        dismiss()
+    }
+
     private func deletePhoto() {
         guard let target = deletionTarget, !isDeletingPhoto,
               let index = items.firstIndex(where: { $0.photo.id == target }) else { return }
@@ -148,6 +182,7 @@ struct DetailPhotoGalleryView: View {
                 } else {
                     focusedID = remaining[min(index, remaining.count - 1)].id
                 }
+                VoiceOverAnnouncement.post("사진을 삭제했습니다. 남은 사진 \(remaining.count)장")
             } catch {
                 deletionError = error.localizedDescription
             }
@@ -167,6 +202,7 @@ struct DetailPhotoGalleryView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(item.label + (photo.purpose == .detail ? " \(detailNumber)" : ""))
         .accessibilityValue(focused ? "현재 보는 사진" : "")
+        .accessibilityHint("전체 \(items.count)장 중 \(index + 1)번째 사진을 표시합니다.")
         .accessibilityAddTraits(focused ? .isSelected : [])
         .accessibilityIdentifier("camera.galleryThumbnail.\(index)")
     }

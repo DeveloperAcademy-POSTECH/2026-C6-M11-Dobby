@@ -17,6 +17,9 @@ struct ExportUploadAccountCard<Profile: View>: View {
         .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 16))
         .frame(maxWidth: 363)
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("업로드할 계정")
+        .accessibilityValue(accountLabel)
     }
 }
 

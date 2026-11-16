@@ -64,6 +64,8 @@ struct GarmentTotalLengthCorrectionView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("사진에서 \(startTitle)과 \(endTitle)을 차례로 눌러 주세요.")
                         .font(.headline)
+                        .accessibilityModalHeading()
+                        .accessibilityHint("사진의 A와 B 측정점을 각각 두 번 탭해 현재 위치를 확인하거나 방향 동작으로 조절할 수 있어요")
                     Text("같은 사진의 깊이로 총장을 다시 측정하고 현재 실측 결과에 반영해요. 깊이가 부족한 위치는 다시 촬영해야 해요.")
                         .font(.subheadline).foregroundStyle(.secondary)
                     if let failureFeedback {
@@ -80,7 +82,7 @@ struct GarmentTotalLengthCorrectionView: View {
                     let presentation = editingPresentation
                     MeasurementImageView(snapshot: model.snapshot, landmarks: presentation.landmarks,
                         image: image, activePointIndex: activePointIndex, placePoint: placePoint,
-                        pendingPointIDs: presentation.pendingIDs)
+                        pendingPointIDs: presentation.pendingIDs, pointTitles: [startTitle, endTitle])
                         .aspectRatio(SnapshotPresentation.aspectRatio(for: model.snapshot), contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                         .accessibilityElement(children: .contain)
@@ -112,6 +114,9 @@ struct GarmentTotalLengthCorrectionView: View {
                 }.buttonStyle(.plain).foregroundStyle(.white)
                     .disabled(!isConfirmed(0) || !isConfirmed(1))
                     .opacity(isConfirmed(0) && isConfirmed(1) ? 1 : 0.45)
+                    .accessibilityHint(isConfirmed(0) && isConfirmed(1)
+                        ? "확인한 두 점으로 총장을 다시 측정하고 실측 결과에 반영합니다"
+                        : "사진에서 A와 B 측정점을 모두 선택해 현재 위치를 확인해 주세요")
                     .accessibilityIdentifier("applyTotalLengthCorrection")
                     .padding(20).background(GarmentCaptureStyle.background)
             }
@@ -136,6 +141,8 @@ struct GarmentTotalLengthCorrectionView: View {
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
             .accessibilityValue(isConfirmed(index) ? "위치 확인 완료" : "위치 확인 필요")
+            .accessibilityAddTraits(activePointIndex == index ? .isSelected : [])
+            .accessibilityHint("이 점을 선택한 뒤 사진에서 위치를 지정하거나, 해당 측정점의 방향 동작으로 조절해 주세요")
             .accessibilityIdentifier("totalLengthCorrectionEndpoint_\(index)")
     }
 

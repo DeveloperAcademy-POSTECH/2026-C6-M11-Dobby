@@ -89,7 +89,9 @@ struct ProductFieldTitle: View {
         .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
         .tracking(-0.43)
         .foregroundStyle(Color("BrandNeutralBlack"))
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(title + (isRequired ? ", 필수" : ""))
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -112,7 +114,10 @@ struct ProductInputField: View {
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
             ProductFieldEditor(text: $text, placeholder: placeholder, focus: focus, focusValue: focusValue,
                                isSingleLine: isSingleLine, isMultiline: isMultiline,
-                               usesEditingLayout: usesEditingLayout)
+                               usesEditingLayout: usesEditingLayout,
+                               accessibilityTitle: title + (isRequired ? ", 필수" : ""),
+                               accessibilityHelp: errorMessage.map { "오류: \($0). \(placeholder)" } ?? placeholder,
+                               accessibilityID: "product-info.\(identifier)")
                 .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
                 .tracking(-0.23)
                 .foregroundStyle(Color("BrandNeutralBlack"))
@@ -127,13 +132,15 @@ struct ProductInputField: View {
                             .stroke(ProductInformationStyle.error, lineWidth: 1)
                     }
                 }
-                .accessibilityLabel(title)
+                .accessibilityLabel(title + (isRequired ? ", 필수" : ""))
+                .accessibilityHint(errorMessage.map { "오류: \($0). \(placeholder)" } ?? placeholder)
                 .accessibilityIdentifier("product-info.\(identifier)")
                 .productInputInteractionArea()
             if let errorMessage {
                 Text(errorMessage)
                     .font(.system(.caption))
                     .foregroundStyle(ProductInformationStyle.error)
+                    .accessibilityHint("\(title) 오류")
                     .accessibilityIdentifier("product-info.\(identifier).error")
             }
         }
@@ -149,13 +156,17 @@ private struct ProductFieldEditor: View {
     let isSingleLine: Bool
     let isMultiline: Bool
     let usesEditingLayout: Bool
+    let accessibilityTitle: String
+    let accessibilityHelp: String
+    let accessibilityID: String
     @State private var descriptionHeight: CGFloat = 172
     @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 15
 
     var body: some View {
         if isMultiline && usesEditingLayout {
             DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: true,
-                                contentHeight: nil)
+                                contentHeight: nil, accessibilityTitle: accessibilityTitle,
+                                accessibilityHelp: accessibilityHelp, accessibilityID: accessibilityID)
                 .focused(focus, equals: focusValue)
                 .frame(height: 172)
                 .overlay(alignment: .topLeading) {
@@ -166,7 +177,8 @@ private struct ProductFieldEditor: View {
                 }
         } else if isMultiline {
             DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: false,
-                                contentHeight: $descriptionHeight)
+                                contentHeight: $descriptionHeight, accessibilityTitle: accessibilityTitle,
+                                accessibilityHelp: accessibilityHelp, accessibilityID: accessibilityID)
                 .focused(focus, equals: focusValue)
                 .frame(height: descriptionHeight, alignment: .topLeading)
                 .overlay(alignment: .topLeading) {
@@ -178,9 +190,13 @@ private struct ProductFieldEditor: View {
         } else if isSingleLine {
             TextField("", text: $text, prompt: prompt)
                 .focused(focus, equals: focusValue)
+                .accessibilityLabel(accessibilityTitle)
+                .accessibilityHint(accessibilityHelp)
         } else {
             TextField("", text: $text, prompt: prompt, axis: .vertical)
                 .focused(focus, equals: focusValue)
+                .accessibilityLabel(accessibilityTitle)
+                .accessibilityHint(accessibilityHelp)
                 .lineLimit(1...2)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(usesEditingLayout ? max(0, 20 * fontSize / 15 - inputFont.lineHeight) : 0)
@@ -205,6 +221,9 @@ private struct DescriptionTextView: UIViewRepresentable {
     let fontSize: CGFloat
     let isScrollEnabled: Bool
     let contentHeight: Binding<CGFloat>?
+    let accessibilityTitle: String
+    let accessibilityHelp: String
+    let accessibilityID: String
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -224,6 +243,10 @@ private struct DescriptionTextView: UIViewRepresentable {
 
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.parent = self
+        // This native editor, rather than its SwiftUI decoration, receives VO focus.
+        view.accessibilityLabel = accessibilityTitle
+        view.accessibilityHint = accessibilityHelp
+        view.accessibilityIdentifier = accessibilityID
         view.isScrollEnabled = isScrollEnabled
         guard view.markedTextRange == nil else { return }
         let attributes = textAttributes
@@ -400,7 +423,7 @@ struct ProductPriceField: View {
         VStack(alignment: .leading, spacing: 12) {
             ProductFieldTitle(title: "가격", isRequired: true)
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
-            ProductPriceInput(price: $garment.price, focus: focus)
+            ProductPriceInput(price: $garment.price, focus: focus, errorMessage: errorMessage)
                 .productInputInteractionArea()
                 .background(ProductInformationStyle.field, in: RoundedRectangle(cornerRadius: 16))
                 .overlay {
@@ -413,6 +436,7 @@ struct ProductPriceField: View {
                 Text(errorMessage)
                     .font(.system(.caption))
                     .foregroundStyle(ProductInformationStyle.error)
+                    .accessibilityHint("가격 오류")
                     .accessibilityIdentifier("product-info.price.error")
             }
         }
@@ -423,6 +447,7 @@ struct ProductPriceField: View {
 private struct ProductPriceInput: View {
     @Binding var price: Int?
     let focus: FocusState<ProductInformationField?>.Binding
+    let errorMessage: String?
     @State private var priceText = ""
 
     var body: some View {
@@ -436,14 +461,16 @@ private struct ProductPriceInput: View {
                         .font(.custom("Pretendard-SemiBold", size: 15, relativeTo: .subheadline))
                         .keyboardType(.numberPad)
                         .focused(focus, equals: .price)
-                        .accessibilityLabel("가격, 원")
-                        .accessibilityHint("제품의 판매 가격을 입력해주세요")
+                        .accessibilityLabel("가격, 필수, 원")
+                        .accessibilityHint(errorMessage.map { "오류: \($0). 제품의 판매 가격을 원 단위로 입력해주세요" }
+                            ?? "제품의 판매 가격을 원 단위로 입력해주세요")
                         .accessibilityIdentifier("product-info.price")
                 }
             Text("원")
                 .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
                 .foregroundStyle(Color("BrandNeutral700"))
                 .accessibilityIdentifier("product-info.price.unit")
+                .accessibilityHint("가격 단위")
             Spacer(minLength: 0)
         }
         .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))

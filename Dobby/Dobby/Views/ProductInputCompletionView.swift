@@ -49,11 +49,16 @@ private struct ProductCompletionContent: View {
 }
 
 private struct ProductCompletionHeader: View {
+    @AccessibilityFocusState(for: .voiceOver) private var isTitleFocused: Bool
+
     var body: some View {
         VStack(spacing: 12) {
             Text("제품 정보 입력 완료! 🎉")
                 .font(.custom("Pretendard-SemiBold", size: 20, relativeTo: .title3))
                 .frame(minHeight: 25)
+                .accessibilityLabel("제품 정보 입력 완료")
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityFocused($isTitleFocused)
             Text("보관함에서 저장한 옷을 확인할 수 있어요")
                 .font(.custom("Pretendard-Regular", size: 16, relativeTo: .callout))
                 .frame(minHeight: 20)
@@ -61,6 +66,11 @@ private struct ProductCompletionHeader: View {
         .foregroundStyle(Color("BrandNeutralBlack"))
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
+        .task {
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            isTitleFocused = true
+        }
     }
 }
 
@@ -76,6 +86,7 @@ private struct ProductCompletionActions: View {
             }
             .buttonStyle(ChakPrimaryButtonStyle(variant: .solid))
             .accessibilityIdentifier("product-complete.export")
+            .accessibilityHint("저장한 제품의 업로드 채널 선택 화면을 엽니다")
             Button(action: onLibrary) {
                 Text("보관함으로 이동하기")
                     .font(.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout))
@@ -83,6 +94,7 @@ private struct ProductCompletionActions: View {
             }
             .buttonStyle(ChakPrimaryButtonStyle(variant: .tonal))
             .accessibilityIdentifier("product-complete.library")
+            .accessibilityHint("완료한 제품을 저장하고 보관함으로 이동합니다")
         }
         .frame(maxWidth: .infinity)
     }

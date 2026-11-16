@@ -25,6 +25,7 @@ private struct ExportChannelSection: View {
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color(.brandNeutral600))
+                .accessibilityAddTraits(.isHeader)
 
             VStack(spacing: 10) {
                 ForEach(channels) { channel in

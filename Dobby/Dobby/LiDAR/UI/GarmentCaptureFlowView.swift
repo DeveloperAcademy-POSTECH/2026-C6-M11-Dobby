@@ -377,7 +377,14 @@ struct GarmentCaptureFlowView: View {
         .disabled(!canUseCameraControls || !controlCapabilities.availableZooms.contains(nextZoom))
         .accessibilityLabel("촬영 배율")
         .accessibilityValue(selectedZoom == .standard ? "1x" : "2x")
-        .accessibilityHint(nextZoom == .double ? "탭하면 2배로 전환합니다" : "탭하면 1배로 전환합니다")
+        .accessibilityHint("위아래로 쓸어 배율을 조절하거나, 두 번 탭해 \(nextZoom == .double ? "2배" : "1배")로 전환합니다")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: selectZoom(.double)
+            case .decrement: selectZoom(.standard)
+            @unknown default: break
+            }
+        }
         .accessibilityIdentifier("cameraZoomSelector")
         .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)
     }
@@ -563,7 +570,7 @@ struct GarmentCaptureFlowView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(guidance)
-            .accessibilityHint("옷 윤곽이 인식되어 셔터에 주황색 점이 나타나면 촬영할 수 있어요")
+            .accessibilityHint("이 안내와 실측 사진 촬영 버튼에서 촬영 가능 여부를 확인할 수 있어요")
             .accessibilityIdentifier("captureGuidance")
             .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)
             // This is advisory text, not a control. It must not swallow taps
@@ -607,7 +614,8 @@ struct GarmentCaptureFlowView: View {
                     showsRecognizedState: canTakePhoto, action: takePhoto, forceReduceMotion: presentationReduceMotion)
                     .accessibilityHint(isPreview && previewControls.selectedZoom == .double
                         ? "합성 촬영 결과는 1배에서 확인해요. 1배로 돌아와 옷 윤곽을 다시 인식해 주세요"
-                        : "옷 윤곽이 인식되어 주황색 점이 나타나면 촬영할 수 있습니다")
+                        : canTakePhoto ? "옷 윤곽을 인식했어요. 두 번 탭하면 실측 사진을 촬영합니다"
+                        : "촬영 안내를 확인하고 옷 전체가 화면 안에 들어오도록 맞춰 주세요")
             }
         }
         .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)

@@ -6,6 +6,10 @@ struct ProductPhotoPager: UIViewControllerRepresentable {
     @Binding var selectedIndex: Int
     var onTransitionChange: ((Bool) -> Void)? = nil
     var onRotationAnimationChange: ((Bool) -> Void)? = nil
+    var accessibilityOnDelete: (() -> Void)? = nil
+    var accessibilityOnRotate: (() -> Void)? = nil
+    var accessibilityOnClose: (() -> Void)? = nil
+    var accessibilityIsHidden = false
     var allowsDismissGesture = true
     var allowsPaging = true
     var onDismissDragChanged: ((CGFloat) -> Void)? = nil
@@ -26,7 +30,11 @@ struct ProductPhotoPager: UIViewControllerRepresentable {
         controller.view.isOpaque = false
         controller.view.clipsToBounds = true
         controller.view.isAccessibilityElement = false
+        controller.view.accessibilityElementsHidden = accessibilityIsHidden
         context.coordinator.installDismissGesture(in: controller)
+        context.coordinator.accessibilityOnDelete = accessibilityOnDelete
+        context.coordinator.accessibilityOnRotate = accessibilityOnRotate
+        context.coordinator.accessibilityOnClose = accessibilityOnClose
         context.coordinator.setInteraction(allowsPaging: allowsPaging, allowsDismissGesture: allowsDismissGesture)
         context.coordinator.show(selectedIndex, in: controller, animated: false)
         return controller
@@ -36,6 +44,10 @@ struct ProductPhotoPager: UIViewControllerRepresentable {
         context.coordinator.selection = $selectedIndex
         context.coordinator.onTransitionChange = onTransitionChange
         context.coordinator.onRotationAnimationChange = onRotationAnimationChange
+        context.coordinator.accessibilityOnDelete = accessibilityOnDelete
+        context.coordinator.accessibilityOnRotate = accessibilityOnRotate
+        context.coordinator.accessibilityOnClose = accessibilityOnClose
+        controller.view.accessibilityElementsHidden = accessibilityIsHidden
         context.coordinator.onDismissDragChanged = onDismissDragChanged
         context.coordinator.onDismissDragEnded = onDismissDragEnded
         context.coordinator.setInteraction(allowsPaging: allowsPaging, allowsDismissGesture: allowsDismissGesture)
@@ -54,6 +66,9 @@ struct ProductPhotoPager: UIViewControllerRepresentable {
         var selection: Binding<Int>
         var onTransitionChange: ((Bool) -> Void)?
         var onRotationAnimationChange: ((Bool) -> Void)?
+        var accessibilityOnDelete: (() -> Void)?
+        var accessibilityOnRotate: (() -> Void)?
+        var accessibilityOnClose: (() -> Void)?
         var onDismissDragChanged: ((CGFloat) -> Void)?
         var onDismissDragEnded: ((CGFloat, CGFloat, Bool) -> Void)?
         fileprivate weak var dismissPan: UIPanGestureRecognizer?
@@ -143,6 +158,9 @@ struct ProductPhotoPager: UIViewControllerRepresentable {
             pendingIndex = nil
             onTransitionChange = nil
             onRotationAnimationChange = nil
+            accessibilityOnDelete = nil
+            accessibilityOnRotate = nil
+            accessibilityOnClose = nil
             animatingPages.removeAll()
             onDismissDragChanged = nil
             onDismissDragEnded = nil
@@ -254,7 +272,22 @@ struct ProductPhotoPager: UIViewControllerRepresentable {
         private func page(at index: Int) -> UIHostingController<ProductPhotoPage> {
             if let cached = pages[index] { return cached }
             let controller = UIHostingController(rootView: ProductPhotoPage(photo: photos[index], index: index,
-                onRotationAnimationChange: { [weak self] in self?.reportRotation($0, at: index) }))
+                count: photos.count,
+                onRotationAnimationChange: { [weak self] in self?.reportRotation($0, at: index) },
+                onPrevious: { [weak self] in self?.changeAccessibilityPage(by: -1) },
+                onNext: { [weak self] in self?.changeAccessibilityPage(by: 1) },
+                onDelete: accessibilityOnDelete == nil ? nil : { [weak self] in
+                    guard let self, self.isActive, !self.isTransitioning, self.animatingPages.isEmpty else { return }
+                    self.accessibilityOnDelete?()
+                },
+                onRotate: accessibilityOnRotate == nil ? nil : { [weak self] in
+                    guard let self, self.isActive, !self.isTransitioning, self.animatingPages.isEmpty else { return }
+                    self.accessibilityOnRotate?()
+                },
+                onClose: accessibilityOnClose == nil ? nil : { [weak self] in
+                    guard let self, self.isActive else { return }
+                    self.accessibilityOnClose?()
+                }))
             controller.safeAreaRegions = []
             controller.view.backgroundColor = .clear
             controller.view.isOpaque = false
@@ -263,23 +296,44 @@ struct ProductPhotoPager: UIViewControllerRepresentable {
             pages[index] = controller
             return controller
         }
+
+        private func changeAccessibilityPage(by offset: Int) {
+            guard isActive, allowsPaging, !isTransitioning, animatingPages.isEmpty else { return }
+            let target = selection.wrappedValue + offset
+            guard photos.indices.contains(target) else { return }
+            selection.wrappedValue = target
+        }
     }
 }
 
 private struct ProductPhotoPage: View {
     let photo: GarmentPhoto
     let index: Int
+    let count: Int
     let onRotationAnimationChange: (Bool) -> Void
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+    let onDelete: (() -> Void)?
+    let onRotate: (() -> Void)?
+    let onClose: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var image: CGImage?
     @State private var imageRequestID: UUID?
     @State private var displayAngle: Double
     @State private var animationID: UUID?
 
-    init(photo: GarmentPhoto, index: Int, onRotationAnimationChange: @escaping (Bool) -> Void) {
+    init(photo: GarmentPhoto, index: Int, count: Int, onRotationAnimationChange: @escaping (Bool) -> Void,
+         onPrevious: @escaping () -> Void, onNext: @escaping () -> Void,
+         onDelete: (() -> Void)?, onRotate: (() -> Void)?, onClose: (() -> Void)?) {
         self.photo = photo
         self.index = index
+        self.count = count
         self.onRotationAnimationChange = onRotationAnimationChange
+        self.onPrevious = onPrevious
+        self.onNext = onNext
+        self.onDelete = onDelete
+        self.onRotate = onRotate
+        self.onClose = onClose
         _displayAngle = State(initialValue:
             Double(ProductPhotoRotationLayout.normalizedQuarterTurns(photo.productRotationQuarterTurns ?? 0)) * 90)
     }
@@ -302,8 +356,24 @@ private struct ProductPhotoPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("제품 사진 \(index + 1)")
+        .accessibilityLabel("제품 사진 \(index + 1), 총 \(count)장")
         .accessibilityValue("회전 \(ProductPhotoRotationLayout.normalizedQuarterTurns(photo.productRotationQuarterTurns ?? 0) * 90)도")
+        .accessibilityAddTraits(.isImage)
+        .accessibilityHint("위아래로 쓸어 사진을 변경할 수 있어요. 동작 메뉴에서 지원되는 사진 작업을 선택하세요")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onNext()
+            case .decrement: onPrevious()
+            @unknown default: break
+            }
+        }
+        .accessibilityActions {
+            if index > 0 { Button("이전 사진", action: onPrevious) }
+            if index + 1 < count { Button("다음 사진", action: onNext) }
+            if let onRotate { Button("사진을 왼쪽으로 90도 회전", action: onRotate) }
+            if let onDelete { Button("제품 사진 삭제", action: onDelete) }
+            if let onClose { Button("사진 보기 닫기", action: onClose) }
+        }
         .accessibilityIdentifier("product-gallery.photo.\(index + 1)")
         .task(id: originalRequest) {
             let request = originalRequest

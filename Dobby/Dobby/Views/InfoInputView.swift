@@ -133,6 +133,7 @@ struct InfoInputView: View {
                     .tint(.black)
                     .disabled(generationRequestID != nil || isImportingPhotos)
                     .accessibilityLabel("뒤로가기")
+                    .accessibilityHint(allowsPhotoEditing ? "제품 정보 수정 화면에서 나갑니다" : "이전 촬영 단계로 돌아갑니다")
                     .accessibilityIdentifier("product-flow.back")
                 }
             }
@@ -146,6 +147,8 @@ struct InfoInputView: View {
                 }
                 .disabled(generationRequestID != nil || isImportingPhotos)
                 .buttonStyle(.plain)
+                .accessibilityLabel(allowsPhotoEditing ? "제품 정보 수정 완료" : "제품 정보 입력 완료")
+                .accessibilityHint("필수 항목과 사진 수를 확인하고 제품 정보를 저장합니다")
                 .accessibilityIdentifier("product-info.done")
             }
             .sharedBackgroundVisibility(.hidden)
@@ -170,8 +173,10 @@ struct InfoInputView: View {
         .task(id: generationRequestID) {
             guard let identifier = generationRequestID, let onGenerateAI else { return }
             var failure: String?
+            var succeeded = false
             do {
                 try await onGenerateAI()
+                succeeded = true
             } catch {
                 if generationRequestID == identifier, !(error is CancellationError), !Task.isCancelled {
                     failure = error.localizedDescription
@@ -181,6 +186,9 @@ struct InfoInputView: View {
                 generationRequestID = nil
                 onAIGenerationPresentationChange?(nil)
                 generationError = failure
+                if succeeded, !Task.isCancelled {
+                    VoiceOverAnnouncement.post("제품 정보 생성을 완료했어요. 입력 항목을 확인하고 수정할 수 있어요")
+                }
             }
         }
         .alert("AI 정보를 생성하지 못했어요", isPresented: Binding(
@@ -193,6 +201,7 @@ struct InfoInputView: View {
         } message: {
             Text(generationError ?? "잠시 후 다시 시도하거나 직접 입력해 주세요.")
         }
+        .accessibilityHidden(generationRequestID != nil)
         .overlay {
             if generationRequestID != nil, onAIGenerationPresentationChange == nil {
                 ProductAutofillLoadingView(onCancel: cancelGeneration)
@@ -221,7 +230,8 @@ struct InfoInputView: View {
         }
         .buttonStyle(.plain)
         .disabled(generationRequestID != nil || isImportingPhotos)
-        .accessibilityHint("선택한 제품 사진으로 제품명, 설명, 브랜드를 생성합니다")
+        .accessibilityLabel(garment.aiInformationGeneratedAt == nil ? "AI로 제품 정보 생성하기" : "다시 정보 생성하기")
+        .accessibilityHint("선택한 제품 사진으로 제품명, 설명, 브랜드를 생성합니다. 기존 입력 내용이 새 정보로 바뀔 수 있어요")
         .accessibilityIdentifier("product-ai.generate")
     }
 
@@ -242,7 +252,11 @@ struct InfoInputView: View {
     private func complete() {
         guard generationRequestID == nil, !isImportingPhotos else { return }
         hasAttemptedCompletion = true
-        guard GarmentInformationValidation.isValid(garment) else { return }
+        guard GarmentInformationValidation.isValid(garment) else {
+            do { try GarmentInformationValidation.validate(garment) }
+            catch { VoiceOverAnnouncement.post(error.localizedDescription) }
+            return
+        }
         do {
             try GarmentInputCompletion.save(garment: garment, drafts: &measurementInput.wrappedValue.drafts,
                                            isEditingExistingProduct: allowsPhotoEditing) {

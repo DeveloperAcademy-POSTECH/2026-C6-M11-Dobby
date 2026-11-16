@@ -34,7 +34,12 @@ struct ProductInputPhotoSection: View {
                 }
                 .font(.custom(allowsEditing ? "Pretendard-Medium" : "Pretendard-Regular", size: allowsEditing ? 16 : 14, relativeTo: .subheadline))
                 .tracking(allowsEditing ? -0.16 : 0)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel("제품 사진 \(displayedPhotoCount)장, 최대 \(ProductPhotoLimit.maximumCount)장")
+                .accessibilityValue(displayedPhotoCount > ProductPhotoLimit.maximumCount
+                    ? "등록 가능 장수를 초과했어요" : "")
+                .accessibilityHint(displayedPhotoCount > ProductPhotoLimit.maximumCount
+                    ? "사진을 제외해 \(ProductPhotoLimit.maximumCount)장 이하로 맞춰주세요" : "")
                 .accessibilityIdentifier("product-info.photo-count")
             }
             .frame(minHeight: allowsEditing ? 22 : nil)
@@ -130,9 +135,6 @@ struct ProductInputPhotoSection: View {
             onReorder: { GarmentStore.reorderProductPhotos(ids: $0, in: garment) },
             includesRemovalButton: allowsRemoval, leadingContent: AnyView(addPhotoButton)) { photo in
                 photoCell(photo)
-                    .accessibilityHint("길게 누른 뒤 좌우로 드래그해 순서를 바꿀 수 있어요")
-                    .accessibilityAction(named: "앞으로 이동") { movePhoto(photo.id, offset: -1) }
-                    .accessibilityAction(named: "뒤로 이동") { movePhoto(photo.id, offset: 1) }
             }
             .frame(height: 108 + (allowsRemoval ? 4 : 0))
             .accessibilityIdentifier("product-info.photo-strip")
@@ -157,6 +159,7 @@ struct ProductInputPhotoSection: View {
         }
         .disabled(isImporting)
         .accessibilityLabel("제품 사진 추가")
+        .accessibilityHint("사진 촬영 또는 앨범에서 선택할 수 있어요")
         .accessibilityIdentifier("product-info.add-photo")
     }
 
@@ -172,15 +175,25 @@ struct ProductInputPhotoSection: View {
     }
 
     @ViewBuilder private func photoCell(_ photo: GarmentPhoto) -> some View {
+        let index = garment.productPhotos.firstIndex { $0.id == photo.id } ?? 0
+        let count = garment.productPhotos.count
         if allowsRemoval {
-            ProductInputEditablePhoto(photo: photo, onExpand: { expand(photo) },
-                                      onDelete: { deletePhoto(photo.id) })
+            ProductInputEditablePhoto(photo: photo, index: index, count: count,
+                onExpand: { expand(photo) }, onDelete: { deletePhoto(photo.id) },
+                onMoveEarlier: { movePhoto(photo.id, offset: -1) },
+                onMoveLater: { movePhoto(photo.id, offset: 1) })
         } else {
             Button { expand(photo) } label: {
                 ProductInputPhotoImage(photo: photo)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("제품 사진 확대")
+            .accessibilityValue("\(count)장 중 \(index + 1)번째 사진")
+            .accessibilityHint("동작 메뉴에서 사진 순서를 바꿀 수 있어요")
+            .accessibilityActions {
+                if index > 0 { Button("앞으로 이동") { movePhoto(photo.id, offset: -1) } }
+                if index + 1 < count { Button("뒤로 이동") { movePhoto(photo.id, offset: 1) } }
+            }
             .accessibilityIdentifier("product-info.photo.\(photo.id)")
         }
     }
@@ -192,6 +205,7 @@ struct ProductInputPhotoSection: View {
         ids.insert(moved, at: index + offset)
         if GarmentStore.reorderProductPhotos(ids: ids, in: garment) {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            VoiceOverAnnouncement.post("제품 사진을 \(index + offset + 1)번째로 이동했어요")
         }
     }
 
@@ -211,14 +225,22 @@ struct ProductInputPhotoSection: View {
     }
 
     private func deletePhoto(_ id: UUID) {
-        do { _ = try removePhoto(id) } catch { showsDeletionError = true }
+        do {
+            if try removePhoto(id) {
+                VoiceOverAnnouncement.post("제품 사진에서 제외했어요. \(garment.productPhotos.count)장이 남았어요")
+            }
+        } catch { showsDeletionError = true }
     }
 }
 
 private struct ProductInputEditablePhoto: View {
     let photo: GarmentPhoto
+    let index: Int
+    let count: Int
     let onExpand: () -> Void
     let onDelete: () -> Void
+    let onMoveEarlier: () -> Void
+    let onMoveLater: () -> Void
 
     var body: some View {
         Button(action: onExpand) {
@@ -226,6 +248,13 @@ private struct ProductInputEditablePhoto: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("제품 사진 확대")
+        .accessibilityValue("\(count)장 중 \(index + 1)번째 사진")
+        .accessibilityHint("동작 메뉴에서 순서를 바꾸거나 제품 사진에서 제외할 수 있어요")
+        .accessibilityActions {
+            if index > 0 { Button("앞으로 이동", action: onMoveEarlier) }
+            if index + 1 < count { Button("뒤로 이동", action: onMoveLater) }
+            Button("제품 사진에서 제외", action: onDelete)
+        }
         .accessibilityIdentifier("product-info.photo.\(photo.id)")
         .overlay(alignment: .topTrailing) {
             Button(action: onDelete) {
@@ -242,6 +271,8 @@ private struct ProductInputEditablePhoto: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("제품 사진 삭제")
+            .accessibilityValue("\(count)장 중 \(index + 1)번째 사진")
+            .accessibilityHint("이 사진을 제품 사진 목록에서 제외합니다")
             .accessibilityIdentifier("product-info.delete-photo.\(photo.id)")
             // The visible badge overhangs by four points, while the hit area
             // stays out of the next thumbnail (including the eight-point gap).

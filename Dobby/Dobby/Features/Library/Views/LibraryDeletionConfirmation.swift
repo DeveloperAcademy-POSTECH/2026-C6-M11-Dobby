@@ -76,6 +76,7 @@ struct LibraryDeletionConfirmation: UIViewControllerRepresentable {
             )
             let confirmation = UIHostingController(rootView: content)
             confirmation.view.backgroundColor = .clear
+            confirmation.view.accessibilityViewIsModal = true
             confirmation.modalPresentationStyle = .overFullScreen
             confirmation.modalTransitionStyle = .crossDissolve
             self.confirmation = confirmation

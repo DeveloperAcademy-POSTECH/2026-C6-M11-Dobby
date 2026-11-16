@@ -145,6 +145,8 @@ private struct FruitsExportBottomAction: View {
             .buttonStyle(FruitsExportButtonStyle())
             .disabled(!hasCopied || isLoading)
             .accessibilityIdentifier("export.fruits.open")
+            .accessibilityValue(isLoading ? "후루츠패밀리를 여는 중" : "")
+            .accessibilityHint(hasCopied ? "실측 사이즈를 작은 화면에 띄우고 후루츠패밀리 앱을 엽니다." : "먼저 상품 정보의 복사 버튼을 누르세요.")
         }
         .padding(.horizontal, 33)
         .padding(.top, 16)

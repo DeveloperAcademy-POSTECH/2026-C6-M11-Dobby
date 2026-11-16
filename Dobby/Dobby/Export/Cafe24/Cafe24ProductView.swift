@@ -76,6 +76,7 @@ private struct Cafe24CompletionHeader: View {
         VStack(spacing: 12) {
             Text("카페24에 업로드 완료 🎉")
                 .font(.title3.bold())
+                .accessibilityAddTraits(.isHeader)
             HStack(spacing: 0) {
                 Text("연결된 계정에 자동 업로드를 ")
                 Text("완료")
@@ -83,6 +84,7 @@ private struct Cafe24CompletionHeader: View {
                 Text("했어요")
             }
             .font(.body)
+            .accessibilityElement(children: .combine)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
@@ -96,6 +98,7 @@ private struct Cafe24ProductPhotos: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("업로드할 사진")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Cafe24PhotoStrip(photos: photos)
         }
@@ -110,9 +113,12 @@ private struct Cafe24PhotoStrip: View {
             LazyHStack(spacing: 8) {
                 if photos.isEmpty {
                     Cafe24ProductPhoto(data: nil)
+                        .accessibilityLabel("업로드할 상품 사진 없음")
                 } else {
                     ForEach(photos.indices, id: \.self) { index in
                         Cafe24ProductPhoto(data: photos[index])
+                            .accessibilityLabel("업로드할 상품 사진 \(index + 1)")
+                            .accessibilityValue("전체 \(photos.count)장")
                     }
                 }
             }
@@ -138,6 +144,8 @@ private struct Cafe24ProductPhoto: View {
         .frame(width: 152, height: 212)
         .background(Color(.brandNeutral100))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isImage)
     }
 }
 
@@ -156,6 +164,7 @@ private struct Cafe24ProductNameField: View {
                 .padding(.horizontal, 16)
                 .frame(minHeight: 52)
                 .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel("카페24 상품명")
         }
     }
 }
@@ -178,6 +187,7 @@ private struct Cafe24ProductDescriptionField: View {
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel("카페24 상품 설명")
         }
     }
 }
@@ -206,9 +216,11 @@ private struct Cafe24PriceInput: View {
                 .keyboardType(.numberPad)
                 .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
                 .foregroundStyle(Color(.brandNeutralBlack))
+                .accessibilityLabel("카페24 판매가, 원")
             Spacer()
             Text("원")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -235,6 +247,8 @@ private struct Cafe24EditorHeader: View {
             Cafe24EditorTitle(title: title)
             Spacer()
             Cafe24ResetButton(action: onReset)
+                .accessibilityLabel("\(title) 초기화")
+                .accessibilityHint("수정한 \(title)을 원래 상품 정보로 되돌립니다.")
         }
     }
 }
@@ -246,6 +260,7 @@ private struct Cafe24EditorTitle: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.body.weight(.medium))
+                .accessibilityAddTraits(.isHeader)
             Text("눌러서 직접 글을 수정할 수 있어요")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

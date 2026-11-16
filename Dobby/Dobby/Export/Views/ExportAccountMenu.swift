@@ -57,6 +57,7 @@ private struct ExportAccountMenuButton: View {
                 Image(systemName: systemImage)
                     .font(.body)
                     .frame(width: 28, alignment: .center)
+                    .accessibilityHidden(true)
 
                 Text(title)
                     .font(.custom("Pretendard", fixedSize: 17))
@@ -70,6 +71,7 @@ private struct ExportAccountMenuButton: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(tint)
+        .accessibilityLabel(title)
     }
 }
 

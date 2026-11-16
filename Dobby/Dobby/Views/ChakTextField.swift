@@ -16,7 +16,9 @@ struct ChakTextField: View {
                 text: $text,
                 placeholder: placeholder,
                 isFocused: $isFocused,
-                showsError: errorMessage != nil
+                showsError: errorMessage != nil,
+                accessibilityTitle: label + (isRequired ? ", 필수" : ""),
+                accessibilityHelp: errorMessage.map { "오류: \($0). \(placeholder)" } ?? placeholder
             )
 
             if let errorMessage {
@@ -24,6 +26,7 @@ struct ChakTextField: View {
                     .font(.custom("Pretendard-Medium", fixedSize: 12))
                     .tracking(-0.12)
                     .foregroundStyle(Color(.accentsRed))
+                    .accessibilityHint("\(label) 오류")
                     .accessibilityIdentifier("chak-text-field.error")
             }
         }
@@ -51,6 +54,7 @@ private struct ChakTextFieldLabel: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label + (isRequired ? ", 필수" : ""))
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -59,6 +63,8 @@ private struct ChakTextFieldEditor: View {
     let placeholder: String
     var isFocused: FocusState<Bool>.Binding
     let showsError: Bool
+    var accessibilityTitle = ""
+    var accessibilityHelp = ""
 
     var body: some View {
         TextField(
@@ -70,6 +76,8 @@ private struct ChakTextFieldEditor: View {
         .font(.custom("Pretendard-Regular", fixedSize: 15))
         .tracking(-0.16)
         .focused(isFocused)
+        .accessibilityLabel(accessibilityTitle)
+        .accessibilityHint(accessibilityHelp)
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(minHeight: 56)

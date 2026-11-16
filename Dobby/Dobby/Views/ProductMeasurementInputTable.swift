@@ -89,6 +89,7 @@ private struct SizeColumn: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 42)
                 .background(Color("BrandNeutral100"))
+                .accessibilityHidden(true)
 
             ProductMeasurementNumber(value: value, text: $text, focus: focus)
         }
@@ -112,14 +113,19 @@ private struct ProductMeasurementNumber: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             TextField("", text: $text)
-                .accessibilityLabel("\(value.displayLabel) 센티미터")
+                .accessibilityLabel("\(value.displayLabel), 실측 사이즈, 센티미터")
+                .accessibilityHint(text.isEmpty
+                    ? "계산된 길이가 없으면 센티미터 단위로 직접 입력해주세요"
+                    : GarmentMeasurementInputText.parsed(text) == nil
+                        ? "오류: 0보다 큰 숫자를 센티미터 단위로 입력해주세요"
+                        : "센티미터 단위로 수정할 수 있어요")
                 .accessibilityIdentifier("product-info.measurement.\(value.key)")
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
                 .focused(focus, equals: value.id)
                 .frame(width: inputWidth)
                 .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
-            Text("cm")
+            Text("cm").accessibilityHidden(true)
         }
         .font(.custom("Pretendard-Regular", size: 15, relativeTo: .subheadline))
         .tracking(-0.23)

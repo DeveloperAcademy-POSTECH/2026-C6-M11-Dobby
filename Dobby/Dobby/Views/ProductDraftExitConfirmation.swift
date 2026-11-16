@@ -12,7 +12,6 @@ struct ProductDraftExitConfirmation: View {
     @ScaledMetric(relativeTo: .body) private var messageLineHeight: CGFloat = 22
     @ScaledMetric(relativeTo: .headline) private var buttonFontSize: CGFloat = 17
     @ScaledMetric(relativeTo: .headline) private var buttonLineHeight: CGFloat = 22
-    @AccessibilityFocusState private var messageIsFocused: Bool
 
     var body: some View {
         ZStack {
@@ -40,7 +39,6 @@ struct ProductDraftExitConfirmation: View {
         .accessibilityAddTraits(.isModal)
         .accessibilityIdentifier("product-flow.exit-confirmation")
         .accessibilityAction(.escape, onCancel)
-        .onAppear { messageIsFocused = true }
     }
 
     private var panel: some View {
@@ -55,6 +53,7 @@ struct ProductDraftExitConfirmation: View {
                         .background(Color("BrandMain500"), in: Capsule())
                 }
                 .accessibilityIdentifier("product-flow.exit-save")
+                .accessibilityHint("현재 사진과 입력한 내용을 임시저장하고 홈으로 나갑니다")
 
                 Button(role: .destructive, action: onDiscard) {
                     actionLabel("삭제하고 나가기")
@@ -62,6 +61,7 @@ struct ProductDraftExitConfirmation: View {
                         .background(Color("BrandMain50"), in: Capsule())
                 }
                 .accessibilityIdentifier("product-flow.exit-discard")
+                .accessibilityHint("작성 중인 제품과 저장되지 않은 작업을 삭제하고 홈으로 나갑니다")
 
                 Button(role: .cancel, action: onCancel) {
                     actionLabel("닫기")
@@ -69,6 +69,7 @@ struct ProductDraftExitConfirmation: View {
                         .background(Color("BrandNeutral50"), in: Capsule())
                 }
                 .accessibilityIdentifier("product-flow.exit-cancel")
+                .accessibilityHint("입력한 내용을 유지하고 현재 화면으로 돌아갑니다")
             }
             .buttonStyle(.plain)
         }
@@ -82,9 +83,8 @@ struct ProductDraftExitConfirmation: View {
         VStack(spacing: 8) {
             styledText("작성 중인 상품이 있어요", fontName: "Pretendard-Bold",
                        size: titleFontSize, lineHeight: titleLineHeight)
-                .accessibilityAddTraits(.isHeader)
+                .accessibilityModalHeading()
                 .accessibilityIdentifier("product-flow.exit-title")
-                .accessibilityFocused($messageIsFocused)
             styledText("나중에 이어서 작성할 수 있도록\n임시 저장할까요?", fontName: "Pretendard-Regular",
                        size: messageFontSize, lineHeight: messageLineHeight)
                 .accessibilityIdentifier("product-flow.exit-message")

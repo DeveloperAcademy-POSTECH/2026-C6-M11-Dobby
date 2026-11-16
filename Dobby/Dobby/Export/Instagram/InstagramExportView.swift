@@ -71,6 +71,7 @@ struct InstagramExportView: View {
                 )
             }
         }
+        .accessibilityHidden(uploadState.isUploading || isShowingUploadFailure)
         .navigationTitle(Self.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
@@ -78,6 +79,7 @@ struct InstagramExportView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 ExportToolbarTitle(title: Self.navigationTitle)
+                    .accessibilityHidden(uploadState.isUploading || isShowingUploadFailure)
             }
             if !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarLeading) {
@@ -88,6 +90,7 @@ struct InstagramExportView: View {
                         dismiss()
                     }
                     .buttonBorderShape(.circle)
+                    .accessibilityHidden(isShowingUploadFailure)
                 }
             }
             if account != nil && !uploadState.isUploading && !showsCompletion {
@@ -98,6 +101,7 @@ struct InstagramExportView: View {
                         onDisconnect: { Task { await disconnect() } }
                     )
                     .buttonBorderShape(.capsule)
+                    .accessibilityHidden(isShowingUploadFailure)
                 }
             }
         }
@@ -109,6 +113,7 @@ struct InstagramExportView: View {
                 .padding(.horizontal, 33)
                 .padding(.top, 16)
                 .background(Color(.brandNeutralWhite))
+                .accessibilityHidden(uploadState.isUploading || isShowingUploadFailure)
             }
         }
         .overlay {

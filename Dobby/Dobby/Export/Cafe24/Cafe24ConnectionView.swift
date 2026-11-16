@@ -38,6 +38,9 @@ struct Cafe24ConnectionView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("카페24 계정 연결하기")
+            .accessibilityValue(isLoading ? "연결 중" : "연결 전")
         }
         .frame(maxWidth: 362, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 20)
@@ -60,6 +63,7 @@ private struct Cafe24ConnectionHeader: View {
                 .foregroundStyle(Color(.brandNeutralBlack))
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
 
             Text("먼저 카페24 ID를 입력하고 아래 버튼을 눌러\n계정 연결을 완료해주세요.")
                 .font(.body.weight(.regular))

@@ -105,7 +105,7 @@ struct CameraAspectRatioView: View {
                     .frame(width: ratioTouchSide, height: ratioTouchSide).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("사진 비율 \(ratio)")
+            .accessibilityLabel("사진 비율 \(ratio.replacingOccurrences(of: ":", with: " 대 "))")
             .accessibilityAddTraits(state.selectedAspectRatio == ratio ? .isSelected : [])
             .accessibilityIdentifier("camera.aspectRatio.\(ratio)")
         }

@@ -12,7 +12,6 @@ struct ProductAutofillLoadingView: View {
     @ScaledMetric(relativeTo: .title2) private var titleLineHeight: CGFloat = 28
     @ScaledMetric(relativeTo: .body) private var messageSize: CGFloat = 17
     @ScaledMetric(relativeTo: .body) private var messageLineHeight: CGFloat = 22
-    @AccessibilityFocusState private var titleIsFocused: Bool
 
     var body: some View {
         GeometryReader { geometry in
@@ -36,7 +35,6 @@ struct ProductAutofillLoadingView: View {
             .accessibilityAddTraits(.isModal)
             .accessibilityIdentifier("product-ai.loading")
             .accessibilityAction(.escape, onCancel)
-            .onAppear { titleIsFocused = true }
         }
         .ignoresSafeArea()
     }
@@ -47,10 +45,12 @@ struct ProductAutofillLoadingView: View {
                 .font(.custom("Pretendard-Bold", fixedSize: titleSize))
                 .tracking(-0.26)
                 .frame(minHeight: titleLineHeight)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityFocused($titleIsFocused)
+                .accessibilityModalHeading()
+                .accessibilityHint("동작 메뉴에서 정보 생성을 취소할 수 있습니다.")
+                .accessibilityAction(named: Text("정보 생성 취소"), onCancel)
 
             UploadLoadingAnimation(source: .upload, width: imageSide, height: imageSide)
+                .accessibilityHidden(true)
 
             Text("사진을 꼼꼼히 보며\n어떤 옷인지 알아보고 있어요")
                 .font(.custom("Pretendard-Regular", fixedSize: messageSize))

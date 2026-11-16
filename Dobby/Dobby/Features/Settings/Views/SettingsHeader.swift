@@ -7,6 +7,7 @@ struct SettingsHeader: View {
             .tracking(SettingsTypography.screenTitleTracking)
             .foregroundStyle(.black)
             .frame(maxWidth: .infinity, minHeight: 33, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
