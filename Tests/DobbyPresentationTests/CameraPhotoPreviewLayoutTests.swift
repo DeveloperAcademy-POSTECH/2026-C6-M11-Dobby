@@ -24,13 +24,29 @@ final class CameraPhotoPreviewLayoutTests: XCTestCase {
         XCTAssertEqual(tall.photoFrame.maxY, 874)
     }
 
-    func testResultPhotoKeepsFourteenPointGapBelowHeaderForEveryRatio() {
+    func testResultSquareUsesFigmaCenterWhileOtherRatiosKeepTheirHeaderGap() {
         let aspects: [CGFloat] = [0.75, 1, 9.0 / 16]
         for aspect in aspects {
             let layout = MeasurementResultLayout(size: CGSize(width: 402, height: 812),
-                bottomSafeArea: 34, aspect: aspect, summaryHeight: 111)
-            XCTAssertEqual(layout.photo.minY, 84)
+                bottomSafeArea: 34, aspect: aspect, summaryHeight: 111, topSafeArea: 62)
+            XCTAssertEqual(layout.photo.minY, aspect == 1 ? 156 : 84)
             XCTAssertEqual(layout.photo.width / layout.photo.height, aspect, accuracy: 0.000001)
+        }
+    }
+
+    func testSquareResultCompositionUsesCaptureRatioWhenPresentationCropExpands() {
+        let size = CGSize(width: 402, height: 812)
+        let selected = MeasurementResultLayout(size: size, bottomSafeArea: 34,
+            aspect: 1, summaryHeight: 111, captureAspect: 1, topSafeArea: 62, usesSheet: false)
+        let expandedAspects: [CGFloat] = [3.0 / 4, 9.0 / 16, 0.8]
+        for expandedAspect in expandedAspects {
+            let expanded = MeasurementResultLayout(size: size, bottomSafeArea: 34,
+                aspect: expandedAspect, summaryHeight: 111,
+                captureAspect: 1, topSafeArea: 62, usesSheet: false)
+            assertRect(expanded.photo, selected.photo)
+            assertRect(expanded.summary, selected.summary)
+            XCTAssertNil(expanded.sheetTop)
+            XCTAssertEqual(expanded.magnifierBottomInset, 0)
         }
     }
 

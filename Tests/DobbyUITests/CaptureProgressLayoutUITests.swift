@@ -57,6 +57,25 @@ final class CaptureProgressLayoutUITests: XCTestCase {
         XCTAssertEqual(frozen.frame.height, photoFrame.height, accuracy: 1)
         screenshot("square-measurement-processing-keeps-photo-frame")
         waitUntilEnabled(app.buttons["confirmGarmentMeasurement"])
+        let resultPhoto = app.descendants(matching: .any)["garmentResultPhotoViewport"].firstMatch
+        let summary = app.descendants(matching: .any)["garmentResultMeasurementSummary"].firstMatch
+        XCTAssertTrue(resultPhoto.waitForExistence(timeout: 5))
+        XCTAssertTrue(summary.exists)
+        XCTAssertEqual(resultPhoto.frame.width, app.frame.width, accuracy: 1)
+        XCTAssertEqual(resultPhoto.frame.height, resultPhoto.frame.width, accuracy: 1)
+        XCTAssertEqual(resultPhoto.frame.midY, app.frame.midY - 18, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(summary.frame.minY - resultPhoto.frame.maxY, 33)
+        let resultImage = app.images["garmentMeasurementPhoto"]
+        XCTAssertTrue(resultImage.exists)
+        XCTAssertTrue(resultPhoto.frame.insetBy(dx: -1, dy: -1).contains(resultImage.frame),
+                      "The retained image and its editing coordinate system must fit inside the square viewport")
+        XCTAssertFalse(app.buttons["enlargeGarmentPhoto"].exists)
+        let shoulder = app.descendants(matching: .any)["garmentResultMeasurementCard_top.shoulderWidth"].firstMatch
+        let chest = app.descendants(matching: .any)["garmentResultMeasurementCard_top.chestWidth"].firstMatch
+        let length = app.descendants(matching: .any)["garmentResultMeasurementCard_top.totalLength"].firstMatch
+        XCTAssertLessThan(shoulder.frame.minX, chest.frame.minX)
+        XCTAssertLessThan(chest.frame.minX, length.frame.minX)
+        screenshot("square-measurement-result-figma-5254-6854")
     }
 
     @MainActor
