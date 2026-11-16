@@ -26,12 +26,21 @@ final class ProductInputCameraUITests: XCTestCase {
         openAdditionalCamera(app)
         XCTAssertFalse(app.buttons["captureGarment"].exists, "Photo add must never enter LiDAR capture")
         XCTAssertFalse(app.buttons["camera.startDetailCapture"].exists)
-        XCTAssertFalse(app.buttons["camera.selectPhotos"].isEnabled)
+        XCTAssertTrue(app.buttons["camera.selectPhotos"].isEnabled)
+        tap(app, "camera.openGallery")
+        assertGalleryPage(app, index: count, total: count)
+        let preloaded = XCTAttachment(screenshot: app.screenshot())
+        preloaded.name = "product-input-add-camera-preloaded-gallery"; preloaded.lifetime = .keepAlways; add(preloaded)
+        tap(app, "촬영으로 돌아가기")
         tap(app, "camera.captureDetail")
         tap(app, "camera.openGallery")
-        let pager = app.descendants(matching: .any)["camera.galleryPager"].firstMatch
-        XCTAssertTrue(pager.waitForExistence(timeout: 10))
-        XCTAssertEqual(pager.value as? String, "1 / 1", "Only new captures belong to the supplemental session")
+        assertGalleryPage(app, index: count + 1, total: count + 1)
+        // Browsing a borrowed photo permits the same gallery deletion gesture,
+        // but canceling additional capture must retain the input's original.
+        tap(app, "camera.galleryThumbnail.0")
+        tap(app, "camera.galleryDelete")
+        tap(app, "camera.galleryConfirmDelete")
+        assertGalleryPage(app, index: 1, total: count)
         tap(app, "촬영으로 돌아가기")
         tap(app, "product-flow.back")
         XCTAssertTrue(app.buttons["product-info.done"].waitForExistence(timeout: 10))
@@ -45,12 +54,14 @@ final class ProductInputCameraUITests: XCTestCase {
         XCTAssertTrue(app.buttons["product-info.done"].waitForExistence(timeout: 30))
         XCTAssertEqual(photoCount(app), count + 2)
         XCTAssertEqual(name.value as? String, "촬영 전 입력한 이름")
-        // A fresh add-camera entry starts empty and cannot repeat a previous
-        // successful handoff or save the existing measurement photos again.
+        // Every re-entry preloads the current photos. Next without a new
+        // capture returns to the same draft without saving or appending again.
         openAdditionalCamera(app)
-        XCTAssertFalse(app.buttons["camera.selectPhotos"].isEnabled)
-        XCTAssertFalse(app.buttons["camera.openGallery"].isEnabled)
-        tap(app, "product-flow.back")
+        tap(app, "camera.openGallery")
+        assertGalleryPage(app, index: count + 2, total: count + 2)
+        tap(app, "촬영으로 돌아가기")
+        tap(app, "camera.selectPhotos")
+        XCTAssertTrue(app.buttons["product-info.done"].waitForExistence(timeout: 30))
         XCTAssertEqual(photoCount(app), count + 2)
     }
 
@@ -76,8 +87,14 @@ final class ProductInputCameraUITests: XCTestCase {
         delete.tap()
         XCTAssertEqual(photoCount(app), 9)
         openAdditionalCamera(app)
+        tap(app, "camera.openGallery")
+        assertGalleryPage(app, index: 9, total: 9)
+        tap(app, "촬영으로 돌아가기")
         tap(app, "camera.captureDetail")
         tap(app, "camera.captureDetail")
+        tap(app, "camera.openGallery")
+        assertGalleryPage(app, index: 11, total: 11)
+        tap(app, "촬영으로 돌아가기")
         tap(app, "camera.selectPhotos")
         XCTAssertTrue(app.buttons["product-info.done"].waitForExistence(timeout: 30))
         XCTAssertEqual(photoCount(app), 11)
@@ -105,6 +122,13 @@ final class ProductInputCameraUITests: XCTestCase {
         tap(app, "product-info.add-photo")
         tap(app, "사진 촬영하기")
         XCTAssertTrue(app.buttons["camera.captureDetail"].waitForExistence(timeout: 15))
+    }
+
+    private func assertGalleryPage(_ app: XCUIApplication, index: Int, total: Int) {
+        let pager = app.descendants(matching: .any)["camera.galleryPager"].firstMatch
+        XCTAssertTrue(pager.waitForExistence(timeout: 10))
+        let expected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "\(index) / \(total)"), object: pager)
+        wait(for: [expected], timeout: 10)
     }
 
     private func photoCount(_ app: XCUIApplication) -> Int {

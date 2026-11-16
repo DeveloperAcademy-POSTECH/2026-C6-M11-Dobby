@@ -97,7 +97,7 @@ struct CameraFlowView: View {
         }
         .accessibilityHidden(isCompletingCapture)
         .overlay {
-            if isCompletingCapture {
+            if isCompletingCapture && !capturePhotosToSave.isEmpty {
                 DetailPhotoLibrarySavingOverlay(
                     savedCount: hasStartedLibrarySaving
                         ? min(librarySaver.savedCount, capturePhotosToSave.count) : 0,
@@ -396,7 +396,7 @@ struct CameraFlowView: View {
         guard let output = model.allPhotosOutput else { return }
         captureOutputToSave = output
         didSaveAllCapturePhotos = false
-        capturePhotosToSave = output.selectedPhotos
+        capturePhotosToSave = model.photosRequiringLibrarySave
         hasStartedLibrarySaving = false
         isCompletingCapture = true
     }

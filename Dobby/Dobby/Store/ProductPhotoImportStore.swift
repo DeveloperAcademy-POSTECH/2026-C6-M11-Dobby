@@ -4,6 +4,34 @@ import SwiftData
 
 @MainActor
 enum ProductPhotoImportStore {
+    /// Borrow the input draft's current visible photos for the capture gallery.
+    /// Product rotations are already separate files; never copy or delete them here.
+    static func capturePreviewPhotos(for garment: Garment, sessionID: UUID) throws -> [CapturedAsset] {
+        try garment.productPhotos.map { photo in
+            let url = GarmentStore.url(for: photo)
+            return CapturedAsset(id: photo.id, sessionID: sessionID, garmentID: garment.id,
+                purpose: photo.isMeasurementSource ? .measurement : .detail, capturedAt: photo.capturedAt,
+                source: .localFile(url, metadata: try ProductPhotoHandoff.metadata(for: url)))
+        }
+    }
+
+    /// Add only newly owned captures and apply gallery exclusions to the current
+    /// draft. Borrowed originals and the surviving product order stay untouched.
+    static func applyAdditionalCapture(_ photos: [CapturedAsset], removing photoIDs: Set<UUID>,
+                                       to garment: Garment, in context: ModelContext) async throws {
+        try Task.checkCancellation()
+        guard garment.modelContext === context,
+              photoIDs.isSubset(of: Set(garment.productPhotos.map(\.id))) else {
+            throw CameraFailure.mismatchedCapture
+        }
+        if !photos.isEmpty { try await appendCapturedPhotos(photos, to: garment, in: context) }
+        // No suspension or persistence between exclusions: the parent draft still
+        // owns Done/discard and removeProductPhoto retains every original file.
+        for id in photoIDs {
+            try GarmentStore.removeProductPhoto(id: id, from: garment, in: context, persist: { _ in })
+        }
+    }
+
     /// Detail capture returns every new photo, including overflow. Prepare all
     /// product copies before touching SwiftData so an import failure/retry can
     /// never append the first few captures twice or change existing photo order.

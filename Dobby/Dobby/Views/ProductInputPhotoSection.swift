@@ -15,6 +15,8 @@ struct ProductInputPhotoSection: View {
     @State private var showsDeletionError = false
     @State private var showsPhotoPicker = false
     @State private var showsCamera = false
+    @State private var existingCameraPhotos: [CapturedAsset] = []
+    @State private var cameraSessionID = UUID()
     @State private var pickedItems: [PhotosPickerItem] = []
     @State private var isImporting = false
     @State private var pendingPhotoCount = 0
@@ -63,12 +65,14 @@ struct ProductInputPhotoSection: View {
                       maxSelectionCount: nil, matching: .images)
         .fullScreenCover(isPresented: $showsCamera) {
             ProductInputCameraPicker(garmentID: garment.id,
-                captureSessionID: garment.measurementPhoto?.measurementSessionID, fixtureSource: fixtureCameraSource,
-                onCancel: { showsCamera = false }) { photos in
+                captureSessionID: cameraSessionID, existingPhotos: existingCameraPhotos,
+                fixtureSource: fixtureCameraSource,
+                onCancel: { showsCamera = false }) { photos, removedPhotoIDs in
                 pendingPhotoCount = photos.count
                 setImporting(true)
                 defer { setImporting(false) }
-                try await ProductPhotoImportStore.appendCapturedPhotos(photos, to: garment, in: context)
+                try await ProductPhotoImportStore.applyAdditionalCapture(photos, removing: removedPhotoIDs,
+                    to: garment, in: context)
                 showsCamera = false
             }
         }
@@ -123,6 +127,17 @@ struct ProductInputPhotoSection: View {
         isImporting = busy
     }
 
+    private func openCamera() {
+        do {
+            let sessionID = garment.measurementPhoto?.measurementSessionID ?? UUID()
+            // Snapshot once per presentation, preserving the draft's exact visible
+            // order/IDs and product-only rotations without lending file ownership.
+            existingCameraPhotos = try ProductPhotoImportStore.capturePreviewPhotos(for: garment, sessionID: sessionID)
+            cameraSessionID = sessionID
+            showsCamera = true
+        } catch { importError = error.localizedDescription }
+    }
+
     private var fixtureCameraSource: CapturedAsset.Source? {
 #if DEBUG
         guard ProductAppStorage.fixtureDirectory != nil,
@@ -151,7 +166,7 @@ struct ProductInputPhotoSection: View {
 
     private var addPhotoButton: some View {
         Menu {
-            Button("사진 촬영하기", systemImage: "camera.fill") { showsCamera = true }
+            Button("사진 촬영하기", systemImage: "camera.fill", action: openCamera)
                 .accessibilityIdentifier("product-info.take-photos")
             Button("앨범에서 선택하기", systemImage: "photo") { showsPhotoPicker = true }
         } label: {

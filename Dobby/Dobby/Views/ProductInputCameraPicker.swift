@@ -8,18 +8,19 @@ struct ProductInputCameraPicker: View {
     @State private var permission: CameraPermission
     private let previewSource: CapturedAsset.Source?
     private let onCancel: () -> Void
-    private let onComplete: ([CapturedAsset]) async throws -> Void
+    private let onComplete: ([CapturedAsset], Set<UUID>) async throws -> Void
     @State private var hasFinished = false
 
-    init(garmentID: UUID, captureSessionID: UUID? = nil, fixtureSource: CapturedAsset.Source? = nil,
+    init(garmentID: UUID, captureSessionID: UUID? = nil, existingPhotos: [CapturedAsset] = [],
+         fixtureSource: CapturedAsset.Source? = nil,
          onCancel: @escaping () -> Void,
-         onComplete: @escaping ([CapturedAsset]) async throws -> Void) {
+         onComplete: @escaping ([CapturedAsset], Set<UUID>) async throws -> Void) {
         self.onCancel = onCancel
         self.onComplete = onComplete
 #if DEBUG
         if ProductAppStorage.fixtureDirectory != nil, let fixtureSource {
             _model = State(initialValue: AdditionalProductPhotoModel(garmentID: garmentID,
-                sessionID: captureSessionID ?? UUID(),
+                sessionID: captureSessionID ?? UUID(), existingPhotos: existingPhotos,
                 captureProvider: ProductPhotoFixtureCaptureProvider(seed: fixtureSource,
                     directory: ProductAppStorage.fixtureDirectory?.appending(path: "input-captures"))))
             _permission = State(initialValue: CameraPermission(authorizer: MockCameraAuthorization()))
@@ -30,7 +31,7 @@ struct ProductInputCameraPicker: View {
 #endif
         let session = CameraPreviewSession()
         _model = State(initialValue: AdditionalProductPhotoModel(garmentID: garmentID,
-            sessionID: captureSessionID ?? UUID(), captureProvider: session))
+            sessionID: captureSessionID ?? UUID(), existingPhotos: existingPhotos, captureProvider: session))
         _camera = State(initialValue: session)
         _permission = State(initialValue: CameraPermission(authorizer: SystemCameraAuthorization()))
         previewSource = nil
@@ -44,7 +45,7 @@ struct ProductInputCameraPicker: View {
                     guard !hasFinished else { return }
                     // CameraFlowView keeps its input lock and saving overlay
                     // until every product copy has been appended successfully.
-                    try await onComplete(output.detailPhotos)
+                    try await onComplete(model.newlyCapturedPhotos, output.deletedPhotoIDs)
                     finish()
                 }
         }

@@ -9,10 +9,16 @@ protocol DetailPhotoCaptureModeling: AnyObject {
     var detailPhotos: [CapturedAsset] { get }
     var measurementRecord: SavedMeasurement? { get }
     var allPhotosOutput: ProductPhotoOutput? { get }
+    /// Borrowed product photos are browsable but must not be saved to Photos again.
+    var photosRequiringLibrarySave: [CapturedAsset] { get }
     var isCapturing: Bool { get }
     var isDeleting: Bool { get }
     var hasAcknowledgedCaptureGuide: Bool { get }
     func acknowledgeCaptureGuide()
     func captureDetail() async throws
     func deletePhoto(_ id: UUID) async throws
+}
+
+extension DetailPhotoCaptureModeling {
+    var photosRequiringLibrarySave: [CapturedAsset] { allPhotosOutput?.selectedPhotos ?? [] }
 }
