@@ -226,14 +226,14 @@ final class DetailPhotoGalleryUITests: XCTestCase {
 
     @MainActor
     private func assertInformationPhotoCount(_ app: XCUIApplication, count: Int) {
-        let header = app.staticTexts.matching(identifier: "product-info.photo-count").firstMatch
+        let header = app.descendants(matching: .any).matching(identifier: "product-info.photo-count").firstMatch
         XCTAssertTrue(header.waitForExistence(timeout: 5))
         XCTAssertEqual(header.label, "제품 사진 \(count)장, 최대 10장")
     }
 
     @MainActor
     private func informationPhotoIDs(_ app: XCUIApplication) -> [String] {
-        let countHeader = app.staticTexts.matching(identifier: "product-info.photo-count").firstMatch
+        let countHeader = app.descendants(matching: .any).matching(identifier: "product-info.photo-count").firstMatch
         guard let expectedCount = countHeader.label.split(whereSeparator: { !$0.isNumber }).first.flatMap({ Int($0) }) else {
             attachInformationDiagnostic(app, name: "product-info-photo-count-unreadable")
             XCTFail("The photo-count header must expose the actual registered count")
@@ -347,8 +347,7 @@ final class DetailPhotoGalleryUITests: XCTestCase {
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString,
                                "--garment-preview-top"]
         app.launch()
-        let start = app.buttons["product-flow.start"]
-        XCTAssertTrue(start.waitForExistence(timeout: 20)); start.tap()
+        startMeasurementFromHome(in: app)
         let measure = app.buttons["captureGarment"]
         XCTAssertTrue(measure.waitForExistence(timeout: 15))
         armSyntheticGarmentCapture(in: app)

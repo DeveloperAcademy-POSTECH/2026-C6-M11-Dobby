@@ -41,7 +41,7 @@ final class MeasurementFullZoomComparisonUITests: XCTestCase {
         let initialOtherCoordinates = try XCTUnwrap(otherPoint.value as? String)
         let initialPointSeparation = abs(otherPoint.frame.midX - point.frame.midX)
         XCTAssertTrue(initialValue.contains("cm"))
-        XCTAssertTrue(initialCoordinates.hasPrefix("x ") && initialCoordinates.contains(", y "))
+        XCTAssertNotNil(Self.measurementPhotoCoordinates(in: initialCoordinates))
         XCTAssertGreaterThan(initialLabel.width, 0)
         XCTAssertGreaterThan(initialLabel.height, 0)
         XCTAssertGreaterThan(initialPointSeparation, 0)

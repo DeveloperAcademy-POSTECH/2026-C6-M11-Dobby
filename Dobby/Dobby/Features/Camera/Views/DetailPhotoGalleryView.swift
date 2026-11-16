@@ -106,6 +106,7 @@ struct DetailPhotoGalleryView: View {
                     .accessibilityIdentifier("camera.galleryDelete")
                     .padding(.trailing, 28).offset(y: 8)
                 }
+                .accessibilityHidden(deletionTarget != nil)
         }
         .background(Color(.systemBackground).ignoresSafeArea())
         .overlayPreferenceValue(GalleryDeleteBarBounds.self) { bounds in

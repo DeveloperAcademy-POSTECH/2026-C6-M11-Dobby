@@ -13,7 +13,7 @@ final class VoiceOverFlowTests: XCTestCase {
         XCTAssertTrue(start.label.contains("실측"))
         try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
         app.tabBars.buttons["설정"].tap()
-        XCTAssertTrue(app.navigationBars["설정"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["설정"].waitForExistence(timeout: 10))
         try app.performAccessibilityAudit(for: .sufficientElementDescription)
     }
 
@@ -52,7 +52,13 @@ final class VoiceOverFlowTests: XCTestCase {
         tap(app, "camera.galleryDelete")
         XCTAssertTrue(app.buttons["camera.galleryConfirmDelete"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["camera.galleryClose"].exists)
-        XCTAssertFalse(app.buttons["camera.galleryDelete"].exists)
+        let trashHidden = app.buttons["camera.galleryDelete"].wait(for: \.exists, toEqual: false, timeout: 3)
+        if !trashHidden { XCTContext.runActivity(named: "Delete dialog accessibility tree") { activity in
+            let tree = XCTAttachment(string: app.debugDescription)
+            tree.lifetime = .keepAlways
+            activity.add(tree)
+        } }
+        XCTAssertTrue(trashHidden)
         XCTAssertFalse(app.buttons["camera.galleryThumbnail.0"].exists)
         // The existing outside-tap cancellation must still work without adding
         // a visible cancel control to the designer's popover.
@@ -94,6 +100,7 @@ final class VoiceOverFlowTests: XCTestCase {
         XCTAssertEqual(rotate.label, "사진 회전")
         XCTAssertEqual(app.buttons["product-gallery.close"].label, "닫기")
         rotate.tap()
+        XCTAssertTrue(rotate.wait(for: \.value, toEqual: "왼쪽으로 90도 회전", timeout: 10))
         XCTAssertTrue(rotate.wait(for: \.isEnabled, toEqual: true, timeout: 10))
         tap(app, "product-gallery.close")
         XCTAssertTrue(app.buttons["product-info.done"].waitForExistence(timeout: 10))
@@ -107,7 +114,7 @@ final class VoiceOverFlowTests: XCTestCase {
     }
 
     private func enterMeasurementResult(_ app: XCUIApplication) {
-        tap(app, "product-flow.start")
+        startMeasurementFromHome(in: app)
         armSyntheticGarmentCapture(in: app)
         tap(app, "captureGarment")
         let confirm = app.buttons["confirmGarmentMeasurement"]

@@ -319,7 +319,7 @@ struct MeasurementImageView: View {
                             .accessibilityAddTraits(.isButton)
                             .accessibilityAddTraits(activePointIndex == index ? .isSelected : [])
                             .accessibilityLabel(accessiblePointName(point, index: index))
-                            .accessibilityValue("\(pendingPointIDs.contains(point.id) ? "위치 확인 필요" : "위치 지정됨"). \(MeasurementPointAccessibilityText.position(displayPoint(point)))")
+                            .accessibilityValue("\(accessiblePointStatus(point)). \(MeasurementPointAccessibilityText.position(displayPoint(point)))")
                             .accessibilityHint("두 번 탭하면 현재 위치를 확정합니다. \(MeasurementPointAccessibilityText.movementHint)")
                             .accessibilityAction { confirmAccessiblePoint(displayPoint(point), index: index) }
                             .accessibilityAdjustableAction { direction in
@@ -354,6 +354,12 @@ struct MeasurementImageView: View {
     private func accessiblePointName(_ point: GarmentLandmark, index: Int) -> String {
         let title = pointTitles.indices.contains(index) ? pointTitles[index] : GarmentPointName.title(point.id)
         return "측정점 \(index == 0 ? "A" : "B"), \(title)"
+    }
+
+    private func accessiblePointStatus(_ point: GarmentLandmark) -> String {
+        let confirmed = !pendingPointIDs.contains(point.id) && point.origin == .manual
+            && point.isVisible && point.point.isValid && point.derivedFrom == nil && point.contourRule == nil
+        return confirmed ? "위치 확인 완료" : "현재 위치, 확정 필요"
     }
 
     private func confirmAccessiblePoint(_ display: ImagePoint, index: Int) {
