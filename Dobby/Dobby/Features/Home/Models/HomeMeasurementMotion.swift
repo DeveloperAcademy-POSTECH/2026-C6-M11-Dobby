@@ -34,7 +34,7 @@ nonisolated enum HomeMeasurementMotion {
     static let referenceSize = CGSize(width: 402, height: 874)
     static let maximumPull: CGFloat = 270
     static let commitThreshold: CGFloat = 87.5
-    static let idleDuration: TimeInterval = 2.25
+    static let idleDuration: TimeInterval = 2.0
     static let transitionDuration: TimeInterval = 0.65
     static let returnDuration: TimeInterval = 0.25
     static let accessiblePullDuration: TimeInterval = 0.30
@@ -63,8 +63,9 @@ nonisolated enum HomeMeasurementMotion {
         guard !reducedMotion, elapsed.isFinite else { return 0 }
         let keys: [(Double, Double)] = [
             (0, 0), (0.05, 0), (0.10, 5), (0.15, 12), (0.20, 13.5),
-            (0.30, 9), (0.45, 10.5), (0.60, 10), (1.85, 10),
-            (1.95, -1), (2.05, 0), (2.25, 0)
+            // Shorten only the hold by 250ms so the movement stays gentle.
+            (0.30, 9), (0.45, 10.5), (0.60, 10), (1.60, 10),
+            (1.70, -1), (1.80, 0), (idleDuration, 0)
         ]
         let phase = max(0, elapsed).truncatingRemainder(dividingBy: idleDuration)
         for index in 1..<keys.count where phase < keys[index].0 {

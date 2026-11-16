@@ -6,7 +6,7 @@ final class HomeMeasurementTransitionTests: XCTestCase {
     func testPrototypeDurationsAndCommitBoundaryStayIndependent() {
         XCTAssertEqual(HomeMeasurementMotion.transitionDuration, 0.65, accuracy: 0.000001)
         XCTAssertEqual(HomeMeasurementMotion.returnDuration, 0.25, accuracy: 0.000001)
-        XCTAssertEqual(HomeMeasurementMotion.idleDuration, 2.25, accuracy: 0.000001)
+        XCTAssertEqual(HomeMeasurementMotion.idleDuration, 2.0, accuracy: 0.000001)
         XCTAssertEqual(HomeMeasurementMotion.accessiblePullDuration, 0.30, accuracy: 0.000001)
         XCTAssertFalse(HomeMeasurementMotion.shouldCommit(pull: 87.5 - 0.001))
         XCTAssertTrue(HomeMeasurementMotion.shouldCommit(pull: 87.5))
@@ -44,13 +44,14 @@ final class HomeMeasurementTransitionTests: XCTestCase {
         }
     }
 
-    func testIdleArrowKeepsThePrototypeKeyframesAndStopsForReducedMotion() {
+    func testIdleArrowKeepsMovementKeyframesWithAShorterHoldAndStopsForReducedMotion() {
         let samples: [(TimeInterval, CGFloat)] = [
-            (0, 0), (0.10, 5), (0.20, 13.5), (0.60, 10), (1.85, 10), (1.95, -1), (2.05, 0)
+            (0, 0), (0.10, 5), (0.20, 13.5), (0.60, 10), (1.60, 10),
+            (1.70, -1), (1.80, 0), (1.99, 0), (2.0, 0)
         ]
         for (time, offset) in samples {
             XCTAssertEqual(HomeMeasurementMotion.idleArrowOffset(elapsed: time), offset, accuracy: 0.000001)
-            XCTAssertEqual(HomeMeasurementMotion.idleArrowOffset(elapsed: time + 2.25), offset, accuracy: 0.000001)
+            XCTAssertEqual(HomeMeasurementMotion.idleArrowOffset(elapsed: time + 2.0), offset, accuracy: 0.000001)
             XCTAssertEqual(HomeMeasurementMotion.idleArrowOffset(elapsed: time, reducedMotion: true), 0)
         }
         XCTAssertEqual(HomeMeasurementMotion.idleArrowOffset(elapsed: .nan), 0)
