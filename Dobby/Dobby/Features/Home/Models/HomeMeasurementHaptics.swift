@@ -15,19 +15,19 @@ final class HomeMeasurementHaptics {
     private static let pullSpacing: CGFloat = 6
     private static let minimumInterval: TimeInterval = 0.035
     private static let rollingPulses: [Pulse] = [
-        .init(offset: 0, intensity: 0.72),
-        .init(offset: 0.040, intensity: 0.65),
-        .init(offset: 0.085, intensity: 0.58),
-        .init(offset: 0.135, intensity: 0.50),
-        .init(offset: 0.190, intensity: 0.42),
-        .init(offset: 0.250, intensity: 0.34),
-        .init(offset: 0.315, intensity: 0.27),
-        .init(offset: 0.385, intensity: 0.21),
-        .init(offset: 0.460, intensity: 0.15),
-        .init(offset: 0.540, intensity: 0.09)
+        .init(offset: 0, intensity: 1.0),
+        .init(offset: 0.040, intensity: 0.92),
+        .init(offset: 0.085, intensity: 0.84),
+        .init(offset: 0.135, intensity: 0.76),
+        .init(offset: 0.190, intensity: 0.68),
+        .init(offset: 0.250, intensity: 0.60),
+        .init(offset: 0.315, intensity: 0.52),
+        .init(offset: 0.385, intensity: 0.43),
+        .init(offset: 0.460, intensity: 0.33),
+        .init(offset: 0.540, intensity: 0.22)
     ]
 
-    private lazy var feedback = UIImpactFeedbackGenerator(style: .light)
+    private lazy var feedback = UIImpactFeedbackGenerator(style: .medium)
     private var phase = Phase.idle
     private var lastCrossedPull: CGFloat = 0
     private var lastImpactTime: CFTimeInterval = -.infinity
@@ -54,7 +54,7 @@ final class HomeMeasurementHaptics {
         // Consume this crossing even when rate-limited. Identical/nearby input
         // cannot emit a delayed duplicate after the 35ms interval has elapsed.
         lastCrossedPull = pull
-        emit(intensity: 0.42)
+        emit(intensity: 0.80)
     }
 
     /// Commit once per gesture. The independent rolling tail ends within 650ms,
