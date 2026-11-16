@@ -20,7 +20,9 @@
 	<key>InstagramAppAPIKey</key>
 	<string>$(DOBBY_INSTAGRAM_APP_API_KEY)</string>
 	<key>InstagramBackendBaseURL</key>
-	<string>$(INSTAGRAM_BACKEND_BASE_URL)</string>
+	<string>$(INSTAGRAM_WORKER_BASE_URL)</string>
+	<key>InstagramWorkerAppAPIKey</key>
+	<string>$(INSTAGRAM_WORKER_APP_API_KEY)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
