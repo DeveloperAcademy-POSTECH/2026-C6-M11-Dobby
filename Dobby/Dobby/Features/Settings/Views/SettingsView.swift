@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    var onConnectedAccountsVisibilityChange: (Bool) -> Void = { _ in }
     @Environment(\.openURL) private var openURL
     @State private var message: String?
 
@@ -11,7 +12,8 @@ struct SettingsView: View {
 
             SettingsContent(
                 onPrivacyPolicy: openPrivacyPolicy,
-                onSupportMail: openSupportMail
+                onSupportMail: openSupportMail,
+                onConnectedAccountsVisibilityChange: onConnectedAccountsVisibilityChange
             )
             .padding(.top, 29)
             .padding(.bottom, 24)

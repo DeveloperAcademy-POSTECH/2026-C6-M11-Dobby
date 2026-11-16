@@ -4,7 +4,6 @@ import UIKit
 import ImageIO
 
 struct ContentView: View {
-    private enum HomeTab: Hashable { case capture, library, settings }
     private struct CreationRequest: Identifiable {
         let id = UUID()
         let productID: UUID?
@@ -14,9 +13,10 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
-    @State private var tab: HomeTab = .capture
+    @State private var tab: MainTab = .capture
     @State private var libraryPath: [UUID] = []
     @State private var libraryIsEditing = false
+    @State private var settingsHidesTabBar = false
     @State private var creationRequest: CreationRequest?
     @State private var creationCopyHomeProduct: ExportProduct?
     @State private var showLiDAR = false
@@ -41,8 +41,38 @@ struct ContentView: View {
 #endif
 
     var body: some View {
+        GeometryReader { geometry in
+            mainContent
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if showsMainTabBar {
+                        MainTabBar(selection: $tab)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 16)
+                            // Figma's 25pt inset includes the home-indicator area.
+                            .padding(.bottom, 25 - geometry.safeAreaInsets.bottom)
+                    }
+                }
+        }
+        .allowsHitTesting(editingAutofillLoadingPresentation == nil)
+        .accessibilityHidden(editingAutofillLoadingPresentation != nil)
+        .overlay {
+            if let presentation = editingAutofillLoadingPresentation {
+                ProductAutofillLoadingView(onCancel: presentation.onCancel)
+            }
+        }
+    }
+
+    private var showsMainTabBar: Bool {
+        switch tab {
+        case .capture: true
+        case .library: libraryPath.isEmpty
+        case .settings: !settingsHidesTabBar
+        }
+    }
+
+    private var mainContent: some View {
         TabView(selection: $tab) {
-            Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: HomeTab.capture) {
+            Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: MainTab.capture) {
                 HomeView(resumeCandidate: HomeResumeCandidate.latest(in: garments),
                     onResumeDraft: { startCreation(resuming: $0) },
                     onStartCapture: { startCreation() },
@@ -50,6 +80,7 @@ struct ContentView: View {
                     onBeginMeasurementTransition: startHomeMeasurementTransition,
                     measurementHaptics: homeMeasurementHaptics)
                     .id(homeMeasurementIdentity)
+                    .toolbar(.hidden, for: .tabBar)
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
                         if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
@@ -64,7 +95,7 @@ struct ContentView: View {
                     }
 #endif
             }
-            Tab("보관함", systemImage: "hanger", value: HomeTab.library) {
+            Tab("보관함", systemImage: "hanger", value: MainTab.library) {
                 NavigationStack(path: $libraryPath) {
                     ProductLibraryView(garments: garments, isEditing: $libraryIsEditing,
                         onStartMeasurement: { startCreation() },
@@ -91,27 +122,22 @@ struct ContentView: View {
                 }
                 .tint(libraryPath.isEmpty
                     ? LibraryStyle.primary : Color("HomeAccent"))
+                .toolbar(.hidden, for: .tabBar)
             }
-            Tab("설정", systemImage: "gearshape.fill", value: HomeTab.settings) {
+            Tab("설정", systemImage: "gearshape.fill", value: MainTab.settings) {
                 NavigationStack {
-                    SettingsView()
+                    SettingsView(onConnectedAccountsVisibilityChange: { settingsHidesTabBar = $0 })
                 }
+                .toolbar(.hidden, for: .tabBar)
             }
         }
-        .tint(Color("BrandNeutralBlack"))
+        .tint(Color.primary)
         .background { HomeMeasurementSnapshotAnchor(source: homeSnapshotSource).allowsHitTesting(false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if ProductAppStorage.fixtureDirectory != nil {
                 Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
                     .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
                     .allowsHitTesting(false)
-            }
-        }
-        .allowsHitTesting(editingAutofillLoadingPresentation == nil)
-        .accessibilityHidden(editingAutofillLoadingPresentation != nil)
-        .overlay {
-            if let presentation = editingAutofillLoadingPresentation {
-                ProductAutofillLoadingView(onCancel: presentation.onCancel)
             }
         }
         .fullScreenCover(item: $creationRequest) { request in
