@@ -24,6 +24,7 @@ struct DetailPhotoFilmstrip<Thumbnail: View>: View {
                 }
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: focusedID)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: ids)
             .padding(.horizontal, max(0, (width - step) / 2))
         }
         .scrollPosition($position)
@@ -44,9 +45,13 @@ struct DetailPhotoFilmstrip<Thumbnail: View>: View {
             if isUserScrolling { focus(at: index) }
         }
         .onChange(of: width, initial: true) { _, _ in align(animated: false) }
-        .onChange(of: ids) { _, _ in
+        .onChange(of: ids) { previousIDs, _ in
             isUserScrolling = false
-            align(animated: false)
+            if let selection = DetailPhotoGalleryPageSelection(focusedID: focusedID,
+                currentID: focusedID, previousIDs: previousIDs, ids: ids), selection.id != focusedID {
+                focusedID = selection.id
+            }
+            align(animated: true)
         }
         .onChange(of: focusedID) { _, _ in
             if !isUserScrolling { align(animated: true) }

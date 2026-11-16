@@ -293,9 +293,9 @@ struct CameraFlowView: View {
 
     private var completionLabel: some View {
         Text("다음")
-            .font(.body.weight(.semibold)).foregroundStyle(.white)
+            .font(.body.weight(.semibold)).foregroundStyle(.primary)
             .frame(width: 76, height: ProductCreationHeaderLayout.toolbarHeight)
-            .glassEffect(.regular.tint(Color(red: 0.94, green: 0.24, blue: 0.07)).interactive(), in: Capsule())
+            .glassEffect(.regular.interactive(), in: Capsule())
             .contentShape(.interaction, Capsule())
     }
 
