@@ -170,7 +170,7 @@ struct InstagramExportView: View {
         let coversBottom = frameInWindow.intersects(window.bounds)
             && frameInWindow.maxY >= window.bounds.maxY
             && frameInWindow.minY < window.bounds.maxY - deviceBottomInset
-        keyboardButtonBottomPadding = coversBottom ? deviceBottomInset : 0
+        keyboardButtonBottomPadding = coversBottom ? 16 : 0
     }
 
     private func dismissKeyboard() {
