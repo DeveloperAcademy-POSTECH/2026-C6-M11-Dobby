@@ -228,8 +228,7 @@ private struct Cafe24ConnectionCompletionView: View {
                 title: "업로드하러 가기",
                 accessibilityIdentifier: "export.cafe24.continueToUpload",
                 action: onContinueToUpload
-            ),
-            primaryFontSize: 17
+            )
         )
     }
 }
