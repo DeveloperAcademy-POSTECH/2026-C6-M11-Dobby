@@ -161,6 +161,11 @@ extension Garment {
         return ExportChannel.availableCases.filter { selected.contains($0.rawValue) || hasExported(to: $0) }
     }
 
+    /// 실제 업로드 성공 이력이 있는 채널만 보관함 배지로 표시한다.
+    var completedExportChannels: [ExportChannel] {
+        ExportChannel.availableCases.filter { hasExported(to: $0) }
+    }
+
     /// 실측에 쓴 사진. 「지점 다시 잡기」 화면이 이 사진과 그 점들을 연다.
     var measurementPhoto: GarmentPhoto? {
         photos.first(where: \.isMeasurementSource)

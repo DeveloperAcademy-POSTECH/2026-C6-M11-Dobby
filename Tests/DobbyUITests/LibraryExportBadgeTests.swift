@@ -4,7 +4,7 @@ import XCTest
 /// It never starts a copy helper or opens an external platform.
 @MainActor
 final class LibraryExportBadgeTests: XCTestCase {
-    func testFruitsSelectionsAddOneBadgeToTheSavedProductAndSurviveRelaunch() {
+    func testPlatformSelectionsDoNotCreateCompletedUploadBadgesAfterRelaunch() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
@@ -29,7 +29,7 @@ final class LibraryExportBadgeTests: XCTestCase {
         export.tap()
         XCTAssertTrue(app.buttons["export.close"].waitForExistence(timeout: 10))
 
-        // Repeated visits must still create only one platform badge. Do not
+        // Visiting a platform does not confirm a completed upload. Do not
         // save photos, start PiP or open the external platform in this test.
         for _ in 0..<2 {
             let fruits = app.buttons["후르츠패밀리에 업로드하기"]
@@ -44,20 +44,19 @@ final class LibraryExportBadgeTests: XCTestCase {
         XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.tabBars.buttons["홈"].isSelected)
         app.tabBars.buttons["보관함"].tap()
-        assertOnlyFruitsBadge(on: app.buttons[cardID])
+        assertNoCompletedUploadBadges(on: app.buttons[cardID])
 
         app.terminate()
         app.launch()
         app.tabBars.buttons["보관함"].tap()
-        assertOnlyFruitsBadge(on: app.buttons[cardID])
+        assertNoCompletedUploadBadges(on: app.buttons[cardID])
     }
 
-    private func assertOnlyFruitsBadge(on card: XCUIElement, file: StaticString = #filePath,
+    private func assertNoCompletedUploadBadges(on card: XCUIElement, file: StaticString = #filePath,
                                      line: UInt = #line) {
         XCTAssertTrue(card.waitForExistence(timeout: 10), file: file, line: line)
-        XCTAssertTrue(card.label.contains("선택한 내보내기 플랫폼"), file: file, line: line)
-        XCTAssertEqual(card.label.components(separatedBy: "후루츠패밀리로 내보내기").count - 1, 1,
-                       file: file, line: line)
+        XCTAssertFalse(card.label.contains("업로드 완료 플랫폼"), file: file, line: line)
+        XCTAssertFalse(card.label.contains("후루츠패밀리로 내보내기"), file: file, line: line)
         XCTAssertFalse(card.label.contains("Instagram으로 내보내기"), file: file, line: line)
         XCTAssertFalse(card.label.contains("카페24로 내보내기"), file: file, line: line)
         XCTAssertFalse(card.label.contains("네이버스토어로 내보내기"), file: file, line: line)
