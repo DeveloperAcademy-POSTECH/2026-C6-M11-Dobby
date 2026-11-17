@@ -3,8 +3,7 @@ main = "src/index.js"
 compatibility_date = "2026-09-01"
 
 [vars]
-SHOWCASE_MALL_ID = "dobbyisvintage"
-SHOWCASE_DISPLAY_GROUP = "1"
+DEFAULT_DISPLAY_GROUP = "1"
 
 [[kv_namespaces]]
 binding = "CAFE24_TOKENS"

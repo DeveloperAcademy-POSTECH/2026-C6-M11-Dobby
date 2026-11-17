@@ -68,7 +68,7 @@ test("첫 사진을 대표 이미지로 연결하고 나머지만 추가 이미�
     if (path.endsWith("/products/images")) {
       return Response.json({ images: [{ path: "/uploaded/first.jpg" }] });
     }
-    if (path.endsWith("/products")) {
+    if (path === "/api/v2/admin/products") {
       return Response.json({ product: { product_no: 358 } });
     }
     return Response.json({});
@@ -123,10 +123,10 @@ test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중
       imageUploads += 1;
       return Response.json({ images: [{ path: "/uploaded/first.jpg" }] });
     }
-    if (path.endsWith("/products") && options.method === "GET") {
+    if (path === "/api/v2/admin/products" && options.method === "GET") {
       return Response.json({ products: [] });
     }
-    if (path.endsWith("/products") && options.method === "POST") {
+    if (path === "/api/v2/admin/products" && options.method === "POST") {
       productCreates += 1;
       const body = JSON.parse(options.body);
       assert.equal(body.request.custom_product_code, "550e8400-e29b-41d4-a716-446655440000");
@@ -141,6 +141,9 @@ test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중
       if (additionalAttaches === 1) {
         return Response.json({ message: "temporary failure" }, { status: 500 });
       }
+      return Response.json({});
+    }
+    if (options.method === "PUT" || path.endsWith("/mains/1/products")) {
       return Response.json({});
     }
     assert.fail(`예상하지 못한 카페24 API 호출: ${path}`);
@@ -166,10 +169,8 @@ test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중
   assert.equal((await retryResponse.json()).productNo, 358);
 });
 
-test("쇼케이스 몰은 이미지 등록 완료 후 상품을 공개하고 메인에 진열한다", async t => {
+test("연결된 몰은 이미지 등록 완료 후 상품을 공개하고 메인에 진열한다", async t => {
   const environment = makeEnvironment();
-  environment.SHOWCASE_MALL_ID = "dobbyisvintage";
-  environment.SHOWCASE_DISPLAY_GROUP = "1";
   const calls = [];
   t.mock.method(globalThis, "fetch", async (url, options) => {
     const path = new URL(url).pathname;
@@ -178,7 +179,7 @@ test("쇼케이스 몰은 이미지 등록 완료 후 상품을 공개하고 메
     if (path.endsWith("/products/images")) {
       return Response.json({ images: [{ path: "/uploaded/first.jpg" }] });
     }
-    if (path.endsWith("/products") && options.method === "POST") {
+    if (path === "/api/v2/admin/products" && options.method === "POST") {
       return Response.json({ product: { product_no: 358 } });
     }
     return Response.json({});
