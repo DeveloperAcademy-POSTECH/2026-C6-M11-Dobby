@@ -34,6 +34,6 @@ enum MainTab: Hashable {
             }
             caption.draw(at: CGPoint(x: (canvas.width - caption.size().width) / 2, y: iconHeight))
         }
-        return Image(uiImage: artwork).renderingMode(.original)
+        return Image(uiImage: artwork.withRenderingMode(.alwaysOriginal)).renderingMode(.original)
     }
 }
