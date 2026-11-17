@@ -107,3 +107,59 @@ test("대표 이미지 경로가 없으면 상품을 생성하지 않는다", as
   assert.equal(response.status, 500);
   assert.deepEqual(paths, ["/api/v2/admin/products/images"]);
 });
+
+test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중복 생성하지 않는다", async t => {
+  const environment = makeEnvironment();
+  let imageUploads = 0;
+  let productCreates = 0;
+  let representativeAttaches = 0;
+  let additionalAttaches = 0;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    const parsedURL = new URL(url);
+    const path = parsedURL.pathname;
+    if (path.endsWith("/products/images")) {
+      imageUploads += 1;
+      return Response.json({ images: [{ path: "/uploaded/first.jpg" }] });
+    }
+    if (path.endsWith("/products") && options.method === "GET") {
+      return Response.json({ products: [] });
+    }
+    if (path.endsWith("/products") && options.method === "POST") {
+      productCreates += 1;
+      const body = JSON.parse(options.body);
+      assert.equal(body.request.custom_product_code, "550e8400-e29b-41d4-a716-446655440000");
+      return Response.json({ product: { product_no: 358 } });
+    }
+    if (path.endsWith("/images")) {
+      representativeAttaches += 1;
+      return Response.json({});
+    }
+    if (path.endsWith("/additionalimages")) {
+      additionalAttaches += 1;
+      if (additionalAttaches === 1) {
+        return Response.json({ message: "temporary failure" }, { status: 500 });
+      }
+      return Response.json({});
+    }
+    assert.fail(`예상하지 못한 카페24 API 호출: ${path}`);
+  });
+
+  const body = {
+    requestID: "550E8400-E29B-41D4-A716-446655440000",
+    productName: "빈티지 재킷",
+    description: "테스트 상품",
+    price: 50000,
+    supplyPrice: 50000,
+    imagesBase64: ["first-image", "second-image"],
+  };
+  const firstResponse = await worker.fetch(await connectedRequest(body, environment), environment);
+  const retryResponse = await worker.fetch(await connectedRequest(body, environment), environment);
+
+  assert.equal(firstResponse.status, 500);
+  assert.equal(retryResponse.status, 201);
+  assert.equal(imageUploads, 1);
+  assert.equal(productCreates, 1);
+  assert.equal(representativeAttaches, 1);
+  assert.equal(additionalAttaches, 2);
+  assert.equal((await retryResponse.json()).productNo, 358);
+});

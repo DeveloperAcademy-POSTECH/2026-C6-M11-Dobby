@@ -138,45 +138,103 @@ async function createProduct(request, env) {
       || imagesBase64.some((image) => typeof image !== "string" || !image)) {
     return json({ error: "invalid_images", message: "상품 사진은 1장 이상 20장 이하로 등록해 주세요." }, 400);
   }
+  const requestID = typeof input.requestID === "string" ? input.requestID.toLowerCase() : null;
+  if (requestID && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestID)) {
+    return json({ error: "invalid_request_id", message: "업로드 요청 정보를 확인해 주세요." }, 400);
+  }
+  const deviceKey = requestID ? await tokenKey(bearer(request)) : null;
+  const uploadKey = requestID ? `upload:${token.mall_id}:${deviceKey}:${requestID}` : null;
+  const fingerprint = requestID ? await productFingerprint(input, imagesBase64) : null;
+  let progress = uploadKey ? await readUploadProgress(env, uploadKey) : null;
+  if (progress?.fingerprint && progress.fingerprint !== fingerprint) {
+    return json({ error: "request_conflict", message: "같은 업로드 요청의 상품 정보가 변경되었습니다." }, 409);
+  }
+  if (progress?.completed) {
+    return json({ productNo: progress.productNo, mallID: token.mall_id });
+  }
+  progress ||= { fingerprint, productNo: null, representativeAttached: false, additionalAttached: false };
+
   let imagePath = null;
-  if (imagesBase64.length) {
+  if (!progress.productNo || !progress.representativeAttached) {
     const uploaded = await cafe24API(token, env, "/api/v2/admin/products/images", "POST", {
       requests: [{ image: imagesBase64[0] }],
     });
     imagePath = uploaded.images?.[0]?.path || uploaded.image?.path || null;
     if (!imagePath) throw new Error("카페24가 대표 이미지 경로를 반환하지 않았습니다.");
   }
-  const created = await cafe24API(token, env, "/api/v2/admin/products", "POST", {
-    shop_no: 1,
-    request: {
+
+  if (!progress.productNo && requestID) {
+    progress.productNo = await findProductNumber(token, env, requestID);
+  }
+  if (!progress.productNo) {
+    const productRequest = {
       product_name: input.productName,
       supply_price: String(input.supplyPrice ?? input.price),
       price: String(input.price),
       display: "F", selling: "F", has_option: "F",
       summary_description: plainText(input.description).slice(0, 255),
       description: html(input.description),
-    },
-  });
-  const product = created.product || created.products?.[0];
-  if (!product?.product_no) throw new Error("카페24가 생성된 상품번호를 반환하지 않았습니다.");
-  if (imagePath) {
-    await cafe24API(token, env, `/api/v2/admin/products/${product.product_no}/images`, "POST", {
+    };
+    if (requestID) productRequest.custom_product_code = requestID;
+    const created = await cafe24API(token, env, "/api/v2/admin/products", "POST", {
+      shop_no: 1,
+      request: productRequest,
+    });
+    const product = created.product || created.products?.[0];
+    if (!product?.product_no) throw new Error("카페24가 생성된 상품번호를 반환하지 않았습니다.");
+    progress.productNo = product.product_no;
+    await writeUploadProgress(env, uploadKey, progress);
+  }
+  if (!progress.representativeAttached) {
+    await cafe24API(token, env, `/api/v2/admin/products/${progress.productNo}/images`, "POST", {
       shop_no: 1,
       request: {
         image_upload_type: "A",
         detail_image: imagePath,
       },
     });
+    progress.representativeAttached = true;
+    await writeUploadProgress(env, uploadKey, progress);
   }
-  if (imagesBase64.length > 1) {
-    await cafe24API(token, env, `/api/v2/admin/products/${product.product_no}/additionalimages`, "POST", {
+  if (imagesBase64.length > 1 && !progress.additionalAttached) {
+    await cafe24API(token, env, `/api/v2/admin/products/${progress.productNo}/additionalimages`, "POST", {
       shop_no: 1,
       request: {
         additional_image: imagesBase64.slice(1),
       },
     });
+    progress.additionalAttached = true;
+    await writeUploadProgress(env, uploadKey, progress);
   }
-  return json({ productNo: product.product_no, mallID: token.mall_id }, 201);
+  progress.completed = true;
+  await writeUploadProgress(env, uploadKey, progress);
+  return json({ productNo: progress.productNo, mallID: token.mall_id }, 201);
+}
+
+async function findProductNumber(token, env, requestID) {
+  const query = new URLSearchParams({ custom_product_code: requestID, fields: "product_no,custom_product_code" });
+  const result = await cafe24API(token, env, `/api/v2/admin/products?${query}`, "GET");
+  const products = result.products || (result.product ? [result.product] : []);
+  return products.find(product => product.custom_product_code?.toLowerCase() === requestID)?.product_no || null;
+}
+
+async function productFingerprint(input, imagesBase64) {
+  return sha256Base64URL(JSON.stringify({
+    productName: input.productName,
+    description: input.description || "",
+    price: input.price,
+    supplyPrice: input.supplyPrice ?? input.price,
+    imagesBase64,
+  }));
+}
+
+async function readUploadProgress(env, key) {
+  const value = key && await env.CAFE24_TOKENS.get(key);
+  return value ? JSON.parse(value) : null;
+}
+
+async function writeUploadProgress(env, key, progress) {
+  if (key) await env.CAFE24_TOKENS.put(key, JSON.stringify(progress), { expirationTtl: 86400 });
 }
 
 async function storedConnection(request, env, required) {

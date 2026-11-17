@@ -32,6 +32,7 @@ struct Cafe24ExportView: View {
     @State private var isDisconnecting = false
     @State private var message: String?
     @State private var isConfirmingRepublish = false
+    @State private var uploadRequestID = UUID()
 
     init(
         product: ExportProduct,
@@ -119,7 +120,10 @@ struct Cafe24ExportView: View {
         .task { await loadStatus() }
         .confirmationDialog("상품을 한 번 더 올릴까요?", isPresented: $isConfirmingRepublish,
                             titleVisibility: .visible) {
-            Button("다시 업로드하기") { Task { await publish() } }
+            Button("다시 업로드하기") {
+                uploadRequestID = UUID()
+                Task { await publish() }
+            }
             Button("취소", role: .cancel) {}
         } message: {
             Text("다시 업로드하면 같은 쇼핑몰에 새 상품이 추가됩니다.")
@@ -178,6 +182,7 @@ struct Cafe24ExportView: View {
         uploadState = .uploading
         do {
             let result = try await client.publish(
+                requestID: uploadRequestID.uuidString,
                 productName: draft.productName,
                 description: draft.productDescription,
                 price: price,

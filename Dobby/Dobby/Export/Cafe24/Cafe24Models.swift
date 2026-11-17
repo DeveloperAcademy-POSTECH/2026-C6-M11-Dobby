@@ -94,6 +94,7 @@ enum Cafe24IntegrationError: LocalizedError {
 }
 
 struct Cafe24PublishRequest: Encodable {
+    let requestID: String
     let productName: String
     let description: String
     let price: Int
