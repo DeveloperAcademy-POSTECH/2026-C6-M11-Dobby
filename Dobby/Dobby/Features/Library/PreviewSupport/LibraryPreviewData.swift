@@ -32,9 +32,9 @@ enum LibraryPreviewData {
                     name: item.name, brand: item.brand, price: item.price)
                 context.insert(garment)
                 try GarmentStore.addPhoto(image, to: garment, role: .thumbnail)
-                garment.selectedExportChannelRawValues = [
+                garment.exports = [
                     ExportChannel.instagram, .cafe24, .fruitsFamily
-                ].map(\.rawValue)
+                ].map { ExportRecord(channel: $0, succeeded: true) }
                 let date = timestamp.addingTimeInterval(-Double(index))
                 garment.createdAt = date
                 garment.updatedAt = date

@@ -85,7 +85,7 @@ struct ProductLibraryCard: View {
     }
 
     private var platformBadges: some View {
-        let channels = garment.selectedExportChannels
+        let channels = garment.completedExportChannels
         return HStack(spacing: -4) {
             ForEach(Array(channels.enumerated()), id: \.element) { index, channel in
                 Image(channel.libraryBadgeAssetName)
@@ -99,7 +99,7 @@ struct ProductLibraryCard: View {
         .frame(maxWidth: .infinity, minHeight: 22, maxHeight: 22, alignment: .leading)
         .padding(.vertical, 4)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("선택한 내보내기 플랫폼: " + channels.map(\.title).joined(separator: ", "))
+        .accessibilityLabel("업로드 완료 플랫폼: " + channels.map(\.title).joined(separator: ", "))
         .accessibilityIdentifier("library.platforms.\(garment.id.uuidString)")
         .accessibilityHidden(channels.isEmpty)
     }
@@ -116,8 +116,8 @@ struct ProductLibraryCard: View {
         if showsDraftPlaceholders, let draft = garment.creationDraft {
             values.append("임시저장, 현재 \(draft.step.title)")
         }
-        if !garment.selectedExportChannels.isEmpty {
-            values.append("선택한 내보내기 플랫폼: " + garment.selectedExportChannels.map(\.title).joined(separator: ", "))
+        if !garment.completedExportChannels.isEmpty {
+            values.append("업로드 완료 플랫폼: " + garment.completedExportChannels.map(\.title).joined(separator: ", "))
         }
         if let registrationDateText {
             values.append((showsDraftPlaceholders ? "임시저장일: " : "최초 등록일: ") + registrationDateText)

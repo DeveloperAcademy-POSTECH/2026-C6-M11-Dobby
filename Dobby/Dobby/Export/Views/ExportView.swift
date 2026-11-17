@@ -56,16 +56,12 @@ struct ExportView: View {
                     onRequestExit: requestExit,
                     onUploadingChanged: { isCafe24Uploading = $0 }
                 ) { _ in
-                    completedChannels.insert(.cafe24)
-                    try? ExportCompletionRecorder.record(productID: product.id, channel: .cafe24,
-                                                         in: modelContext)
+                    recordCompletion(for: .cafe24)
                 }
             }
             .navigationDestination(isPresented: $showInstagram) {
                 InstagramExportView(product: product, onRequestExit: requestExit) { _ in
-                    completedChannels.insert(.instagram)
-                    try? ExportCompletionRecorder.record(productID: product.id, channel: .instagram,
-                                                         in: modelContext)
+                    recordCompletion(for: .instagram)
                 }
             }
         }
@@ -117,6 +113,15 @@ struct ExportView: View {
             showFruits = true
         case .naverStore:
             break
+        }
+    }
+
+    private func recordCompletion(for channel: ExportChannel) {
+        completedChannels.insert(channel)
+        do {
+            try ExportCompletionRecorder.record(productID: product.id, channel: channel, in: modelContext)
+        } catch {
+            selectionSaveError = "업로드는 완료됐지만 보관함에 업로드 기록을 저장하지 못했어요.\n\(error.localizedDescription)"
         }
     }
 
