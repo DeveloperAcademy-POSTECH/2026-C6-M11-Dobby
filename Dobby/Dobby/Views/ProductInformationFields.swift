@@ -163,22 +163,10 @@ private struct ProductFieldEditor: View {
     @ScaledMetric(relativeTo: .subheadline) private var fontSize: CGFloat = 15
 
     var body: some View {
-        if isMultiline && usesEditingLayout {
-            DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: true,
-                                contentHeight: nil, accessibilityTitle: accessibilityTitle,
-                                accessibilityHelp: accessibilityHelp, accessibilityID: accessibilityID)
-                .focused(focus, equals: focusValue)
-                .frame(height: 172)
-                .overlay(alignment: .topLeading) {
-                    if text.isEmpty {
-                        prompt
-                            .allowsHitTesting(false).accessibilityHidden(true)
-                    }
-                }
-        } else if isMultiline {
-            DescriptionTextView(text: $text, fontSize: fontSize, isScrollEnabled: false,
-                                contentHeight: $descriptionHeight, accessibilityTitle: accessibilityTitle,
-                                accessibilityHelp: accessibilityHelp, accessibilityID: accessibilityID)
+        if isMultiline {
+            DescriptionTextView(text: $text, fontSize: fontSize, contentHeight: $descriptionHeight,
+                                accessibilityTitle: accessibilityTitle, accessibilityHelp: accessibilityHelp,
+                                accessibilityID: accessibilityID)
                 .focused(focus, equals: focusValue)
                 .frame(height: descriptionHeight, alignment: .topLeading)
                 .overlay(alignment: .topLeading) {
@@ -216,13 +204,11 @@ private struct ProductFieldEditor: View {
 
 }
 
-/// Applies consistent typography to UIKit text editing. The registration field
-/// expands and reports its caret, while the saved-product editor keeps scrolling.
+/// The description grows with its text. The enclosing form scrolls to reveal the caret.
 private struct DescriptionTextView: UIViewRepresentable {
     @Binding var text: String
     let fontSize: CGFloat
-    let isScrollEnabled: Bool
-    let contentHeight: Binding<CGFloat>?
+    @Binding var contentHeight: CGFloat
     let accessibilityTitle: String
     let accessibilityHelp: String
     let accessibilityID: String
@@ -232,7 +218,7 @@ private struct DescriptionTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
         view.delegate = context.coordinator
-        view.isScrollEnabled = isScrollEnabled
+        view.isScrollEnabled = false
         view.backgroundColor = .clear
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
@@ -249,23 +235,16 @@ private struct DescriptionTextView: UIViewRepresentable {
         view.accessibilityLabel = accessibilityTitle
         view.accessibilityHint = accessibilityHelp
         view.accessibilityIdentifier = accessibilityID
-        view.isScrollEnabled = isScrollEnabled
         guard view.markedTextRange == nil else { return }
         let attributes = textAttributes
         if view.text != text || context.coordinator.appliedFontSize != fontSize {
             let selection = view.selectedRange
-            let offset = view.contentOffset
             view.attributedText = NSAttributedString(string: text, attributes: attributes)
             view.selectedRange = NSRange(location: min(selection.location, view.text.utf16.count), length: 0)
-            if isScrollEnabled {
-                view.setContentOffset(offset, animated: false)
-            }
             context.coordinator.appliedFontSize = fontSize
         }
         view.typingAttributes = attributes
-        if !isScrollEnabled {
-            context.coordinator.updateLayout(in: view)
-        }
+        context.coordinator.updateLayout(in: view)
     }
 
     private var textAttributes: [NSAttributedString.Key: Any] {
@@ -313,38 +292,32 @@ private struct DescriptionTextView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
-            if !parent.isScrollEnabled {
-                updateLayout(in: textView, reason: "text-change")
-            }
+            updateLayout(in: textView, reason: "text-change")
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             textView.typingAttributes = parent.textAttributes
-            if !parent.isScrollEnabled {
-                updateLayout(in: textView, reason: "selection-change")
-            }
+            updateLayout(in: textView, reason: "selection-change")
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
-            if !parent.isScrollEnabled {
-                updateLayout(in: textView, reason: "begin-editing")
-            }
+            updateLayout(in: textView, reason: "begin-editing")
         }
 
         func updateLayout(in textView: UITextView, reason: String = "layout-update") {
             Task { @MainActor [weak self, weak textView] in
                 await Task.yield()
-                guard let self, let textView, let selection = textView.selectedTextRange else { return }
+                guard let self, let textView else { return }
                 textView.layoutIfNeeded()
                 let width = textView.bounds.width
                 var heightChanged = false
-                if width > 0, let contentHeight = parent.contentHeight {
+                if width > 0 {
                     let fittingHeight = ceil(textView.sizeThatFits(
                         CGSize(width: width, height: .greatestFiniteMagnitude)
                     ).height)
                     let height = max(172, fittingHeight)
-                    if abs(contentHeight.wrappedValue - height) > 0.5 {
-                        contentHeight.wrappedValue = height
+                    if abs(parent.contentHeight - height) > 0.5 {
+                        parent.contentHeight = height
                         heightChanged = true
                     }
                 }
@@ -352,7 +325,9 @@ private struct DescriptionTextView: UIViewRepresentable {
                     await Task.yield()
                     textView.window?.layoutIfNeeded()
                 }
-                revealCaret(selection.end, in: textView, reason: reason)
+                if let selection = textView.selectedTextRange {
+                    revealCaret(selection.end, in: textView, reason: reason)
+                }
             }
         }
 
@@ -361,21 +336,25 @@ private struct DescriptionTextView: UIViewRepresentable {
                 return
             }
             keyboardFrame = frame
-            guard let textView, textView.isFirstResponder, !parent.isScrollEnabled else { return }
+            guard let textView, textView.isFirstResponder else { return }
             updateLayout(in: textView, reason: "keyboard-change")
         }
 
         @MainActor
         private func revealCaret(_ position: UITextPosition, in textView: UITextView, reason: String) {
-            guard textView.isFirstResponder,
+            guard textView.isFirstResponder, !textView.isTracking, !textView.isDecelerating,
                   let scrollView = enclosingScrollView(of: textView),
                   !scrollView.isTracking,
                   !scrollView.isDragging,
                   !scrollView.isDecelerating else { return }
 
             let caretFrame = textView.caretRect(for: position)
-            var targetFrame = textView.convert(caretFrame, to: scrollView).insetBy(dx: 0, dy: -12)
             let keyboardOverlap = uncoveredKeyboardOverlapHeight(scrollView: scrollView)
+            let viewportHeight = scrollView.bounds.inset(by: scrollView.adjustedContentInset).height - keyboardOverlap
+            // Reveal the whole editor when it fits, then follow the caret in long descriptions.
+            let target = textView.bounds.height + 24 <= viewportHeight
+                ? textView.bounds : caretFrame
+            var targetFrame = textView.convert(target, to: scrollView).insetBy(dx: 0, dy: -12)
             targetFrame.size.height += keyboardOverlap
             let beforeOffsetY = scrollView.contentOffset.y
 

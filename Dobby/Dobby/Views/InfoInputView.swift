@@ -101,10 +101,7 @@ struct InfoInputView: View {
                 revealFocusedInput(using: proxy)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
-                // Wait for the resized visible area as well as the focus event.
-                if focusedInformationField != .detail {
-                    revealFocusedInput(using: proxy)
-                }
+                revealFocusedInput(using: proxy)
             }
         }
         .background(ProductInformationStyle.background)
@@ -290,11 +287,18 @@ struct InfoInputView: View {
     }
 
     private func revealFocusedInput(using proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.22)) {
-            if let focusedInformationField, focusedInformationField != .detail {
-                proxy.scrollTo(focusedInformationField)
-            } else if focusedMeasurementID != nil {
-                proxy.scrollTo(Self.measurementTableID, anchor: .bottom)
+        Task { @MainActor in
+            // Resolve the current field after SwiftUI has laid out the keyboard safe area.
+            await Task.yield()
+            withAnimation(.easeOut(duration: 0.2)) {
+                if let focusedInformationField {
+                    // The multiline editor reveals its insertion point as the user types.
+                    if focusedInformationField != .detail {
+                        proxy.scrollTo(focusedInformationField, anchor: .center)
+                    }
+                } else if focusedMeasurementID != nil {
+                    proxy.scrollTo(Self.measurementTableID, anchor: .center)
+                }
             }
         }
     }

@@ -481,6 +481,99 @@ final class AppRoutingTests: XCTestCase {
     }
 
     @MainActor
+    func testNewProductDescriptionKeepsItsLastLineAboveKeyboardAsItGrows() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        startMeasurementFromHome(in: app)
+        armSyntheticGarmentCapture(in: app)
+        app.buttons["captureGarment"].tap()
+        for identifier in ["confirmGarmentMeasurement", "camera.startDetailCapture", "camera.selectPhotos"] {
+            let button = app.buttons[identifier]
+            XCTAssertTrue(button.waitForExistence(timeout: 15), identifier)
+            XCTAssertTrue(button.wait(for: \.isEnabled, toEqual: true, timeout: 10), identifier)
+            button.tap()
+        }
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
+        let description = app.textViews["product-info.detail"]
+        tapVisibleInput(description, in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        assertEditorBottomAboveKeyboard(description, in: app)
+        let initialHeight = description.frame.height
+        description.typeText(String(repeating: "line\n", count: 14) + "end")
+        XCTAssertTrue((description.value as? String)?.hasSuffix("end") == true)
+        XCTAssertGreaterThan(description.frame.height, initialHeight)
+        assertEditorBottomAboveKeyboard(description, in: app)
+        attachKeyboardScreenshot("new-product-description-keyboard")
+    }
+
+    @MainActor
+    func testSavedProductEditorsMoveAboveKeyboard() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        let library = app.buttons["보관함"].firstMatch
+        XCTAssertTrue(library.waitForExistence(timeout: 10))
+        library.tap()
+        let sample = app.buttons["debug.export-sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5))
+        sample.tap()
+        let edit = app.buttons["library.edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 10))
+        edit.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 5))
+        let description = app.textViews["product-info.detail"]
+        let originalHeight = description.frame.height
+        tapVisibleInput(description, in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let originalText = description.value as? String
+        let addedText = String(repeating: "\n", count: 16) + "end"
+        description.typeText(addedText)
+        XCTAssertTrue((description.value as? String)?.contains("end") == true)
+        XCTAssertGreaterThan(description.frame.height, originalHeight)
+        assertEditorBottomAboveKeyboard(description, in: app)
+        attachKeyboardScreenshot("saved-product-description-keyboard")
+
+        description.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: addedText.count))
+        XCTAssertEqual(description.value as? String, originalText)
+        XCTAssertEqual(description.frame.height, originalHeight, accuracy: 1)
+        assertEditorBottomAboveKeyboard(description, in: app)
+
+        dismissKeyboardByTappingBackground(beside: description, in: app)
+        let price = app.textFields["product-info.price"]
+        reveal(price, in: app)
+        tapVisibleInput(price, in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        assertEditorBottomAboveKeyboard(price, in: app)
+    }
+
+    @MainActor
+    private func assertEditorBottomAboveKeyboard(_ editor: XCUIElement, in app: XCUIApplication,
+                                                file: StaticString = #filePath, line: UInt = #line) {
+        let keyboard = app.keyboards.firstMatch
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let occlusion = app.frame.intersection(keyboard.frame)
+            // A simulated hardware keyboard can leave an AX keyboard entirely offscreen.
+            return occlusion.height > 100 && editor.frame.maxY <= occlusion.minY
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed,
+                       "Editor \(editor.frame), keyboard \(keyboard.frame), app \(app.frame)",
+                       file: file, line: line)
+    }
+
+    @MainActor
+    private func attachKeyboardScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
     func testProductInformationBackgroundTapDismissesKeyboardsWithoutLosingInput() {
         continueAfterFailure = false
         let app = fixtureApp()
