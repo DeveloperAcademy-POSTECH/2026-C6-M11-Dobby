@@ -103,6 +103,8 @@ final class LibraryExportBadgeTests: XCTestCase {
         let placeholder = field.placeholderValue ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue,
                               count: value == placeholder ? 0 : value.count) + text)
+        app.swipeDown()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication,
