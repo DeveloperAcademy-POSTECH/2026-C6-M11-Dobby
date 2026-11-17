@@ -313,22 +313,16 @@ private struct DescriptionTextView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
-            if !parent.isScrollEnabled {
-                updateLayout(in: textView, reason: "text-change")
-            }
+            updateLayout(in: textView, reason: "text-change")
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             textView.typingAttributes = parent.textAttributes
-            if !parent.isScrollEnabled {
-                updateLayout(in: textView, reason: "selection-change")
-            }
+            updateLayout(in: textView, reason: "selection-change")
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
-            if !parent.isScrollEnabled {
-                updateLayout(in: textView, reason: "begin-editing")
-            }
+            updateLayout(in: textView, reason: "begin-editing")
         }
 
         func updateLayout(in textView: UITextView, reason: String = "layout-update") {
@@ -361,21 +355,28 @@ private struct DescriptionTextView: UIViewRepresentable {
                 return
             }
             keyboardFrame = frame
-            guard let textView, textView.isFirstResponder, !parent.isScrollEnabled else { return }
+            guard let textView, textView.isFirstResponder else { return }
             updateLayout(in: textView, reason: "keyboard-change")
         }
 
         @MainActor
         private func revealCaret(_ position: UITextPosition, in textView: UITextView, reason: String) {
-            guard textView.isFirstResponder,
+            guard textView.isFirstResponder, !textView.isTracking, !textView.isDecelerating,
                   let scrollView = enclosingScrollView(of: textView),
                   !scrollView.isTracking,
                   !scrollView.isDragging,
                   !scrollView.isDecelerating else { return }
 
             let caretFrame = textView.caretRect(for: position)
-            var targetFrame = textView.convert(caretFrame, to: scrollView).insetBy(dx: 0, dy: -12)
             let keyboardOverlap = uncoveredKeyboardOverlapHeight(scrollView: scrollView)
+            let viewportHeight = scrollView.bounds.inset(by: scrollView.adjustedContentInset).height - keyboardOverlap
+            if textView.isScrollEnabled {
+                textView.scrollRectToVisible(caretFrame, animated: false)
+            }
+            // Reveal the whole editor when it fits, then follow the caret in long descriptions.
+            let target = textView.bounds.height + 24 <= viewportHeight
+                ? textView.bounds : caretFrame
+            var targetFrame = textView.convert(target, to: scrollView).insetBy(dx: 0, dy: -12)
             targetFrame.size.height += keyboardOverlap
             let beforeOffsetY = scrollView.contentOffset.y
 
