@@ -145,7 +145,8 @@ struct InfoInputView: View {
                         .frame(width: 61, height: 44)
                         .background(ProductInformationStyle.accent, in: Capsule())
                 }
-                .disabled(generationRequestID != nil || isImportingPhotos)
+                .disabled(generationRequestID != nil || isImportingPhotos
+                    || garment.productPhotos.count > ProductPhotoLimit.maximumCount)
                 .buttonStyle(.plain)
                 .accessibilityLabel(allowsPhotoEditing ? "제품 정보 수정 완료" : "제품 정보 입력 완료")
                 .accessibilityHint("필수 항목과 사진 수를 확인하고 제품 정보를 저장합니다")
