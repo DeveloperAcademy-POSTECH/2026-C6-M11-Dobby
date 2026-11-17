@@ -34,13 +34,13 @@ struct Cafe24ExportView: View {
 
     init(
         product: ExportProduct,
-        client: Cafe24IntegrationClient = Cafe24IntegrationClient(),
+        client: Cafe24IntegrationClient? = nil,
         onRequestExit: @escaping (ExportReturnDestination) -> Void = { _ in },
         onPublished: @escaping (Cafe24PublishResult) -> Void = { _ in }
     ) {
         self.onRequestExit = onRequestExit
         self.onPublished = onPublished
-        _client = State(initialValue: client)
+        _client = State(initialValue: client ?? Cafe24IntegrationClient())
         _draft = State(initialValue: Cafe24ExportDraft(product: product))
     }
 
