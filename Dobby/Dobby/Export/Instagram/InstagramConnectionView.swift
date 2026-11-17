@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct InstagramConnectionView: View {
     let isLoading: Bool
@@ -24,9 +25,14 @@ struct InstagramConnectionView: View {
 
 private struct InstagramConnectionHeader: View {
     var body: some View {
+        let font = UIFont(name: "Pretendard-Bold", size: 24) ?? .boldSystemFont(ofSize: 24)
+        let lineSpacing = max(0, 32 - font.lineHeight)
+
         VStack(alignment: .leading, spacing: 48) {
             Text("먼저 인스타그램 프로페셔널\n계정과 연결이 필요해요")
-                .font(.system(size: 24, weight: .bold))
+                .font(.custom("Pretendard-Bold", fixedSize: 24))
+                .tracking(-0.26)
+                .lineSpacing(lineSpacing)
                 .foregroundStyle(Color(.brandNeutralBlack))
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .fixedSize(horizontal: false, vertical: true)
