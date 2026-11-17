@@ -10,8 +10,7 @@ struct ProductLibraryDraftCard: View {
 
     var body: some View {
         ProductDraftCard(step: draft.step, relativeSaveTime: relativeSaveTime,
-                         stageAccessibilityIdentifier: "library.draft.stage.\(garment.id.uuidString)",
-                         usesLibraryTypography: true) {
+                         stageAccessibilityIdentifier: "library.draft.stage.\(garment.id.uuidString)") {
             thumbnail
         }
         .accessibilityElement(children: .combine)

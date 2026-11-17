@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -21,6 +22,8 @@ struct GarmentCaptureFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.measurementCaptureActivation) private var captureActivation
+    @Environment(\.measurementCaptureChromeOpacity) private var captureChromeOpacity
     @ScaledMetric(relativeTo: .subheadline) private var guidanceFontSize: CGFloat = 14
     @State private var orientation: ImageOrientation = .right
     @State private var model: AutomaticMeasurement?
@@ -30,6 +33,7 @@ struct GarmentCaptureFlowView: View {
     @State private var phase: AutomaticMeasurementPhase = .idle
     @State private var captureTask: Task<Void, Never>?
     @State private var cameraRestartTask: Task<Void, Never>?
+    @State private var cameraRestartID: UUID?
     @State private var runID: UUID?
     @State private var captureFailure: WorkflowFailureFeedback?
     @State private var recordingError: String?
@@ -47,6 +51,7 @@ struct GarmentCaptureFlowView: View {
     @AppStorage("dobby.measurementCapture.skipPlacementTutorial.v1") private var skipsPlacementTutorial = false
     @State private var showsPlacementTutorial = false
     @State private var previewSkipsPlacementTutorial = false
+    @State private var hasInitializedCapturePresentation = false
     @StateObject private var levelGuide = GarmentCameraLevelGuide()
 
     init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false,
@@ -85,6 +90,13 @@ struct GarmentCaptureFlowView: View {
                         .navigationTitle("실측 촬영")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
+                            ToolbarItem(placement: .principal) {
+                                Text("실측 촬영")
+                                    .font(.custom("Pretendard-Regular", size: 17, relativeTo: .headline))
+                                    .foregroundStyle(.white)
+                                    .accessibilityAddTraits(.isHeader)
+                                    .opacity(captureChromeOpacity)
+                            }
                             ToolbarItem(placement: .topBarLeading) {
                                 Button {
                                     cancel()
@@ -93,12 +105,14 @@ struct GarmentCaptureFlowView: View {
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("촬영 닫기")
                                     .accessibilityIdentifier("closeGarmentCapture")
+                                    .opacity(captureChromeOpacity)
                             }.sharedBackgroundVisibility(.hidden)
                         }
                 }
             }
             .toolbarBackground(model == nil ? Color.black : Color.white, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(model == nil ? .dark : .light, for: .navigationBar)
             .background {
                 if model == nil { GarmentCaptureStyle.background.ignoresSafeArea() }
                 else { Color.white.ignoresSafeArea() }
@@ -108,27 +122,37 @@ struct GarmentCaptureFlowView: View {
         .allowsHitTesting(captureFailure == nil)
         .accessibilityHidden(captureFailure != nil)
         .tint(model == nil ? .white : .primary)
-        .preferredColorScheme(model == nil ? .dark : .light)
+        // The home host supplies a local dark environment for its preview.
+        // Avoid changing the window's home/status-bar appearance before commit.
+        .preferredColorScheme(captureActivation == .active ? (model == nil ? .dark : .light) : nil)
+        .preference(key: MeasurementCaptureColorSchemePreferenceKey.self, value: model == nil ? .dark : .light)
         .task {
             // A result tutorial may temporarily cover this flow. Returning to
             // that result must not restart a camera or reset placement guidance.
             guard model == nil else { return }
-            showsPlacementTutorial = isPreview
-                ? ProcessInfo.processInfo.arguments.contains("--garment-preview-capture-tutorial")
-                : !skipsPlacementTutorial && camera.isSupported && loadingError == nil
-            if !isPreview { levelGuide.start() }
-            if isPreview {
-                previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial,
-                    bothSidesPartial: previewBothSidesPartial, missingTopLength: previewMissingTopLength, kind: previewKind)
-                synchronizePreviewOptions()
+            if !hasInitializedCapturePresentation {
+                hasInitializedCapturePresentation = true
+                showsPlacementTutorial = isPreview
+                    ? ProcessInfo.processInfo.arguments.contains("--garment-preview-capture-tutorial")
+                    : !skipsPlacementTutorial && camera.isSupported && loadingError == nil
+                if isPreview {
+                    previewModel = GarmentCapturePreview.measurement(partial: previewIsPartial,
+                        bothSidesPartial: previewBothSidesPartial, missingTopLength: previewMissingTopLength, kind: previewKind)
+                    synchronizePreviewOptions()
+                }
             }
-            else {
-                // Camera startup and lightweight service setup run independently.
-                // Semantic models still analyze the frozen photo; the product
-                // shutter separately requires a visible live foreground outline.
-                async let preparation: Void = captureSession.prepare()
-                await camera.start()
-                await preparation
+            if !isPreview { restartCamera() }
+        }
+        .onChange(of: captureActivation) { _, _ in
+            guard !isPreview, model == nil else { return }
+            if !permitsCameraStartup {
+                levelGuide.stop()
+                cancel()
+                camera.stop()
+            } else if !camera.isRunning {
+                // Keep the authorized preview's existing session and preparation
+                // task when the home pull becomes a committed capture flow.
+                restartCamera()
             }
         }
         .onChange(of: orientation) { _, value in
@@ -164,7 +188,7 @@ struct GarmentCaptureFlowView: View {
                 levelGuide.stop(); clearPreviewFocus(); cancel(); camera.stop(); previewRecognized = false
                 if isPreview { synchronizePreviewOptions(invalidate: true) }
             }
-            else if !isPreview, model == nil { levelGuide.start(); restartCamera() }
+            else if !isPreview, model == nil { restartCamera() }
             else if isPreview { synchronizePreviewOptions() }
         }
         .onDisappear {
@@ -175,7 +199,8 @@ struct GarmentCaptureFlowView: View {
             if isPreview { syntheticOptions.synchronize(exposure: 0, available: false, invalidatePendingRequests: true) }
         }
         .onChange(of: model == nil) { _, isCamera in
-            if isCamera, !isPreview { levelGuide.start() } else { levelGuide.stop() }
+            if isCamera, !isPreview, scenePhase == .active, permitsCameraStartup { levelGuide.start() }
+            else { levelGuide.stop() }
         }
         .task(id: processingSnapshot?.frame.frameID) {
             guard let snapshot = processingSnapshot else { return }
@@ -229,12 +254,13 @@ struct GarmentCaptureFlowView: View {
                 CameraBlackSurroundings(photoRect: photoRect)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 cameraFeedback
+                    .opacity(captureChromeOpacity)
                 if !showsCameraOptions {
                     responsiveCameraChrome(in: geometry.size, photoRect: photoRect,
                         bottomSafeAreaInset: bottomSafeAreaInset, layout: layout)
                         .animation(presentationReduceMotion ? nil : .smooth(duration: 0.30), value: displayedAspectRatio)
                         .animation(nil, value: geometry.size)
-                        .opacity(showsPlacementTutorial ? 0 : 1)
+                        .opacity(showsPlacementTutorial ? 0 : captureChromeOpacity)
                         .accessibilityHidden(showsPlacementTutorial)
                         .transition(.opacity)
                 }
@@ -244,6 +270,7 @@ struct GarmentCaptureFlowView: View {
                         .animation(nil, value: geometry.size)
                         .transition(.opacity)
                         .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)
+                        .opacity(captureChromeOpacity)
                 }
                 if shouldShowLevelGuide, !showsPlacementTutorial, !showsCameraOptions {
                     VStack(spacing: 109) {
@@ -256,13 +283,16 @@ struct GarmentCaptureFlowView: View {
                     .accessibilityLabel("카메라를 바닥과 평행하게 맞춰주세요")
                     .accessibilityIdentifier("garmentCameraLevelGuide")
                     .allowsHitTesting(false)
+                    .opacity(captureChromeOpacity)
                 }
                 if showsPlacementTutorial {
                     GarmentCaptureTutorialView(skipsTutorial: isPreview ? $previewSkipsPlacementTutorial : $skipsPlacementTutorial) {
                         showsPlacementTutorial = false
                     }
+                    .opacity(captureChromeOpacity)
                 }
                 cameraOptionsOverlay(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset)
+                    .opacity(captureChromeOpacity)
                     .allowsHitTesting(showsCameraOptions)
                     .accessibilityHidden(!showsCameraOptions)
                     .zIndex(2)
@@ -900,6 +930,7 @@ struct GarmentCaptureFlowView: View {
         runID = nil
         captureTask?.cancel()
         captureTask = nil
+        cameraRestartID = nil
         cameraRestartTask?.cancel()
         cameraRestartTask = nil
         service?.cancel()
@@ -911,10 +942,25 @@ struct GarmentCaptureFlowView: View {
         captureFailure = nil
     }
 
+    private var permitsCameraStartup: Bool {
+        captureActivation.permitsCameraStartup(authorization: AVCaptureDevice.authorizationStatus(for: .video))
+    }
+
     private func restartCamera() {
-        guard !isPreview, model == nil, scenePhase == .active else { return }
-        cameraRestartTask?.cancel()
+        guard !isPreview, model == nil, scenePhase == .active, permitsCameraStartup,
+              cameraRestartTask == nil else { return }
+        levelGuide.start()
+        let token = UUID()
+        cameraRestartID = token
         cameraRestartTask = Task {
+            defer {
+                // A cancelled startup may finish after a foreground restart.
+                // It must not clear the newer task's cancellation handle.
+                if cameraRestartID == token {
+                    cameraRestartID = nil
+                    cameraRestartTask = nil
+                }
+            }
             guard !Task.isCancelled else { return }
             // A resumed draft starts at the result and skips initial camera
             // setup. Prepare its existing service before allowing a new shot.

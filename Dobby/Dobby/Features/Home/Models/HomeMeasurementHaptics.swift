@@ -12,19 +12,29 @@ final class HomeMeasurementHaptics {
         let intensity: CGFloat
     }
 
-    private static let pullSpacing: CGFloat = 6
-    private static let minimumInterval: TimeInterval = 0.035
+    // Finer distance detents make a slow pull feel like unwinding the scale;
+    // the independent time limit still caps fast drags at 40 impacts/second.
+    private static let pullSpacing: CGFloat = 3
+    private static let minimumInterval: TimeInterval = 0.025
     private static let rollingPulses: [Pulse] = [
         .init(offset: 0, intensity: 1.0),
-        .init(offset: 0.040, intensity: 0.92),
-        .init(offset: 0.085, intensity: 0.84),
-        .init(offset: 0.135, intensity: 0.76),
-        .init(offset: 0.190, intensity: 0.68),
-        .init(offset: 0.250, intensity: 0.60),
-        .init(offset: 0.315, intensity: 0.52),
-        .init(offset: 0.385, intensity: 0.43),
-        .init(offset: 0.460, intensity: 0.33),
-        .init(offset: 0.540, intensity: 0.22)
+        .init(offset: 0.028, intensity: 0.94),
+        .init(offset: 0.057, intensity: 0.90),
+        .init(offset: 0.087, intensity: 0.85),
+        .init(offset: 0.118, intensity: 0.81),
+        .init(offset: 0.150, intensity: 0.76),
+        .init(offset: 0.183, intensity: 0.71),
+        .init(offset: 0.217, intensity: 0.66),
+        .init(offset: 0.252, intensity: 0.61),
+        .init(offset: 0.288, intensity: 0.56),
+        .init(offset: 0.325, intensity: 0.51),
+        .init(offset: 0.363, intensity: 0.46),
+        .init(offset: 0.402, intensity: 0.41),
+        .init(offset: 0.442, intensity: 0.36),
+        .init(offset: 0.483, intensity: 0.32),
+        .init(offset: 0.525, intensity: 0.28),
+        .init(offset: 0.568, intensity: 0.24),
+        .init(offset: 0.612, intensity: 0.20)
     ]
 
     private lazy var feedback = UIImpactFeedbackGenerator(style: .medium)
@@ -52,13 +62,13 @@ final class HomeMeasurementHaptics {
         let pull = HomeMeasurementMotion.clampedPull(value)
         guard abs(pull - lastCrossedPull) >= Self.pullSpacing else { return }
         // Consume this crossing even when rate-limited. Identical/nearby input
-        // cannot emit a delayed duplicate after the 35ms interval has elapsed.
+        // cannot emit a delayed duplicate after the 25ms interval has elapsed.
         lastCrossedPull = pull
         emit(intensity: 0.80)
     }
 
     /// Commit once per gesture. The independent rolling tail ends within 650ms,
-    /// even when a recent pull impact delays its first pulse by up to 35ms.
+    /// even when a recent pull impact delays its first pulse by up to 25ms.
     func finishPull() {
         guard phase == .pulling else { return }
         guard UIApplication.shared.applicationState == .active else { stop(); return }

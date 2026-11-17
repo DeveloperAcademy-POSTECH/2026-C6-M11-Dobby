@@ -17,6 +17,63 @@ struct HomeMeasurementPresentation<Content: View>: View {
     }
 }
 
+/// Prepare capture once when a pull begins, keeping it covered by Home until
+/// release. The existing Home gesture owns the complete pull and cancellation.
+struct HomeMeasurementInteractivePresentation<Content: View>: View {
+    let seed: HomeMeasurementTransitionSeed
+    let snapshot: UIImage?
+    let isCommitted: Bool
+    @ViewBuilder let content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var progress: Double = 0
+    @State private var hasFinished = false
+
+    var body: some View {
+        HomeMeasurementTransitionOverlay(snapshot: snapshot, seed: seed, progress: progress,
+            showsCover: !hasFinished) {
+            content()
+        }
+        // The live Home underneath owns the entire drag, including cancellation.
+        // The parent blocks Home after release; capture becomes active only once
+        // its cover has departed, without moving it into another presentation.
+        .disabled(!hasFinished)
+        .accessibilityHidden(!hasFinished)
+        .overlay {
+            if isCommitted && !hasFinished {
+                Color.clear
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("실측 화면 전환 중")
+                    .accessibilityIdentifier("home.measurementTransition")
+                    .allowsHitTesting(false)
+            }
+        }
+        .task(id: isCommitted) {
+            guard isCommitted, !hasFinished else { return }
+            if reduceMotion || scenePhase == .background { finishWithoutMotion(); return }
+            await Task.yield()
+            guard !Task.isCancelled, !hasFinished else { return }
+            withAnimation(.linear(duration: HomeMeasurementMotion.transitionDuration), completionCriteria: .removed) {
+                progress = 1
+            } completion: {
+                hasFinished = true
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if isCommitted && phase == .background { finishWithoutMotion() }
+        }
+        .onChange(of: reduceMotion) { _, enabled in
+            if isCommitted && enabled { finishWithoutMotion() }
+        }
+    }
+
+    private func finishWithoutMotion() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { progress = 1; hasFinished = true }
+    }
+}
+
 private struct HomeMeasurementAnimatedPresentation<Content: View>: View {
     let seed: HomeMeasurementTransitionSeed
     let snapshot: UIImage?
@@ -27,12 +84,13 @@ private struct HomeMeasurementAnimatedPresentation<Content: View>: View {
     @State private var hasFinished = false
 
     var body: some View {
-        HomeMeasurementTransitionOverlay(snapshot: snapshot, seed: seed, progress: progress) {
+        HomeMeasurementTransitionOverlay(snapshot: snapshot, seed: seed, progress: progress,
+            showsCover: !hasFinished) {
             content()
-                .disabled(!hasFinished)
-                .allowsHitTesting(hasFinished)
-                .accessibilityHidden(!hasFinished)
         }
+        .disabled(!hasFinished)
+        .allowsHitTesting(hasFinished)
+        .accessibilityHidden(!hasFinished)
         .overlay {
             if !hasFinished {
                 Color.clear
@@ -79,6 +137,17 @@ private struct HomeMeasurementAnimatedPresentation<Content: View>: View {
 final class HomeMeasurementSnapshotSource {
     weak var window: UIWindow?
     var canvasSize: CGSize? { window?.bounds.size }
+    var bottomChromeTop: CGFloat? {
+        guard let window, let tabBar = visibleTabBar(in: window) else { return nil }
+        // Include the floating bar's shadow without fading or translating it.
+        return max(0, window.convert(tabBar.bounds, from: tabBar).minY - 12)
+    }
+
+    private func visibleTabBar(in view: UIView) -> UITabBar? {
+        guard !view.isHidden, view.alpha > 0 else { return nil }
+        if let tabBar = view as? UITabBar { return tabBar }
+        return view.subviews.lazy.compactMap { self.visibleTabBar(in: $0) }.first
+    }
 
     func snapshot() -> UIImage? {
         guard let window, window.bounds.width > 0, window.bounds.height > 0 else { return nil }

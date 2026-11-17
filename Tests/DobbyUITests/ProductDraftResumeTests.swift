@@ -13,6 +13,7 @@ final class ProductDraftResumeTests: XCTestCase {
         let id = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
         let draft = app.buttons.matching(identifier: "library.draft.\(id)").firstMatch
         XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        attachScreenshot(app, name: "library-updated-draft-card")
         draft.press(forDuration: 0.8)
         let remove = app.buttons["library.delete.\(id)"]
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
@@ -25,6 +26,8 @@ final class ProductDraftResumeTests: XCTestCase {
         app.buttons["library.edit-mode"].tap()
         XCTAssertTrue(remove.waitForNonExistence(timeout: 5))
         XCTAssertTrue(draft.waitForExistence(timeout: 5))
+        draft.tap()
+        assertResumedStage("제품 상세 촬영", app: app)
     }
 
     func testInformationBackUsesDoneStateBeforeAndAfterHomeResume() {
@@ -349,11 +352,13 @@ final class ProductDraftResumeTests: XCTestCase {
         attachScreenshot(app, name: "home-draft-accessibility-text")
         let start = app.buttons["product-flow.start"]
         XCTAssertTrue(start.isHittable)
-        let startFrame = start.frame
+        let arrow = app.buttons["home.pullArrow"]
+        XCTAssertTrue(arrow.waitForExistence(timeout: 5))
+        let arrowFrame = arrow.frame
         let cardFrame = card.frame
         let screenEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.66))
         screenEdge.press(forDuration: 0.05, thenDragTo: screenEdge.withOffset(CGVector(dx: 0, dy: -160)))
-        XCTAssertEqual(start.frame, startFrame)
+        XCTAssertEqual(arrow.frame, arrowFrame)
         XCTAssertEqual(card.frame, cardFrame)
         card.tap()
         let detailGuide = app.buttons["camera.startDetailCapture"]
