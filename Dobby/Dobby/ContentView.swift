@@ -16,7 +16,6 @@ struct ContentView: View {
     @State private var tab: MainTab = .capture
     @State private var libraryPath: [UUID] = []
     @State private var libraryIsEditing = false
-    @State private var settingsHidesTabBar = false
     @State private var creationRequest: CreationRequest?
     @State private var creationCopyHomeProduct: ExportProduct?
     @State private var showLiDAR = false
@@ -41,38 +40,19 @@ struct ContentView: View {
 #endif
 
     var body: some View {
-        GeometryReader { geometry in
-            mainContent
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if showsMainTabBar {
-                        MainTabBar(selection: $tab)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 16)
-                            // Figma's 25pt inset includes the home-indicator area.
-                            .padding(.bottom, 25 - geometry.safeAreaInsets.bottom)
-                    }
+        mainContent
+            .allowsHitTesting(editingAutofillLoadingPresentation == nil)
+            .accessibilityHidden(editingAutofillLoadingPresentation != nil)
+            .overlay {
+                if let presentation = editingAutofillLoadingPresentation {
+                    ProductAutofillLoadingView(onCancel: presentation.onCancel)
                 }
-        }
-        .allowsHitTesting(editingAutofillLoadingPresentation == nil)
-        .accessibilityHidden(editingAutofillLoadingPresentation != nil)
-        .overlay {
-            if let presentation = editingAutofillLoadingPresentation {
-                ProductAutofillLoadingView(onCancel: presentation.onCancel)
             }
-        }
-    }
-
-    private var showsMainTabBar: Bool {
-        switch tab {
-        case .capture: true
-        case .library: libraryPath.isEmpty
-        case .settings: !settingsHidesTabBar
-        }
     }
 
     private var mainContent: some View {
         TabView(selection: $tab) {
-            Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: MainTab.capture) {
+            Tab(value: MainTab.capture) {
                 HomeView(resumeCandidate: HomeResumeCandidate.latest(in: garments),
                     onResumeDraft: { startCreation(resuming: $0) },
                     onStartCapture: { startCreation() },
@@ -80,7 +60,6 @@ struct ContentView: View {
                     onBeginMeasurementTransition: startHomeMeasurementTransition,
                     measurementHaptics: homeMeasurementHaptics)
                     .id(homeMeasurementIdentity)
-                    .toolbar(.hidden, for: .tabBar)
 #if DEBUG
                     .overlay(alignment: .bottomTrailing) {
                         if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
@@ -94,8 +73,12 @@ struct ContentView: View {
                         }
                     }
 #endif
+                    .safeAreaInset(edge: .bottom, spacing: 0) { fixtureBanner }
+            } label: {
+                MainTab.capture.label(selected: tab, symbol: libraryIsEditing ? "house" : "house.fill")
             }
-            Tab("보관함", systemImage: "hanger", value: MainTab.library) {
+            .accessibilityLabel(Text(MainTab.capture.title))
+            Tab(value: MainTab.library) {
                 NavigationStack(path: $libraryPath) {
                     ProductLibraryView(garments: garments, isEditing: $libraryIsEditing,
                         onStartMeasurement: { startCreation() },
@@ -122,24 +105,23 @@ struct ContentView: View {
                 }
                 .tint(libraryPath.isEmpty
                     ? LibraryStyle.primary : Color("HomeAccent"))
-                .toolbar(.hidden, for: .tabBar)
+                .safeAreaInset(edge: .bottom, spacing: 0) { fixtureBanner }
+            } label: {
+                MainTab.library.label(selected: tab, symbol: "hanger")
             }
-            Tab("설정", systemImage: "gearshape.fill", value: MainTab.settings) {
+            .accessibilityLabel(Text(MainTab.library.title))
+            Tab(value: MainTab.settings) {
                 NavigationStack {
-                    SettingsView(onConnectedAccountsVisibilityChange: { settingsHidesTabBar = $0 })
+                    SettingsView()
                 }
-                .toolbar(.hidden, for: .tabBar)
+                .safeAreaInset(edge: .bottom, spacing: 0) { fixtureBanner }
+            } label: {
+                MainTab.settings.label(selected: tab, symbol: "gearshape.fill")
             }
+            .accessibilityLabel(Text(MainTab.settings.title))
         }
-        .tint(Color.primary)
+        .tint(Color("BrandNeutralBlack"))
         .background { HomeMeasurementSnapshotAnchor(source: homeSnapshotSource).allowsHitTesting(false) }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if ProductAppStorage.fixtureDirectory != nil {
-                Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
-                    .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
-                    .allowsHitTesting(false)
-            }
-        }
         .fullScreenCover(item: $creationRequest) { request in
             HomeMeasurementPresentation(seed: request.homeTransition, snapshot: request.homeSnapshot) {
                 ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
@@ -193,6 +175,15 @@ struct ContentView: View {
             ExportReturnNavigationAction(id: exportReturnNavigationID, action: { @MainActor destination in
                 returnFromExport(to: destination)
             }))
+    }
+
+    @ViewBuilder
+    private var fixtureBanner: some View {
+        if ProductAppStorage.fixtureDirectory != nil {
+            Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
+                .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
+                .allowsHitTesting(false)
+        }
     }
 
     private func finishExportDismissal() {

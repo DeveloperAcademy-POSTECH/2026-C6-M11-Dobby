@@ -1,11 +1,10 @@
 import SwiftUI
+import UIKit
 
-enum MainTab: Hashable, CaseIterable, Identifiable {
+enum MainTab: Hashable {
     case capture
     case library
     case settings
-
-    var id: Self { self }
 
     var title: String {
         switch self {
@@ -15,63 +14,26 @@ enum MainTab: Hashable, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .capture: "house.fill"
-        case .library: "hanger"
-        case .settings: "gearshape.fill"
-        }
-    }
-}
-
-struct MainTabBar: View {
-    @Binding var selection: MainTab
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var selectionAnimation
-
-    var body: some View {
-        HStack(spacing: -10) {
-            ForEach(MainTab.allCases) { tab in
-                tabButton(tab)
+    // Supply only the artwork. TabView still owns the glass, hit targets,
+    // VoiceOver selection state and the gesture that slides between tabs.
+    func label(selected: MainTab, symbol: String) -> Image {
+        let color = UIColor(resource: self == selected ? .brandNeutralBlack : .brandNeutral600)
+        let configuration = UIImage.SymbolConfiguration(pointSize: 24, weight: .regular)
+        let icon = UIImage(systemName: symbol, withConfiguration: configuration)?.withTintColor(color)
+        let caption = NSAttributedString(string: title, attributes: [
+            .font: UIFont.systemFont(ofSize: 10, weight: .medium),
+            .foregroundColor: color
+        ])
+        let iconHeight: CGFloat = 28
+        let canvas = CGSize(width: ceil(max(icon?.size.width ?? 0, caption.size().width)),
+                            height: iconHeight + ceil(caption.size().height))
+        let artwork = UIGraphicsImageRenderer(size: canvas).image { _ in
+            if let icon {
+                icon.draw(at: CGPoint(x: (canvas.width - icon.size.width) / 2,
+                                      y: (iconHeight - icon.size.height) / 2))
             }
+            caption.draw(at: CGPoint(x: (canvas.width - caption.size().width) / 2, y: iconHeight))
         }
-        .glassEffect(.regular, in: Capsule())
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selection)
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(.isTabBar)
-        .accessibilityIdentifier("main-tab-bar")
-    }
-
-    private func tabButton(_ tab: MainTab) -> some View {
-        let isSelected = selection == tab
-        return Button {
-            selection = tab
-        } label: {
-            VStack(spacing: 1) {
-                Image(systemName: tab.symbol)
-                    .font(.system(size: 24, weight: .regular))
-                    .frame(height: 28)
-                Text(tab.title)
-                    .font(.system(size: 10, weight: .medium))
-                    .frame(height: 12)
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 6)
-            .padding(.bottom, 7)
-            .frame(width: 102, height: 54)
-            .foregroundStyle(Color(isSelected ? "BrandNeutralBlack" : "BrandNeutral600"))
-            .background {
-                if isSelected {
-                    Capsule()
-                        .fill(Color(uiColor: .tertiarySystemFill))
-                        .matchedGeometryEffect(id: "main-tab-selection", in: selectionAnimation)
-                }
-            }
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(tab.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        return Image(uiImage: artwork.withRenderingMode(.alwaysOriginal)).renderingMode(.original)
     }
 }

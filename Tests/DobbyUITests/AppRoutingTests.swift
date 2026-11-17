@@ -1,9 +1,102 @@
+import UIKit
 import XCTest
 
-/// Checks the actual capture/library home and URL delivery. Every test has an
-/// isolated, empty product store; none copies data, starts a Live Activity,
-/// captures a real photo, or opens an external marketplace.
+/// Checks the actual capture/library home and URL delivery. Flow fixtures use
+/// isolated stores. The tab color check only visits the three main screens.
 final class AppRoutingTests: XCTestCase {
+    @MainActor
+    func testMainTabBrandColorsFollowSelection() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        // The default test scheme sets a store token, which adds an orange preview banner behind the glass.
+        app.launchEnvironment["DOBBY_FLOW_TEST_STORE_TOKEN"] = ""
+        app.launch()
+        defer { app.terminate() }
+
+        let titles = ["홈", "보관함", "설정"]
+        for title in titles {
+            let tab = app.tabBars.buttons[title]
+            XCTAssertTrue(tab.waitForExistence(timeout: 10))
+            if !tab.isSelected { tab.tap() }
+            XCTAssertTrue(tab.wait(for: \.isSelected, toEqual: true, timeout: 5))
+            XCTAssertFalse(app.staticTexts["연결 흐름 미리보기 · 합성 측정값"].exists)
+
+            let screenshot = app.screenshot()
+            let attachment = XCTAttachment(screenshot: screenshot)
+            attachment.name = "main-tab-colors-\(title)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            let image = try XCTUnwrap(screenshot.image.cgImage)
+            let screen = app.frame
+            let scaleX = CGFloat(image.width) / screen.width
+            let scaleY = CGFloat(image.height) / screen.height
+            for name in titles {
+                let button = app.tabBars.buttons[name]
+                let frame = button.frame.offsetBy(dx: -screen.minX, dy: -screen.minY)
+                    .applying(CGAffineTransform(scaleX: scaleX, y: scaleY))
+                let regions = frame.divided(atDistance: frame.height * 0.62, from: .minYEdge)
+                for (part, region) in [("아이콘", regions.slice), ("제목", regions.remainder)] {
+                    let crop = try XCTUnwrap(image.cropping(to: region.integral))
+                    let counts = try tabInkCounts(in: crop)
+                    let message = "\(title) 선택 중 \(name) \(part) · black \(counts.black), neutral600 \(counts.neutral)"
+                    if name == title {
+                        XCTAssertGreaterThan(counts.black, max(3, counts.neutral), message)
+                    } else {
+                        XCTAssertGreaterThan(counts.neutral, 3, message)
+                        XCTAssertEqual(counts.black, 0, message)
+                    }
+                }
+            }
+        }
+    }
+
+    private func tabInkCounts(in image: CGImage) throws -> (black: Int, neutral: Int) {
+        let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try XCTUnwrap(CGContext(data: nil, width: image.width, height: image.height,
+            bitsPerComponent: 8, bytesPerRow: image.width * 4, space: space,
+            bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.noneSkipLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let bytes = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+        var black = 0
+        var neutral = 0
+        // Count ink inside the glyphs, allowing four sRGB levels for antialiasing.
+        for i in stride(from: 0, to: image.height * context.bytesPerRow, by: 4) {
+            let r = Int(bytes[i]), g = Int(bytes[i + 1]), b = Int(bytes[i + 2])
+            if abs(r - 16) <= 4 && abs(g - 16) <= 4 && abs(b - 15) <= 4 { black += 1 }
+            if abs(r - 111) <= 4 && abs(g - 106) <= 4 && abs(b - 99) <= 4 { neutral += 1 }
+        }
+        return (black, neutral)
+    }
+
+    @MainActor
+    func testDraggingSelectedTabToSettingsSwitchesScreens() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        let home = app.tabBars.buttons["홈"]
+        let settings = app.tabBars.buttons["설정"]
+        XCTAssertTrue(home.waitForExistence(timeout: 10))
+        XCTAssertTrue(home.isSelected)
+        let center = CGVector(dx: 0.5, dy: 0.5)
+        home.coordinate(withNormalizedOffset: center).press(forDuration: 0.3,
+            thenDragTo: settings.coordinate(withNormalizedOffset: center),
+            withVelocity: .slow, thenHoldForDuration: 0.15)
+
+        XCTAssertTrue(app.buttons["개인정보 처리방침"].waitForExistence(timeout: 5))
+        XCTAssertTrue(settings.isSelected)
+        XCTAssertFalse(home.isSelected)
+        attachScreenshot(app, name: "settings-after-tab-drag")
+
+        app.tabBars.buttons["보관함"].tap()
+        let sample = app.buttons["debug.export-sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5))
+        sample.tap()
+        XCTAssertTrue(app.buttons["library.export"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.firstMatch.waitForNonExistence(timeout: 5))
+    }
+
     @MainActor
     func testCaptureAndEmptyLibraryRemainReachableWithLabHidden() {
         continueAfterFailure = false
