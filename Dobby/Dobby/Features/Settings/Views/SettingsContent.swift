@@ -3,12 +3,15 @@ import SwiftUI
 struct SettingsContent: View {
     let onPrivacyPolicy: () -> Void
     let onSupportMail: () -> Void
+    var onConnectedAccountsVisibilityChange: (Bool) -> Void = { _ in }
 
     var body: some View {
         VStack(spacing: 28) {
             SettingsSection(title: "기본 설정") {
                 NavigationLink {
                     ConnectedAccountsView()
+                        .onAppear { onConnectedAccountsVisibilityChange(true) }
+                        .onDisappear { onConnectedAccountsVisibilityChange(false) }
                 } label: {
                     SettingsNavigationRow(title: "연결된 계정 관리", systemImage: "chevron.right")
                 }
