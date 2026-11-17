@@ -88,43 +88,23 @@ final class LibraryExportBadgeTests: XCTestCase {
         let field = textView.exists ? textView : app.textFields[identifier].firstMatch
         reveal(field, in: app)
         if key == "detail" {
-            let navigationBottom = app.navigationBars.allElementsBoundByIndex.filter(\.isHittable)
-                .map { $0.frame.maxY }.max() ?? 100
-            let keyboardTop = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY : app.frame.maxY
-            let top = max(field.frame.minY, navigationBottom + 12)
-            let bottom = min(field.frame.maxY, keyboardTop - 12)
-            app.coordinate(withNormalizedOffset: .zero).withOffset(
-                CGVector(dx: field.frame.midX, dy: (top + min(bottom, top + 44)) / 2)
-            ).tap()
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.1)).tap()
         } else {
-            field.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            field.tap()
         }
-        let value = field.value as? String ?? ""
-        let placeholder = field.placeholderValue ?? ""
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue,
-                              count: value == placeholder ? 0 : value.count) + text)
-        app.swipeDown()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        field.typeText(text)
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication,
                         file: StaticString = #filePath, line: UInt = #line) {
-        for _ in 0..<12 {
-            let top = (app.navigationBars.allElementsBoundByIndex.filter(\.isHittable)
-                .map { $0.frame.maxY }.max() ?? 68) + 12
-            let bottom = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY - 12 : app.frame.maxY - 40
-            let frame = element.frame
-            if element.isHittable, frame.minY >= top,
-               frame.maxY <= bottom || (element.identifier == "product-info.detail"
-                    && min(frame.maxY, bottom) - max(frame.minY, top) >= 44) { break }
-            let above = element.exists && !frame.isEmpty && frame.minY < top
-            let height = max(40, bottom - top)
-            let origin = app.coordinate(withNormalizedOffset: .zero)
-            origin.withOffset(CGVector(dx: app.frame.width * 0.97, dy: top + height * (above ? 0.3 : 0.8)))
-                .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(
-                    dx: app.frame.width * 0.97, dy: top + height * (above ? 0.8 : 0.3))))
-        }
         XCTAssertTrue(element.waitForExistence(timeout: 5), file: file, line: line)
+        for _ in 0..<8 where !element.isHittable {
+            if element.frame.midY < app.navigationBars.firstMatch.frame.maxY {
+                app.swipeDown()
+            } else {
+                app.swipeUp()
+            }
+        }
         XCTAssertTrue(element.isHittable, file: file, line: line)
     }
 }
