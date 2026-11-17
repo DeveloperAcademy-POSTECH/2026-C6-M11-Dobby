@@ -19,6 +19,7 @@ struct Cafe24ExportView: View {
     private static let navigationTitle = "카페24로 업로드하기"
 
     let onRequestExit: (ExportReturnDestination) -> Void
+    let onUploadingChanged: (Bool) -> Void
     let onPublished: (Cafe24PublishResult) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var client = Cafe24IntegrationClient()
@@ -36,9 +37,11 @@ struct Cafe24ExportView: View {
     init(
         product: ExportProduct,
         onRequestExit: @escaping (ExportReturnDestination) -> Void = { _ in },
+        onUploadingChanged: @escaping (Bool) -> Void = { _ in },
         onPublished: @escaping (Cafe24PublishResult) -> Void = { _ in }
     ) {
         self.onRequestExit = onRequestExit
+        self.onUploadingChanged = onUploadingChanged
         self.onPublished = onPublished
         _draft = State(initialValue: Cafe24ExportDraft(product: product))
     }
@@ -110,10 +113,11 @@ struct Cafe24ExportView: View {
                 .accessibilityHidden(uploadState.isUploading)
             }
         }
-        .overlay {
-            if uploadState.isUploading {
-                PlatformUploadingOverlay(platformName: "카페24")
-            }
+        .onChange(of: uploadState.isUploading) { _, isUploading in
+            onUploadingChanged(isUploading)
+        }
+        .onDisappear {
+            onUploadingChanged(false)
         }
         .interactiveDismissDisabled(uploadState.isUploading)
         .task { await loadStatus() }
