@@ -20,6 +20,7 @@ struct Cafe24UploadCompletionView: View {
                 action: onOpenCafe24
             )
         )
+        .ignoresSafeArea(.container, edges: .bottom)
     }
 }
 
