@@ -27,6 +27,7 @@ struct InfoInputView: View {
     private let retainedMeasurementInput: Binding<GarmentMeasurementInputState>?
     @State private var saveError: String?
     @State private var hasAttemptedCompletion = false
+    @State private var validationScrollRequest: UUID?
     @State private var pendingExportDestination: ExportReturnDestination?
     @State private var isImportingPhotos = false
     @State private var generationRequestID: UUID?
@@ -34,6 +35,7 @@ struct InfoInputView: View {
     @FocusState private var focusedInformationField: ProductInformationField?
     @FocusState private var focusedMeasurementID: UUID?
     static let measurementTableID = "product-info.measurement-table"
+    private static let photoSectionID = "product-info.photo-section"
 
     init(garment: Garment, measurementInput: Binding<GarmentMeasurementInputState>? = nil,
          allowsPhotoEditing: Bool = false,
@@ -64,6 +66,7 @@ struct InfoInputView: View {
                         ProductInputPhotoSection(garment: garment, allowsEditing: allowsPhotoEditing,
                             onImportingChange: { isImportingPhotos = $0 })
                             .productInputInteractionArea()
+                            .id(Self.photoSectionID)
                         if onGenerateAI != nil { generateInformationButton.productInputInteractionArea() }
                     }
                     // Keep the same photo strip mounted and visible during generation.
@@ -94,6 +97,16 @@ struct InfoInputView: View {
                 ProductInputKeyboardDismissBackground(bounds: bounds, onDismiss: dismissKeyboard)
             }
             .scrollDismissesKeyboard(.interactively)
+            .task(id: validationScrollRequest) {
+                guard validationScrollRequest != nil, let target = firstInvalidInformationTarget else { return }
+                // Error messages add height after a completion attempt. Scroll
+                // after that layout update, including for repeated failures.
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo(target, anchor: .top)
+                }
+            }
             .onChange(of: focusedMeasurementID) { _, _ in
                 revealFocusedInput(using: proxy)
             }
@@ -101,10 +114,7 @@ struct InfoInputView: View {
                 revealFocusedInput(using: proxy)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
-                // Wait for the resized visible area as well as the focus event.
-                if focusedInformationField != .detail {
-                    revealFocusedInput(using: proxy)
-                }
+                revealFocusedInput(using: proxy)
             }
         }
         .background(ProductInformationStyle.background)
@@ -145,7 +155,8 @@ struct InfoInputView: View {
                         .frame(width: 61, height: 44)
                         .background(ProductInformationStyle.accent, in: Capsule())
                 }
-                .disabled(generationRequestID != nil || isImportingPhotos)
+                .disabled(generationRequestID != nil || isImportingPhotos
+                    || garment.productPhotos.count > ProductPhotoLimit.maximumCount)
                 .buttonStyle(.plain)
                 .accessibilityLabel(allowsPhotoEditing ? "제품 정보 수정 완료" : "제품 정보 입력 완료")
                 .accessibilityHint("필수 항목과 사진 수를 확인하고 제품 정보를 저장합니다")
@@ -253,6 +264,8 @@ struct InfoInputView: View {
         guard generationRequestID == nil, !isImportingPhotos else { return }
         hasAttemptedCompletion = true
         guard GarmentInformationValidation.isValid(garment) else {
+            dismissKeyboard()
+            validationScrollRequest = UUID()
             do { try GarmentInformationValidation.validate(garment) }
             catch { VoiceOverAnnouncement.post(error.localizedDescription) }
             return
@@ -288,12 +301,36 @@ struct InfoInputView: View {
         returnFromExport?(to: destination)
     }
 
+    private var firstInvalidInformationTarget: AnyHashable? {
+        // Match the validator's photo-first order before the required fields.
+        if !ProductPhotoLimit.canRegister(count: garment.productPhotos.count) {
+            return AnyHashable(Self.photoSectionID)
+        }
+        if !GarmentInformationValidation.isNameValid(garment) {
+            return AnyHashable(ProductInformationField.name)
+        }
+        if !GarmentInformationValidation.isDetailValid(garment) {
+            return AnyHashable(ProductInformationField.detail)
+        }
+        if !GarmentInformationValidation.isPriceValid(garment) {
+            return AnyHashable(ProductInformationField.price)
+        }
+        return nil
+    }
+
     private func revealFocusedInput(using proxy: ScrollViewProxy) {
-        withAnimation(.easeOut(duration: 0.22)) {
-            if let focusedInformationField, focusedInformationField != .detail {
-                proxy.scrollTo(focusedInformationField)
-            } else if focusedMeasurementID != nil {
-                proxy.scrollTo(Self.measurementTableID, anchor: .bottom)
+        Task { @MainActor in
+            // Resolve the current field after SwiftUI has laid out the keyboard safe area.
+            await Task.yield()
+            withAnimation(.easeOut(duration: 0.2)) {
+                if let focusedInformationField {
+                    // The multiline editor reveals its insertion point as the user types.
+                    if focusedInformationField != .detail {
+                        proxy.scrollTo(focusedInformationField, anchor: .center)
+                    }
+                } else if focusedMeasurementID != nil {
+                    proxy.scrollTo(Self.measurementTableID, anchor: .center)
+                }
             }
         }
     }

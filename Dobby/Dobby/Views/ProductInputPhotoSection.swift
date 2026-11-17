@@ -14,11 +14,20 @@ struct ProductInputPhotoSection: View {
     @State private var expandedPhoto: GarmentPhoto?
     @State private var showsDeletionError = false
     @State private var showsPhotoPicker = false
-    @State private var showsCamera = false
+    // Presentation and its payload share one identity. A separate Bool cover
+    // can build its first content from the previous render's empty photo state.
+    @State private var cameraPresentation: CameraPresentation?
+
+    private struct CameraPresentation: Identifiable {
+        let id = UUID()
+        let garmentID: UUID
+        let sessionID: UUID
+        let photos: [CapturedAsset]
+        let fixtureSource: CapturedAsset.Source?
+    }
     @State private var pickedItems: [PhotosPickerItem] = []
     @State private var isImporting = false
     @State private var pendingPhotoCount = 0
-    @State private var importTask: Task<Void, Never>?
     @State private var importError: String?
 
     var body: some View {
@@ -67,18 +76,20 @@ struct ProductInputPhotoSection: View {
         }
         .photosPicker(isPresented: $showsPhotoPicker, selection: photoPickerSelection,
                       maxSelectionCount: nil, matching: .images)
-        .fullScreenCover(isPresented: $showsCamera) {
-            ProductInputCameraPicker { data in
-                showsCamera = false
-                guard let data else { return }
-                pendingPhotoCount = 1
+        .fullScreenCover(item: $cameraPresentation) { presentation in
+            ProductInputCameraPicker(garmentID: presentation.garmentID,
+                captureSessionID: presentation.sessionID, existingPhotos: presentation.photos,
+                fixtureSource: presentation.fixtureSource,
+                onCancel: { cameraPresentation = nil }) { photos, removedPhotoIDs in
+                pendingPhotoCount = photos.count
                 setImporting(true)
-                importTask = Task { await importPhotos([data]) }
+                defer { setImporting(false) }
+                try await ProductPhotoImportStore.applyAdditionalCapture(photos, removing: removedPhotoIDs,
+                    to: garment, in: context)
+                cameraPresentation = nil
             }
-            .ignoresSafeArea()
         }
         .onDisappear {
-            importTask?.cancel()
             onImportingChange?(false)
         }
         .task(id: pickedItems) {
@@ -129,6 +140,29 @@ struct ProductInputPhotoSection: View {
         isImporting = busy
     }
 
+    private func openCamera() {
+        do {
+            let sessionID = garment.measurementPhoto?.measurementSessionID ?? UUID()
+            // Snapshot once per presentation, preserving the draft's exact visible
+            // order/IDs and product-only rotations without lending file ownership.
+            let photos = try ProductPhotoImportStore.capturePreviewPhotos(for: garment, sessionID: sessionID)
+            cameraPresentation = CameraPresentation(garmentID: garment.id, sessionID: sessionID,
+                photos: photos, fixtureSource: fixtureCameraSource)
+        } catch { importError = error.localizedDescription }
+    }
+
+    private var fixtureCameraSource: CapturedAsset.Source? {
+#if DEBUG
+        guard ProductAppStorage.fixtureDirectory != nil,
+              let photo = garment.productPhotos.first ?? garment.photos.first else { return nil }
+        let url = GarmentStore.url(for: photo)
+        guard let metadata = try? ProductPhotoHandoff.metadata(for: url) else { return nil }
+        return .localFile(url, metadata: metadata)
+#else
+        return nil
+#endif
+    }
+
     private var photoRow: some View {
         ProductPhotoReorderStrip(photos: garment.productPhotos, spacing: 16,
             topInset: allowsRemoval ? 4 : 0,
@@ -142,8 +176,8 @@ struct ProductInputPhotoSection: View {
 
     private var addPhotoButton: some View {
         Menu {
-            Button("사진 촬영하기", systemImage: "camera.fill") { showsCamera = true }
-                .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+            Button("사진 촬영하기", systemImage: "camera.fill", action: openCamera)
+                .accessibilityIdentifier("product-info.take-photos")
             Button("앨범에서 선택하기", systemImage: "photo") { showsPhotoPicker = true }
         } label: {
             VStack(spacing: 4) {
@@ -161,12 +195,6 @@ struct ProductInputPhotoSection: View {
         .accessibilityLabel("제품 사진 추가")
         .accessibilityHint("사진 촬영 또는 앨범에서 선택할 수 있어요")
         .accessibilityIdentifier("product-info.add-photo")
-    }
-
-    private func importPhotos(_ data: [Data]) async {
-        defer { setImporting(false) }
-        do { for bytes in data { try await appendPhoto(bytes) } }
-        catch is CancellationError { } catch { importError = error.localizedDescription }
     }
 
     private func appendPhoto(_ data: Data) async throws {

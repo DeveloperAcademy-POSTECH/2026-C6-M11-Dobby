@@ -60,7 +60,6 @@ final class HomeMeasurementTransitionUITests: XCTestCase {
 
         let resume = app.buttons["home.resume"]
         XCTAssertTrue(resume.waitForExistence(timeout: 10))
-        for _ in 0..<5 where !resume.isHittable { app.scrollViews.firstMatch.swipeUp() }
         XCTAssertTrue(resume.isHittable)
         XCTAssertTrue(resume.label.contains("상세 촬영"))
         resume.tap()

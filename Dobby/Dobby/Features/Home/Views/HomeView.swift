@@ -16,60 +16,57 @@ struct HomeView: View {
     var body: some View {
         GeometryReader { geometry in
             let reference = HomeTapeMeasure.referenceSize
-            // Both supplied home variants start guidance at y574. The optional
-            // native card follows the two 29pt lines and 20pt gap at y652.
+            // At the reference size, guidance starts at y574. On shorter layouts
+            // the tape fits the space left by the guidance and optional draft card.
             let guidanceTop: CGFloat = 574
             let scale = max(0, geometry.size.width / reference.width)
-            ScrollView(.vertical) {
-                VStack(spacing: 0) {
-                    HomeTapeMeasure(onStartCapture: onStartCapture,
-                        onPrepareMeasurementTransition: onPrepareMeasurementTransition,
-                        onBeginMeasurementTransition: onBeginMeasurementTransition,
-                        onPullChanged: { measurementPull = $0 }, showsResumeCard: showsResumeCard,
-                        canvasSize: CGSize(width: geometry.size.width,
-                            height: max(geometry.frame(in: .global).maxY, geometry.size.height)),
-                        measurementHaptics: measurementHaptics)
-                        .frame(width: reference.width * scale, height: reference.height * scale)
-                        .zIndex(1)
-                    HomeMeasurementLowerContent(pull: measurementPull) {
+            VStack(spacing: 0) {
+                HomeTapeMeasure(onStartCapture: onStartCapture,
+                    onPrepareMeasurementTransition: onPrepareMeasurementTransition,
+                    onBeginMeasurementTransition: onBeginMeasurementTransition,
+                    onPullChanged: { measurementPull = $0 }, showsResumeCard: showsResumeCard,
+                    canvasSize: CGSize(width: geometry.size.width,
+                        height: max(geometry.frame(in: .global).maxY, geometry.size.height)),
+                    measurementHaptics: measurementHaptics)
+                    .aspectRatio(reference, contentMode: .fit)
+                    .zIndex(1)
+                HomeMeasurementLowerContent(pull: measurementPull) {
+                    VStack(spacing: 0) {
                         VStack(spacing: 0) {
-                            VStack(spacing: 0) {
-                                Text("줄자를 아래로 당겨").frame(minHeight: guidanceLineHeight)
-                                Text("실측을 시작하세요").frame(minHeight: guidanceLineHeight)
-                            }
-                            .font(HomeTypography.guidance)
-                            .tracking(-0.2)
-                            .foregroundStyle(Color(red: 122 / 255, green: 117 / 255, blue: 110 / 255))
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityElement(children: .combine)
-                            .accessibilityIdentifier("home.guidance")
-                            .padding(.horizontal, 20)
-                            .padding(.top, (guidanceTop - reference.height) * scale)
-                            if let candidate = resumeCandidate, let onResumeDraft {
-                                TimelineView(.periodic(from: .now, by: 60)) { timeline in
-                                    HomeResumeCard(step: candidate.draft.step, savedAt: candidate.draft.savedAt,
-                                        referenceDate: timeline.date, productName: candidate.garment.name,
-                                        onResume: { onResumeDraft(candidate.garment.id) }) {
-                                        if let photo = candidate.garment.thumbnail {
-                                            StoredProductPhotoView(photo: photo, maximumPixelSize: 500)
-                                        } else {
-                                            Color(white: 217.0 / 255)
-                                        }
+                            Text("줄자를 아래로 당겨").frame(minHeight: guidanceLineHeight)
+                            Text("실측을 시작하세요").frame(minHeight: guidanceLineHeight)
+                        }
+                        .font(HomeTypography.guidance)
+                        .tracking(-0.2)
+                        .foregroundStyle(Color(red: 122 / 255, green: 117 / 255, blue: 110 / 255))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("home.guidance")
+                        .padding(.horizontal, 20)
+                        .padding(.top, (guidanceTop - reference.height) * scale)
+                        if let candidate = resumeCandidate, let onResumeDraft {
+                            TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                                HomeResumeCard(step: candidate.draft.step, savedAt: candidate.draft.savedAt,
+                                    referenceDate: timeline.date, productName: candidate.garment.name,
+                                    onResume: { onResumeDraft(candidate.garment.id) }) {
+                                    if let photo = candidate.garment.thumbnail {
+                                        StoredProductPhotoView(photo: photo, maximumPixelSize: 500)
+                                    } else {
+                                        Color(white: 217.0 / 255)
                                     }
                                 }
-                                .frame(maxWidth: 361)
-                                .padding(.horizontal, 20)
-                                .padding(.top, 20)
                             }
+                            .frame(maxWidth: 361)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 20)
                         }
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 24)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .ignoresSafeArea(.container, edges: .top)
         .background(Color("BrandNeutral50").ignoresSafeArea())

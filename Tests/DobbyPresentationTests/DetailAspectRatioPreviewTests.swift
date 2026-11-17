@@ -20,14 +20,26 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(frame.minY, -0.001)
                 XCTAssertLessThanOrEqual(frame.maxX, size.width + 0.001)
                 XCTAssertLessThanOrEqual(frame.maxY, size.height + 0.001)
-                let expected = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(
-                    containerWidth: Double(size.width), containerHeight: Double(size.height),
-                    photoAspectRatio: ratio.previewRatio(isLandscape: size.width > size.height)))
-                XCTAssertEqual(frame.midX, expected.x + expected.width / 2, accuracy: 0.001)
-                XCTAssertEqual(frame.minX, expected.x, accuracy: 0.001)
-                XCTAssertEqual(frame.minY, expected.y, accuracy: 0.001)
-                XCTAssertEqual(frame.width, expected.width, accuracy: 0.001)
-                XCTAssertEqual(frame.height, expected.height, accuracy: 0.001)
+                let measurement = CameraPhotoPreviewLayout(containerSize: size,
+                    photoAspectRatio: ratio.previewRatio(isLandscape: size.width > size.height)).photoFrame
+                XCTAssertEqual(frame.minX, measurement.minX, accuracy: 0.001)
+                XCTAssertEqual(frame.minY, measurement.minY, accuracy: 0.001)
+                XCTAssertEqual(frame.width, measurement.width, accuracy: 0.001)
+                XCTAssertEqual(frame.height, measurement.height, accuracy: 0.001)
+                if ratio == .square, size.width < size.height {
+                    XCTAssertEqual(frame.minX, 0, accuracy: 0.001)
+                    XCTAssertEqual(frame.minY, (size.height - size.width) / 2, accuracy: 0.001)
+                    XCTAssertEqual(frame.size, CGSize(width: size.width, height: size.width))
+                } else {
+                    let expected = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(
+                        containerWidth: Double(size.width), containerHeight: Double(size.height),
+                        photoAspectRatio: ratio.previewRatio(isLandscape: size.width > size.height)))
+                    XCTAssertEqual(frame.midX, expected.x + expected.width / 2, accuracy: 0.001)
+                    XCTAssertEqual(frame.minX, expected.x, accuracy: 0.001)
+                    XCTAssertEqual(frame.minY, expected.y, accuracy: 0.001)
+                    XCTAssertEqual(frame.width, expected.width, accuracy: 0.001)
+                    XCTAssertEqual(frame.height, expected.height, accuracy: 0.001)
+                }
                 XCTAssertEqual(frame.width / frame.height,
                     crop.outputPixelSize.width / crop.outputPixelSize.height, accuracy: 0.0001)
             }
@@ -169,20 +181,32 @@ final class DetailAspectRatioPreviewTests: XCTestCase {
         XCTAssertEqual(fixture.samples.creations, 1)
     }
 
-    func testPortraitRatiosUseTheSamePhotoWindowAndBlackMaskAsMeasurement() throws {
+    func testPortraitRatiosShareMeasurementPhotoWindowsAndKeepTheirMasksClear() throws {
         for size in [CGSize(width: 375, height: 667), CGSize(width: 390, height: 844),
                      CGSize(width: 440, height: 956)] {
             let standard = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .fourThree).frame
             let tall = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .sixteenNine).frame
             let square = DetailAspectRatioPreviewLayout(containerSize: size, aspectRatio: .square).frame
             for (ratio, frame) in [(DetailPhotoAspectRatio.fourThree, standard), (.sixteenNine, tall), (.square, square)] {
-                let expected = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(
-                    containerWidth: Double(size.width), containerHeight: Double(size.height),
-                    photoAspectRatio: ratio.previewRatio(isLandscape: false)))
-                XCTAssertEqual(frame.minX, expected.x, accuracy: 0.001)
-                XCTAssertEqual(frame.minY, expected.y, accuracy: 0.001)
-                XCTAssertEqual(frame.width, expected.width, accuracy: 0.001)
-                XCTAssertEqual(frame.height, expected.height, accuracy: 0.001)
+                let measurement = CameraPhotoPreviewLayout(containerSize: size,
+                    photoAspectRatio: ratio.previewRatio(isLandscape: false)).photoFrame
+                XCTAssertEqual(frame.minX, measurement.minX, accuracy: 0.001)
+                XCTAssertEqual(frame.minY, measurement.minY, accuracy: 0.001)
+                XCTAssertEqual(frame.width, measurement.width, accuracy: 0.001)
+                XCTAssertEqual(frame.height, measurement.height, accuracy: 0.001)
+                if ratio == .square {
+                    XCTAssertEqual(frame.midX, size.width / 2, accuracy: 0.001)
+                    XCTAssertEqual(frame.midY, size.height / 2, accuracy: 0.001)
+                    XCTAssertEqual(frame.size, CGSize(width: size.width, height: size.width))
+                } else {
+                    let expected = try XCTUnwrap(MeasurementCameraChromeLayout.photoViewport(
+                        containerWidth: Double(size.width), containerHeight: Double(size.height),
+                        photoAspectRatio: ratio.previewRatio(isLandscape: false)))
+                    XCTAssertEqual(frame.minX, expected.x, accuracy: 0.001)
+                    XCTAssertEqual(frame.minY, expected.y, accuracy: 0.001)
+                    XCTAssertEqual(frame.width, expected.width, accuracy: 0.001)
+                    XCTAssertEqual(frame.height, expected.height, accuracy: 0.001)
+                }
                 let mask = DetailPreviewGlassMask(viewport: frame).path(in: CGRect(origin: .zero, size: size))
                 XCTAssertFalse(mask.contains(CGPoint(x: frame.midX, y: frame.midY), eoFill: true))
             }

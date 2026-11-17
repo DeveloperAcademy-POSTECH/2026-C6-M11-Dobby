@@ -1,9 +1,102 @@
+import UIKit
 import XCTest
 
-/// Checks the actual capture/library home and URL delivery. Every test has an
-/// isolated, empty product store; none copies data, starts a Live Activity,
-/// captures a real photo, or opens an external marketplace.
+/// Checks the actual capture/library home and URL delivery. Flow fixtures use
+/// isolated stores. The tab color check only visits the three main screens.
 final class AppRoutingTests: XCTestCase {
+    @MainActor
+    func testMainTabBrandColorsFollowSelection() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        // The default test scheme sets a store token, which adds an orange preview banner behind the glass.
+        app.launchEnvironment["DOBBY_FLOW_TEST_STORE_TOKEN"] = ""
+        app.launch()
+        defer { app.terminate() }
+
+        let titles = ["홈", "보관함", "설정"]
+        for title in titles {
+            let tab = app.tabBars.buttons[title]
+            XCTAssertTrue(tab.waitForExistence(timeout: 10))
+            if !tab.isSelected { tab.tap() }
+            XCTAssertTrue(tab.wait(for: \.isSelected, toEqual: true, timeout: 5))
+            XCTAssertFalse(app.staticTexts["연결 흐름 미리보기 · 합성 측정값"].exists)
+
+            let screenshot = app.screenshot()
+            let attachment = XCTAttachment(screenshot: screenshot)
+            attachment.name = "main-tab-colors-\(title)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            let image = try XCTUnwrap(screenshot.image.cgImage)
+            let screen = app.frame
+            let scaleX = CGFloat(image.width) / screen.width
+            let scaleY = CGFloat(image.height) / screen.height
+            for name in titles {
+                let button = app.tabBars.buttons[name]
+                let frame = button.frame.offsetBy(dx: -screen.minX, dy: -screen.minY)
+                    .applying(CGAffineTransform(scaleX: scaleX, y: scaleY))
+                let regions = frame.divided(atDistance: frame.height * 0.62, from: .minYEdge)
+                for (part, region) in [("아이콘", regions.slice), ("제목", regions.remainder)] {
+                    let crop = try XCTUnwrap(image.cropping(to: region.integral))
+                    let counts = try tabInkCounts(in: crop)
+                    let message = "\(title) 선택 중 \(name) \(part) · black \(counts.black), neutral600 \(counts.neutral)"
+                    if name == title {
+                        XCTAssertGreaterThan(counts.black, max(3, counts.neutral), message)
+                    } else {
+                        XCTAssertGreaterThan(counts.neutral, 3, message)
+                        XCTAssertEqual(counts.black, 0, message)
+                    }
+                }
+            }
+        }
+    }
+
+    private func tabInkCounts(in image: CGImage) throws -> (black: Int, neutral: Int) {
+        let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try XCTUnwrap(CGContext(data: nil, width: image.width, height: image.height,
+            bitsPerComponent: 8, bytesPerRow: image.width * 4, space: space,
+            bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.noneSkipLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let bytes = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+        var black = 0
+        var neutral = 0
+        // Count ink inside the glyphs, allowing four sRGB levels for antialiasing.
+        for i in stride(from: 0, to: image.height * context.bytesPerRow, by: 4) {
+            let r = Int(bytes[i]), g = Int(bytes[i + 1]), b = Int(bytes[i + 2])
+            if abs(r - 16) <= 4 && abs(g - 16) <= 4 && abs(b - 15) <= 4 { black += 1 }
+            if abs(r - 111) <= 4 && abs(g - 106) <= 4 && abs(b - 99) <= 4 { neutral += 1 }
+        }
+        return (black, neutral)
+    }
+
+    @MainActor
+    func testDraggingSelectedTabToSettingsSwitchesScreens() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        let home = app.tabBars.buttons["홈"]
+        let settings = app.tabBars.buttons["설정"]
+        XCTAssertTrue(home.waitForExistence(timeout: 10))
+        XCTAssertTrue(home.isSelected)
+        let center = CGVector(dx: 0.5, dy: 0.5)
+        home.coordinate(withNormalizedOffset: center).press(forDuration: 0.3,
+            thenDragTo: settings.coordinate(withNormalizedOffset: center),
+            withVelocity: .slow, thenHoldForDuration: 0.15)
+
+        XCTAssertTrue(app.buttons["개인정보 처리방침"].waitForExistence(timeout: 5))
+        XCTAssertTrue(settings.isSelected)
+        XCTAssertFalse(home.isSelected)
+        attachScreenshot(app, name: "settings-after-tab-drag")
+
+        app.tabBars.buttons["보관함"].tap()
+        let sample = app.buttons["debug.export-sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5))
+        sample.tap()
+        XCTAssertTrue(app.buttons["library.export"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.firstMatch.waitForNonExistence(timeout: 5))
+    }
+
     @MainActor
     func testCaptureAndEmptyLibraryRemainReachableWithLabHidden() {
         continueAfterFailure = false
@@ -385,6 +478,99 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertTrue(empty.waitForExistence(timeout: 5))
         XCTAssertEqual(thumbnails.count, 0)
         XCTAssertEqual(deletes.count, 0)
+    }
+
+    @MainActor
+    func testNewProductDescriptionKeepsItsLastLineAboveKeyboardAsItGrows() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        startMeasurementFromHome(in: app)
+        armSyntheticGarmentCapture(in: app)
+        app.buttons["captureGarment"].tap()
+        for identifier in ["confirmGarmentMeasurement", "camera.startDetailCapture", "camera.selectPhotos"] {
+            let button = app.buttons[identifier]
+            XCTAssertTrue(button.waitForExistence(timeout: 15), identifier)
+            XCTAssertTrue(button.wait(for: \.isEnabled, toEqual: true, timeout: 10), identifier)
+            button.tap()
+        }
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 15))
+        let description = app.textViews["product-info.detail"]
+        tapVisibleInput(description, in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        assertEditorBottomAboveKeyboard(description, in: app)
+        let initialHeight = description.frame.height
+        description.typeText(String(repeating: "line\n", count: 14) + "end")
+        XCTAssertTrue((description.value as? String)?.hasSuffix("end") == true)
+        XCTAssertGreaterThan(description.frame.height, initialHeight)
+        assertEditorBottomAboveKeyboard(description, in: app)
+        attachKeyboardScreenshot("new-product-description-keyboard")
+    }
+
+    @MainActor
+    func testSavedProductEditorsMoveAboveKeyboard() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        let library = app.buttons["보관함"].firstMatch
+        XCTAssertTrue(library.waitForExistence(timeout: 10))
+        library.tap()
+        let sample = app.buttons["debug.export-sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5))
+        sample.tap()
+        let edit = app.buttons["library.edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 10))
+        edit.tap()
+        XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 5))
+        let description = app.textViews["product-info.detail"]
+        let originalHeight = description.frame.height
+        tapVisibleInput(description, in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        let originalText = description.value as? String
+        let addedText = String(repeating: "\n", count: 16) + "end"
+        description.typeText(addedText)
+        XCTAssertTrue((description.value as? String)?.contains("end") == true)
+        XCTAssertGreaterThan(description.frame.height, originalHeight)
+        assertEditorBottomAboveKeyboard(description, in: app)
+        attachKeyboardScreenshot("saved-product-description-keyboard")
+
+        description.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: addedText.count))
+        XCTAssertEqual(description.value as? String, originalText)
+        XCTAssertEqual(description.frame.height, originalHeight, accuracy: 1)
+        assertEditorBottomAboveKeyboard(description, in: app)
+
+        dismissKeyboardByTappingBackground(beside: description, in: app)
+        let price = app.textFields["product-info.price"]
+        reveal(price, in: app)
+        tapVisibleInput(price, in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        assertEditorBottomAboveKeyboard(price, in: app)
+    }
+
+    @MainActor
+    private func assertEditorBottomAboveKeyboard(_ editor: XCUIElement, in app: XCUIApplication,
+                                                file: StaticString = #filePath, line: UInt = #line) {
+        let keyboard = app.keyboards.firstMatch
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let occlusion = app.frame.intersection(keyboard.frame)
+            // A simulated hardware keyboard can leave an AX keyboard entirely offscreen.
+            return occlusion.height > 100 && editor.frame.maxY <= occlusion.minY
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed,
+                       "Editor \(editor.frame), keyboard \(keyboard.frame), app \(app.frame)",
+                       file: file, line: line)
+    }
+
+    @MainActor
+    private func attachKeyboardScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     @MainActor

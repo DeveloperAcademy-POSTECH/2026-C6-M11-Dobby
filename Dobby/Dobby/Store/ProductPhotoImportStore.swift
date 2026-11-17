@@ -4,6 +4,102 @@ import SwiftData
 
 @MainActor
 enum ProductPhotoImportStore {
+    /// Borrow the input draft's current visible photos for the capture gallery.
+    /// Product rotations are already separate files; never copy or delete them here.
+    static func capturePreviewPhotos(for garment: Garment, sessionID: UUID) throws -> [CapturedAsset] {
+        try garment.productPhotos.map { photo in
+            let url = GarmentStore.url(for: photo)
+            return CapturedAsset(id: photo.id, sessionID: sessionID, garmentID: garment.id,
+                purpose: photo.isMeasurementSource ? .measurement : .detail, capturedAt: photo.capturedAt,
+                source: .localFile(url, metadata: try ProductPhotoHandoff.metadata(for: url)))
+        }
+    }
+
+    /// Add only newly owned captures and apply gallery exclusions to the current
+    /// draft. Borrowed originals and the surviving product order stay untouched.
+    static func applyAdditionalCapture(_ photos: [CapturedAsset], removing photoIDs: Set<UUID>,
+                                       to garment: Garment, in context: ModelContext) async throws {
+        try Task.checkCancellation()
+        guard garment.modelContext === context,
+              photoIDs.isSubset(of: Set(garment.productPhotos.map(\.id))) else {
+            throw CameraFailure.mismatchedCapture
+        }
+        if !photos.isEmpty { try await appendCapturedPhotos(photos, to: garment, in: context) }
+        // No suspension or persistence between exclusions: the parent draft still
+        // owns Done/discard and removeProductPhoto retains every original file.
+        for id in photoIDs {
+            try GarmentStore.removeProductPhoto(id: id, from: garment, in: context, persist: { _ in })
+        }
+    }
+
+    /// Detail capture returns every new photo, including overflow. Prepare all
+    /// product copies before touching SwiftData so an import failure/retry can
+    /// never append the first few captures twice or change existing photo order.
+    /// Album selection uses the single-photo import path below.
+    static func appendCapturedPhotos(_ photos: [CapturedAsset], to garment: Garment,
+                                     in context: ModelContext) async throws {
+        try Task.checkCancellation()
+        guard garment.modelContext === context,
+              !photos.isEmpty, Set(photos.map(\.id)).count == photos.count,
+              Set(photos.map(\.id)).isDisjoint(with: garment.photos.map(\.id)),
+              Set(photos.map(\.sessionID)).count == 1,
+              photos.allSatisfy({ $0.garmentID == garment.id && $0.purpose == .detail }) else {
+            throw CameraFailure.mismatchedCapture
+        }
+        let garmentID = garment.id
+        let directory = GarmentStore.photosDirectory
+        let copies = try await Task.detached(priority: .userInitiated) {
+            var prepared: [CapturedProductPhotoCopy] = []
+            do {
+                for photo in photos {
+                    try Task.checkCancellation()
+                    guard case let .localFile(source, _) = photo.source, source.isFileURL else {
+                        throw ImportError.unreadablePhoto
+                    }
+                    // Preserve capture identity for the existing Photos saving
+                    // receipt when the creation flow revisits detail capture.
+                    // The file is still a separate product-owned JPEG copy.
+                    let id = photo.id
+                    let destination = directory.appending(path: "\(garmentID.uuidString)-\(id.uuidString).jpg")
+                    let size = try autoreleasepool {
+                        try writeJPEG(Data(contentsOf: source), to: destination)
+                    }
+                    prepared.append(CapturedProductPhotoCopy(id: id, destination: destination,
+                        width: size.width, height: size.height, capturedAt: photo.capturedAt))
+                }
+                return prepared
+            } catch {
+                removeUncommittedFiles(prepared.map(\.destination))
+                throw error
+            }
+        }.value
+        do {
+            try Task.checkCancellation()
+            guard garment.modelContext === context else { throw CameraFailure.mismatchedCapture }
+            var nextOrder = (garment.photos.map(\.order).max() ?? -1) + 1
+            var isFirst = garment.productPhotos.isEmpty
+            // No suspension between inserting copies: the parent draft observes
+            // one complete batch and its own Done validation applies <=10.
+            for copy in copies {
+                let photo = GarmentPhoto(fileName: copy.destination.lastPathComponent,
+                    role: isFirst ? .thumbnail : .detail, order: nextOrder)
+                photo.id = copy.id
+                photo.imageWidth = copy.width
+                photo.imageHeight = copy.height
+                photo.capturedAt = copy.capturedAt
+                photo.isSelectedForProduct = true
+                context.insert(photo)
+                garment.photos.append(photo)
+                nextOrder += 1
+                isFirst = false
+            }
+            garment.updatedAt = .now
+        } catch {
+            removeUncommittedFiles(copies.map(\.destination))
+            throw error
+        }
+    }
+
     /// Writes only a new product copy. Album originals and measurement evidence
     /// remain untouched, and the caller's isolated edit context owns persistence.
     static func append(_ data: Data, to garment: Garment, in context: ModelContext) async throws {
@@ -88,4 +184,12 @@ enum ProductPhotoImportStore {
             }
         }
     }
+}
+
+private nonisolated struct CapturedProductPhotoCopy: Sendable {
+    let id: UUID
+    let destination: URL
+    let width: Int
+    let height: Int
+    let capturedAt: Date
 }

@@ -25,7 +25,7 @@ struct HomeTapeMeasure: View {
     var body: some View {
         GeometryReader { geometry in
             let scale = max(0, geometry.size.width / Self.referenceSize.width)
-            let size = canvasSize ?? CGSize(width: geometry.size.width, height: 874 * scale)
+            let size = CGSize(width: geometry.size.width, height: canvasSize?.height ?? 874 * scale)
             ZStack(alignment: .topLeading) {
                 HomeMeasurementHomeArtwork(pull: pull, canvasSize: size)
                     .frame(width: size.width, height: size.height)
@@ -152,7 +152,7 @@ struct HomeTapeMeasure: View {
     private func commit(size: CGSize) {
         guard scenePhase == .active else { resetInteraction(); return }
         phase = .committed
-        let seed = HomeMeasurementTransitionSeed(pull: pull, canvasSize: size)
+        let seed = HomeMeasurementTransitionSeed(pull: pull, canvasSize: canvasSize ?? size, artworkWidth: size.width)
         if let onBeginMeasurementTransition { onBeginMeasurementTransition(seed) }
         else { measurementHaptics?.finishPull(); onStartCapture() }
     }

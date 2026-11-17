@@ -10,11 +10,11 @@ final class CaptureHeaderPhotoLayoutTests: XCTestCase {
         XCTAssertFalse(layout.isBottomAligned)
     }
 
-    func testSquareStartsBelowHeaderWhileTallPhotoKeepsBottomAlignment() {
+    func testSquareCentersBelowHeaderWhileTallPhotoKeepsBottomAlignment() {
         let size = CGSize(width: 402, height: 874)
         let square = CameraPhotoPreviewLayout(containerSize: size,
             photoAspectRatio: 1, portraitPhotoTop: 146)
-        assertRect(square.photoFrame, CGRect(x: 0, y: 146, width: 402, height: 402))
+        assertRect(square.photoFrame, CGRect(x: 0, y: 236, width: 402, height: 402))
 
         let tall = CameraPhotoPreviewLayout(containerSize: size,
             photoAspectRatio: 9.0 / 16, prefersBottomAlignedPortrait: true, portraitPhotoTop: 146)
@@ -74,7 +74,7 @@ final class CaptureHeaderPhotoLayoutTests: XCTestCase {
         assertRect(layout.photoFrame, CGRect(x: 1.75, y: 146, width: 316.5, height: 422))
     }
 
-    func testResultPhotoUsesTheSameReferenceHeaderAndPreservesTheTallSheetLayout() {
+    func testResultSquareMatchesFigmaWhileOtherRatiosPreserveTheirHeaderAndSheetLayout() {
         // Result coordinates begin below the 62pt status safe area.
         let size = CGSize(width: 402, height: 874 - 62)
         let standard = MeasurementResultLayout(size: size, bottomSafeArea: 34,
@@ -84,8 +84,12 @@ final class CaptureHeaderPhotoLayoutTests: XCTestCase {
         XCTAssertNil(standard.sheetTop)
 
         let square = MeasurementResultLayout(size: size, bottomSafeArea: 34,
-            aspect: 1, summaryHeight: 111)
-        assertRect(square.photo, CGRect(x: 0, y: 84, width: 402, height: 402))
+            aspect: 1, summaryHeight: 111, captureAspect: 1, topSafeArea: 62)
+        assertRect(square.photo, CGRect(x: 0, y: 156, width: 402, height: 402))
+        XCTAssertEqual(square.photo.minY + 62, 218, accuracy: 0.001)
+        assertRect(square.summary, CGRect(x: 19, y: 652, width: 364, height: 111))
+        XCTAssertEqual(square.summary.minY + 62, 714, accuracy: 0.001)
+        XCTAssertEqual(square.summary.minY - square.photo.maxY, 94, accuracy: 0.001)
         XCTAssertNil(square.sheetTop)
 
         let tall = MeasurementResultLayout(size: size, bottomSafeArea: 34,
@@ -95,6 +99,32 @@ final class CaptureHeaderPhotoLayoutTests: XCTestCase {
         XCTAssertEqual(tall.photo.height, 402.0 * 16 / 9, accuracy: 0.001)
         XCTAssertNotNil(tall.sheetTop)
         XCTAssertLessThanOrEqual(tall.photo.maxY, size.height)
+    }
+
+    func testSquareResultPreservesAspectAndClearsHeaderAndFooterAcrossWindowSizes() {
+        let cases: [(CGSize, CGFloat, CGFloat)] = [
+            (CGSize(width: 320, height: 548), 20, 0),
+            (CGSize(width: 375, height: 647), 20, 0),
+            (CGSize(width: 390, height: 785), 59, 34),
+            (CGSize(width: 402, height: 812), 62, 34),
+            (CGSize(width: 440, height: 894), 62, 34)
+        ]
+        for (size, safeTop, safeBottom) in cases {
+            for summaryHeight in [CGFloat(111), 151, 240] {
+                let layout = MeasurementResultLayout(size: size, bottomSafeArea: safeBottom,
+                    aspect: 1, summaryHeight: summaryHeight,
+                    captureAspect: 1, topSafeArea: safeTop, usesSheet: false)
+                let photo = layout.photo
+                XCTAssertEqual(photo.width, photo.height, accuracy: 0.001)
+                XCTAssertEqual(photo.midX, size.width / 2, accuracy: 0.001)
+                XCTAssertGreaterThanOrEqual(photo.minY, 84)
+                XCTAssertGreaterThanOrEqual(layout.summary.minY - photo.maxY, 33 - 0.001)
+                XCTAssertLessThanOrEqual(layout.summary.maxY, size.height - safeBottom - 15 + 0.001)
+                XCTAssertTrue(CGRect(origin: .zero, size: size).contains(photo))
+                XCTAssertNil(layout.sheetTop)
+                XCTAssertEqual(layout.magnifierBottomInset, 0)
+            }
+        }
     }
 
     private func assertRect(_ actual: CGRect, _ expected: CGRect,
