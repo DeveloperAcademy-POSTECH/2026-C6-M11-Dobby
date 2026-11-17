@@ -108,9 +108,37 @@ final class ProductInformationValidationScrollTests: XCTestCase {
     }
 
     private func openLibraryEditor(in app: XCUIApplication) {
-        app.tabBars.buttons["보관함"].tap()
-        tap("debug.export-sample", in: app)
-        XCTAssertTrue(app.navigationBars["90s 나이키 트랙탑"].waitForExistence(timeout: 10))
+        let productName = "Validation library product"
+        startMeasurementFromHome(in: app)
+        armSyntheticGarmentCapture(in: app)
+        tap("captureGarment", in: app)
+        tap("confirmGarmentMeasurement", in: app)
+        tap("camera.startDetailCapture", in: app)
+        tap("camera.captureDetail", in: app)
+        tap("camera.selectPhotos", in: app)
+        XCTAssertTrue(app.navigationBars["제품 정보 입력"].waitForExistence(timeout: 30))
+
+        let name = app.textFields["product-info.name"]
+        reveal(name, in: app)
+        name.tap()
+        name.typeText(productName)
+        let detail = app.textViews["product-info.detail"]
+        reveal(detail, in: app)
+        detail.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.1)).tap()
+        detail.typeText("Saved through the normal registration flow")
+        let price = app.textFields["product-info.price"]
+        reveal(price, in: app)
+        price.tap()
+        price.typeText("40000")
+        tap("product-info.done", in: app)
+        tap("product-complete.library", in: app)
+
+        let card = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+            "library.product.", productName)).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        card.tap()
+        XCTAssertTrue(app.navigationBars[productName].waitForExistence(timeout: 10))
         tap("library.edit", in: app)
         XCTAssertTrue(app.navigationBars["제품 정보 수정"].waitForExistence(timeout: 10))
     }
@@ -134,8 +162,14 @@ final class ProductInformationValidationScrollTests: XCTestCase {
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<8 where !element.isHittable { app.swipeDown() }
         XCTAssertTrue(element.waitForExistence(timeout: 5))
+        for _ in 0..<8 where !element.isHittable {
+            if element.frame.midY < app.navigationBars.firstMatch.frame.maxY {
+                app.swipeDown()
+            } else {
+                app.swipeUp()
+            }
+        }
         XCTAssertTrue(element.isHittable)
     }
 
