@@ -71,7 +71,8 @@ struct GarmentMeasurementResultView: View {
             if geometry.size.width <= geometry.size.height && !dynamicTypeSize.isAccessibilitySize {
                 portraitResult(in: CGSize(width: geometry.size.width,
                                           height: geometry.size.height + geometry.safeAreaInsets.bottom),
-                               bottomSafeArea: geometry.safeAreaInsets.bottom)
+                               bottomSafeArea: geometry.safeAreaInsets.bottom,
+                               topSafeArea: geometry.safeAreaInsets.top)
             } else {
                 accessibleResult
             }
@@ -120,22 +121,25 @@ struct GarmentMeasurementResultView: View {
         .background(Color.white)
     }
 
-    private var captureUsesTallResult: Bool {
+    private var captureAspect: CGFloat {
         let crop = model.snapshot.capturePresentationCrop.flatMap { $0.isValid ? $0 : nil }
             ?? model.snapshot.presentationCrop.flatMap { $0.isValid ? $0 : nil } ?? .full
-        let aspect = SnapshotPresentation.aspectRatio(for: model.snapshot) * CGFloat(crop.width / crop.height)
-        return MeasurementResultLayout.usesSheet(aspect: aspect)
+        return SnapshotPresentation.aspectRatio(for: model.snapshot) * CGFloat(crop.width / crop.height)
     }
 
-    private func portraitResult(in size: CGSize, bottomSafeArea: CGFloat) -> some View {
+    private func portraitResult(in size: CGSize, bottomSafeArea: CGFloat, topSafeArea: CGFloat) -> some View {
         let aspect = SnapshotPresentation.resultAspectRatio(for: model.snapshot)
+        let usesSheet = MeasurementResultLayout.usesSheet(aspect: captureAspect)
         let base = MeasurementResultLayout(size: size, bottomSafeArea: bottomSafeArea,
-                                           aspect: aspect, summaryHeight: summaryHeight, usesSheet: captureUsesTallResult)
+                                           aspect: aspect, summaryHeight: summaryHeight,
+                                           captureAspect: captureAspect, topSafeArea: topSafeArea, usesSheet: usesSheet)
         // The photo editor only needs the settled detent for magnifier and
         // touch exclusion. Per-frame sheet motion is owned by the sheet below.
         let sheetHeight = isResultSheetExpanded ? base.expandedSheetHeight : base.collapsedSheetHeight
         let layout = MeasurementResultLayout(size: size, bottomSafeArea: bottomSafeArea,
-                                             aspect: aspect, summaryHeight: summaryHeight, usesSheet: captureUsesTallResult, sheetHeight: sheetHeight)
+                                             aspect: aspect, summaryHeight: summaryHeight,
+                                             captureAspect: captureAspect, topSafeArea: topSafeArea,
+                                             usesSheet: usesSheet, sheetHeight: sheetHeight)
         return ZStack(alignment: .topLeading) {
             Color.white
             photoEditor(showsEnlargeControl: false, magnifierBottomInset: layout.magnifierBottomInset)
@@ -182,7 +186,8 @@ struct GarmentMeasurementResultView: View {
 
     private func resultSummary(overlaysPhoto: Bool) -> some View {
         MeasurementResultSummary(values: model.visibleValues, isRecalculating: model.needsRecalculation,
-                                 overlaysPhoto: overlaysPhoto)
+                                 overlaysPhoto: overlaysPhoto,
+                                 usesSquareCaptureStyle: abs(captureAspect - 1) < 0.000_001)
             .background {
                 GeometryReader { geometry in
                     Color.clear.preference(key: MeasurementResultSummaryHeightKey.self,

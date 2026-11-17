@@ -7,6 +7,7 @@ struct MeasurementResultSummary: View {
     let values: [MeasurementValue]
     let isRecalculating: Bool
     let overlaysPhoto: Bool
+    var usesSquareCaptureStyle = false
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @ScaledMetric(relativeTo: .body) private var cardHeight: CGFloat = 75
@@ -18,8 +19,9 @@ struct MeasurementResultSummary: View {
         // The caller already supplies visible values. Reorder only the known
         // top fields for this screen; preserve every bottom/unknown value and
         // its relative order without changing the shared export presentation.
-        let topOrder = ["top.totalLength", "top.shoulderWidth", "top.chestWidth",
-                        "top.frontLength", "top.sleeveLengthLeft"]
+        let topOrder = usesSquareCaptureStyle
+            ? ["top.shoulderWidth", "top.chestWidth", "top.totalLength", "top.frontLength", "top.sleeveLengthLeft"]
+            : ["top.totalLength", "top.shoulderWidth", "top.chestWidth", "top.frontLength", "top.sleeveLengthLeft"]
         return values.enumerated().sorted { lhs, rhs in
             let left = topOrder.firstIndex(of: lhs.element.id) ?? topOrder.count
             let right = topOrder.firstIndex(of: rhs.element.id) ?? topOrder.count
@@ -96,9 +98,7 @@ struct MeasurementResultSummary: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
             Text(displayText(for: value))
-                // The design's Callout/Emphasized style is Semibold Italic.
-                // Use the bundled Semibold face with SwiftUI's italic trait.
-                .font(.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout).italic())
+                .font(valueFont)
                 .tracking(-0.31)
                 .foregroundStyle(.black)
                 .frame(maxWidth: .infinity, minHeight: valueLineHeight)
@@ -113,6 +113,13 @@ struct MeasurementResultSummary: View {
         .accessibilityLabel(title(for: value))
         .accessibilityValue(accessibilityValue(for: value))
         .accessibilityIdentifier("garmentResultMeasurementCard_\(value.id)")
+    }
+
+    private var valueFont: Font {
+        let font = Font.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout)
+        // The 1:1 design uses upright Callout/Emphasized text; retain the
+        // existing italic styling for the other result compositions.
+        return usesSquareCaptureStyle ? font : font.italic()
     }
 
     private func title(for value: MeasurementValue) -> String {
