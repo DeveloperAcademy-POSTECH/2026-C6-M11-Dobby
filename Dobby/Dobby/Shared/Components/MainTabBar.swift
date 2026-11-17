@@ -35,7 +35,9 @@ struct MainTabBar: View {
                 tabButton(tab)
             }
         }
-        .glassEffect(.regular, in: Capsule())
+        // A custom control needs the interactive variant for the system's
+        // Liquid Glass press, light and deformation responses.
+        .glassEffect(.regular.interactive(), in: Capsule())
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selection)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isTabBar)
