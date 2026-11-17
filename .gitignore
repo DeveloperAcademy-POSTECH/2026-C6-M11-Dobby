@@ -96,6 +96,7 @@ Config/DobbySecrets.xcconfig
 .wrangler/
 Backend/instagram-worker/node_modules/
 Backend/instagram-worker/wrangler.local.toml
+Backend/instagram-worker/wrangler.dev.local.toml
 .pnpm-store/
 
 ### SwiftPackageManager ###

@@ -2,6 +2,14 @@
   "name": "dobby-instagram-worker",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test test/*.test.js", "deploy": "wrangler deploy" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --config wrangler.dev.local.toml",
+    "deploy:prod": "wrangler deploy --config wrangler.local.toml",
+    "tail": "wrangler tail --search instagram_upload_timing",
+    "tail:dev": "wrangler tail --config wrangler.dev.local.toml --search instagram_upload_timing",
+    "tail:oauth:dev": "wrangler tail --config wrangler.dev.local.toml --search instagram_oauth"
+  },
   "devDependencies": { "wrangler": "4.147.0" }
 }

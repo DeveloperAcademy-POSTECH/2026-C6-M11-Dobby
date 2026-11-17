@@ -215,10 +215,10 @@ struct InstagramExportView: View {
 
     private func connect() async {
         busy = true
+        accountLoadError = nil
         defer { busy = false }
         do {
             account = try await client.connect()
-            accountLoadError = nil
             requestID = UUID().uuidString
             showsConnectionCompletion = true
         } catch {
@@ -247,18 +247,30 @@ struct InstagramExportView: View {
             return
         }
         guard let expected = account else { return }
+        let start = ContinuousClock.now
+        let timing = InstagramUploadTiming(photoCount: draft.photos.count)
+        var outcome = "error"
+        defer { timing.log("upload_total", since: start, outcome: outcome) }
+
         uploadState = .uploading
         do {
-            let current = try await client.account()
+            let current = try await client.account(timing: timing)
             guard current?.id == expected.id else {
+                outcome = "account_changed"
                 account = current
                 uploadState = .idle
                 message = "연결 계정이 변경되었습니다. 게시할 계정을 다시 확인해 주세요."
                 return
             }
-            let result = try await client.publish(images: draft.photos.map(\.data), caption: draft.caption,
-                                                  accountID: expected.id, requestID: requestID)
+            let result = try await client.publish(
+                images: draft.photos.map(\.data),
+                caption: draft.caption,
+                accountID: expected.id,
+                requestID: requestID,
+                timing: timing
+            )
             uploadState = .completed
+            outcome = "ok"
             onPublished(result)
         } catch {
             uploadState = .idle

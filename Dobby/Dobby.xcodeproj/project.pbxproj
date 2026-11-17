@@ -406,6 +406,8 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INSTAGRAM_WORKER_APP_API_KEY = "$(DOBBY_INSTAGRAM_DEV_APP_API_KEY)";
+				INSTAGRAM_WORKER_BASE_URL = "$(INSTAGRAM_DEV_BACKEND_BASE_URL)";
 				IPHONEOS_DEPLOYMENT_TARGET = 26;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -453,6 +455,8 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INSTAGRAM_WORKER_APP_API_KEY = "$(DOBBY_INSTAGRAM_APP_API_KEY)";
+				INSTAGRAM_WORKER_BASE_URL = "$(INSTAGRAM_BACKEND_BASE_URL)";
 				IPHONEOS_DEPLOYMENT_TARGET = 26;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

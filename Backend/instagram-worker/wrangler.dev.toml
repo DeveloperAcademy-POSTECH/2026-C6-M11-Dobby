@@ -1,0 +1,36 @@
+name = "dobby-instagram-dev"
+main = "src/index.js"
+compatibility_date = "2026-10-04"
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+
+[vars]
+PUBLIC_BASE_URL = "https://dobby-instagram-dev.YOUR-SUBDOMAIN.workers.dev"
+INSTAGRAM_API_VERSION = "v25.0"
+INSTAGRAM_UPLOAD_TIMING = "true"
+
+[[kv_namespaces]]
+binding = "INSTAGRAM_MEDIA"
+id = "REPLACE_WITH_DEVELOPMENT_MEDIA_KV_NAMESPACE_ID"
+
+[[durable_objects.bindings]]
+name = "INSTAGRAM_CONNECTIONS"
+class_name = "InstagramConnection"
+
+[[durable_objects.bindings]]
+name = "INSTAGRAM_ACCOUNT_CONNECTIONS"
+class_name = "InstagramAccountConnections"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["InstagramConnection"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["InstagramAccountConnections"]
