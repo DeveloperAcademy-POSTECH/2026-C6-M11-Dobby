@@ -2,6 +2,9 @@ name = "dobby-cafe24"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
 
+[vars]
+DEFAULT_DISPLAY_GROUP = "2"
+
 [[kv_namespaces]]
 binding = "CAFE24_TOKENS"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"

@@ -33,6 +33,7 @@ struct Cafe24ExportView: View {
     @State private var isConnecting = false
     @State private var isDisconnecting = false
     @State private var message: String?
+    @State private var uploadRequestID = UUID()
 
     init(
         product: ExportProduct,
@@ -64,7 +65,6 @@ struct Cafe24ExportView: View {
                 Cafe24ProductView(
                     draft: $draft,
                     mallID: connectedMallID,
-                    isCompleted: uploadState.isCompleted,
                     isDisabled: uploadState.isUploading
                 )
             } else {
@@ -196,8 +196,10 @@ struct Cafe24ExportView: View {
         uploadState = .uploading
         do {
             let result = try await client.publish(
+                requestID: uploadRequestID.uuidString,
                 productName: draft.productName,
                 description: draft.productDescription,
+                category: draft.category,
                 price: price,
                 images: draft.photos
             )

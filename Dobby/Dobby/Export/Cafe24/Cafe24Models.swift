@@ -26,6 +26,7 @@ struct Cafe24ExportDraft {
     private let originalProductName: String
     private let originalProductDescription: String
     private let originalPriceText: String
+    let category: String?
     let photos: [Data]
     var productName: String
     var productDescription: String
@@ -39,6 +40,9 @@ struct Cafe24ExportDraft {
     var validationMessage: String? {
         if productName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "상품명을 입력해 주세요."
+        }
+        if photos.isEmpty {
+            return Cafe24IntegrationError.missingImage.errorDescription
         }
         if photos.count > Cafe24IntegrationClient.maximumImageCount {
             return Cafe24IntegrationError.tooManyImages.errorDescription
@@ -59,6 +63,8 @@ struct Cafe24ExportDraft {
         originalProductName = productName
         originalProductDescription = productDescription
         originalPriceText = product.marketplacePayload.price
+        let category = product.category?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.category = category?.isEmpty == false ? category : nil
         photos = product.exportPhotos
         self.productName = productName
         self.productDescription = productDescription
@@ -78,9 +84,9 @@ struct Cafe24ExportDraft {
     }
 }
 
-enum Cafe24IntegrationError: LocalizedError {
-    case backendNotConfigured, invalidMallID, invalidProductName, invalidPrice, tooManyImages
-    case authenticationCancelled, invalidResponse
+nonisolated enum Cafe24IntegrationError: LocalizedError {
+    case backendNotConfigured, invalidMallID, invalidProductName, invalidPrice, missingImage, tooManyImages
+    case authenticationCancelled, invalidResponse, imagePreparationFailed
     case server(String)
 
     var errorDescription: String? {
@@ -89,7 +95,9 @@ enum Cafe24IntegrationError: LocalizedError {
         case .invalidMallID: "카페24 쇼핑몰 ID를 확인해 주세요."
         case .invalidProductName: "상품명을 입력해 주세요."
         case .invalidPrice: "판매가는 숫자로 입력해 주세요."
+        case .missingImage: "카페24에 올릴 상품 사진이 필요해요."
         case .tooManyImages: "카페24에는 사진을 최대 20장까지 올릴 수 있어요."
+        case .imagePreparationFailed: "카페24에 올릴 사진을 준비하지 못했어요. 다른 사진을 선택해 주세요."
         case .authenticationCancelled: "카페24 연결을 취소했습니다."
         case .invalidResponse: "서버 응답을 확인할 수 없습니다."
         case .server(let message): message
@@ -98,10 +106,11 @@ enum Cafe24IntegrationError: LocalizedError {
 }
 
 struct Cafe24PublishRequest: Encodable {
+    let requestID: String
     let productName: String
     let description: String
+    let category: String?
     let price: Int
-    let supplyPrice: Int
     let imagesBase64: [String]
 }
 

@@ -9,16 +9,12 @@ struct Cafe24ProductView: View {
     @Binding var draft: Cafe24ExportDraft
     @FocusState private var focusedField: Cafe24InputField?
     let mallID: String
-    let isCompleted: Bool
     let isDisabled: Bool
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if isCompleted {
-                        Cafe24CompletionHeader()
-                    }
                     ExportUploadAccountCard(accountLabel: "@\(mallID).cafe24.com") {
                         EmptyView()
                     }
@@ -30,18 +26,18 @@ struct Cafe24ProductView: View {
                         dismissKeyboard()
                         draft.resetProductName()
                     }
-                    .disabled(areFieldsDisabled)
+                    .disabled(isDisabled)
                     .id(Cafe24InputField.productName)
                     Cafe24ProductDescriptionField(text: $draft.productDescription, focus: $focusedField) {
                         dismissKeyboard()
                         draft.resetProductDescription()
                     }
-                    .disabled(areFieldsDisabled)
+                    .disabled(isDisabled)
                     Cafe24PriceField(priceText: $draft.priceText, focus: $focusedField) {
                         dismissKeyboard()
                         draft.resetPrice()
                     }
-                    .disabled(areFieldsDisabled)
+                    .disabled(isDisabled)
                     .id(Cafe24InputField.price)
                 }
                 .padding(.horizontal, 20)
@@ -70,13 +66,11 @@ struct Cafe24ProductView: View {
             )) { _ in
                 revealFocusedField(using: proxy)
             }
-            .onChange(of: areFieldsDisabled) {
-                if areFieldsDisabled { dismissKeyboard() }
+            .onChange(of: isDisabled) {
+                if isDisabled { dismissKeyboard() }
             }
         }
     }
-
-    private var areFieldsDisabled: Bool { isDisabled || isCompleted }
 
     private func dismissKeyboard() {
         focusedField = nil
@@ -249,26 +243,6 @@ private struct Cafe24GrowingDescriptionTextView: UIViewRepresentable {
             let overlap = scrollFrameInWindow.intersection(keyboardFrameInWindow).height
             return max(0, overlap - scrollView.adjustedContentInset.bottom)
         }
-    }
-}
-
-private struct Cafe24CompletionHeader: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Text("카페24에 업로드 완료 🎉")
-                .font(.title3.bold())
-                .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 0) {
-                Text("연결된 계정에 자동 업로드를 ")
-                Text("완료")
-                    .foregroundStyle(Color(.brandMain500))
-                Text("했어요")
-            }
-            .font(.body)
-            .accessibilityElement(children: .combine)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
     }
 }
 
@@ -475,27 +449,8 @@ private struct Cafe24ResetButton: View {
     Cafe24ProductView(
         draft: $draft,
         mallID: "myshop",
-        isCompleted: false,
         isDisabled: false
     )
-}
-
-#Preview("업로드 완료") {
-    @Previewable @State var draft = Cafe24ExportDraft(product: .demo)
-
-    Cafe24ProductView(
-        draft: $draft,
-        mallID: "myshop",
-        isCompleted: true,
-        isDisabled: false
-    )
-}
-
-#Preview("완료 안내", traits: .sizeThatFitsLayout) {
-    Cafe24CompletionHeader()
-        .frame(width: 363)
-        .padding()
-        .background(Color(.brandNeutral50))
 }
 
 #Preview("업로드할 사진", traits: .sizeThatFitsLayout) {
