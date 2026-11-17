@@ -320,11 +320,20 @@ private struct DescriptionTextView: UIViewRepresentable {
         view.accessibilityIdentifier = accessibilityID
         guard view.markedTextRange == nil else { return }
         let attributes = textAttributes
-        if view.text != text || context.coordinator.appliedFontSize != fontSize {
+        let displayedText = maximumLength.map {
+            ProductTextLimit.truncated(text, maximumLength: $0)
+        } ?? text
+        if view.text != displayedText || context.coordinator.appliedFontSize != fontSize {
             let selection = view.selectedRange
-            view.attributedText = NSAttributedString(string: text, attributes: attributes)
+            view.attributedText = NSAttributedString(string: displayedText, attributes: attributes)
             view.selectedRange = NSRange(location: min(selection.location, view.text.utf16.count), length: 0)
             context.coordinator.appliedFontSize = fontSize
+        }
+        if displayedText != text {
+            Task { @MainActor in
+                await Task.yield()
+                context.coordinator.parent.text = displayedText
+            }
         }
         view.typingAttributes = attributes
         context.coordinator.updateLayout(in: view)
@@ -375,8 +384,24 @@ private struct DescriptionTextView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             guard textView.markedTextRange == nil else { return }
+            if let maximumLength = parent.maximumLength, textView.text.count > maximumLength {
+                restoreAcceptedText(in: textView, maximumLength: maximumLength)
+                return
+            }
             parent.text = textView.text
             updateLayout(in: textView, reason: "text-change")
+        }
+
+        private func restoreAcceptedText(in textView: UITextView, maximumLength: Int) {
+            let acceptedText = ProductTextLimit.truncated(parent.text, maximumLength: maximumLength)
+            let selectionLocation = min(textView.selectedRange.location, acceptedText.utf16.count)
+            textView.attributedText = NSAttributedString(string: acceptedText, attributes: parent.textAttributes)
+            textView.selectedRange = NSRange(location: selectionLocation, length: 0)
+            textView.typingAttributes = parent.textAttributes
+            if parent.text != acceptedText {
+                parent.text = acceptedText
+            }
+            updateLayout(in: textView, reason: "length-limit")
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange,

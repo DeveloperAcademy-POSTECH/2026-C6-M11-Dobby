@@ -117,13 +117,20 @@ private struct Cafe24GrowingDescriptionTextView: UIViewRepresentable {
         context.coordinator.parent = self
         guard textView.markedTextRange == nil else { return }
 
-        if textView.text != text {
+        let displayedText = ProductTextLimit.truncated(text, maximumLength: ProductTextLimit.detail)
+        if textView.text != displayedText {
             let selection = textView.selectedRange
-            textView.attributedText = NSAttributedString(string: text, attributes: textAttributes)
+            textView.attributedText = NSAttributedString(string: displayedText, attributes: textAttributes)
             textView.selectedRange = NSRange(
                 location: min(selection.location, textView.text.utf16.count),
                 length: 0
             )
+        }
+        if displayedText != text {
+            Task { @MainActor in
+                await Task.yield()
+                context.coordinator.parent.text = displayedText
+            }
         }
         textView.typingAttributes = textAttributes
         context.coordinator.updateLayout(in: textView)
@@ -164,7 +171,26 @@ private struct Cafe24GrowingDescriptionTextView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             guard textView.markedTextRange == nil else { return }
+            guard textView.text.count <= ProductTextLimit.detail else {
+                restoreAcceptedText(in: textView)
+                return
+            }
             parent.text = textView.text
+            updateLayout(in: textView)
+        }
+
+        private func restoreAcceptedText(in textView: UITextView) {
+            let acceptedText = ProductTextLimit.truncated(
+                parent.text,
+                maximumLength: ProductTextLimit.detail
+            )
+            let selectionLocation = min(textView.selectedRange.location, acceptedText.utf16.count)
+            textView.attributedText = NSAttributedString(string: acceptedText, attributes: parent.textAttributes)
+            textView.selectedRange = NSRange(location: selectionLocation, length: 0)
+            textView.typingAttributes = parent.textAttributes
+            if parent.text != acceptedText {
+                parent.text = acceptedText
+            }
             updateLayout(in: textView)
         }
 
