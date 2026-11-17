@@ -55,14 +55,16 @@ struct ProductInformationFields: View {
                 placeholder: "업로드에 사용되는 제품명을 입력해주세요", identifier: "name",
                 focus: informationFocus, focusValue: .name, isRequired: true,
                 isSingleLine: !allowsPhotoEditing, usesEditingLayout: allowsPhotoEditing,
+                maximumLength: ProductTextLimit.name,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isNameValid(garment)
-                    ? "제품명을 입력해주세요" : nil)
+                    ? GarmentInformationValidation.nameErrorMessage(for: garment) : nil)
             ProductInputField(title: "상세 설명", text: $garment.detail,
                 placeholder: "제품의 상세 설명을 입력해주세요",
                 identifier: "detail", focus: informationFocus, focusValue: .detail,
                 isRequired: true, isMultiline: true, usesEditingLayout: allowsPhotoEditing,
+                maximumLength: ProductTextLimit.detail,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isDetailValid(garment)
-                    ? "설명을 입력해주세요" : nil)
+                    ? GarmentInformationValidation.detailErrorMessage(for: garment) : nil)
             ProductPriceField(garment: garment, focus: informationFocus, usesEditingLayout: allowsPhotoEditing,
                 errorMessage: showsValidationErrors && !GarmentInformationValidation.isPriceValid(garment)
                     ? "가격을 입력해주세요" : nil)
@@ -106,15 +108,21 @@ struct ProductInputField: View {
     var isSingleLine = false
     var isMultiline = false
     var usesEditingLayout = false
+    var maximumLength: Int? = nil
     var errorMessage: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ProductFieldTitle(title: title, isRequired: isRequired)
+            ProductInputFieldHeader(
+                title: title,
+                isRequired: isRequired,
+                characterCount: maximumLength.map { (text.count, $0) }
+            )
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
-            ProductFieldEditor(text: $text, placeholder: placeholder, focus: focus, focusValue: focusValue,
+            ProductFieldEditor(text: limitedText, placeholder: placeholder, focus: focus, focusValue: focusValue,
                                isSingleLine: isSingleLine, isMultiline: isMultiline,
                                usesEditingLayout: usesEditingLayout,
+                               maximumLength: maximumLength,
                                accessibilityTitle: title + (isRequired ? ", 필수" : ""),
                                accessibilityHelp: errorMessage.map { "오류: \($0). \(placeholder)" } ?? placeholder,
                                accessibilityID: "product-info.\(identifier)")
@@ -146,6 +154,44 @@ struct ProductInputField: View {
         }
         .id(focusValue)
     }
+
+    private var limitedText: Binding<String> {
+        Binding {
+            text
+        } set: { newText in
+            guard let maximumLength else {
+                text = newText
+                return
+            }
+            guard ProductTextLimit.allowsChange(
+                from: text,
+                to: newText,
+                maximumLength: maximumLength
+            ) else { return }
+            text = newText
+        }
+    }
+}
+
+private struct ProductInputFieldHeader: View {
+    let title: String
+    let isRequired: Bool
+    let characterCount: (current: Int, maximum: Int)?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            ProductFieldTitle(title: title, isRequired: isRequired)
+            Spacer(minLength: 0)
+            if let characterCount {
+                Text("\(characterCount.current) / \(characterCount.maximum)")
+                    .font(.custom("Pretendard-Regular", fixedSize: 15))
+                    .tracking(-0.23)
+                    .foregroundStyle(Color("BrandNeutral500"))
+                    .frame(minHeight: 20)
+                    .accessibilityLabel("\(characterCount.current)자 입력, 최대 \(characterCount.maximum)자")
+            }
+        }
+    }
 }
 
 private struct ProductFieldEditor: View {
@@ -156,6 +202,7 @@ private struct ProductFieldEditor: View {
     let isSingleLine: Bool
     let isMultiline: Bool
     let usesEditingLayout: Bool
+    let maximumLength: Int?
     let accessibilityTitle: String
     let accessibilityHelp: String
     let accessibilityID: String
@@ -165,6 +212,7 @@ private struct ProductFieldEditor: View {
     var body: some View {
         if isMultiline {
             DescriptionTextView(text: $text, fontSize: fontSize, contentHeight: $descriptionHeight,
+                                maximumLength: maximumLength,
                                 accessibilityTitle: accessibilityTitle, accessibilityHelp: accessibilityHelp,
                                 accessibilityID: accessibilityID)
                 .focused(focus, equals: focusValue)
@@ -209,6 +257,7 @@ private struct DescriptionTextView: UIViewRepresentable {
     @Binding var text: String
     let fontSize: CGFloat
     @Binding var contentHeight: CGFloat
+    let maximumLength: Int?
     let accessibilityTitle: String
     let accessibilityHelp: String
     let accessibilityID: String
@@ -291,8 +340,21 @@ private struct DescriptionTextView: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
+            guard textView.markedTextRange == nil else { return }
             parent.text = textView.text
             updateLayout(in: textView, reason: "text-change")
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange,
+                      replacementText replacement: String) -> Bool {
+            guard textView.markedTextRange == nil, let maximumLength = parent.maximumLength else { return true }
+            guard let textRange = Range(range, in: textView.text) else { return false }
+            let newText = textView.text.replacingCharacters(in: textRange, with: replacement)
+            return ProductTextLimit.allowsChange(
+                from: textView.text,
+                to: newText,
+                maximumLength: maximumLength
+            )
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {

@@ -16,10 +16,24 @@ enum GarmentInformationValidation {
 
     static func isNameValid(_ garment: Garment) -> Bool {
         !garment.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && garment.name.count <= ProductTextLimit.name
     }
 
     static func isDetailValid(_ garment: Garment) -> Bool {
         !garment.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && garment.detail.count <= ProductTextLimit.detail
+    }
+
+    static func nameErrorMessage(for garment: Garment) -> String {
+        garment.name.count > ProductTextLimit.name
+            ? "제품명은 \(ProductTextLimit.name)자 이내로 입력해주세요"
+            : "제품명을 입력해주세요"
+    }
+
+    static func detailErrorMessage(for garment: Garment) -> String {
+        garment.detail.count > ProductTextLimit.detail
+            ? "설명은 \(ProductTextLimit.detail)자 이내로 입력해주세요"
+            : "설명을 입력해주세요"
     }
 
     static func isPriceValid(_ garment: Garment) -> Bool {
@@ -38,9 +52,15 @@ enum GarmentInformationValidation {
         guard garment.productPhotos.count <= ProductPhotoLimit.maximumCount else {
             throw ProductPhotoLimit.ValidationError.tooManyPhotos
         }
-        for (label, text) in [("제품명", garment.name), ("설명", garment.detail)] {
+        for (label, text, maximumLength) in [
+            ("제품명", garment.name, ProductTextLimit.name),
+            ("설명", garment.detail, ProductTextLimit.detail)
+        ] {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw GarmentInputCompletion.ValidationError.missingInformation(label)
+            }
+            if text.count > maximumLength {
+                throw GarmentInputCompletion.ValidationError.missingInformation("\(label) \(maximumLength)자 이내")
             }
         }
         guard let price = garment.price, price > 0 else {
