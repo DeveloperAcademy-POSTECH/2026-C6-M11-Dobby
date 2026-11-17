@@ -165,3 +165,41 @@ test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중
   assert.equal(additionalAttaches, 2);
   assert.equal((await retryResponse.json()).productNo, 358);
 });
+
+test("쇼케이스 몰은 이미지 등록 완료 후 상품을 공개하고 메인에 진열한다", async t => {
+  const environment = makeEnvironment();
+  environment.SHOWCASE_MALL_ID = "dobbyisvintage";
+  environment.SHOWCASE_DISPLAY_GROUP = "1";
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    const path = new URL(url).pathname;
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push({ path, method: options.method, body });
+    if (path.endsWith("/products/images")) {
+      return Response.json({ images: [{ path: "/uploaded/first.jpg" }] });
+    }
+    if (path.endsWith("/products") && options.method === "POST") {
+      return Response.json({ product: { product_no: 358 } });
+    }
+    return Response.json({});
+  });
+
+  const response = await worker.fetch(await connectedRequest({
+    productName: "빈티지 재킷",
+    description: "테스트 상품",
+    price: 50000,
+    supplyPrice: 50000,
+    imagesBase64: ["first-image"],
+  }, environment), environment);
+
+  assert.equal(response.status, 201);
+  assert.deepEqual(calls.map(call => [call.method, call.path]), [
+    ["POST", "/api/v2/admin/products/images"],
+    ["POST", "/api/v2/admin/products"],
+    ["POST", "/api/v2/admin/products/358/images"],
+    ["PUT", "/api/v2/admin/products/358"],
+    ["POST", "/api/v2/admin/mains/1/products"],
+  ]);
+  assert.deepEqual(calls[3].body.request, { display: "T", selling: "T" });
+  assert.deepEqual(calls[4].body.request, { product_no: 358 });
+});

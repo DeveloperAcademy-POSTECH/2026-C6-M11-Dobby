@@ -152,11 +152,12 @@ async function createProduct(request, env) {
   const deviceKey = requestID ? await tokenKey(bearer(request)) : null;
   const uploadKey = requestID ? `upload:${token.mall_id}:${deviceKey}:${requestID}` : null;
   const fingerprint = requestID ? await productFingerprint(input, imagesBase64) : null;
+  const showcase = showcaseConfiguration(env, token.mall_id);
   let progress = uploadKey ? await readUploadProgress(env, uploadKey) : null;
   if (progress?.fingerprint && progress.fingerprint !== fingerprint) {
     return json({ error: "request_conflict", message: "같은 업로드 요청의 상품 정보가 변경되었습니다." }, 409);
   }
-  if (progress?.completed) {
+  if (progress?.completed && (!showcase || progress.showcaseCompleted)) {
     return json({ productNo: progress.productNo, mallID: token.mall_id });
   }
   progress ||= { fingerprint, productNo: null, representativeAttached: false, additionalAttached: false };
@@ -213,9 +214,33 @@ async function createProduct(request, env) {
     progress.additionalAttached = true;
     await writeUploadProgress(env, uploadKey, progress);
   }
+  if (showcase && !progress.showcasePublished) {
+    await cafe24API(token, env, `/api/v2/admin/products/${progress.productNo}`, "PUT", {
+      shop_no: 1,
+      request: { display: "T", selling: "T" },
+    });
+    progress.showcasePublished = true;
+    await writeUploadProgress(env, uploadKey, progress);
+  }
+  if (showcase && !progress.showcaseCompleted) {
+    await cafe24API(token, env, `/api/v2/admin/mains/${showcase.displayGroup}/products`, "POST", {
+      shop_no: 1,
+      request: { product_no: progress.productNo },
+    });
+    progress.showcaseCompleted = true;
+    await writeUploadProgress(env, uploadKey, progress);
+  }
   progress.completed = true;
   await writeUploadProgress(env, uploadKey, progress);
   return json({ productNo: progress.productNo, mallID: token.mall_id }, 201);
+}
+
+function showcaseConfiguration(env, mallID) {
+  const configuredMallID = (env.SHOWCASE_MALL_ID || "").toLowerCase();
+  if (!configuredMallID || configuredMallID !== mallID.toLowerCase()) return null;
+  const displayGroup = String(env.SHOWCASE_DISPLAY_GROUP || "1");
+  if (!/^[1-9][0-9]*$/.test(displayGroup)) throw new Error("쇼케이스 메인 진열 그룹 설정을 확인해 주세요.");
+  return { displayGroup };
 }
 
 async function findProductNumber(token, env, requestID) {
