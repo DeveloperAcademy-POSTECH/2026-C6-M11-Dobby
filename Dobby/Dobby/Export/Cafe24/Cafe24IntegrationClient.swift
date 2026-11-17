@@ -68,7 +68,12 @@ final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationCo
     func publish(requestID: String, productName rawProductName: String, description: String,
                  category: String?, price: Int, images: [Data]) async throws -> Cafe24PublishResult {
         let productName = rawProductName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !productName.isEmpty else { throw Cafe24IntegrationError.invalidProductName }
+        guard !productName.isEmpty, productName.count <= ProductTextLimit.name else {
+            throw Cafe24IntegrationError.invalidProductName
+        }
+        guard description.count <= ProductTextLimit.detail else {
+            throw Cafe24IntegrationError.invalidProductDescription
+        }
         guard price >= 0 else { throw Cafe24IntegrationError.invalidPrice }
         guard !images.isEmpty else { throw Cafe24IntegrationError.missingImage }
         guard images.count <= Self.maximumImageCount else {

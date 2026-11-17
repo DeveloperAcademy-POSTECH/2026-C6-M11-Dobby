@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct InstagramConnectionView: View {
     let isLoading: Bool
@@ -24,9 +25,14 @@ struct InstagramConnectionView: View {
 
 private struct InstagramConnectionHeader: View {
     var body: some View {
+        let font = UIFont(name: "Pretendard-Bold", size: 24) ?? .boldSystemFont(ofSize: 24)
+        let lineSpacing = max(0, 32 - font.lineHeight)
+
         VStack(alignment: .leading, spacing: 48) {
             Text("먼저 인스타그램 프로페셔널\n계정과 연결이 필요해요")
-                .font(.system(size: 24, weight: .bold))
+                .font(.custom("Pretendard-Bold", fixedSize: 24))
+                .tracking(-0.26)
+                .lineSpacing(lineSpacing)
                 .foregroundStyle(Color(.brandNeutralBlack))
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -40,12 +46,17 @@ private struct InstagramConnectionHeader: View {
 
 private struct InstagramConnectionInstructions: View {
     var body: some View {
+        let font = UIFont(name: "Pretendard-Regular", size: 17) ?? .systemFont(ofSize: 17)
+        let lineSpacing = max(0, 22 - font.lineHeight)
+
         VStack(alignment: .leading, spacing: 16) {
             Text("인스타그램을 열고, 프로페셔널 계정으로\n연결을 완료하면 자동으로 업로드할 수 있어요")
 
             Text("아래 버튼을 누르고, 프로페셔널 계정으로\n로그인해주세요")
         }
-        .font(.body.weight(.regular))
+        .font(.custom("Pretendard-Regular", fixedSize: 17))
+        .tracking(-0.43)
+        .lineSpacing(lineSpacing)
         .foregroundStyle(Color(.brandNeutral600))
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)

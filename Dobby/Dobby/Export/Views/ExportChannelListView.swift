@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ExportChannelListView: View {
     let completedChannels: Set<ExportChannel>
@@ -21,9 +22,14 @@ private struct ExportChannelSection: View {
     let onSelectChannel: (ExportChannel) -> Void
 
     var body: some View {
+        let font = UIFont(name: "Pretendard-SemiBold", size: 14) ?? .systemFont(ofSize: 14, weight: .semibold)
+        let lineSpacing = max(0, 20 - font.lineHeight)
+
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.custom("Pretendard-SemiBold", fixedSize: 14))
+                .tracking(-0.23)
+                .lineSpacing(lineSpacing)
                 .foregroundStyle(Color(.brandNeutral600))
                 .accessibilityAddTraits(.isHeader)
 

@@ -54,7 +54,14 @@ private struct FruitsCopyFieldContent: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 Text(field.fruitsTitle)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.custom("Pretendard-SemiBold", fixedSize: 17))
+                    .tracking(-0.43)
+                    .lineSpacing(
+                        max(
+                            0,
+                            22 - (UIFont(name: "Pretendard-SemiBold", size: 17)?.lineHeight ?? 17)
+                        )
+                    )
                     .foregroundColor(.labelPrimary)
                 Spacer()
                 if showsCopyIcon {
