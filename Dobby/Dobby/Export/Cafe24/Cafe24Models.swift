@@ -12,6 +12,14 @@ struct Cafe24DisconnectResult: Decodable {
 struct Cafe24PublishResult: Decodable {
     let productNo: Int
     let mallID: String
+
+    var storefrontURL: URL? {
+        let mallID = mallID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard mallID.range(of: #"^[a-z0-9][a-z0-9_-]{1,39}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return URL(string: "https://\(mallID).cafe24.com/")
+    }
 }
 
 struct Cafe24ExportDraft {
