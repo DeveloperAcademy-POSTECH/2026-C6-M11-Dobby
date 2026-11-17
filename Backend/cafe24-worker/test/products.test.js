@@ -6,6 +6,9 @@ import worker from "../src/index.js";
 
 globalThis.crypto ??= webcrypto;
 
+const pngImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j7ZkAAAAASUVORK5CYII=";
+const jpegHeader = "/9j/4AAQSkZJRg==";
+
 function makeEnvironment() {
   const values = new Map();
   return {
@@ -51,7 +54,6 @@ test("상품 사진이 없으면 카페24 API를 호출하지 않는다", async 
     productName: "빈티지 재킷",
     description: "테스트 상품",
     price: 50000,
-    supplyPrice: 50000,
     imagesBase64: [],
   }, environment), environment);
 
@@ -65,13 +67,11 @@ test("첫 사진을 대표 이미지로 연결하고 나머지만 추가 이미�
     const path = new URL(url).pathname;
     const body = options.body ? JSON.parse(options.body) : null;
     calls.push({ path, body });
-    if (path.endsWith("/products/images")) {
-      return Response.json({
-        images: [{ path: "https://dobbyisvintage.cafe24.com/web/product/big/first.jpg?cache=1" }],
-      });
-    }
     if (path === "/api/v2/admin/products") {
       return Response.json({ product: { product_no: 358 } });
+    }
+    if (path === "/api/v2/admin/products/358" && options.method === "GET") {
+      return Response.json({ product: { variants: [{ variant_code: "P00000GR000A" }] } });
     }
     return Response.json({});
   });
@@ -81,71 +81,49 @@ test("첫 사진을 대표 이미지로 연결하고 나머지만 추가 이미�
     description: "테스트 상품",
     category: "아우터",
     price: 50000,
-    supplyPrice: 50000,
-    imagesBase64: ["first-image", "second-image", "third-image"],
+    imagesBase64: [pngImage, jpegHeader],
   }, environment), environment);
 
   assert.equal(response.status, 201);
-  assert.deepEqual(calls[0].body, { requests: [{ image: "first-image" }] });
-  assert.equal(calls[1].body.request.description, "<p>의류 분류: 아우터<br><br>테스트 상품</p>");
-  assert.equal(calls[2].body.request.detail_image, "/web/product/big/first.jpg");
-  assert.deepEqual(calls[3].body.request.additional_image, ["second-image", "third-image"]);
+  assert.equal(calls[0].path, "/api/v2/admin/products");
+  assert.equal(calls[0].body.request.description, "<p>의류 분류: 아우터<br><br>테스트 상품</p>");
+  assert.equal(calls[1].path, "/api/v2/admin/products/358/images");
+  assert.deepEqual(calls[1].body.request, {
+    image_upload_type: "A",
+    detail_image: `data:image/png;base64,${pngImage}`,
+  });
+  assert.equal(calls[2].path, "/api/v2/admin/products/358/additionalimages");
+  assert.deepEqual(calls[2].body.request.additional_image, [jpegHeader]);
 });
 
-test("대표 이미지 경로가 없으면 상품을 생성하지 않는다", async t => {
+test("대표 이미지의 파일 형식을 인식할 수 없으면 상품을 생성하지 않는다", async t => {
   const environment = makeEnvironment();
   const paths = [];
   t.mock.method(globalThis, "fetch", async url => {
     paths.push(new URL(url).pathname);
-    return Response.json({ images: [] });
+    return Response.json({});
   });
 
   const response = await worker.fetch(await connectedRequest({
     productName: "빈티지 재킷",
     description: "테스트 상품",
     price: 50000,
-    supplyPrice: 50000,
-    imagesBase64: ["first-image"],
+    imagesBase64: ["bm90LWFuLWltYWdl"],
   }, environment), environment);
 
-  assert.equal(response.status, 500);
-  assert.deepEqual(paths, ["/api/v2/admin/products/images"]);
-});
-
-test("카페24 상품 이미지 경로가 아니면 상품을 생성하지 않는다", async t => {
-  const environment = makeEnvironment();
-  const paths = [];
-  t.mock.method(globalThis, "fetch", async url => {
-    paths.push(new URL(url).pathname);
-    return Response.json({ images: [{ path: "https://example.com/images/first.jpg" }] });
-  });
-
-  const response = await worker.fetch(await connectedRequest({
-    productName: "빈티지 재킷",
-    description: "테스트 상품",
-    price: 50000,
-    supplyPrice: 50000,
-    imagesBase64: ["first-image"],
-  }, environment), environment);
-
-  assert.equal(response.status, 500);
-  assert.deepEqual(paths, ["/api/v2/admin/products/images"]);
-  assert.equal((await response.json()).message, "카페24 대표 이미지 경로 형식이 올바르지 않습니다.");
+  assert.equal(response.status, 400);
+  assert.deepEqual(paths, []);
+  assert.equal((await response.json()).error, "invalid_representative_image");
 });
 
 test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중복 생성하지 않는다", async t => {
   const environment = makeEnvironment();
-  let imageUploads = 0;
   let productCreates = 0;
   let representativeAttaches = 0;
   let additionalAttaches = 0;
   t.mock.method(globalThis, "fetch", async (url, options) => {
     const parsedURL = new URL(url);
     const path = parsedURL.pathname;
-    if (path.endsWith("/products/images")) {
-      imageUploads += 1;
-      return Response.json({ images: [{ path: "/web/product/big/first.jpg" }] });
-    }
     if (path === "/api/v2/admin/products" && options.method === "GET") {
       return Response.json({ products: [] });
     }
@@ -155,7 +133,7 @@ test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중
       assert.equal(body.request.custom_product_code, "550e8400-e29b-41d4-a716-446655440000");
       return Response.json({ product: { product_no: 358 } });
     }
-    if (path.endsWith("/images")) {
+    if (path === "/api/v2/admin/products/358/images") {
       representativeAttaches += 1;
       return Response.json({});
     }
@@ -166,7 +144,10 @@ test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중
       }
       return Response.json({});
     }
-    if (options.method === "PUT" || path.endsWith("/mains/1/products")) {
+    if (path === "/api/v2/admin/products/358" && options.method === "GET") {
+      return Response.json({ product: { variants: [{ variant_code: "P00000GR000A" }] } });
+    }
+    if (options.method === "PUT" || path.endsWith("/mains/2/products")) {
       return Response.json({});
     }
     assert.fail(`예상하지 못한 카페24 API 호출: ${path}`);
@@ -177,15 +158,13 @@ test("이미지 단계 실패 후 같은 요청을 재시도해도 상품을 중
     productName: "빈티지 재킷",
     description: "테스트 상품",
     price: 50000,
-    supplyPrice: 50000,
-    imagesBase64: ["first-image", "second-image"],
+    imagesBase64: [pngImage, jpegHeader],
   };
   const firstResponse = await worker.fetch(await connectedRequest(body, environment), environment);
   const retryResponse = await worker.fetch(await connectedRequest(body, environment), environment);
 
   assert.equal(firstResponse.status, 500);
   assert.equal(retryResponse.status, 201);
-  assert.equal(imageUploads, 1);
   assert.equal(productCreates, 1);
   assert.equal(representativeAttaches, 1);
   assert.equal(additionalAttaches, 2);
@@ -199,11 +178,11 @@ test("연결된 몰은 이미지 등록 완료 후 상품을 공개하고 메인
     const path = new URL(url).pathname;
     const body = options.body ? JSON.parse(options.body) : null;
     calls.push({ path, method: options.method, body });
-    if (path.endsWith("/products/images")) {
-      return Response.json({ images: [{ path: "//dobbyisvintage.cafe24.com/web/product/big/first.jpg" }] });
-    }
     if (path === "/api/v2/admin/products" && options.method === "POST") {
       return Response.json({ product: { product_no: 358 } });
+    }
+    if (path === "/api/v2/admin/products/358" && options.method === "GET") {
+      return Response.json({ product: { variants: [{ variant_code: "P00000GR000A" }] } });
     }
     return Response.json({});
   });
@@ -212,18 +191,27 @@ test("연결된 몰은 이미지 등록 완료 후 상품을 공개하고 메인
     productName: "빈티지 재킷",
     description: "테스트 상품",
     price: 50000,
-    supplyPrice: 50000,
-    imagesBase64: ["first-image"],
+    imagesBase64: [jpegHeader],
   }, environment), environment);
 
   assert.equal(response.status, 201);
   assert.deepEqual(calls.map(call => [call.method, call.path]), [
-    ["POST", "/api/v2/admin/products/images"],
     ["POST", "/api/v2/admin/products"],
     ["POST", "/api/v2/admin/products/358/images"],
+    ["GET", "/api/v2/admin/products/358"],
+    ["PUT", "/api/v2/admin/products/358/variants/P00000GR000A/inventories"],
     ["PUT", "/api/v2/admin/products/358"],
-    ["POST", "/api/v2/admin/mains/1/products"],
+    ["POST", "/api/v2/admin/mains/2/products"],
   ]);
-  assert.deepEqual(calls[3].body.request, { display: "T", selling: "T" });
-  assert.deepEqual(calls[4].body.request, { product_no: 358 });
+  assert.equal(calls[1].body.request.detail_image, `data:image/jpeg;base64,${jpegHeader}`);
+  assert.deepEqual(calls[3].body.request, {
+    use_inventory: "T",
+    important_inventory: "A",
+    inventory_control_type: "A",
+    display_soldout: "T",
+    quantity: 1,
+    safety_inventory: 0,
+  });
+  assert.deepEqual(calls[4].body.request, { display: "T", selling: "T" });
+  assert.deepEqual(calls[5].body.request, { product_no: 358 });
 });

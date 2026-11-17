@@ -36,10 +36,24 @@ function validAppKey(request, env) {
   return difference === 0;
 }
 
+function isAllowedMall(mallID, env) {
+  if (env.CAFE24_ENV !== "dev") return true;
+  const testMallID = env.CAFE24_TEST_MALL_ID?.trim().toLowerCase();
+  return Boolean(testMallID) && mallID?.toLowerCase() === testMallID;
+}
+
+function devMallNotAllowed() {
+  return json({
+    error: "dev_mall_not_allowed",
+    message: "개발 환경에서는 지정한 테스트 몰만 사용할 수 있습니다.",
+  }, 403);
+}
+
 async function startOAuth(request, url, env) {
   const deviceToken = bearer(request);
   const mallID = (url.searchParams.get("mall_id") || "").toLowerCase();
   if (!deviceToken || !/^[a-z0-9][a-z0-9_-]{1,39}$/.test(mallID)) return json({ error: "invalid_request" }, 400);
+  if (!isAllowedMall(mallID, env)) return devMallNotAllowed();
   const state = crypto.randomUUID();
   const codeVerifier = randomBase64URL(32);
   const codeChallenge = await sha256Base64URL(codeVerifier);
@@ -73,6 +87,7 @@ async function finishOAuth(url, env) {
   const pendingText = state && await env.CAFE24_TOKENS.get(`pending:${state}`);
   if (!pendingText || !code) return appRedirect(env, "error");
   const pending = JSON.parse(pendingText);
+  if (!isAllowedMall(pending.mallID, env)) return appRedirect(env, "error");
   const pendingDeviceKey = `pending-device:${pending.deviceKey}`;
   const activeState = await env.CAFE24_TOKENS.get(pendingDeviceKey);
 
@@ -103,7 +118,9 @@ async function finishOAuth(url, env) {
 
 async function connection(request, env) {
   const stored = await storedConnection(request, env, false);
-  return json(stored ? { connected: true, mallID: stored.mall_id } : { connected: false, mallID: null });
+  return json(stored && isAllowedMall(stored.mall_id, env)
+    ? { connected: true, mallID: stored.mall_id }
+    : { connected: false, mallID: null });
 }
 
 async function disconnect(request, env) {
@@ -126,7 +143,14 @@ async function disconnect(request, env) {
 
 async function createProduct(request, env) {
   let token = await storedConnection(request, env, true);
-  token = await freshToken(token, env, request);
+  const connectionKey = `connection:${await tokenKey(bearer(request))}`;
+  if (!isAllowedMall(token.mall_id, env)) return devMallNotAllowed();
+  token = await freshToken(token, env, connectionKey);
+  const callCafe24 = async (path, method, body) => {
+    const result = await cafe24APIWithRefresh(token, env, connectionKey, path, method, body);
+    token = result.token;
+    return result.value;
+  };
   const input = await request.json();
   if (!input.productName || !Number.isInteger(input.price) || input.price < 0) {
     return json({ error: "invalid_product", message: "상품명과 판매가를 확인해 주세요." }, 400);
@@ -142,6 +166,7 @@ async function createProduct(request, env) {
   if (category.length > 100) {
     return json({ error: "invalid_category", message: "의류 분류를 확인해 주세요." }, 400);
   }
+  const categoryNumber = categoryNumberConfiguration(category, env);
   const productDescription = [category && `의류 분류: ${category}`, input.description]
     .filter(value => typeof value === "string" && value.trim())
     .join("\n\n");
@@ -157,34 +182,57 @@ async function createProduct(request, env) {
   if (progress?.fingerprint && progress.fingerprint !== fingerprint) {
     return json({ error: "request_conflict", message: "같은 업로드 요청의 상품 정보가 변경되었습니다." }, 409);
   }
-  if (progress?.completed && progress.mainDisplayed) {
+  if (progress?.completed && progress.mainDisplayed && progress.inventoryConfigured
+      && (!categoryNumber || progress.categoryAssigned)) {
     return json({ productNo: progress.productNo, mallID: token.mall_id });
   }
-  progress ||= { fingerprint, productNo: null, representativeAttached: false, additionalAttached: false };
+  progress ||= {
+    fingerprint,
+    productNo: null,
+    representativeAttached: false,
+    additionalAttached: false,
+    inventoryConfigured: false,
+    categoryAssigned: false,
+  };
 
-  let imagePath = null;
-  if (!progress.productNo || !progress.representativeAttached) {
-    const uploaded = await cafe24API(token, env, "/api/v2/admin/products/images", "POST", {
-      requests: [{ image: imagesBase64[0] }],
-    });
-    const uploadedPath = uploaded.images?.[0]?.path || uploaded.image?.path || null;
-    imagePath = normalizeCafe24ImagePath(uploadedPath);
+  const [representativeImage, ...additionalImages] = imagesBase64;
+  if (additionalImages.some(image => !imageMimeType(image))) {
+    return json({
+      error: "invalid_additional_images",
+      message: "추가 이미지는 JPEG, PNG, GIF 형식으로 등록해 주세요.",
+    }, 400);
+  }
+  if (!progress.additionalAttached && additionalImagesTooLarge(additionalImages)) {
+    return json({
+      error: "additional_images_too_large",
+      message: "추가 사진 용량이 너무 커요. 사진 수나 용량을 줄여 다시 시도해 주세요.",
+    }, 413);
+  }
+  let detailImage;
+  if (!progress.representativeAttached) {
+    detailImage = toImageDataURL(representativeImage);
+    if (!detailImage) {
+      return json({
+        error: "invalid_representative_image",
+        message: "대표 이미지는 JPEG, PNG, GIF 형식으로 등록해 주세요.",
+      }, 400);
+    }
   }
 
   if (!progress.productNo && requestID) {
-    progress.productNo = await findProductNumber(token, env, requestID);
+    progress.productNo = await findProductNumber(callCafe24, requestID);
   }
   if (!progress.productNo) {
     const productRequest = {
       product_name: input.productName,
-      supply_price: String(input.supplyPrice ?? input.price),
+      supply_price: "0",
       price: String(input.price),
       display: "F", selling: "F", has_option: "F",
       summary_description: plainText(productDescription).slice(0, 255),
       description: html(productDescription),
     };
     if (requestID) productRequest.custom_product_code = requestID;
-    const created = await cafe24API(token, env, "/api/v2/admin/products", "POST", {
+    const created = await callCafe24("/api/v2/admin/products", "POST", {
       shop_no: 1,
       request: productRequest,
     });
@@ -194,36 +242,73 @@ async function createProduct(request, env) {
     await writeUploadProgress(env, uploadKey, progress);
   }
   if (!progress.representativeAttached) {
-    await cafe24API(token, env, `/api/v2/admin/products/${progress.productNo}/images`, "POST", {
+    await callCafe24(`/api/v2/admin/products/${progress.productNo}/images`, "POST", {
       shop_no: 1,
       request: {
         image_upload_type: "A",
-        detail_image: imagePath,
+        detail_image: detailImage,
       },
     });
     progress.representativeAttached = true;
     await writeUploadProgress(env, uploadKey, progress);
   }
-  if (imagesBase64.length > 1 && !progress.additionalAttached) {
-    await cafe24API(token, env, `/api/v2/admin/products/${progress.productNo}/additionalimages`, "POST", {
+  if (additionalImages.length > 0 && !progress.additionalAttached) {
+    await callCafe24(`/api/v2/admin/products/${progress.productNo}/additionalimages`, "POST", {
       shop_no: 1,
       request: {
-        additional_image: imagesBase64.slice(1),
+        additional_image: additionalImages,
       },
     });
     progress.additionalAttached = true;
     await writeUploadProgress(env, uploadKey, progress);
   }
-  if (!progress.published) {
-    await cafe24API(token, env, `/api/v2/admin/products/${progress.productNo}`, "PUT", {
+  if (!progress.inventoryConfigured) {
+    const productResource = await callCafe24(
+      `/api/v2/admin/products/${progress.productNo}?embed=variants`,
+      "GET",
+    );
+    const product = productResource.product || productResource.products?.[0];
+    const variants = Array.isArray(product?.variants) ? product.variants : [];
+    if (variants.length !== 1 || !variants[0]?.variant_code) {
+      throw new Error("카페24가 단일 상품의 품목코드를 반환하지 않았습니다.");
+    }
+    await callCafe24(
+      `/api/v2/admin/products/${progress.productNo}/variants/${variants[0].variant_code}/inventories`,
+      "PUT",
+      {
+        shop_no: 1,
+        request: {
+          use_inventory: "T",
+          important_inventory: "A",
+          inventory_control_type: "A",
+          display_soldout: "T",
+          quantity: 1,
+          safety_inventory: 0,
+        },
+      },
+    );
+    progress.inventoryConfigured = true;
+    await writeUploadProgress(env, uploadKey, progress);
+  }
+  if (!progress.published || (categoryNumber && !progress.categoryAssigned)) {
+    const productUpdate = { display: "T", selling: "T" };
+    if (categoryNumber && !progress.categoryAssigned) {
+      productUpdate.add_category_no = [{
+        category_no: Number(categoryNumber),
+        recommend: "F",
+        new: "F",
+      }];
+    }
+    await callCafe24(`/api/v2/admin/products/${progress.productNo}`, "PUT", {
       shop_no: 1,
-      request: { display: "T", selling: "T" },
+      request: productUpdate,
     });
     progress.published = true;
+    if (categoryNumber) progress.categoryAssigned = true;
     await writeUploadProgress(env, uploadKey, progress);
   }
   if (!progress.mainDisplayed) {
-    await cafe24API(token, env, `/api/v2/admin/mains/${displayGroup}/products`, "POST", {
+    await callCafe24(`/api/v2/admin/mains/${displayGroup}/products`, "POST", {
       shop_no: 1,
       request: { product_no: progress.productNo },
     });
@@ -235,35 +320,67 @@ async function createProduct(request, env) {
   return json({ productNo: progress.productNo, mallID: token.mall_id }, 201);
 }
 
-function normalizeCafe24ImagePath(value) {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error("카페24가 대표 이미지 경로를 반환하지 않았습니다.");
+function additionalImagesTooLarge(images) {
+  // Leave room for the JSON envelope and array separators in the 30 MB request budget.
+  const maximumBase64Bytes = 30_000_000 - 1024;
+  let totalBase64Bytes = 0;
+  for (const image of images) {
+    const padding = image.endsWith("==") ? 2 : image.endsWith("=") ? 1 : 0;
+    const decodedBytes = Math.floor(image.length * 3 / 4) - padding;
+    if (decodedBytes > 5_000_000) return true;
+    totalBase64Bytes += image.length;
+    if (totalBase64Bytes > maximumBase64Bytes) return true;
   }
-  const rawPath = value.trim();
-  let path;
+  return false;
+}
+
+function toImageDataURL(base64) {
+  const mimeType = imageMimeType(base64);
+  return mimeType ? `data:${mimeType};base64,${base64}` : null;
+}
+
+function imageMimeType(base64) {
+  let header;
   try {
-    if (/^https?:\/\//i.test(rawPath)) path = new URL(rawPath).pathname;
-    else if (rawPath.startsWith("//")) path = new URL(`https:${rawPath}`).pathname;
-    else path = rawPath.split(/[?#]/, 1)[0];
+    header = atob(base64.slice(0, 12));
   } catch {
-    throw new Error("카페24 대표 이미지 경로 형식이 올바르지 않습니다.");
+    return null;
   }
-  if (!path.startsWith("/")) path = `/${path}`;
-  if (!path.startsWith("/web/product/big/") || path.split("/").includes("..")) {
-    throw new Error("카페24 대표 이미지 경로 형식이 올바르지 않습니다.");
-  }
-  return path;
+
+  if (header.startsWith("\xFF\xD8\xFF")) return "image/jpeg";
+  if (header.startsWith("\x89PNG\r\n\x1A\n")) return "image/png";
+  if (header.startsWith("GIF87a") || header.startsWith("GIF89a")) return "image/gif";
+  return null;
 }
 
 function displayGroupConfiguration(env) {
-  const displayGroup = String(env.DEFAULT_DISPLAY_GROUP || "1");
-  if (!/^[1-9][0-9]*$/.test(displayGroup)) throw new Error("카페24 메인 진열 그룹 설정을 확인해 주세요.");
+  const displayGroup = String(env.DEFAULT_DISPLAY_GROUP || "2");
+  if (!/^[2-9][0-9]*$/.test(displayGroup)) {
+    throw new Error("카페24 메인 진열 그룹은 2 이상의 정수여야 합니다.");
+  }
   return displayGroup;
 }
 
-async function findProductNumber(token, env, requestID) {
-  const query = new URLSearchParams({ custom_product_code: requestID, fields: "product_no,custom_product_code" });
-  const result = await cafe24API(token, env, `/api/v2/admin/products?${query}`, "GET");
+function categoryNumberConfiguration(category, env) {
+  const categoryNumberByName = {
+    "아우터": env.CAFE24_CATEGORY_OUTERWEAR_NO,
+    "상의": env.CAFE24_CATEGORY_TOP_NO,
+    "하의": env.CAFE24_CATEGORY_BOTTOM_NO,
+    "바지": env.CAFE24_CATEGORY_BOTTOM_NO,
+  };
+  const categoryNumber = categoryNumberByName[category];
+  if (!categoryNumber) return null;
+
+  const normalized = String(categoryNumber);
+  if (!/^[1-9][0-9]*$/.test(normalized)) {
+    throw new Error(`카페24 ${category} 상품 분류 설정을 확인해 주세요.`);
+  }
+  return normalized;
+}
+
+async function findProductNumber(callCafe24, requestID) {
+  const query = new URLSearchParams({ custom_product_code: requestID });
+  const result = await callCafe24(`/api/v2/admin/products?${query}`, "GET");
   const products = result.products || (result.product ? [result.product] : []);
   return products.find(product => product.custom_product_code?.toLowerCase() === requestID)?.product_no || null;
 }
@@ -274,7 +391,6 @@ async function productFingerprint(input, imagesBase64) {
     description: input.description || "",
     category: input.category || "",
     price: input.price,
-    supplyPrice: input.supplyPrice ?? input.price,
     imagesBase64,
   }));
 }
@@ -296,13 +412,46 @@ async function storedConnection(request, env, required) {
   return value ? JSON.parse(value) : null;
 }
 
-async function freshToken(token, env, request) {
+async function freshToken(token, env, connectionKey) {
   if (Date.parse(token.expires_at || 0) > Date.now() + 60_000) return token;
+  return renewToken(token, env, connectionKey);
+}
+
+async function renewToken(token, env, connectionKey) {
   const renewed = await cafe24Token(token.mall_id, env, new URLSearchParams({
     grant_type: "refresh_token", refresh_token: token.refresh_token,
   }));
-  await env.CAFE24_TOKENS.put(`connection:${await tokenKey(bearer(request))}`, JSON.stringify(renewed));
+  await env.CAFE24_TOKENS.put(connectionKey, JSON.stringify(renewed));
   return renewed;
+}
+
+async function cafe24APIWithRefresh(token, env, connectionKey, path, method, body) {
+  try {
+    return { value: await cafe24API(token, env, path, method, body), token };
+  } catch (error) {
+    if (error.cafe24Status !== 401) throw error;
+
+    const latestText = await env.CAFE24_TOKENS.get(connectionKey);
+    const latest = latestText ? JSON.parse(latestText) : null;
+    const hasNewerStoredToken = latest?.mall_id === token.mall_id
+      && latest.access_token !== token.access_token
+      && Date.parse(latest.expires_at || 0) > Date.parse(token.expires_at || 0);
+    const recoveredToken = hasNewerStoredToken
+      ? latest
+      : await renewToken(token, env, connectionKey);
+
+    console.info(JSON.stringify({
+      event: "cafe24_access_token_recovered",
+      path,
+      source: hasNewerStoredToken ? "stored" : "refresh",
+      rejectedExpiresAt: token.expires_at || null,
+      rejectedExpiresAtHasTimezone: /(?:Z|[+-]\d{2}:\d{2})$/i.test(token.expires_at || ""),
+    }));
+    return {
+      value: await cafe24API(recoveredToken, env, path, method, body),
+      token: recoveredToken,
+    };
+  }
 }
 
 async function cafe24Token(mallID, env, form) {
@@ -335,7 +484,11 @@ async function cafe24API(token, env, path, method, body) {
       || value.message
       || (typeof value.error === "string" ? value.error : null)
       || responseText;
-    throw new Error(`[${method} ${path}] ${detail || `카페24 상품 등록에 실패했습니다. (HTTP ${response.status})`}`);
+    const error = new Error(
+      `[${method} ${path}] ${detail || `카페24 상품 등록에 실패했습니다. (HTTP ${response.status})`}`,
+    );
+    error.cafe24Status = response.status;
+    throw error;
   }
   return value;
 }

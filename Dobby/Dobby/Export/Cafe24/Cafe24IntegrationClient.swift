@@ -1,5 +1,6 @@
 import AuthenticationServices
 import Foundation
+import ImageIO
 import OSLog
 import Security
 import UIKit
@@ -74,12 +75,59 @@ final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationCo
             throw Cafe24IntegrationError.tooManyImages
         }
         var request = try authorizedRequest(path: "/products", method: "POST")
+        let preparation = Task.detached(priority: .userInitiated) {
+            try images.map { image in
+                try Task.checkCancellation()
+                return try autoreleasepool {
+                    try Self.makeUploadJPEG(from: image).base64EncodedString()
+                }
+            }
+        }
+        let imagesBase64 = try await withTaskCancellationHandler {
+            try await preparation.value
+        } onCancel: {
+            preparation.cancel()
+        }
+        try Task.checkCancellation()
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(Cafe24PublishRequest(
             requestID: requestID, productName: productName, description: description,
-            category: category, price: price, supplyPrice: price,
-            imagesBase64: images.map { $0.base64EncodedString() }))
+            category: category, price: price, imagesBase64: imagesBase64))
         return try await send(request, as: Cafe24PublishResult.self)
+    }
+
+    nonisolated private static func makeUploadJPEG(from data: Data) throws -> Data {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            throw Cafe24IntegrationError.imagePreparationFailed
+        }
+
+        for maxPixelSize in [1600, 1200, 900, 640] {
+            try Task.checkCancellation()
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+                kCGImageSourceShouldCacheImmediately: true
+            ] as CFDictionary) else {
+                throw Cafe24IntegrationError.imagePreparationFailed
+            }
+
+            for quality in [0.85, 0.7, 0.55] {
+                try Task.checkCancellation()
+                let bytes = NSMutableData()
+                guard let encoder = CGImageDestinationCreateWithData(bytes, "public.jpeg" as CFString, 1, nil) else {
+                    throw Cafe24IntegrationError.imagePreparationFailed
+                }
+                CGImageDestinationAddImage(encoder, image, [
+                    kCGImageDestinationLossyCompressionQuality: quality
+                ] as CFDictionary)
+                guard CGImageDestinationFinalize(encoder) else {
+                    throw Cafe24IntegrationError.imagePreparationFailed
+                }
+                if bytes.length <= 1_000_000 { return bytes as Data }
+            }
+        }
+        throw Cafe24IntegrationError.imagePreparationFailed
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {

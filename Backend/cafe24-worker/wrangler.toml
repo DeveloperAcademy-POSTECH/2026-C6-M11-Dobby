@@ -3,7 +3,7 @@ main = "src/index.js"
 compatibility_date = "2026-09-01"
 
 [vars]
-DEFAULT_DISPLAY_GROUP = "1"
+DEFAULT_DISPLAY_GROUP = "2"
 
 [[kv_namespaces]]
 binding = "CAFE24_TOKENS"
