@@ -89,7 +89,7 @@ private struct InstagramConnectionActions: View {
 
             Button("프로페셔널 계정으로 어떻게 설정하나요?") {
                 guard let url = URL(
-                    string: "https://www.facebook.com/business/help/347556992775908?id=419087378825961"
+                    string: "https://help.instagram.com/502981923235522"
                 ) else { return }
                 openURL(url)
             }
