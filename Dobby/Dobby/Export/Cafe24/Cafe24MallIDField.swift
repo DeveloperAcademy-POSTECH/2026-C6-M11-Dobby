@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct Cafe24MallIDField: View {
     @Binding var mallID: String
@@ -35,8 +36,13 @@ struct Cafe24MallIDField: View {
 
 private struct Cafe24MallIDSuffix: View {
     var body: some View {
+        let font = UIFont(name: "Pretendard-SemiBold", size: 14) ?? .systemFont(ofSize: 14, weight: .semibold)
+        let lineSpacing = max(0, 20 - font.lineHeight)
+
         Text(".cafe24.com")
-            .font(.system(size: 14, weight: .semibold))
+            .font(.custom("Pretendard-SemiBold", fixedSize: 14))
+            .tracking(-0.23)
+            .lineSpacing(lineSpacing)
             .foregroundStyle(Color(.brandNeutralBlack))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
