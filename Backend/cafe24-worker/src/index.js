@@ -167,8 +167,8 @@ async function createProduct(request, env) {
     const uploaded = await cafe24API(token, env, "/api/v2/admin/products/images", "POST", {
       requests: [{ image: imagesBase64[0] }],
     });
-    imagePath = uploaded.images?.[0]?.path || uploaded.image?.path || null;
-    if (!imagePath) throw new Error("카페24가 대표 이미지 경로를 반환하지 않았습니다.");
+    const uploadedPath = uploaded.images?.[0]?.path || uploaded.image?.path || null;
+    imagePath = normalizeCafe24ImagePath(uploadedPath);
   }
 
   if (!progress.productNo && requestID) {
@@ -233,6 +233,26 @@ async function createProduct(request, env) {
   progress.completed = true;
   await writeUploadProgress(env, uploadKey, progress);
   return json({ productNo: progress.productNo, mallID: token.mall_id }, 201);
+}
+
+function normalizeCafe24ImagePath(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("카페24가 대표 이미지 경로를 반환하지 않았습니다.");
+  }
+  const rawPath = value.trim();
+  let path;
+  try {
+    if (/^https?:\/\//i.test(rawPath)) path = new URL(rawPath).pathname;
+    else if (rawPath.startsWith("//")) path = new URL(`https:${rawPath}`).pathname;
+    else path = rawPath.split(/[?#]/, 1)[0];
+  } catch {
+    throw new Error("카페24 대표 이미지 경로 형식이 올바르지 않습니다.");
+  }
+  if (!path.startsWith("/")) path = `/${path}`;
+  if (!path.startsWith("/web/product/big/") || path.split("/").includes("..")) {
+    throw new Error("카페24 대표 이미지 경로 형식이 올바르지 않습니다.");
+  }
+  return path;
 }
 
 function displayGroupConfiguration(env) {
