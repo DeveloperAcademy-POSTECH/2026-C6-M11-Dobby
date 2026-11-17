@@ -31,6 +31,7 @@ struct InstagramExportView: View {
     @State private var uploadState: InstagramUploadState = .idle
     @State private var busy = false
     @State private var isShowingUploadFailure = false
+    @State private var shouldRetryUpload = false
     @State private var keyboardButtonBottomPadding: CGFloat = 0
     @State private var message: String?
     @State private var requestID = UUID().uuidString
@@ -124,16 +125,20 @@ struct InstagramExportView: View {
             if uploadState.isUploading {
                 PlatformUploadingOverlay(platformName: "인스타그램")
                     .zIndex(10)
-            } else if isShowingUploadFailure {
-                InstagramUploadFailureOverlay(
-                    onCancel: { isShowingUploadFailure = false },
-                    onRetry: {
-                        isShowingUploadFailure = false
-                        Task { await republish() }
-                    }
-                )
-                .zIndex(10)
             }
+        }
+        .fullScreenCover(
+            isPresented: $isShowingUploadFailure,
+            onDismiss: retryUploadIfRequested
+        ) {
+            InstagramUploadFailureOverlay(
+                onCancel: { isShowingUploadFailure = false },
+                onRetry: {
+                    shouldRetryUpload = true
+                    isShowingUploadFailure = false
+                }
+            )
+            .presentationBackground(.clear)
         }
         .interactiveDismissDisabled(uploadState.isUploading)
         .onReceive(NotificationCenter.default.publisher(
@@ -158,6 +163,12 @@ struct InstagramExportView: View {
 
     private var showsCompletion: Bool {
         showsConnectionCompletion || uploadState.isCompleted
+    }
+
+    private func retryUploadIfRequested() {
+        guard shouldRetryUpload else { return }
+        shouldRetryUpload = false
+        Task { await republish() }
     }
 
     private func updateKeyboardButtonBottomPadding(_ notification: Notification) {
