@@ -65,19 +65,9 @@ struct ProductAutofillLoadingView: View {
                     .accessibilityIdentifier("product-ai.cancel")
                 }
 
-            ZStack {
-                // Keep the large Figma artwork and center the 150pt Lottie over it.
-                Image("AIGenerationArtwork")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: imageSide * 312.62 / 280,
-                           height: imageSide * 312.62 / 280)
-                UploadLoadingAnimation(source: .aiInformation,
-                    width: imageSide * 150 / 280, height: imageSide * 150 / 280)
-            }
-            .frame(width: imageSide, height: imageSide)
-            .accessibilityHidden(true)
-            .allowsHitTesting(false)
+            UploadLoadingAnimation(source: .aiInformation, width: imageSide, height: imageSide)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
 
             Text("사진을 꼼꼼히 보며\n어떤 옷인지 알아보고 있어요")
                 .font(.custom("Pretendard-Regular", fixedSize: messageSize))
