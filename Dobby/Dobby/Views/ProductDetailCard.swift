@@ -51,6 +51,7 @@ struct ProductDetailCard: View {
             .background(.white)
             .clipShape(RoundedRectangle(cornerRadius: 17, style: style.usesSpacedSections ? .circular : .continuous))
             .foregroundStyle(Color(red: 26 / 255, green: 26 / 255, blue: 26 / 255))
+            .accessibilityElement(children: .contain)
     }
 }
 
@@ -132,6 +133,7 @@ private struct ProductDetailSectionTitle: View {
         }
             .tracking(-0.43)
             .frame(minHeight: 22, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -154,6 +156,10 @@ private struct ProductDetailField: View {
             .frame(maxWidth: style == .library ? .infinity : nil, alignment: .leading)
         }
         .frame(maxWidth: style == .library ? .infinity : nil, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "입력하지 않음" : text + (suffix.map { " \($0)" } ?? ""))
     }
 
     private var usesCompletionBody: Bool { style == .completion }
@@ -226,8 +232,9 @@ private struct ProductDetailPhotoRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            ForEach(garment.productPhotos) { photo in
-                ProductDetailPhoto(photo: photo, presentation: presentation,
+            ForEach(Array(garment.productPhotos.enumerated()), id: \.element.id) { index, photo in
+                ProductDetailPhoto(photo: photo, index: index, count: garment.productPhotos.count,
+                    presentation: presentation,
                     allowsExpansion: style.allowsPhotoExpansion,
                     showsExpansionIcon: style.allowsPhotoExpansion && presentation.showsExpansionIcon
                         && photo.id == garment.productPhotos.first?.id,
@@ -248,6 +255,8 @@ private struct ProductDetailPhotoRow: View {
 
 private struct ProductDetailPhoto: View {
     let photo: GarmentPhoto
+    let index: Int
+    let count: Int
     let presentation: ProductDetailPhotoPresentation
     let allowsExpansion: Bool
     let showsExpansionIcon: Bool
@@ -259,10 +268,12 @@ private struct ProductDetailPhoto: View {
                 Button(action: onExpand) { photograph }
                     .buttonStyle(.plain)
                     .accessibilityLabel("제품 사진 확대")
+                    .accessibilityValue("\(count)장 중 \(index + 1)번째 사진")
+                    .accessibilityHint("사진 전체 화면을 엽니다")
             } else {
                 photograph
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("제품 사진")
+                    .accessibilityLabel("제품 사진 \(index + 1), 총 \(count)장")
                     .accessibilityAddTraits(.isImage)
             }
         }
@@ -387,5 +398,9 @@ private struct ProductDetailMeasurementColumn: View {
                 .frame(maxWidth: .infinity).frame(height: 64)
                 .background(Color("BrandNeutralWhite"))
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(style == .library && value.key == "totalLength" ? "총장" : ProductInformationStyle.measurementTitle(for: value))
+        .accessibilityValue(value.valueCm.isFinite && value.valueCm > 0
+            ? MeasurementDisplayText.centimeters(value.valueCm) + "cm" : "측정값 없음")
     }
 }

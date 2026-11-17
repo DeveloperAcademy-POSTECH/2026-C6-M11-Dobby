@@ -12,7 +12,6 @@ struct ProductInformationDiscardConfirmation: View {
     @ScaledMetric(relativeTo: .body) private var messageLineHeight: CGFloat = 22
     @ScaledMetric(relativeTo: .headline) private var buttonFontSize: CGFloat = 17
     @ScaledMetric(relativeTo: .headline) private var buttonLineHeight: CGFloat = 22
-    @AccessibilityFocusState private var titleIsFocused: Bool
 
     var body: some View {
         ZStack {
@@ -29,7 +28,6 @@ struct ProductInformationDiscardConfirmation: View {
         .accessibilityAddTraits(.isModal)
         .accessibilityIdentifier("product-info.discard-confirmation")
         .accessibilityAction(.escape, onCancel)
-        .onAppear { titleIsFocused = true }
     }
 
     private var confirmationPanel: some View {
@@ -49,8 +47,7 @@ struct ProductInformationDiscardConfirmation: View {
         VStack(spacing: 8) {
             styledText("저장하지 않은 변경사항이 있어요", fontName: "Pretendard-Bold",
                        size: titleFontSize, lineHeight: titleLineHeight, tracking: -0.26 * titleFontSize / 22)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityFocused($titleIsFocused)
+                .accessibilityModalHeading()
             styledText("변경사항을 삭제하고 보관함으로 나갈까요?", fontName: "Pretendard-Regular",
                        size: messageFontSize, lineHeight: messageLineHeight, tracking: -0.43 * messageFontSize / 17)
         }
@@ -68,12 +65,14 @@ struct ProductInformationDiscardConfirmation: View {
                     .foregroundStyle(Color("BrandMain600"))
             }
             .accessibilityIdentifier("product-info.discard-cancel")
+            .accessibilityHint("변경한 내용을 유지하고 수정 화면으로 돌아갑니다")
 
             Button(role: .destructive, action: onDiscard) {
                 actionLabel("삭제하고 나가기")
                     .foregroundStyle(Color("AccentsRed"))
             }
             .accessibilityIdentifier("product-info.discard-exit")
+            .accessibilityHint("저장하지 않은 변경사항을 버리고 보관함으로 돌아갑니다")
         }
         .buttonStyle(.plain)
     }

@@ -17,7 +17,10 @@ struct ConnectedAccount: View {
                 state: buttonState,
                 action: action
             )
+            .accessibilityLabel(accountActionLabel)
+            .accessibilityValue(item.state.account ?? "")
         }
+        .accessibilityElement(children: .contain)
     }
 
     private var platformTitle: String {
@@ -27,6 +30,13 @@ struct ConnectedAccount: View {
         case .cafe24:
             "카페24"
         }
+    }
+
+    private var accountActionLabel: String {
+        if item.isWorking {
+            return "\(platformTitle) 계정 \(item.state.isConnected ? "연결 해제 중" : "연결 중")"
+        }
+        return "\(platformTitle) 계정 \(item.state.isConnected ? "연결 해제" : "연결하기")"
     }
 
     private var imageName: String {

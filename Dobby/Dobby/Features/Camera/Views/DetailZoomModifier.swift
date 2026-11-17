@@ -40,7 +40,17 @@ struct DetailZoomModifier: ViewModifier {
                             .buttonStyle(.plain).disabled(options.isApplying || pinching)
                             .position(x: chrome.zoomCenterX, y: chrome.zoomCenterY)
                             .accessibilityLabel("촬영 배율").accessibilityValue(label)
-                            .accessibilityHint("탭하여 배율을 변경하거나 미리보기를 두 손가락으로 확대하세요.")
+                            .accessibilityHint("이중 탭하거나 위아래로 쓸어 배율을 변경합니다.")
+                            .accessibilityAdjustableAction { direction in
+                                guard enabled, !options.isApplying, !pinching else { return }
+                                let delta: Double
+                                switch direction {
+                                case .increment: delta = 0.1
+                                case .decrement: delta = -0.1
+                                @unknown default: return
+                                }
+                                options.requestZoom(min(range.maximum, max(range.minimum, value + delta)))
+                            }
                             .accessibilityIdentifier("camera.zoom")
                             if options.failure != nil, case .zoom = options.requested {
                                 Text("줌을 적용하지 못했어요. 다시 시도해 주세요.")

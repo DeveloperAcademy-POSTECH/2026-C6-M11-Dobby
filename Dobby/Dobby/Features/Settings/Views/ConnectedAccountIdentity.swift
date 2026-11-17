@@ -12,10 +12,12 @@ struct ConnectedAccountIdentity: View {
                 .scaledToFill()
                 .frame(width: 32, height: 32)
                 .clipShape(RoundedRectangle(cornerRadius: 15))
+                .accessibilityHidden(true)
 
             ConnectedAccountText(title: title, account: account)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 

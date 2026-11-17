@@ -45,6 +45,9 @@ struct ExportProductItem<Thumbnail: View>: View {
         .clipShape(
             RoundedRectangle(cornerRadius: ExportProductItemLayout.cornerRadius)
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "이름 없는 상품" : name)
+        .accessibilityValue([brand.map { "브랜드 \($0)" } ?? "브랜드 없음", priceText].compactMap { $0 }.joined(separator: ", "))
     }
 }
 

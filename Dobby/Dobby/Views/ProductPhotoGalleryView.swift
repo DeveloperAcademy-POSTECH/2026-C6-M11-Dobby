@@ -32,6 +32,7 @@ struct ProductPhotoGalleryView: View {
     private let style: ProductPhotoGalleryStyle
     @State private var controlReferenceURL: URL?
     @State private var controlReferenceTurns: Int
+    @AccessibilityFocusState(for: .voiceOver) private var closeIsFocused: Bool
 
     private let controlBackground = Color.black.opacity(0.2)
     private let controlFont = Font.system(size: 17, weight: .semibold)
@@ -134,6 +135,17 @@ struct ProductPhotoGalleryView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .task(id: hasResolvedControlSize) {
+            guard hasResolvedControlSize else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            closeIsFocused = true
+        }
+        .onChange(of: pendingDeletionID) { _, identifier in
+            if identifier == nil { closeIsFocused = true }
+        }
         .accessibilityAction(.escape) {
             if pendingDeletionID != nil { pendingDeletionID = nil } else { close() }
         }
@@ -183,27 +195,39 @@ struct ProductPhotoGalleryView: View {
     }
 
     private func photoSurface(in size: CGSize, height: CGFloat) -> some View {
-        ProductPhotoPager(photos: photos, selectedIndex: $selectedIndex,
-                          onTransitionChange: { isPaging = $0 },
-                          onRotationAnimationChange: { isRotationAnimating = $0 },
-                          allowsDismissGesture: pendingDeletionID == nil && !showsDeletionError && !isClosing && !rotationIsBusy,
-                          allowsPaging: !rotationIsBusy,
-                          onDismissDragChanged: updateDismissal,
-                          onDismissDragEnded: { distance, velocity, cancelled in
-                              endDismissal(distance: distance, velocity: velocity, cancelled: cancelled,
-                                           containerHeight: size.height)
-                          })
+        photoPager(containerHeight: size.height)
         .id(photos.map(\.id))
         .frame(width: size.width, height: height)
         .clipped()
         .accessibilityIdentifier("product-gallery.pager")
         .accessibilityValue("\(photos.isEmpty ? 0 : selectedIndex + 1) / \(photos.count)")
         .overlay {
-            let controlsSize = controlAreaSize(in: CGSize(width: size.width, height: height))
-            photoControls(in: controlsSize)
-                .opacity(hasResolvedControlSize ? 1 : 0)
-                .allowsHitTesting(hasResolvedControlSize)
+            photoControlsOverlay(in: CGSize(width: size.width, height: height))
         }
+    }
+
+    private func photoPager(containerHeight: CGFloat) -> ProductPhotoPager {
+        var pager = ProductPhotoPager(photos: photos, selectedIndex: $selectedIndex)
+        pager.onTransitionChange = { isPaging = $0 }
+        pager.onRotationAnimationChange = { isRotationAnimating = $0 }
+        if onDelete != nil { pager.accessibilityOnDelete = { requestDeletion() } }
+        if onRotate != nil { pager.accessibilityOnRotate = { rotateSelectedPhoto() } }
+        pager.accessibilityOnClose = { close() }
+        pager.accessibilityIsHidden = pendingDeletionID != nil
+        pager.allowsDismissGesture = pendingDeletionID == nil && !showsDeletionError && !isClosing && !rotationIsBusy
+        pager.allowsPaging = !rotationIsBusy
+        pager.onDismissDragChanged = updateDismissal
+        pager.onDismissDragEnded = { distance, velocity, cancelled in
+            endDismissal(distance: distance, velocity: velocity, cancelled: cancelled,
+                         containerHeight: containerHeight)
+        }
+        return pager
+    }
+
+    private func photoControlsOverlay(in size: CGSize) -> some View {
+        photoControls(in: controlAreaSize(in: size))
+            .opacity(hasResolvedControlSize ? 1 : 0)
+            .allowsHitTesting(hasResolvedControlSize)
     }
 
     private func photoControls(in size: CGSize) -> some View {
@@ -220,6 +244,7 @@ struct ProductPhotoGalleryView: View {
                     .disabled(photos.isEmpty || isPaging || rotationIsBusy || dismissalOffset > 0)
                     .accessibilityLabel("사진 회전")
                     .accessibilityValue(rotationDescription)
+                    .accessibilityHint("현재 사진을 왼쪽으로 90도 회전합니다")
                     .accessibilityIdentifier("product-gallery.rotate")
                     .padding(10)
             } else if onDelete != nil {
@@ -272,6 +297,8 @@ struct ProductPhotoGalleryView: View {
                 .offset(x: style == .library ? -1 : 0, y: style == .library ? -0.5 : 0)
         }
             .accessibilityLabel(style == .library ? "뒤로가기" : "닫기")
+            .accessibilityHint("제품 사진 보기를 닫고 이전 화면으로 돌아갑니다")
+            .accessibilityFocused($closeIsFocused)
             .foregroundStyle(style == .library ? Color.white : Color.black)
             .frame(width: 48, height: 48)
             .contentShape(Circle())
@@ -322,6 +349,7 @@ struct ProductPhotoGalleryView: View {
                     return
                 }
                 try Task.checkCancellation()
+                VoiceOverAnnouncement.post("사진을 왼쪽으로 90도 회전했어요")
             } catch is CancellationError {
                 // Closing the viewer cancels outstanding work without an alert.
             } catch {
@@ -340,7 +368,7 @@ struct ProductPhotoGalleryView: View {
     }
 
     private func requestDeletion() {
-        guard !isPaging, !isClosing, onDelete != nil, photos.indices.contains(selectedIndex) else { return }
+        guard !isPaging, !isClosing, !rotationIsBusy, onDelete != nil, photos.indices.contains(selectedIndex) else { return }
         pendingDeletionID = photos[selectedIndex].id
     }
 
@@ -352,6 +380,7 @@ struct ProductPhotoGalleryView: View {
             photos.removeAll { $0.id == photoID }
             selectedIndex = min(selectedIndex, max(0, photos.count - 1))
             isPaging = false
+            VoiceOverAnnouncement.post(photos.isEmpty ? "모든 제품 사진을 제외했어요" : "제품 사진에서 제외했어요. \(photos.count)장이 남았어요")
             if photos.isEmpty { close() }
         } catch {
             showsDeletionError = true
@@ -438,6 +467,7 @@ private struct ProductPhotoPageIndicator: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("제품 사진 페이지")
         .accessibilityValue("\(selection + 1) / \(count)")
+        .accessibilityHint("위아래로 쓸어 이전 또는 다음 사진을 봅니다")
         .accessibilityIdentifier("product-gallery.page-control")
         .accessibilityAdjustableAction { direction in
             switch direction {
@@ -452,6 +482,7 @@ private struct ProductPhotoPageIndicator: View {
 private struct ProductPhotoPageControl: UIViewRepresentable {
     let count: Int
     @Binding var selection: Int
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeUIView(context: Context) -> UIPageControl {
         let control = UIPageControl()
@@ -470,6 +501,9 @@ private struct ProductPhotoPageControl: UIViewRepresentable {
         context.coordinator.selection = $selection
         control.numberOfPages = count
         control.currentPage = selection
+        control.isEnabled = isEnabled
+        control.accessibilityValue = "\(selection + 1) / \(count)"
+        control.accessibilityHint = "위아래로 쓸어 이전 또는 다음 사진을 봅니다"
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIPageControl, context: Context) -> CGSize? {

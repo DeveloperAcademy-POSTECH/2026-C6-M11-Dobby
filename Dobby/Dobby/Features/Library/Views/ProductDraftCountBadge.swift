@@ -24,6 +24,7 @@ struct ProductDraftCountBadge: View {
         .buttonStyle(.plain)
         .accessibilityLabel("임시저장 \(count)개")
         .accessibilityValue(isSelected ? "선택됨" : "선택 안 됨")
+        .accessibilityHint(isSelected ? "모든 상품을 표시합니다." : "임시저장한 상품만 표시합니다.")
         .accessibilityIdentifier("library.draft-count")
     }
 }

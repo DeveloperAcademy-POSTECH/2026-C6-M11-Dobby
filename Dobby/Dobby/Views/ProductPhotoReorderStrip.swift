@@ -54,6 +54,9 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
         view.showsHorizontalScrollIndicator = false
         view.alwaysBounceHorizontal = true
         view.contentInsetAdjustmentBehavior = .never
+        view.isAccessibilityElement = false
+        view.shouldGroupAccessibilityChildren = true
+        view.accessibilityLabel = "제품 사진 목록"
         view.dataSource = context.coordinator
         view.dragDelegate = context.coordinator
         view.dropDelegate = context.coordinator
@@ -119,6 +122,10 @@ struct ProductPhotoReorderStrip<Content: View>: UIViewRepresentable {
 
         func collectionView(_ view: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
             let cell = view.dequeueReusableCell(withReuseIdentifier: "photo", for: indexPath)
+            // Hosted photo/add/remove buttons retain their own actions and IDs.
+            // Making the collection cell a separate element would hide them.
+            cell.isAccessibilityElement = false
+            cell.shouldGroupAccessibilityChildren = true
             if indexPath.item == 0, let leading = parent.leadingContent {
                 cell.contentConfiguration = UIHostingConfiguration { parent.hosted(leading) }.margins(.all, 0)
                 cell.backgroundConfiguration = .clear()

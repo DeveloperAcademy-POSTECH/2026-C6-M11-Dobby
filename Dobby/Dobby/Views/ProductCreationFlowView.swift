@@ -90,7 +90,7 @@ struct ProductCreationFlowView: View {
         // Each generation screen locks its own controls. Disabling this ancestor
         // would also disable native error-alert actions created as loading ends.
         .disabled(isFinishing || pendingExitAction != nil)
-        .accessibilityHidden(autofillLoadingPresentation != nil)
+        .accessibilityHidden(autofillLoadingPresentation != nil || pendingExitAction != nil || isFinishing)
         .overlay {
             if let presentation = autofillLoadingPresentation {
                 ProductAutofillLoadingView(onCancel: presentation.onCancel)
@@ -100,6 +100,7 @@ struct ProductCreationFlowView: View {
             if isFinishing {
                 ProgressView(cleanupAction == .discard ? "작업을 삭제하는 중…" : "작업을 저장하는 중…")
                     .padding().background(.regularMaterial, in: Capsule())
+                    .accessibilityAddTraits(.isModal)
             }
         }
         .overlay {

@@ -6,18 +6,22 @@ struct ExportLoadingOverlay: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.08).ignoresSafeArea()
+                .accessibilityHidden(true)
             HStack(spacing: 12) {
                 ProgressView()
                     .tint(ExportScreenStyle.accent)
+                    .accessibilityHidden(true)
                 Text(message)
                     .font(.subheadline.weight(.semibold))
+                    .accessibilityModalHeading()
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
         .allowsHitTesting(true)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
     }
 }
 

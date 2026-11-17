@@ -46,6 +46,46 @@ struct DetailPhotoGalleryView: View {
     }
 
     var body: some View {
+        // Keep the popover outside the hidden content subtree. SwiftUI's
+        // preference overlay must not inherit the gallery controls' AX state.
+        ZStack {
+            galleryContent.accessibilityHidden(deletionTarget != nil)
+        }
+        .overlayPreferenceValue(GalleryDeleteBarBounds.self) { bounds in
+            if let bounds {
+                GeometryReader { geometry in
+                    // 확인창 하단을 구분선에 맞추고 취소 영역은 하단 버튼까지 덮는다.
+                    DetailPhotoDeleteConfirmation(isPresented: deletionTarget != nil, isDeleting: isDeletingPhoto,
+                        bottomInset: max(0, geometry.size.height - geometry[bounds].minY),
+                        onCancel: { deletionTarget = nil }, onDelete: deletePhoto)
+                }
+                .ignoresSafeArea(edges: .bottom)
+            }
+        }
+        .preferredColorScheme(.light)
+        .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("촬영으로 돌아가기", systemImage: "chevron.left") {
+                    closeGallery()
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityHidden(deletionTarget != nil)
+                .accessibilityIdentifier("camera.galleryClose")
+            }
+        }
+        .tint(.primary)
+        .interactiveDismissDisabled(deletionTarget != nil || isDeletingPhoto || isChangingPhoto)
+        .alert("사진을 삭제하지 못했어요", isPresented: Binding(
+            get: { deletionError != nil }, set: { if !$0 { deletionError = nil } })) {
+            Button("확인", role: .cancel) { deletionError = nil }
+        } message: {
+            Text(deletionError ?? "다시 시도해 주세요.")
+        }
+    }
+
+    private var galleryContent: some View {
         GeometryReader { geometry in
             // Figma 402×874: 사진 y169/높이536, 썸네일 중심 y764, 하단 구분선 y788.
             // 좁거나 낮은 화면에서는 사진 영역부터 줄여 하단 조작 영역을 유지한다.
@@ -58,7 +98,20 @@ struct DetailPhotoGalleryView: View {
                     max(0, 169 * geometry.size.width / 402 - geometry.frame(in: .global).minY)))
                 DetailPhotoGalleryPager(items: items, focusedID: $focusedID, reduceMotion: reduceMotion,
                     onTransitionChanged: { isChangingPhoto = $0 }) { item in
-                    photoView(item).accessibilityLabel(item.label)
+                    photoView(item)
+                        .accessibilityLabel(item.label)
+                        .accessibilityHint("위아래로 쓸어 사진을 바꾸거나 동작 메뉴에서 이전 사진, 다음 사진, 삭제를 선택합니다.")
+                        .accessibilityAdjustableAction { direction in
+                            switch direction {
+                            case .increment: movePhoto(by: 1)
+                            case .decrement: movePhoto(by: -1)
+                            @unknown default: break
+                            }
+                        }
+                        .accessibilityAction(named: Text("이전 사진")) { movePhoto(by: -1) }
+                        .accessibilityAction(named: Text("다음 사진")) { movePhoto(by: 1) }
+                        .accessibilityAction(named: Text("현재 사진 삭제"), requestPhotoDeletion)
+                        .accessibilityAction(.escape, closeGallery)
                 }
                 .frame(height: height)
                 .allowsHitTesting(deletionTarget == nil && !isDeletingPhoto)
@@ -78,9 +131,7 @@ struct DetailPhotoGalleryView: View {
                     Rectangle().fill(Color(.separator)).frame(height: 1 / displayScale)
                 }
                 .overlay(alignment: .trailing) {
-                    Button {
-                        deletionTarget = UUID(uuidString: focusedID)
-                    } label: {
+                    Button(action: requestPhotoDeletion) {
                         Image(systemName: "trash.fill")
                             .font(.system(size: 24, weight: .semibold))
                             .foregroundStyle(.black)
@@ -95,43 +146,32 @@ struct DetailPhotoGalleryView: View {
                 }
         }
         .background(Color(.systemBackground).ignoresSafeArea())
-        .overlayPreferenceValue(GalleryDeleteBarBounds.self) { bounds in
-            if let bounds {
-                GeometryReader { geometry in
-                    // 확인창 하단을 구분선에 맞추고 취소 영역은 하단 버튼까지 덮는다.
-                    DetailPhotoDeleteConfirmation(isPresented: deletionTarget != nil, isDeleting: isDeletingPhoto,
-                        bottomInset: max(0, geometry.size.height - geometry[bounds].minY),
-                        onCancel: { deletionTarget = nil }, onDelete: deletePhoto)
-                }
-                .ignoresSafeArea(edges: .bottom)
-            }
-        }
-        .preferredColorScheme(.light)
-        .toolbarBackground(Color(.systemBackground), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("촬영으로 돌아가기", systemImage: "chevron.left") {
-                    if deletionTarget == nil && !isDeletingPhoto && !isChangingPhoto { dismiss() }
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityHidden(deletionTarget != nil)
-            }
-        }
-        .tint(.primary)
-        .interactiveDismissDisabled(deletionTarget != nil || isDeletingPhoto || isChangingPhoto)
-        .alert("사진을 삭제하지 못했어요", isPresented: Binding(
-            get: { deletionError != nil }, set: { if !$0 { deletionError = nil } })) {
-            Button("확인", role: .cancel) { deletionError = nil }
-        } message: {
-            Text(deletionError ?? "다시 시도해 주세요.")
-        }
     }
 
     private func thumbnailStrip(width: CGFloat) -> some View {
         DetailPhotoFilmstrip(ids: items.map(\.id), focusedID: $focusedID, width: width) { index in
             if items.indices.contains(index) { thumbnail(items[index], index: index) }
         }
+    }
+
+    private func movePhoto(by offset: Int) {
+        guard deletionTarget == nil, !isDeletingPhoto, !isChangingPhoto,
+              let index = items.firstIndex(where: { $0.id == focusedID }),
+              items.indices.contains(index + offset) else { return }
+        let destination = items[index + offset]
+        focusedID = destination.id
+        VoiceOverAnnouncement.post("\(items.count)장 중 \(index + offset + 1)번째, \(destination.label)")
+    }
+
+    private func requestPhotoDeletion() {
+        guard deletionTarget == nil, !isDeletingPhoto, !isChangingPhoto,
+              !model.isDeleting, !model.isCapturing, !items.isEmpty else { return }
+        deletionTarget = UUID(uuidString: focusedID)
+    }
+
+    private func closeGallery() {
+        guard deletionTarget == nil, !isDeletingPhoto, !isChangingPhoto else { return }
+        dismiss()
     }
 
     private func deletePhoto() {
@@ -148,6 +188,7 @@ struct DetailPhotoGalleryView: View {
                 } else {
                     focusedID = remaining[min(index, remaining.count - 1)].id
                 }
+                VoiceOverAnnouncement.post("사진을 삭제했습니다. 남은 사진 \(remaining.count)장")
             } catch {
                 deletionError = error.localizedDescription
             }
@@ -167,6 +208,7 @@ struct DetailPhotoGalleryView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(item.label + (photo.purpose == .detail ? " \(detailNumber)" : ""))
         .accessibilityValue(focused ? "현재 보는 사진" : "")
+        .accessibilityHint("전체 \(items.count)장 중 \(index + 1)번째 사진을 표시합니다.")
         .accessibilityAddTraits(focused ? .isSelected : [])
         .accessibilityIdentifier("camera.galleryThumbnail.\(index)")
     }

@@ -131,7 +131,8 @@ struct MeasurementResultSummary: View {
         guard value.hasUsableMeasurement else {
             return value.failureFeedback.map { "측정 불가. \($0.reason) \($0.recovery)" } ?? "측정 불가"
         }
-        return displayText(for: value)
+        guard let meters = value.meters else { return "측정 불가" }
+        return MeasurementDisplayText.centimeters(meters * 100) + " 센티미터"
     }
 }
 
@@ -200,9 +201,16 @@ struct MeasurementResultSheet: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("실측값 패널")
                 .accessibilityValue(isExpanded ? "펼쳐짐" : "접힘")
+                .accessibilityHint("두 번 탭해 펼치거나 접습니다. 위아래로 쓸어서도 조절할 수 있어요")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { settle(expanded: !isExpanded) }
-                .accessibilityAdjustableAction { settle(expanded: $0 == .increment) }
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: settle(expanded: true)
+                    case .decrement: settle(expanded: false)
+                    @unknown default: break
+                    }
+                }
                 .accessibilityIdentifier("garmentResultSheetHandle")
         }
         .frame(height: expandedHeight, alignment: .top)

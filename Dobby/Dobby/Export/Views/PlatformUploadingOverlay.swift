@@ -9,17 +9,19 @@ struct PlatformUploadingOverlay: View {
             ZStack {
                 Color.black.opacity(0.6)
                     .ignoresSafeArea()
-                PlatformUploadingContent(width: min(312, max(0, geometry.size.width - 40)))
+                    .accessibilityHidden(true)
+                PlatformUploadingContent(width: min(312, max(0, geometry.size.width - 40)), platformName: platformName)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(platformName)에 업로드 중입니다. 조금만 기다려 주세요.")
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
     }
 }
 
 private struct PlatformUploadingContent: View {
     var width: CGFloat = 312
+    var platformName: String = "플랫폼"
     @ScaledMetric(relativeTo: .title2) private var titleSize: CGFloat = 22
     @ScaledMetric(relativeTo: .title2) private var titleLineHeight: CGFloat = 28
     @ScaledMetric(relativeTo: .body) private var messageSize: CGFloat = 17
@@ -31,6 +33,8 @@ private struct PlatformUploadingContent: View {
                 .font(.custom("Pretendard-Bold", fixedSize: titleSize))
                 .tracking(-0.26)
                 .frame(minHeight: titleLineHeight)
+                .accessibilityLabel("\(platformName)에 업로드 중")
+                .accessibilityModalHeading()
             UploadLoadingAnimation(width: max(0, width - 32), height: max(0, width - 32))
             Text("자동으로 업로드하고 있어요!\n조금만 기다려 주세요")
                 .font(.custom("Pretendard-Regular", fixedSize: messageSize))

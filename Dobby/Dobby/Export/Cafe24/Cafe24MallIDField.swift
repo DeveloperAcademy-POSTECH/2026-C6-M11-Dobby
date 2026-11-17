@@ -20,6 +20,8 @@ struct Cafe24MallIDField: View {
                 .tracking(-0.16)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .accessibilityLabel("카페24 쇼핑몰 ID")
+                .accessibilityHint("쇼핑몰 주소에서 .cafe24.com 앞부분만 입력합니다.")
 
                 Cafe24MallIDSuffix()
             }

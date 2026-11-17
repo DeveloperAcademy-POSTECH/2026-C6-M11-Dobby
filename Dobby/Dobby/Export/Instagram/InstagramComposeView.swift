@@ -61,13 +61,18 @@ private struct InstagramPhotoEditor: View {
                 .foregroundStyle(Color(.brandNeutral950))
                 .frame(maxWidth: 363, alignment: .topLeading)
                 .frame(maxWidth: .infinity)
+                .accessibilityAddTraits(.isHeader)
             GeometryReader { geometry in
                 let horizontalInset = max(0, (geometry.size.width - 363) / 2)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 8) {
-                        ForEach(photos) { photo in
+                        ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                             InstagramDraftPhotoCell(photo: photo)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("업로드할 상품 사진 \(index + 1)")
+                                .accessibilityValue("전체 \(photos.count)장")
+                                .accessibilityAddTraits(.isImage)
                         }
                     }
                 }
@@ -128,6 +133,7 @@ private struct InstagramCaptionHeader: View {
                 Text("캡션")
                     .font(.custom("Pretendard-SemiBold", fixedSize: 17))
                     .foregroundStyle(Color(.brandNeutral950))
+                    .accessibilityAddTraits(.isHeader)
                 Text("눌러서 직접 글을 수정할 수 있어요")
                     .font(.custom("Pretendard-Regular", fixedSize: 14))
                     .foregroundStyle(Color(.brandNeutral700))
@@ -184,6 +190,9 @@ private struct InstagramGrowingCaptionTextView: UIViewRepresentable {
 
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.parent = self
+        // VoiceOver focuses the native editor that also manages the caret.
+        textView.accessibilityLabel = "인스타그램 캡션"
+        textView.accessibilityHint = "업로드할 게시물의 글을 수정합니다."
         guard textView.markedTextRange == nil else { return }
 
         if textView.text != text {
@@ -342,6 +351,8 @@ private struct InstagramResetButton: View {
                 .foregroundStyle(Color(.brandNeutral800))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("캡션 초기화")
+        .accessibilityHint("수정한 캡션을 원래 상품 정보로 되돌립니다.")
     }
 }
 

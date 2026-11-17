@@ -14,8 +14,10 @@ struct SettingsNavigationRow: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(SettingsStyle.primaryText)
                 .frame(width: 16, height: 20)
+                .accessibilityHidden(true)
         }
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
 

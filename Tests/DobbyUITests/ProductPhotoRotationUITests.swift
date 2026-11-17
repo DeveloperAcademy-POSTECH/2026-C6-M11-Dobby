@@ -11,7 +11,7 @@ final class ProductPhotoRotationUITests: XCTestCase {
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString, "--garment-preview-top"]
         app.launch()
         defer { app.terminate() }
-        tap(app, "product-flow.start")
+        startMeasurementFromHome(in: app)
         armSyntheticGarmentCapture(in: app)
         tap(app, "captureGarment")
         tap(app, "confirmGarmentMeasurement")

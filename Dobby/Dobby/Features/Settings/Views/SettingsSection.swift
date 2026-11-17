@@ -18,10 +18,12 @@ struct SettingsSection<Content: View>: View {
                 .tracking(SettingsTypography.sectionTitleTracking)
                 .foregroundStyle(SettingsStyle.primaryText)
                 .frame(height: 29, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
 
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
     }
 }
 

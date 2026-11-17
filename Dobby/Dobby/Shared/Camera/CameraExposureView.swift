@@ -164,8 +164,13 @@ struct CameraExposureView: View {
             .onEnded { _ in finishDrag() })
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("노출 조절").accessibilityValue("\(valueText) EV")
+        .accessibilityHint("위아래로 쓸어 노출을 0.1 EV씩 조절합니다")
         .accessibilityAdjustableAction { direction in
-            change(value + (direction == .increment ? 0.1 : -0.1))
+            switch direction {
+            case .increment: change(value + 0.1)
+            case .decrement: change(value - 0.1)
+            @unknown default: break
+            }
         }
         .accessibilityIdentifier("camera.exposureRuler")
     }

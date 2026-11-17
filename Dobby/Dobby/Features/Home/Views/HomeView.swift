@@ -49,7 +49,7 @@ struct HomeView: View {
                             if let candidate = resumeCandidate, let onResumeDraft {
                                 TimelineView(.periodic(from: .now, by: 60)) { timeline in
                                     HomeResumeCard(step: candidate.draft.step, savedAt: candidate.draft.savedAt,
-                                        referenceDate: timeline.date,
+                                        referenceDate: timeline.date, productName: candidate.garment.name,
                                         onResume: { onResumeDraft(candidate.garment.id) }) {
                                         if let photo = candidate.garment.thumbnail {
                                             StoredProductPhotoView(photo: photo, maximumPixelSize: 500)

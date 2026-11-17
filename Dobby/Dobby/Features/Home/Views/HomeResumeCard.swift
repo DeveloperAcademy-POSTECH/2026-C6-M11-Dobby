@@ -12,6 +12,7 @@ struct HomeResumeCard<Thumbnail: View>: View {
     let step: ProductDraftStep
     let savedAt: Date
     var referenceDate: Date = .now
+    var productName: String? = nil
     let onResume: () -> Void
     @ViewBuilder let thumbnail: () -> Thumbnail
 
@@ -24,9 +25,15 @@ struct HomeResumeCard<Thumbnail: View>: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("작업 이어서 하기, 현재 \(step.title), \(relativeSaveTime)")
+        .accessibilityLabel("\(accessibleProductName), 작업 이어서 하기, 현재 \(step.title)")
+        .accessibilityValue("\(relativeSaveTime) 저장")
         .accessibilityHint("저장된 작업 단계에서 계속합니다")
         .accessibilityIdentifier("home.resume")
+    }
+
+    private var accessibleProductName: String {
+        let name = productName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "이름 없는 상품" : name
     }
 
     private var relativeSaveTime: String {

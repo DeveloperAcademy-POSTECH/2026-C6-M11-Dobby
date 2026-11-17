@@ -23,6 +23,7 @@ struct SettingsContent: View {
                     SettingsNavigationRow(title: "개인정보 처리방침", systemImage: "arrow.up.right")
                 }
                 .buttonStyle(.plain)
+                .accessibilityHint("개인정보 처리방침 웹페이지를 엽니다.")
             }
             .padding(.horizontal, 20)
 
@@ -37,6 +38,7 @@ struct SettingsContent: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityHint("문의 메일을 작성합니다.")
             }
             .padding(.horizontal, 20)
 
