@@ -14,15 +14,13 @@ struct ChakHorizontalActionButtons: View {
         HStack(spacing: 8) {
             ChakActionButton(
                 configuration: secondary,
-                fontName: "Pretendard-Medium",
-                foregroundColor: Color(.brandMain500),
-                backgroundColor: Color(.brandMain100),
+                foregroundColor: Color(.brandNeutral950),
+                backgroundColor: Color(.brandNeutral50),
                 horizontalPadding: 0,
                 height: 56
             )
             ChakActionButton(
                 configuration: primary,
-                fontName: "Pretendard-Medium",
                 foregroundColor: Color(.brandNeutralWhite),
                 backgroundColor: Color(.brandMain500),
                 horizontalPadding: 0,
@@ -35,13 +33,11 @@ struct ChakHorizontalActionButtons: View {
 struct ChakVerticalActionButtons: View {
     let secondary: ChakButtonAction
     let primary: ChakButtonAction
-    var primaryFontSize: CGFloat = 16
 
     var body: some View {
         VStack(spacing: 8) {
             ChakActionButton(
                 configuration: secondary,
-                fontName: "Pretendard-SemiBold",
                 foregroundColor: Color(.brandMain500),
                 backgroundColor: Color(.brandNeutral100),
                 horizontalPadding: 28,
@@ -49,12 +45,10 @@ struct ChakVerticalActionButtons: View {
             )
             ChakActionButton(
                 configuration: primary,
-                fontName: "Pretendard-SemiBold",
                 foregroundColor: Color(.brandNeutralWhite),
                 backgroundColor: Color(.brandMain500),
                 horizontalPadding: 28,
                 height: 58,
-                fontSize: primaryFontSize
             )
         }
     }
@@ -62,17 +56,15 @@ struct ChakVerticalActionButtons: View {
 
 private struct ChakActionButton: View {
     let configuration: ChakButtonAction
-    let fontName: String
     let foregroundColor: Color
     let backgroundColor: Color
     let horizontalPadding: CGFloat
     let height: CGFloat
-    var fontSize: CGFloat = 16
 
     var body: some View {
         Button(action: configuration.action) {
             Text(configuration.title)
-                .font(.custom(fontName, fixedSize: fontSize))
+                .font(.custom("Pretendard-SemiBold", fixedSize: 17))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, horizontalPadding)
                 .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
@@ -109,12 +101,10 @@ private struct ChakActionButton: View {
 #Preview("단일 액션 버튼", traits: .sizeThatFitsLayout) {
     ChakActionButton(
         configuration: .init(title: "업로드하러 가기", action: {}),
-        fontName: "Pretendard-SemiBold",
         foregroundColor: Color(.brandNeutralWhite),
         backgroundColor: Color(.brandMain500),
         horizontalPadding: 28,
-        height: 58,
-        fontSize: 17
+        height: 58
     )
     .frame(width: 334)
     .padding()

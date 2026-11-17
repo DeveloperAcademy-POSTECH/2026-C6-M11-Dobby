@@ -41,8 +41,7 @@ struct InstagramConnectionCompletionView: View {
                 title: "업로드하러 가기",
                 accessibilityIdentifier: "export.instagram.continueToUpload",
                 action: onContinueToUpload
-            ),
-            primaryFontSize: 17
+            )
         )
     }
 }
@@ -62,7 +61,6 @@ struct ExportCompletionContent: View {
     let message: String
     let secondary: ChakButtonAction
     let primary: ChakButtonAction
-    var primaryFontSize: CGFloat = 16
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,7 +75,6 @@ struct ExportCompletionContent: View {
             ChakVerticalActionButtons(
                 secondary: secondary,
                 primary: primary,
-                primaryFontSize: primaryFontSize
             )
             .padding(.horizontal, Layout.buttonBarHorizontalPadding)
             .padding(.top, Layout.buttonBarTopPadding)
@@ -144,8 +141,7 @@ private struct InstagramCompletionText: View {
         title: "인스타그램 연결 완료!",
         message: "인스타그램 프로페셔널 계정과\n성공적으로 연결을 완료했어요",
         secondary: .init(title: "보관함으로 가기", action: {}),
-        primary: .init(title: "업로드하러 가기", action: {}),
-        primaryFontSize: 17
+        primary: .init(title: "업로드하러 가기", action: {})
     )
 }
 

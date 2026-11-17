@@ -13,6 +13,7 @@ struct ExportView: View {
     @State private var selectionSaveError: String?
     @State private var closeError: String?
     @State private var showCafe24 = false
+    @State private var isCafe24Uploading = false
     @State private var showInstagram = false
 
     init(product: ExportProduct, showFruits: Binding<Bool>,
@@ -50,7 +51,11 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showCafe24) {
-                Cafe24ExportView(product: product, onRequestExit: requestExit) { _ in
+                Cafe24ExportView(
+                    product: product,
+                    onRequestExit: requestExit,
+                    onUploadingChanged: { isCafe24Uploading = $0 }
+                ) { _ in
                     recordCompletion(for: .cafe24)
                 }
             }
@@ -61,6 +66,11 @@ struct ExportView: View {
             }
         }
         .toast(bottomPadding: 112)
+        .overlay {
+            if isCafe24Uploading {
+                PlatformUploadingOverlay(platformName: "카페24")
+            }
+        }
         .alert("플랫폼 기록을 저장하지 못했어요", isPresented: Binding(
             get: { selectionSaveError != nil },
             set: { if !$0 { selectionSaveError = nil } }
