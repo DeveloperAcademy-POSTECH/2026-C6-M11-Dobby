@@ -213,5 +213,5 @@ test("연결된 몰은 이미지 등록 완료 후 상품을 공개하고 메인
     safety_inventory: 0,
   });
   assert.deepEqual(calls[4].body.request, { display: "T", selling: "T" });
-  assert.deepEqual(calls[5].body.request, { product_no: 358 });
+  assert.deepEqual(calls[5].body.request, { product_no: [358] });
 });

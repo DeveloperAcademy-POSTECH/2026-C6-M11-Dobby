@@ -308,9 +308,13 @@ async function createProduct(request, env) {
     await writeUploadProgress(env, uploadKey, progress);
   }
   if (!progress.mainDisplayed) {
+    const productNumber = Number(progress.productNo);
+    if (!Number.isInteger(productNumber) || productNumber < 2) {
+      throw new Error("카페24 상품번호를 확인할 수 없습니다.");
+    }
     await callCafe24(`/api/v2/admin/mains/${displayGroup}/products`, "POST", {
       shop_no: 1,
-      request: { product_no: progress.productNo },
+      request: { product_no: [productNumber] },
     });
     progress.mainDisplayed = true;
     await writeUploadProgress(env, uploadKey, progress);
