@@ -65,8 +65,9 @@ struct ProductAutofillLoadingView: View {
                     .accessibilityIdentifier("product-ai.cancel")
                 }
 
-            UploadLoadingAnimation(source: .upload, width: imageSide, height: imageSide)
+            UploadLoadingAnimation(source: .aiInformation, width: imageSide, height: imageSide)
                 .accessibilityHidden(true)
+                .allowsHitTesting(false)
 
             Text("사진을 꼼꼼히 보며\n어떤 옷인지 알아보고 있어요")
                 .font(.custom("Pretendard-Regular", fixedSize: messageSize))
@@ -76,12 +77,16 @@ struct ProductAutofillLoadingView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: messageLineHeight * 2)
         }
-        .foregroundStyle(Color("BrandNeutralBlack"))
+        .foregroundStyle(.black)
         .padding(.vertical, 12)
         .padding(20)
         .frame(width: width)
         .background(Color("BrandNeutralWhite"), in: RoundedRectangle(cornerRadius: 44, style: .circular))
         .clipShape(RoundedRectangle(cornerRadius: 44, style: .circular))
-        .shadow(color: .black.opacity(0.25), radius: 4)
+        .shadow(color: .black.opacity(0.25), radius: 2)
     }
+}
+
+#Preview("AI 정보 생성 중") {
+    ProductAutofillLoadingView(onCancel: {})
 }
