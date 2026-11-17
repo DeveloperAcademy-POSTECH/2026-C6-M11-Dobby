@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct Cafe24ConnectionView: View {
     let isLoading: Bool
@@ -57,9 +58,14 @@ struct Cafe24ConnectionView: View {
 
 private struct Cafe24ConnectionHeader: View {
     var body: some View {
+        let font = UIFont(name: "Pretendard-Bold", size: 24) ?? .boldSystemFont(ofSize: 24)
+        let lineSpacing = max(0, 32 - font.lineHeight)
+
         VStack(alignment: .leading, spacing: 48) {
             Text("가지고 계신 카페24 계정과 \n연결할게요")
-                .font(.system(size: 24, weight: .bold))
+                .font(.custom("Pretendard-Bold", fixedSize: 24))
+                .tracking(-0.26)
+                .lineSpacing(lineSpacing)
                 .foregroundStyle(Color(.brandNeutralBlack))
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .fixedSize(horizontal: false, vertical: true)
