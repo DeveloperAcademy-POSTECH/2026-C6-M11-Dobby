@@ -69,6 +69,7 @@ final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationCo
         let productName = rawProductName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !productName.isEmpty else { throw Cafe24IntegrationError.invalidProductName }
         guard price >= 0 else { throw Cafe24IntegrationError.invalidPrice }
+        guard !images.isEmpty else { throw Cafe24IntegrationError.missingImage }
         guard images.count <= Self.maximumImageCount else {
             throw Cafe24IntegrationError.tooManyImages
         }

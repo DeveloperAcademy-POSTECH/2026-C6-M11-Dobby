@@ -134,8 +134,9 @@ async function createProduct(request, env) {
   const imagesBase64 = Array.isArray(input.imagesBase64)
     ? input.imagesBase64
     : input.imageBase64 ? [input.imageBase64] : [];
-  if (imagesBase64.length > 20 || imagesBase64.some((image) => typeof image !== "string" || !image)) {
-    return json({ error: "invalid_images", message: "상품 사진은 최대 20장까지 등록할 수 있습니다." }, 400);
+  if (!imagesBase64.length || imagesBase64.length > 20
+      || imagesBase64.some((image) => typeof image !== "string" || !image)) {
+    return json({ error: "invalid_images", message: "상품 사진은 1장 이상 20장 이하로 등록해 주세요." }, 400);
   }
   let imagePath = null;
   if (imagesBase64.length) {
@@ -143,6 +144,7 @@ async function createProduct(request, env) {
       requests: [{ image: imagesBase64[0] }],
     });
     imagePath = uploaded.images?.[0]?.path || uploaded.image?.path || null;
+    if (!imagePath) throw new Error("카페24가 대표 이미지 경로를 반환하지 않았습니다.");
   }
   const created = await cafe24API(token, env, "/api/v2/admin/products", "POST", {
     shop_no: 1,
