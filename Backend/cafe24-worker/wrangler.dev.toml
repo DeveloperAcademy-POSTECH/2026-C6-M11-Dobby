@@ -1,0 +1,20 @@
+name = "dobby-cafe24-dev"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = true
+
+[vars]
+CAFE24_ENV = "dev"
+CAFE24_TEST_MALL_ID = "dobbyisvintage"
+DEFAULT_DISPLAY_GROUP = "2"
+CAFE24_CATEGORY_OUTERWEAR_NO = "42"
+CAFE24_CATEGORY_TOP_NO = "43"
+CAFE24_CATEGORY_BOTTOM_NO = "44"
+
+[[kv_namespaces]]
+binding = "CAFE24_TOKENS"
+id = "REPLACE_WITH_DEV_KV_NAMESPACE_ID"
