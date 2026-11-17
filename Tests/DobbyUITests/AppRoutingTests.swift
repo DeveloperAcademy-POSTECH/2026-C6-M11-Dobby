@@ -5,6 +5,35 @@ import XCTest
 /// captures a real photo, or opens an external marketplace.
 final class AppRoutingTests: XCTestCase {
     @MainActor
+    func testDraggingSelectedTabToSettingsSwitchesScreens() {
+        continueAfterFailure = false
+        let app = fixtureApp()
+        app.launch()
+        defer { app.terminate() }
+
+        let home = app.tabBars.buttons["홈"]
+        let settings = app.tabBars.buttons["설정"]
+        XCTAssertTrue(home.waitForExistence(timeout: 10))
+        XCTAssertTrue(home.isSelected)
+        let center = CGVector(dx: 0.5, dy: 0.5)
+        home.coordinate(withNormalizedOffset: center).press(forDuration: 0.3,
+            thenDragTo: settings.coordinate(withNormalizedOffset: center),
+            withVelocity: .slow, thenHoldForDuration: 0.15)
+
+        XCTAssertTrue(app.buttons["개인정보 처리방침"].waitForExistence(timeout: 5))
+        XCTAssertTrue(settings.isSelected)
+        XCTAssertFalse(home.isSelected)
+        attachScreenshot(app, name: "settings-after-tab-drag")
+
+        app.tabBars.buttons["보관함"].tap()
+        let sample = app.buttons["debug.export-sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5))
+        sample.tap()
+        XCTAssertTrue(app.buttons["library.export"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.firstMatch.waitForNonExistence(timeout: 5))
+    }
+
+    @MainActor
     func testCaptureAndEmptyLibraryRemainReachableWithLabHidden() {
         continueAfterFailure = false
         let app = fixtureApp()
