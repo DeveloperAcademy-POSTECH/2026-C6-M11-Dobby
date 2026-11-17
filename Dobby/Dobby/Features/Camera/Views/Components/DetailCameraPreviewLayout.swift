@@ -1,8 +1,8 @@
 // Created by mason on 11/9/26.
 import CoreGraphics
 
-/// Detail adapter for shared photo placement. Video fills only the photograph,
-/// so navigation space cannot introduce an additional aspect-fill crop.
+/// Detail adapter for shared capture placement. Video fills only the photograph,
+/// so moving the viewport cannot introduce an additional aspect-fill crop.
 nonisolated struct DetailCameraPreviewLayout {
     let photoFrame: CGRect
     let previewFrame: CGRect

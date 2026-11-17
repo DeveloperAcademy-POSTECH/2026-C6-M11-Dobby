@@ -11,7 +11,7 @@ import Observation
 /// 상세 촬영과 사진 선택에서 공유한다. 실측/ML/LiDAR와 제품 전체 초안은 소유하지 않는다.
 @MainActor
 @Observable
-final class ProductPhotoModel {
+final class ProductPhotoModel: DetailPhotoCaptureModeling {
     static let maximumSelectionCount = ProductPhotoLimit.maximumCount
     enum SelectionResult: Equatable { case updated, limitReached, ignored }
 

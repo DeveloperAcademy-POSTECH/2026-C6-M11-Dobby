@@ -14,11 +14,12 @@ struct CameraFlowView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let model: ProductPhotoModel
+    let model: any DetailPhotoCaptureModeling
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
     let onComplete: (ProductPhotoOutput) async throws -> Void
     let onExit: (() -> Void)?
+    let showsCreationProgress: Bool
     var previewSource: CapturedAsset.Source?
     private let background = Color.black
     @State private var captureRequested = false
@@ -41,9 +42,10 @@ struct CameraFlowView: View {
         let canOpenSettings: Bool
     }
 
-    init(model: ProductPhotoModel, permission: CameraPermission,
+    init(model: any DetailPhotoCaptureModeling, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
          previewSource: CapturedAsset.Source? = nil,
+         showsCreationProgress: Bool = true,
          onExit: (() -> Void)? = nil,
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
@@ -52,6 +54,7 @@ struct CameraFlowView: View {
         self.onComplete = onComplete
         self.onExit = onExit
         self.previewSource = previewSource
+        self.showsCreationProgress = showsCreationProgress
     }
 
     var body: some View {
@@ -66,7 +69,7 @@ struct CameraFlowView: View {
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
-        .productCreationProgress(isCompletingCapture ? nil : .details)
+        .productCreationProgress(isCompletingCapture || !showsCreationProgress ? nil : .details)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil || isCompletingCapture)
         .toolbarBackground(.black, for: .navigationBar)
@@ -94,7 +97,7 @@ struct CameraFlowView: View {
         }
         .accessibilityHidden(isCompletingCapture)
         .overlay {
-            if isCompletingCapture {
+            if isCompletingCapture && !capturePhotosToSave.isEmpty {
                 DetailPhotoLibrarySavingOverlay(
                     savedCount: hasStartedLibrarySaving
                         ? min(librarySaver.savedCount, capturePhotosToSave.count) : 0,
@@ -405,7 +408,7 @@ struct CameraFlowView: View {
         guard let output = model.allPhotosOutput else { return }
         captureOutputToSave = output
         didSaveAllCapturePhotos = false
-        capturePhotosToSave = output.selectedPhotos
+        capturePhotosToSave = model.photosRequiringLibrarySave
         hasStartedLibrarySaving = false
         isCompletingCapture = true
     }

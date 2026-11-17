@@ -10,7 +10,7 @@ private struct GalleryDeleteBarBounds: PreferenceKey {
 
 /// 촬영 순서대로 열람한다. 탐색은 판매용 사진 선택·대표 사진을 변경하지 않는다.
 struct DetailPhotoGalleryView: View {
-    let model: ProductPhotoModel
+    let model: any DetailPhotoCaptureModeling
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -20,7 +20,7 @@ struct DetailPhotoGalleryView: View {
     @State private var isChangingPhoto = false
     @State private var deletionError: String?
 
-    init(model: ProductPhotoModel) {
+    init(model: any DetailPhotoCaptureModeling) {
         self.model = model
         _focusedID = State(initialValue: (model.photos.last ?? model.selectablePhotos.last)?.id.uuidString ?? "")
     }
