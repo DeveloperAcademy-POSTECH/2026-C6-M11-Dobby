@@ -163,8 +163,21 @@ private struct Cafe24GrowingDescriptionTextView: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
+            guard textView.markedTextRange == nil else { return }
             parent.text = textView.text
             updateLayout(in: textView)
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange,
+                      replacementText replacement: String) -> Bool {
+            guard textView.markedTextRange == nil else { return true }
+            guard let textRange = Range(range, in: textView.text) else { return false }
+            let newText = textView.text.replacingCharacters(in: textRange, with: replacement)
+            return ProductTextLimit.allowsChange(
+                from: textView.text,
+                to: newText,
+                maximumLength: ProductTextLimit.detail
+            )
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
@@ -312,7 +325,7 @@ private struct Cafe24ProductNameField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품명", onReset: onReset)
-            TextField("상품명 입력", text: $text)
+            TextField("상품명 입력", text: limitedText)
                 .focused(focus, equals: .productName)
                 .font(.body)
                 .foregroundStyle(Color(.brandNeutralBlack))
@@ -320,6 +333,19 @@ private struct Cafe24ProductNameField: View {
                 .frame(minHeight: 52)
                 .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityLabel("카페24 상품명")
+        }
+    }
+
+    private var limitedText: Binding<String> {
+        Binding {
+            text
+        } set: { newText in
+            guard ProductTextLimit.allowsChange(
+                from: text,
+                to: newText,
+                maximumLength: ProductTextLimit.name
+            ) else { return }
+            text = newText
         }
     }
 }
