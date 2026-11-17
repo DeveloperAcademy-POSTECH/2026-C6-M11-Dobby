@@ -119,7 +119,7 @@ struct ProductInputField: View {
                 characterCount: maximumLength.map { (text.count, $0) }
             )
                 .frame(minHeight: usesEditingLayout ? 22 : nil, alignment: .leading)
-            ProductFieldEditor(text: limitedText, placeholder: placeholder, focus: focus, focusValue: focusValue,
+            ProductFieldEditor(text: $text, placeholder: placeholder, focus: focus, focusValue: focusValue,
                                isSingleLine: isSingleLine, isMultiline: isMultiline,
                                usesEditingLayout: usesEditingLayout,
                                maximumLength: maximumLength,
@@ -153,23 +153,6 @@ struct ProductInputField: View {
             }
         }
         .id(focusValue)
-    }
-
-    private var limitedText: Binding<String> {
-        Binding {
-            text
-        } set: { newText in
-            guard let maximumLength else {
-                text = newText
-                return
-            }
-            guard ProductTextLimit.allowsChange(
-                from: text,
-                to: newText,
-                maximumLength: maximumLength
-            ) else { return }
-            text = newText
-        }
     }
 }
 
@@ -223,17 +206,17 @@ private struct ProductFieldEditor: View {
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
-        } else if isSingleLine {
-            TextField("", text: $text, prompt: prompt)
-                .focused(focus, equals: focusValue)
-                .accessibilityLabel(accessibilityTitle)
-                .accessibilityHint(accessibilityHelp)
         } else {
-            TextField("", text: $text, prompt: prompt, axis: .vertical)
-                .focused(focus, equals: focusValue)
-                .accessibilityLabel(accessibilityTitle)
-                .accessibilityHint(accessibilityHelp)
-                .lineLimit(1...2)
+            LimitedProductTextField(
+                text: $text,
+                maximumLength: maximumLength,
+                prompt: prompt,
+                focus: focus,
+                focusValue: focusValue,
+                isSingleLine: isSingleLine,
+                accessibilityTitle: accessibilityTitle,
+                accessibilityHelp: accessibilityHelp
+            )
                 .multilineTextAlignment(.leading)
                 .lineSpacing(usesEditingLayout ? max(0, 20 * fontSize / 15 - inputFont.lineHeight) : 0)
                 .padding(.vertical, usesEditingLayout ? max(0, 20 * fontSize / 15 - inputFont.lineHeight) / 2 : 0)
@@ -250,6 +233,57 @@ private struct ProductFieldEditor: View {
         UIFont(name: "Pretendard-Regular", size: fontSize) ?? .systemFont(ofSize: fontSize)
     }
 
+}
+
+private struct LimitedProductTextField: View {
+    @Binding var text: String
+    let maximumLength: Int?
+    let prompt: Text
+    let focus: FocusState<ProductInformationField?>.Binding
+    let focusValue: ProductInformationField
+    let isSingleLine: Bool
+    let accessibilityTitle: String
+    let accessibilityHelp: String
+    @State private var inputText = ""
+
+    var body: some View {
+        TextField("", text: $inputText, prompt: prompt, axis: isSingleLine ? .horizontal : .vertical)
+            .focused(focus, equals: focusValue)
+            .lineLimit(isSingleLine ? 1...1 : 1...2)
+            .accessibilityLabel(accessibilityTitle)
+            .accessibilityHint(accessibilityHelp)
+            .onAppear { synchronizeInputText(with: text) }
+            .onChange(of: text) { _, newText in
+                synchronizeInputText(with: newText)
+            }
+            .onChange(of: inputText) { _, newText in
+                updateText(with: newText)
+            }
+    }
+
+    private func synchronizeInputText(with newText: String) {
+        let limitedText = maximumLength.map {
+            ProductTextLimit.truncated(newText, maximumLength: $0)
+        } ?? newText
+        if inputText != limitedText {
+            inputText = limitedText
+        }
+        if text != limitedText {
+            text = limitedText
+        }
+    }
+
+    private func updateText(with newText: String) {
+        if let maximumLength, newText.count > maximumLength {
+            if inputText != text {
+                inputText = text
+            }
+            return
+        }
+        if text != newText {
+            text = newText
+        }
+    }
 }
 
 /// The description grows with its text. The enclosing form scrolls to reveal the caret.

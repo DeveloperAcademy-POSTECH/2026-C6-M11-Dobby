@@ -321,11 +321,12 @@ private struct Cafe24ProductNameField: View {
     @Binding var text: String
     let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
+    @State private var inputText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품명", onReset: onReset)
-            TextField("상품명 입력", text: limitedText)
+            TextField("상품명 입력", text: $inputText)
                 .focused(focus, equals: .productName)
                 .font(.body)
                 .foregroundStyle(Color(.brandNeutralBlack))
@@ -333,18 +334,34 @@ private struct Cafe24ProductNameField: View {
                 .frame(minHeight: 52)
                 .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityLabel("카페24 상품명")
+                .onAppear { synchronizeInputText(with: text) }
+                .onChange(of: text) { _, newText in
+                    synchronizeInputText(with: newText)
+                }
+                .onChange(of: inputText) { _, newText in
+                    updateText(with: newText)
+                }
         }
     }
 
-    private var limitedText: Binding<String> {
-        Binding {
-            text
-        } set: { newText in
-            guard ProductTextLimit.allowsChange(
-                from: text,
-                to: newText,
-                maximumLength: ProductTextLimit.name
-            ) else { return }
+    private func synchronizeInputText(with newText: String) {
+        let limitedText = ProductTextLimit.truncated(newText, maximumLength: ProductTextLimit.name)
+        if inputText != limitedText {
+            inputText = limitedText
+        }
+        if text != limitedText {
+            text = limitedText
+        }
+    }
+
+    private func updateText(with newText: String) {
+        guard newText.count <= ProductTextLimit.name else {
+            if inputText != text {
+                inputText = text
+            }
+            return
+        }
+        if text != newText {
             text = newText
         }
     }
