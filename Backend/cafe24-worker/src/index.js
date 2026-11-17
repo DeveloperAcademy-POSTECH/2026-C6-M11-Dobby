@@ -138,6 +138,13 @@ async function createProduct(request, env) {
       || imagesBase64.some((image) => typeof image !== "string" || !image)) {
     return json({ error: "invalid_images", message: "상품 사진은 1장 이상 20장 이하로 등록해 주세요." }, 400);
   }
+  const category = typeof input.category === "string" ? plainText(input.category).trim() : "";
+  if (category.length > 100) {
+    return json({ error: "invalid_category", message: "의류 분류를 확인해 주세요." }, 400);
+  }
+  const productDescription = [category && `의류 분류: ${category}`, input.description]
+    .filter(value => typeof value === "string" && value.trim())
+    .join("\n\n");
   const requestID = typeof input.requestID === "string" ? input.requestID.toLowerCase() : null;
   if (requestID && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestID)) {
     return json({ error: "invalid_request_id", message: "업로드 요청 정보를 확인해 주세요." }, 400);
@@ -172,8 +179,8 @@ async function createProduct(request, env) {
       supply_price: String(input.supplyPrice ?? input.price),
       price: String(input.price),
       display: "F", selling: "F", has_option: "F",
-      summary_description: plainText(input.description).slice(0, 255),
-      description: html(input.description),
+      summary_description: plainText(productDescription).slice(0, 255),
+      description: html(productDescription),
     };
     if (requestID) productRequest.custom_product_code = requestID;
     const created = await cafe24API(token, env, "/api/v2/admin/products", "POST", {
@@ -222,6 +229,7 @@ async function productFingerprint(input, imagesBase64) {
   return sha256Base64URL(JSON.stringify({
     productName: input.productName,
     description: input.description || "",
+    category: input.category || "",
     price: input.price,
     supplyPrice: input.supplyPrice ?? input.price,
     imagesBase64,

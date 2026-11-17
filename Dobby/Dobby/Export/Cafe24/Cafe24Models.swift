@@ -18,6 +18,7 @@ struct Cafe24ExportDraft {
     private let originalProductName: String
     private let originalProductDescription: String
     private let originalPriceText: String
+    let category: String?
     let photos: [Data]
     var productName: String
     var productDescription: String
@@ -54,6 +55,8 @@ struct Cafe24ExportDraft {
         originalProductName = productName
         originalProductDescription = productDescription
         originalPriceText = product.marketplacePayload.price
+        let category = product.category?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.category = category?.isEmpty == false ? category : nil
         photos = product.exportPhotos
         self.productName = productName
         self.productDescription = productDescription
@@ -97,6 +100,7 @@ struct Cafe24PublishRequest: Encodable {
     let requestID: String
     let productName: String
     let description: String
+    let category: String?
     let price: Int
     let supplyPrice: Int
     let imagesBase64: [String]

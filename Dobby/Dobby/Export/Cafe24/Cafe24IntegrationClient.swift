@@ -64,8 +64,8 @@ final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationCo
         }
     }
 
-    func publish(requestID: String, productName rawProductName: String, description: String, price: Int,
-                 images: [Data]) async throws -> Cafe24PublishResult {
+    func publish(requestID: String, productName rawProductName: String, description: String,
+                 category: String?, price: Int, images: [Data]) async throws -> Cafe24PublishResult {
         let productName = rawProductName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !productName.isEmpty else { throw Cafe24IntegrationError.invalidProductName }
         guard price >= 0 else { throw Cafe24IntegrationError.invalidPrice }
@@ -77,7 +77,7 @@ final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationCo
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(Cafe24PublishRequest(
             requestID: requestID, productName: productName, description: description,
-            price: price, supplyPrice: price,
+            category: category, price: price, supplyPrice: price,
             imagesBase64: images.map { $0.base64EncodedString() }))
         return try await send(request, as: Cafe24PublishResult.self)
     }

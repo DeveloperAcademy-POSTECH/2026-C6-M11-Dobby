@@ -77,6 +77,7 @@ test("첫 사진을 대표 이미지로 연결하고 나머지만 추가 이미�
   const response = await worker.fetch(await connectedRequest({
     productName: "빈티지 재킷",
     description: "테스트 상품",
+    category: "아우터",
     price: 50000,
     supplyPrice: 50000,
     imagesBase64: ["first-image", "second-image", "third-image"],
@@ -84,6 +85,7 @@ test("첫 사진을 대표 이미지로 연결하고 나머지만 추가 이미�
 
   assert.equal(response.status, 201);
   assert.deepEqual(calls[0].body, { requests: [{ image: "first-image" }] });
+  assert.equal(calls[1].body.request.description, "<p>의류 분류: 아우터<br><br>테스트 상품</p>");
   assert.equal(calls[2].body.request.detail_image, "/uploaded/first.jpg");
   assert.deepEqual(calls[3].body.request.additional_image, ["second-image", "third-image"]);
 });

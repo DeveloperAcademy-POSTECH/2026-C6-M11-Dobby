@@ -185,6 +185,7 @@ struct Cafe24ExportView: View {
                 requestID: uploadRequestID.uuidString,
                 productName: draft.productName,
                 description: draft.productDescription,
+                category: draft.category,
                 price: price,
                 images: draft.photos
             )
