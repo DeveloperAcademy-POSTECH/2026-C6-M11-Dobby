@@ -60,7 +60,12 @@ final class LibraryExportBadgeTests: XCTestCase {
 
         app.terminate()
         app.launch()
-        app.tabBars.buttons["보관함"].tap()
+        let start = app.buttons["product-flow.start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertTrue(start.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        let library = app.tabBars.buttons["보관함"]
+        library.tap()
+        XCTAssertTrue(library.wait(for: \.isSelected, toEqual: true, timeout: 10))
         assertNoCompletedUploadBadges(on: app.buttons[cardID])
     }
 
