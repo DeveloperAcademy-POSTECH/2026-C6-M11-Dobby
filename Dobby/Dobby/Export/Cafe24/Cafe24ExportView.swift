@@ -28,6 +28,7 @@ struct Cafe24ExportView: View {
     @State private var isLoadingConnection = true
     @State private var connectionError: String?
     @State private var uploadState: Cafe24UploadState = .idle
+    @State private var showsStorefront = false
     @State private var isConnecting = false
     @State private var isDisconnecting = false
     @State private var message: String?
@@ -49,7 +50,7 @@ struct Cafe24ExportView: View {
             if case let .completed(result) = uploadState {
                 Cafe24UploadCompletionView(
                     onOpenLibrary: { onRequestExit(.library) },
-                    onOpenCafe24: { openCafe24(mallID: result.mallID) }
+                    onOpenCafe24: { openCafe24(result: result) }
                 )
             } else if showsConnectionCompletion {
                 Cafe24ConnectionCompletionView(
@@ -118,6 +119,12 @@ struct Cafe24ExportView: View {
             }
         }
         .interactiveDismissDisabled(uploadState.isUploading)
+        .sheet(isPresented: $showsStorefront) {
+            if case let .completed(result) = uploadState, let url = result.storefrontURL {
+                Cafe24StorefrontBrowser(url: url)
+                    .ignoresSafeArea()
+            }
+        }
         .task { await loadStatus() }
         .alert("카페24 안내", isPresented: Binding(
             get: { message != nil }, set: { if !$0 { message = nil } })) {
@@ -131,9 +138,12 @@ struct Cafe24ExportView: View {
         showsConnectionCompletion || uploadState.isCompleted
     }
 
-    private func openCafe24(mallID: String) {
-        guard let url = URL(string: "https://\(mallID).cafe24.com/") else { return }
-        UIApplication.shared.open(url)
+    private func openCafe24(result: Cafe24PublishResult) {
+        guard result.storefrontURL != nil else {
+            message = "연동한 카페24 쇼핑몰 주소를 확인할 수 없습니다."
+            return
+        }
+        showsStorefront = true
     }
 
     private func dismissKeyboard() {
