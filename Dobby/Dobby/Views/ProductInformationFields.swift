@@ -166,7 +166,7 @@ private struct ProductInputFieldHeader: View {
             ProductFieldTitle(title: title, isRequired: isRequired)
             Spacer(minLength: 0)
             if let characterCount {
-                Text("\(characterCount.current) / \(characterCount.maximum)")
+                Text(verbatim: "\(characterCount.current) / \(characterCount.maximum)")
                     .font(.custom("Pretendard-Regular", fixedSize: 15))
                     .tracking(-0.23)
                     .foregroundStyle(Color("BrandNeutral500"))
