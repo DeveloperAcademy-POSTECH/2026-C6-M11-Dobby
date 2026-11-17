@@ -8,6 +8,8 @@
 import SwiftUI
 
 enum HomeTypography {
-    // 공용 Resources/Fonts와 UIAppFonts에 등록된 글꼴을 홈에서도 사용합니다.
-    static let guidance: Font = .custom("Pretendard-Bold", size: 20, relativeTo: .title3)
+    // Figma Subheadline/Regular: Pretendard Regular, 15/20pt, -0.23pt tracking.
+    static let guidance: Font = .custom("Pretendard-Regular", size: 15, relativeTo: .subheadline)
+    static let guidanceLineHeight: CGFloat = 20
+    static let guidanceTracking: CGFloat = -0.23
 }

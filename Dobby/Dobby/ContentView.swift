@@ -10,6 +10,12 @@ struct ContentView: View {
         var homeTransition: HomeMeasurementTransitionSeed? = nil
         var homeSnapshot: UIImage? = nil
     }
+    private struct HomeMeasurementSession: Identifiable {
+        let id = UUID()
+        var seed: HomeMeasurementTransitionSeed
+        let snapshot: UIImage?
+        var isCommitted = false
+    }
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
@@ -28,7 +34,8 @@ struct ContentView: View {
     @State private var exportReturnNavigationID = UUID()
     @State private var editingAutofillLoadingPresentation: ProductAutofillLoadingPresentation?
     @State private var homeSnapshotSource = HomeMeasurementSnapshotSource()
-    @State private var preparedHomeSnapshot: UIImage?
+    @State private var homeMeasurementSession: HomeMeasurementSession?
+    @State private var homeCaptureColorScheme: ColorScheme = .dark
     @State private var homeMeasurementIdentity = UUID()
     @State private var homeMeasurementHaptics = HomeMeasurementHaptics()
 
@@ -51,12 +58,99 @@ struct ContentView: View {
     }
 
     private var mainContent: some View {
+        ZStack {
+            tabs
+                .opacity(homeMeasurementSession?.isCommitted == true ? 0 : 1)
+                .accessibilityHidden(homeMeasurementSession?.isCommitted == true)
+            if let session = homeMeasurementSession {
+                HomeMeasurementInteractivePresentation(seed: session.seed, snapshot: session.snapshot,
+                    isCommitted: session.isCommitted) {
+                    HomeMeasurementCaptureHost(id: session.id) {
+                        makeCreationFlow(isPresented: homeCreationIsPresented(id: session.id))
+                    }
+                    .environment(\.measurementCaptureActivation, session.isCommitted ? .active : .previewIfAuthorized)
+                }
+                .transformEnvironment(\.colorScheme) { scheme in
+                    if !session.isCommitted { scheme = .dark }
+                }
+                .tint(Color("HomeAccent"))
+                .onPreferenceChange(MeasurementCaptureColorSchemePreferenceKey.self) { scheme in
+                    if let scheme { homeCaptureColorScheme = scheme }
+                }
+                .id(session.id)
+                .zIndex(1)
+            }
+        }
+        .tint(Color("BrandNeutralBlack"))
+        .background { HomeMeasurementSnapshotAnchor(source: homeSnapshotSource).allowsHitTesting(false) }
+        .fullScreenCover(item: $creationRequest) { request in
+            HomeMeasurementPresentation(seed: request.homeTransition, snapshot: request.homeSnapshot) {
+                ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
+                    copyHomeProduct: $creationCopyHomeProduct,
+                    resumeProductID: request.productID,
+                    onDraftSaved: returnHomeFromCreation,
+                    onDraftDiscarded: returnHomeFromCreation,
+                    onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
+                    onCancel: { creationRequest = nil })
+            }
+            .tint(Color("HomeAccent"))
+        }
+        .onChange(of: creationRequest?.id) { previous, current in
+            if previous != nil && current == nil {
+                homeMeasurementHaptics.stop()
+                // TabView can keep Home mounted underneath a full-screen cover.
+                // Reset its held gesture/card opacity explicitly on every exit.
+                homeMeasurementIdentity = UUID()
+                cancelHomeMeasurementPreview()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { homeMeasurementHaptics.stop() }
+        }
+        .onChange(of: tab) { _, selected in
+            if selected != .capture { abortHomeMeasurementPreview() }
+        }
+        .fullScreenCover(isPresented: $showLiDAR) {
+            LiDARLabView().safeAreaInset(edge: .top, spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button("닫기") { showLiDAR = false }
+                        .font(.body.weight(.semibold)).accessibilityIdentifier("closeLiDARLab")
+                }.padding(.horizontal, 20).padding(.vertical, 8).background(.bar)
+            }
+        }
+        .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
+            ExportView(product: product, showFruits: $showFruits) { destination in
+                routeTask?.cancel()
+                routeTask = nil
+                pendingExportDestination = destination
+                showFruits = false
+                exportProduct = nil
+            }
+                .tint(Color("HomeAccent"))
+        }
+        .alert("내보내기를 열 수 없어요", isPresented: Binding(
+            get: { linkError != nil }, set: { if !$0 { linkError = nil } })) {
+                Button("확인", role: .cancel) { linkError = nil }
+            } message: { Text(linkError ?? "") }
+        .onOpenURL(perform: handleURL)
+        .tint(Color("HomeAccent"))
+        .environment(\.returnFromExport,
+            ExportReturnNavigationAction(id: exportReturnNavigationID, action: { @MainActor destination in
+                returnFromExport(to: destination)
+            }))
+        .preferredColorScheme(homeMeasurementSession?.isCommitted == true ? homeCaptureColorScheme : nil)
+    }
+
+    private var tabs: some View {
         TabView(selection: $tab) {
             Tab(value: MainTab.capture) {
                 HomeView(resumeCandidate: HomeResumeCandidate.latest(in: garments),
                     onResumeDraft: { startCreation(resuming: $0) },
                     onStartCapture: { startCreation() },
                     onPrepareMeasurementTransition: prepareHomeMeasurementTransition,
+                    onMeasurementTransitionChanged: updateHomeMeasurementTransition,
+                    onCancelMeasurementTransition: cancelHomeMeasurementPreview,
                     onBeginMeasurementTransition: startHomeMeasurementTransition,
                     measurementHaptics: homeMeasurementHaptics)
                     .id(homeMeasurementIdentity)
@@ -121,60 +215,7 @@ struct ContentView: View {
             .accessibilityLabel(Text(MainTab.settings.title))
         }
         .tint(Color("BrandNeutralBlack"))
-        .background { HomeMeasurementSnapshotAnchor(source: homeSnapshotSource).allowsHitTesting(false) }
-        .fullScreenCover(item: $creationRequest) { request in
-            HomeMeasurementPresentation(seed: request.homeTransition, snapshot: request.homeSnapshot) {
-                ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
-                    copyHomeProduct: $creationCopyHomeProduct,
-                    resumeProductID: request.productID,
-                    onDraftSaved: returnHomeFromCreation,
-                    onDraftDiscarded: returnHomeFromCreation,
-                    onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
-                    onCancel: { creationRequest = nil })
-            }
-            .tint(Color("HomeAccent"))
-        }
-        .onChange(of: creationRequest?.id) { previous, current in
-            if previous != nil && current == nil {
-                homeMeasurementHaptics.stop()
-                // TabView can keep Home mounted underneath a full-screen cover.
-                // Reset its held gesture/card opacity explicitly on every exit.
-                homeMeasurementIdentity = UUID()
-                preparedHomeSnapshot = nil
-            }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase != .active { homeMeasurementHaptics.stop() }
-        }
-        .fullScreenCover(isPresented: $showLiDAR) {
-            LiDARLabView().safeAreaInset(edge: .top, spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button("닫기") { showLiDAR = false }
-                        .font(.body.weight(.semibold)).accessibilityIdentifier("closeLiDARLab")
-                }.padding(.horizontal, 20).padding(.vertical, 8).background(.bar)
-            }
-        }
-        .fullScreenCover(item: $exportProduct, onDismiss: finishExportDismissal) { product in
-            ExportView(product: product, showFruits: $showFruits) { destination in
-                routeTask?.cancel()
-                routeTask = nil
-                pendingExportDestination = destination
-                showFruits = false
-                exportProduct = nil
-            }
-                .tint(Color("HomeAccent"))
-        }
-        .alert("내보내기를 열 수 없어요", isPresented: Binding(
-            get: { linkError != nil }, set: { if !$0 { linkError = nil } })) {
-                Button("확인", role: .cancel) { linkError = nil }
-            } message: { Text(linkError ?? "") }
-        .onOpenURL(perform: handleURL)
-        .tint(Color("HomeAccent"))
-        .environment(\.returnFromExport,
-            ExportReturnNavigationAction(id: exportReturnNavigationID, action: { @MainActor destination in
-                returnFromExport(to: destination)
-            }))
+        .preferredColorScheme(homeMeasurementSession?.isCommitted == true ? nil : .light)
     }
 
     @ViewBuilder
@@ -201,6 +242,7 @@ struct ContentView: View {
         showFruits = false
         showLiDAR = false
         creationRequest = nil
+        finishHomeMeasurementSession()
         libraryPath.removeAll()
         libraryIsEditing = false
         tab = destination == .library ? .library : .capture
@@ -208,40 +250,80 @@ struct ContentView: View {
 
     private func returnHomeFromCreation() {
         creationRequest = nil
+        finishHomeMeasurementSession()
         libraryPath.removeAll()
         tab = .capture
     }
 
     private func startCreation(resuming productID: UUID? = nil) {
-        guard creationRequest == nil else { return }
+        guard creationRequest == nil, homeMeasurementSession?.isCommitted != true else { return }
+        abortHomeMeasurementPreview()
         homeMeasurementHaptics.stop()
-        preparedHomeSnapshot = nil
         libraryIsEditing = false
         creationRequest = CreationRequest(productID: productID)
     }
 
-    private func prepareHomeMeasurementTransition() {
-        guard creationRequest == nil, tab == .capture else { return }
+    private func prepareHomeMeasurementTransition(_ seed: HomeMeasurementTransitionSeed) {
+        guard creationRequest == nil, homeMeasurementSession == nil, tab == .capture else { return }
         // Capture the live home, including its current draft card and native
         // tab bar, before the first drag changes its appearance.
-        preparedHomeSnapshot = homeSnapshotSource.snapshot()
+        let snapshot = homeSnapshotSource.snapshot()
+        let canvasSize = homeSnapshotSource.canvasSize ?? seed.canvasSize
+        let heldSeed = HomeMeasurementTransitionSeed(pull: seed.pull, canvasSize: canvasSize,
+            artworkWidth: seed.artworkWidth, bottomChromeTop: homeSnapshotSource.bottomChromeTop, tapeLead: seed.tapeLead)
+        homeCaptureColorScheme = .dark
+        homeMeasurementSession = HomeMeasurementSession(seed: heldSeed, snapshot: snapshot)
+    }
+
+    private func updateHomeMeasurementTransition(_ seed: HomeMeasurementTransitionSeed) {
+        guard var session = homeMeasurementSession, !session.isCommitted else { return }
+        session.seed = .init(pull: seed.pull, canvasSize: session.seed.canvasSize,
+            artworkWidth: session.seed.artworkWidth, bottomChromeTop: session.seed.bottomChromeTop, tapeLead: seed.tapeLead)
+        homeMeasurementSession = session
     }
 
     private func startHomeMeasurementTransition(_ seed: HomeMeasurementTransitionSeed) {
-        guard creationRequest == nil, tab == .capture else { return }
+        guard creationRequest == nil, tab == .capture,
+              homeMeasurementSession?.isCommitted == false else { return }
+        updateHomeMeasurementTransition(seed)
         libraryIsEditing = false
-        let snapshot = preparedHomeSnapshot ?? homeSnapshotSource.snapshot()
-        let canvasSize = homeSnapshotSource.canvasSize ?? seed.canvasSize
-        let request = CreationRequest(productID: nil,
-            homeTransition: .init(pull: seed.pull, canvasSize: canvasSize, artworkWidth: seed.artworkWidth),
-            homeSnapshot: snapshot)
-        preparedHomeSnapshot = nil
-        // Only this entry replaces UIKit's cover slide with the designed wipe.
-        // Resume and library entry keep their existing presentation behaviour.
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
         homeMeasurementHaptics.finishPull()
-        withTransaction(transaction) { creationRequest = request }
+        homeMeasurementSession?.isCommitted = true
+    }
+
+    private func cancelHomeMeasurementPreview() {
+        guard homeMeasurementSession?.isCommitted == false else { return }
+        homeMeasurementSession = nil
+    }
+
+    private func abortHomeMeasurementPreview() {
+        guard homeMeasurementSession?.isCommitted == false else { return }
+        finishHomeMeasurementSession()
+    }
+
+    private func finishHomeMeasurementSession() {
+        guard homeMeasurementSession != nil else { return }
+        homeMeasurementSession = nil
+        creationCopyHomeProduct = nil
+        homeMeasurementHaptics.stop()
+        homeMeasurementIdentity = UUID()
+    }
+
+    private func homeCreationIsPresented(id: UUID) -> Binding<Bool> {
+        Binding(get: { homeMeasurementSession?.id == id }, set: { presented in
+            if !presented, homeMeasurementSession?.id == id { finishHomeMeasurementSession() }
+        })
+    }
+
+    private func makeCreationFlow(isPresented: Binding<Bool>) -> ProductCreationFlowView {
+        ProductCreationFlowView(container: context.container, controller: controller, isPresented: isPresented,
+            copyHomeProduct: $creationCopyHomeProduct,
+            onDraftSaved: returnHomeFromCreation, onDraftDiscarded: returnHomeFromCreation,
+            onFinish: {
+                finishHomeMeasurementSession()
+                libraryPath.removeAll()
+                tab = .library
+            }, onCancel: finishHomeMeasurementSession)
     }
 
     private var creationIsPresented: Binding<Bool> {
@@ -276,6 +358,7 @@ struct ContentView: View {
             return
         }
         guard url.scheme == "dobby-copy", url.host == "home" else { return }
+        abortHomeMeasurementPreview()
         controller.refresh()
         guard let session = controller.session else {
             linkError = "진행 중인 복사 도우미가 없어요. 보관함에서 제품을 골라 내보내기를 시작해 주세요."
@@ -289,7 +372,7 @@ struct ContentView: View {
             },
             photos: saved?.photos ?? [])
         routeTask?.cancel()
-        if creationRequest != nil {
+        if creationRequest != nil || homeMeasurementSession?.isCommitted == true {
             // A previous product's copy helper can return while a new draft is
             // open. Keep its context and captures alive below the export cover.
             creationCopyHomeProduct = restored
@@ -304,6 +387,14 @@ struct ContentView: View {
             exportProduct = restored
         }
     }
+}
+
+/// Keep the capture subtree stable while only the decorative gesture pose changes.
+private struct HomeMeasurementCaptureHost: View {
+    let id: UUID
+    let content: () -> ProductCreationFlowView
+
+    var body: some View { content() }
 }
 
 struct ProductSavedDetailView: View {

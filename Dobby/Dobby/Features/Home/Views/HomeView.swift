@@ -5,26 +5,29 @@ struct HomeView: View {
     var resumeCandidate: HomeResumeCandidate? = nil
     var onResumeDraft: ((UUID) -> Void)? = nil
     let onStartCapture: () -> Void
-    var onPrepareMeasurementTransition: (() -> Void)? = nil
+    var onPrepareMeasurementTransition: ((HomeMeasurementTransitionSeed) -> Void)? = nil
+    var onMeasurementTransitionChanged: ((HomeMeasurementTransitionSeed) -> Void)? = nil
+    var onCancelMeasurementTransition: (() -> Void)? = nil
     var onBeginMeasurementTransition: ((HomeMeasurementTransitionSeed) -> Void)? = nil
     var measurementHaptics: HomeMeasurementHaptics? = nil
     @State private var measurementPull: CGFloat = 0
-    @ScaledMetric(relativeTo: .title3) private var guidanceLineHeight = 29
-
-    private var showsResumeCard: Bool { resumeCandidate != nil && onResumeDraft != nil }
+    @ScaledMetric(relativeTo: .subheadline) private var guidanceLineHeight = HomeTypography.guidanceLineHeight
+    @ScaledMetric(relativeTo: .subheadline) private var guidanceTracking = HomeTypography.guidanceTracking
 
     var body: some View {
         GeometryReader { geometry in
             let reference = HomeTapeMeasure.referenceSize
-            // At the reference size, guidance starts at y574. On shorter layouts
+            // At the reference size, guidance starts at y576. On shorter layouts
             // the tape fits the space left by the guidance and optional draft card.
-            let guidanceTop: CGFloat = 574
+            let guidanceTop: CGFloat = 576
             let scale = max(0, geometry.size.width / reference.width)
             VStack(spacing: 0) {
                 HomeTapeMeasure(onStartCapture: onStartCapture,
                     onPrepareMeasurementTransition: onPrepareMeasurementTransition,
+                    onMeasurementTransitionChanged: onMeasurementTransitionChanged,
+                    onCancelMeasurementTransition: onCancelMeasurementTransition,
                     onBeginMeasurementTransition: onBeginMeasurementTransition,
-                    onPullChanged: { measurementPull = $0 }, showsResumeCard: showsResumeCard,
+                    onPullChanged: { measurementPull = $0 },
                     canvasSize: CGSize(width: geometry.size.width,
                         height: max(geometry.frame(in: .global).maxY, geometry.size.height)),
                     measurementHaptics: measurementHaptics)
@@ -37,8 +40,8 @@ struct HomeView: View {
                             Text("실측을 시작하세요").frame(minHeight: guidanceLineHeight)
                         }
                         .font(HomeTypography.guidance)
-                        .tracking(-0.2)
-                        .foregroundStyle(Color(red: 122 / 255, green: 117 / 255, blue: 110 / 255))
+                        .tracking(guidanceTracking)
+                        .foregroundStyle(Color("BrandNeutral500"))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityElement(children: .combine)
@@ -59,7 +62,7 @@ struct HomeView: View {
                             }
                             .frame(maxWidth: 361)
                             .padding(.horizontal, 20)
-                            .padding(.top, 20)
+                            .padding(.top, 27 * scale)
                         }
                     }
                 }
@@ -70,7 +73,7 @@ struct HomeView: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         .background(Color("BrandNeutral50").ignoresSafeArea())
-        .preferredColorScheme(.light)
+        .environment(\.colorScheme, .light)
     }
 }
 

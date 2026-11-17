@@ -2,50 +2,65 @@ import SwiftUI
 import UIKit
 
 /// The guide is constructed once, remains mounted throughout the transition,
-/// and keeps its normal safe-area layout. Only the decorative home cover moves.
+/// and stays in its final layout behind Home. Only the reel and Home cover
+/// move after release to reveal the real capture screen.
 struct HomeMeasurementTransitionOverlay<Guide: View>: View, Animatable {
     let snapshot: UIImage?
-    let seed: HomeMeasurementTransitionSeed
+    var seed: HomeMeasurementTransitionSeed
     var progress: Double
+    let showsCover: Bool
     private let guide: Guide
 
     init(snapshot: UIImage?, seed: HomeMeasurementTransitionSeed, progress: Double,
+         showsCover: Bool = true,
          @ViewBuilder guide: () -> Guide) {
         self.snapshot = snapshot
         self.seed = seed
         self.progress = progress
+        self.showsCover = showsCover
         self.guide = guide()
     }
 
-    var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
+    var animatableData: AnimatablePair<Double, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(progress, AnimatablePair(seed.pull, seed.tapeLead)) }
+        set {
+            progress = newValue.first
+            seed = HomeMeasurementTransitionSeed(pull: newValue.second.first,
+                canvasSize: seed.canvasSize, artworkWidth: seed.artworkWidth,
+                bottomChromeTop: seed.bottomChromeTop, tapeLead: newValue.second.second)
+        }
     }
 
     var body: some View {
         let pose = HomeMeasurementMotion.pose(seed: seed, progress: progress)
         guide
-            .allowsHitTesting(pose.isComplete)
-            .accessibilityHidden(!pose.isComplete)
+            .ignoresSafeArea()
+            .environment(\.measurementCaptureCover,
+                showsCover ? MeasurementCaptureCover(center: pose.bodyCenter, diameter: pose.bodyDiameter,
+                    revealOpacity: pose.guideRevealOpacity) : nil)
             .overlay {
-                GeometryReader { geometry in
-                    let origin = geometry.frame(in: .global).origin
-                    ZStack(alignment: .topLeading) {
-                        HomeMeasurementHomeCover(snapshot: snapshot, seed: seed, progress: progress)
-                            .mask { HomeMeasurementCoverMask(seed: seed, progress: progress) }
-                        HomeMeasurementBody(pose: pose)
-                            .opacity(pose.isComplete ? 0 : 1)
+                if showsCover {
+                    GeometryReader { geometry in
+                        let origin = geometry.frame(in: .global).origin
+                        ZStack(alignment: .topLeading) {
+                            HomeMeasurementHomeCover(snapshot: snapshot, seed: seed, progress: progress)
+                                .mask {
+                                    HomeMeasurementCoverMask(seed: seed, progress: progress)
+                                }
+                            HomeMeasurementBody(pose: pose)
+                                .opacity(pose.isComplete ? 0 : 1)
+                        }
+                        .frame(width: seed.canvasSize.width, height: seed.canvasSize.height, alignment: .topLeading)
+                        .offset(x: -origin.x, y: -origin.y)
+                        // Progress is already interpolated by this Animatable view.
+                        // Apply the analytic pose directly, including its terminal
+                        // visibility change, without another child animation.
+                        .transaction { $0.animation = nil }
                     }
-                    .frame(width: seed.canvasSize.width, height: seed.canvasSize.height, alignment: .topLeading)
-                    .offset(x: -origin.x, y: -origin.y)
-                    // Progress is already interpolated by this Animatable view.
-                    // Apply the analytic pose directly, including its terminal
-                    // visibility change, without another child animation.
-                    .transaction { $0.animation = nil }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 }
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
             }
     }
 }
@@ -58,6 +73,7 @@ private struct HomeMeasurementHomeCover: View {
     var body: some View {
         let pose = HomeMeasurementMotion.pose(seed: seed, progress: progress)
         let lowerTop = 494 * pose.scale
+        let chromeTop = seed.bottomChromeTop ?? max(lowerTop, seed.canvasSize.height - 130 * pose.scale)
         ZStack(alignment: .topLeading) {
             Color("BrandNeutral50")
             if let snapshot {
@@ -66,11 +82,19 @@ private struct HomeMeasurementHomeCover: View {
                 Image(uiImage: snapshot).resizable()
                     .frame(width: seed.canvasSize.width, height: seed.canvasSize.height)
                     .mask(alignment: .topLeading) {
-                        Rectangle().frame(height: max(0, seed.canvasSize.height - lowerTop))
+                        Rectangle().frame(height: max(0, chromeTop - lowerTop))
                             .offset(y: lowerTop)
                     }
                     .offset(y: pose.homeDrift)
                     .opacity(pose.homeOpacity)
+                // The live TabView does not fade during a pull. Keep its actual
+                // chrome fixed until the round wipe passes, including safe area.
+                Image(uiImage: snapshot).resizable()
+                    .frame(width: seed.canvasSize.width, height: seed.canvasSize.height)
+                    .mask(alignment: .topLeading) {
+                        Rectangle().frame(height: max(0, seed.canvasSize.height - chromeTop))
+                            .offset(y: chromeTop)
+                    }
             }
             HomeMeasurementTapeArtwork(seed: seed, progress: progress)
         }
@@ -78,9 +102,8 @@ private struct HomeMeasurementHomeCover: View {
     }
 }
 
-/// Complement of the prototype's destination-in guide gradient. Keeping the
-/// real guide underneath an inverse mask avoids clipping its extended safe-area
-/// background or re-laying out a NavigationStack as the wipe finishes.
+/// Reveal the real guide in the round reel's wake. The lower home cover and
+/// circle overlap, so no horizontal seam cuts through the circular silhouette.
 private struct HomeMeasurementCoverMask: View {
     let seed: HomeMeasurementTransitionSeed
     let progress: Double
@@ -89,15 +112,15 @@ private struct HomeMeasurementCoverMask: View {
         let pose = HomeMeasurementMotion.pose(seed: seed, progress: progress)
         Canvas { context, size in
             let bounds = Path(CGRect(origin: .zero, size: size))
-            if progress <= 0 {
-                context.fill(bounds, with: .color(.white))
-            } else if !pose.isComplete {
-                let band = CGRect(x: 0, y: pose.guideMaskOpaqueEnd, width: size.width,
-                    height: pose.guideMaskTransparentEnd - pose.guideMaskOpaqueEnd)
-                context.fill(Path(band), with: .linearGradient(Gradient(colors: [.clear, .white]),
-                    startPoint: CGPoint(x: 0, y: pose.guideMaskOpaqueEnd),
-                    endPoint: CGPoint(x: 0, y: pose.guideMaskTransparentEnd)))
-                let lowerTop = max(0, pose.guideMaskTransparentEnd)
+            if !pose.isComplete {
+                // A held pull always keeps the complete Home screen opaque.
+                // Only release progress opens the round wipe onto capture.
+                context.fill(bounds, with: .color(.white.opacity(1 - pose.guideRevealOpacity)))
+                let radius = pose.bodyDiameter / 2
+                context.fill(Path(ellipseIn: CGRect(x: pose.bodyCenter.x - radius,
+                    y: pose.bodyCenter.y - radius, width: pose.bodyDiameter,
+                    height: pose.bodyDiameter)), with: .color(.white))
+                let lowerTop = max(0, pose.bodyCenter.y)
                 context.fill(Path(CGRect(x: 0, y: lowerTop, width: size.width,
                     height: max(0, size.height - lowerTop))), with: .color(.white))
             }
@@ -120,8 +143,8 @@ struct HomeMeasurementBody: View {
     }
 }
 
-/// Keep Chak's dynamic strip length, with the Figma tip's 8pt corners and 5° tilt.
-/// The strip enters an inset slot; the wider handle keeps its visible shoulders.
+/// The cap, ticks and parallel ribbon share one basis. The folded gray face is
+/// clipped inside the white face and retracts up its straight right-hand edge.
 struct HomeMeasurementTapeArtwork: View {
     let seed: HomeMeasurementTransitionSeed
     let progress: Double
@@ -130,43 +153,35 @@ struct HomeMeasurementTapeArtwork: View {
         let pose = HomeMeasurementMotion.pose(seed: seed, progress: progress)
         Canvas { context, _ in
             guard pose.scale > 0 else { return }
-            context.translateBy(x: (seed.canvasSize.width - seed.artworkWidth) / 2, y: 0)
-            context.scaleBy(x: pose.scale, y: pose.scale)
-            let pull = seed.pull
-            let drop = pose.drop / pose.scale
-            let enter = CGFloat(HomeMeasurementMotion.smooth(progress))
-            let top = 275 + drop
-            let base = 411.5 + pull + drop * (enter * 0.9 + 0.1)
-            let length = max(130, base - top)
-            let tipRadius: CGFloat = 8
-            let tipAngle = CGFloat.pi / 36
-            let tipTransform = CGAffineTransform(translationX: 157, y: top + length - 1)
-                .rotated(by: tipAngle)
-            // Figma's ribbon is narrower than the 92pt handle. Keep these
-            // attachment points inside the handle rather than on its outer arc.
-            let leftJoin = CGPoint(x: 4.8, y: tipRadius).applying(tipTransform)
-            let rightJoin = CGPoint(x: 90.35, y: tipRadius).applying(tipTransform)
-            fill(&context, color: Color("BrandNeutral200"),
-                 points: [CGPoint(x: 179.2, y: top), CGPoint(x: 231.7, y: top),
-                          rightJoin, leftJoin])
-            fill(&context, color: Color("BrandNeutral400"),
-                 points: [CGPoint(x: 208.8, y: top), CGPoint(x: 231.7, y: top),
-                          rightJoin])
-            var offset: CGFloat = 9
-            while offset < length - 2 {
-                let x = 179.2 + (leftJoin.x - 179.2) * offset / (leftJoin.y - top)
-                let longMark = Int(((length - offset) / 8).rounded()) % 5 == 0
+            let tape = pose.tape
+            var ribbon = Path()
+            ribbon.addLines([tape.leftJoin, tape.rightJoin, tape.rightTop, tape.leftTop])
+            ribbon.closeSubpath()
+            context.fill(ribbon, with: .color(Color("BrandNeutral200")))
+            var face = context
+            face.clip(to: ribbon)
+            fill(&face, color: Color("BrandNeutral400").opacity(tape.shadowOpacity),
+                points: [tape.shadowTip, tape.shadowOuter, tape.shadowInner])
+            let length = hypot(tape.leftTop.x - tape.leftJoin.x, tape.leftTop.y - tape.leftJoin.y)
+            var offset = 9 * pose.scale
+            var index = 0
+            while offset < length {
+                let start = CGPoint(x: tape.leftJoin.x + tape.axis.x * offset,
+                    y: tape.leftJoin.y + tape.axis.y * offset)
+                let width: CGFloat = (index % 5 == 0 ? 29 : 17) * pose.scale
                 var tick = Path()
-                tick.move(to: CGPoint(x: x, y: top + offset))
-                let width: CGFloat = longMark ? 29 : 17
-                tick.addLine(to: CGPoint(x: x + width, y: top + offset + width * tan(tipAngle)))
-                context.stroke(tick, with: .color(.black), lineWidth: 1)
-                offset += 8
+                tick.move(to: start)
+                tick.addLine(to: CGPoint(x: start.x + tape.normal.x * width,
+                    y: start.y + tape.normal.y * width))
+                face.stroke(tick, with: .color(.black), lineWidth: pose.scale)
+                offset += 8 * pose.scale
+                index += 1
             }
-            // Paint the tip over the strip's joining chord so there is no empty
-            // wedge at either rounded corner or at the shading's lower end.
-            context.concatenate(tipTransform)
-            context.fill(Path(roundedRect: CGRect(x: 0, y: 0, width: 92, height: 68), cornerRadius: tipRadius),
+            context.translateBy(x: tape.capCenter.x, y: tape.capCenter.y)
+            context.rotate(by: .radians(tape.capAngleRadians))
+            context.fill(Path(roundedRect: CGRect(x: -tape.capSize.width / 2,
+                y: -tape.capSize.height / 2, width: tape.capSize.width, height: tape.capSize.height),
+                cornerRadius: 8 * pose.scale),
                 with: .color(Color("BrandNeutral600")))
         }
         .accessibilityHidden(true)
