@@ -1,15 +1,15 @@
 import UIKit
 import XCTest
 
-/// Checks the actual capture/library home and URL delivery. Every test has an
-/// isolated, empty product store; none copies data, starts a Live Activity,
-/// captures a real photo, or opens an external marketplace.
+/// Checks the actual capture/library home and URL delivery. Flow fixtures use
+/// isolated stores. The tab color check only visits the three main screens.
 final class AppRoutingTests: XCTestCase {
     @MainActor
     func testMainTabBrandColorsFollowSelection() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchEnvironment["DOBBY_FLOW_TEST_STORE_TOKEN"] = UUID().uuidString
+        // The default test scheme sets a store token, which adds an orange preview banner behind the glass.
+        app.launchEnvironment["DOBBY_FLOW_TEST_STORE_TOKEN"] = ""
         app.launch()
         defer { app.terminate() }
 
@@ -19,6 +19,7 @@ final class AppRoutingTests: XCTestCase {
             XCTAssertTrue(tab.waitForExistence(timeout: 10))
             if !tab.isSelected { tab.tap() }
             XCTAssertTrue(tab.wait(for: \.isSelected, toEqual: true, timeout: 5))
+            XCTAssertFalse(app.staticTexts["연결 흐름 미리보기 · 합성 측정값"].exists)
 
             let screenshot = app.screenshot()
             let attachment = XCTAttachment(screenshot: screenshot)
@@ -33,8 +34,7 @@ final class AppRoutingTests: XCTestCase {
                 let button = app.tabBars.buttons[name]
                 let frame = button.frame.offsetBy(dx: -screen.minX, dy: -screen.minY)
                     .applying(CGAffineTransform(scaleX: scaleX, y: scaleY))
-                let divider = frame.minY + frame.height * 0.62
-                let regions = frame.divided(atDistance: divider - frame.minY, from: .minYEdge)
+                let regions = frame.divided(atDistance: frame.height * 0.62, from: .minYEdge)
                 for (part, region) in [("아이콘", regions.slice), ("제목", regions.remainder)] {
                     let crop = try XCTUnwrap(image.cropping(to: region.integral))
                     let counts = try tabInkCounts(in: crop)
