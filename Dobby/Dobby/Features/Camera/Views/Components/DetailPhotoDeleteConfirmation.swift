@@ -3,14 +3,15 @@ import SwiftUI
 
 /// 삭제할 사진은 호출 화면에서 고정한다. 바깥 영역을 탭하면 삭제 없이 닫는다.
 struct DetailPhotoDeleteConfirmation: View {
+    var isPresented = true
     let isDeleting: Bool
     let bottomInset: CGFloat
     let onCancel: () -> Void
     let onDelete: () -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric private var titleSize: CGFloat = 17
     @ScaledMetric private var bodySize: CGFloat = 17
-    @AccessibilityFocusState private var titleFocused: Bool
 
     var body: some View {
         GeometryReader { geometry in
@@ -18,23 +19,32 @@ struct DetailPhotoDeleteConfirmation: View {
                 Color.clear.contentShape(Rectangle())
                     .onTapGesture { if !isDeleting { onCancel() } }
                     .accessibilityHidden(true)
-                ViewThatFits(in: .vertical) {
-                    panel.fixedSize(horizontal: false, vertical: true)
-                    ScrollView { panel }.scrollBounceBehavior(.basedOnSize)
+                if isPresented {
+                    ViewThatFits(in: .vertical) {
+                        panel.fixedSize(horizontal: false, vertical: true)
+                        ScrollView { panel }.scrollBounceBehavior(.basedOnSize)
+                    }
+                    .frame(width: min(typeSize.isAccessibilitySize ? 358 : 300,
+                                      max(0, geometry.size.width - 40)))
+                    .padding(.trailing, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, max(0, bottomInset))
+                    // The panel grows from its trash-button corner, like a system
+                    // popover. Keep the outside-tap surface stationary throughout.
+                    .transition(reduceMotion ? .opacity : .scale(scale: 0.94, anchor: .bottomTrailing).combined(with: .opacity))
                 }
-                .frame(width: min(typeSize.isAccessibilitySize ? 358 : 300,
-                                  max(0, geometry.size.width - 40)))
-                .padding(.trailing, 20)
-                .padding(.top, 16)
-                .padding(.bottom, max(0, bottomInset))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(reduceMotion ? .easeOut(duration: 0.12) : .smooth(duration: 0.22), value: isPresented)
         }
+        .allowsHitTesting(isPresented)
         .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(.isModal)
+        .accessibilityAddTraits(isPresented ? .isModal : [])
         .accessibilityAction(.escape) { if !isDeleting { onCancel() } }
         .accessibilityIdentifier("camera.galleryDeleteConfirmation")
-        .onAppear { titleFocused = true }
+        // Apply last: the persistent transition host must not recreate an
+        // empty accessibility alert while the confirmation is closed.
+        .accessibilityHidden(!isPresented)
     }
 
     private var panel: some View {
@@ -44,7 +54,11 @@ struct DetailPhotoDeleteConfirmation: View {
                     .font(.system(size: titleSize, weight: .semibold))
                     .tracking(-0.43)
                     .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-                    .accessibilityFocused($titleFocused)
+                    .accessibilityModalHeading()
+                    .accessibilityHint("동작 메뉴에서 삭제를 취소할 수 있습니다.")
+                    .accessibilityAction(named: Text("삭제 취소")) {
+                        if !isDeleting { onCancel() }
+                    }
                 Text("삭제된 사진은 복구할 수 없어요")
                     .font(.system(size: bodySize, weight: .regular))
                     .tracking(-0.43)

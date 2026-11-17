@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct Cafe24MallIDField: View {
     @Binding var mallID: String
@@ -20,6 +21,8 @@ struct Cafe24MallIDField: View {
                 .tracking(-0.16)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .accessibilityLabel("카페24 쇼핑몰 ID")
+                .accessibilityHint("쇼핑몰 주소에서 .cafe24.com 앞부분만 입력합니다.")
 
                 Cafe24MallIDSuffix()
             }
@@ -33,8 +36,13 @@ struct Cafe24MallIDField: View {
 
 private struct Cafe24MallIDSuffix: View {
     var body: some View {
+        let font = UIFont(name: "Pretendard-SemiBold", size: 14) ?? .systemFont(ofSize: 14, weight: .semibold)
+        let lineSpacing = max(0, 20 - font.lineHeight)
+
         Text(".cafe24.com")
-            .font(.system(size: 14, weight: .semibold))
+            .font(.custom("Pretendard-SemiBold", fixedSize: 14))
+            .tracking(-0.23)
+            .lineSpacing(lineSpacing)
             .foregroundStyle(Color(.brandNeutralBlack))
             .allowsHitTesting(false)
             .accessibilityHidden(true)

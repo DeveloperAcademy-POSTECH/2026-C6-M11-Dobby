@@ -10,11 +10,8 @@ struct ProductInformationDiscardConfirmation: View {
     @ScaledMetric(relativeTo: .title2) private var titleLineHeight: CGFloat = 28
     @ScaledMetric(relativeTo: .body) private var messageFontSize: CGFloat = 17
     @ScaledMetric(relativeTo: .body) private var messageLineHeight: CGFloat = 22
-    @ScaledMetric(relativeTo: .headline) private var cancelFontSize: CGFloat = 17
-    @ScaledMetric(relativeTo: .headline) private var cancelLineHeight: CGFloat = 22
-    @ScaledMetric(relativeTo: .callout) private var buttonFontSize: CGFloat = 16
-    @ScaledMetric(relativeTo: .callout) private var buttonLineHeight: CGFloat = 20
-    @AccessibilityFocusState private var titleIsFocused: Bool
+    @ScaledMetric(relativeTo: .headline) private var buttonFontSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .headline) private var buttonLineHeight: CGFloat = 22
 
     var body: some View {
         ZStack {
@@ -31,7 +28,6 @@ struct ProductInformationDiscardConfirmation: View {
         .accessibilityAddTraits(.isModal)
         .accessibilityIdentifier("product-info.discard-confirmation")
         .accessibilityAction(.escape, onCancel)
-        .onAppear { titleIsFocused = true }
     }
 
     private var confirmationPanel: some View {
@@ -51,8 +47,7 @@ struct ProductInformationDiscardConfirmation: View {
         VStack(spacing: 8) {
             styledText("저장하지 않은 변경사항이 있어요", fontName: "Pretendard-Bold",
                        size: titleFontSize, lineHeight: titleLineHeight, tracking: -0.26 * titleFontSize / 22)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityFocused($titleIsFocused)
+                .accessibilityModalHeading()
             styledText("변경사항을 삭제하고 보관함으로 나갈까요?", fontName: "Pretendard-Regular",
                        size: messageFontSize, lineHeight: messageLineHeight, tracking: -0.43 * messageFontSize / 17)
         }
@@ -66,27 +61,29 @@ struct ProductInformationDiscardConfirmation: View {
             : AnyLayout(HStackLayout(spacing: 12))
         return layout {
             Button(role: .cancel, action: onCancel) {
-                actionLabel("닫기", background: "BrandMain50", isCancel: true)
+                actionLabel("닫기", background: "BrandMain50")
                     .foregroundStyle(Color("BrandMain600"))
             }
             .accessibilityIdentifier("product-info.discard-cancel")
+            .accessibilityHint("변경한 내용을 유지하고 수정 화면으로 돌아갑니다")
 
             Button(role: .destructive, action: onDiscard) {
                 actionLabel("삭제하고 나가기")
                     .foregroundStyle(Color("AccentsRed"))
             }
             .accessibilityIdentifier("product-info.discard-exit")
+            .accessibilityHint("저장하지 않은 변경사항을 버리고 보관함으로 돌아갑니다")
         }
         .buttonStyle(.plain)
     }
 
-    private func actionLabel(_ title: String, background: String = "BrandNeutral100", isCancel: Bool = false) -> some View {
-        styledText(title, fontName: isCancel ? "Pretendard-SemiBold" : "Pretendard-Medium",
-                   size: isCancel ? cancelFontSize : buttonFontSize,
-                   lineHeight: isCancel ? cancelLineHeight : buttonLineHeight,
-                   tracking: isCancel ? -0.43 * cancelFontSize / 17 : -0.16 * buttonFontSize / 16)
+    private func actionLabel(_ title: String, background: String = "BrandNeutral100") -> some View {
+        styledText(title, fontName: "Pretendard-SemiBold",
+                   size: buttonFontSize,
+                   lineHeight: buttonLineHeight,
+                   tracking: -0.43 * buttonFontSize / 17)
             .padding(.horizontal, 12)
-            .padding(.vertical, isCancel ? 16 : 17)
+            .padding(.vertical, 16)
             .frame(maxWidth: .infinity, minHeight: 54)
             .background(Color(background), in: RoundedRectangle(cornerRadius: 60))
             .contentShape(RoundedRectangle(cornerRadius: 60))

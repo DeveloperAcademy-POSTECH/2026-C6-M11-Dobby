@@ -3,13 +3,23 @@ import SwiftData
 
 @MainActor
 enum ExportCompletionRecorder {
-    static func record(productID: String, channel: ExportChannel, in modelContext: ModelContext) throws {
-        guard let id = UUID(uuidString: productID) else { return }
-        let descriptor = FetchDescriptor<Garment>(predicate: #Predicate<Garment> { $0.id == id })
+    static func record(productID: String, channel: ExportChannel, in modelContext: ModelContext,
+                       save: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        guard ExportChannel.availableCases.contains(channel),
+              let id = UUID(uuidString: productID) else { return }
+        var descriptor = FetchDescriptor<Garment>(predicate: #Predicate<Garment> { $0.id == id })
+        descriptor.fetchLimit = 1
         guard let garment = try modelContext.fetch(descriptor).first else { return }
+        let previousExports = garment.exports
         let record = ExportRecord(channel: channel, succeeded: true)
-        record.garment = garment
+        modelContext.insert(record)
         garment.exports.append(record)
-        try modelContext.save()
+        do {
+            try save(modelContext)
+        } catch {
+            garment.exports = previousExports
+            modelContext.delete(record)
+            throw error
+        }
     }
 }

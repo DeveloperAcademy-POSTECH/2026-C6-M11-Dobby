@@ -1,6 +1,36 @@
 import XCTest
 
 extension XCTestCase {
+    /// Handles both legacy sensor descriptions and the photo-relative spoken
+    /// coordinates used by VoiceOver. The latter are normalized after parsing.
+    nonisolated static func measurementPhotoCoordinates(in text: String) -> CGPoint? {
+        let pattern = #"사진 가로 ([0-9]+(?:\.[0-9]+)?)퍼센트, 세로 ([0-9]+(?:\.[0-9]+)?)퍼센트"#
+        if let expression = try? NSRegularExpression(pattern: pattern),
+           let match = expression.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+           let xRange = Range(match.range(at: 1), in: text),
+           let yRange = Range(match.range(at: 2), in: text),
+           let x = Double(text[xRange]), let y = Double(text[yRange]) {
+            return CGPoint(x: x / 100, y: y / 100)
+        }
+        let pieces = text.split { $0 == " " || $0 == "," }
+        guard pieces.count == 4, pieces[0] == "x", pieces[2] == "y",
+              let x = Double(pieces[1]), let y = Double(pieces[3]) else { return nil }
+        return CGPoint(x: x, y: y)
+    }
+
+    /// The home tape starts capture after a deliberate downward pull.
+    @MainActor
+    func startMeasurementFromHome(in app: XCUIApplication,
+                                  file: StaticString = #filePath, line: UInt = #line) {
+        let entry = app.buttons["product-flow.start"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 15), file: file, line: line)
+        XCTAssertTrue(entry.isHittable, file: file, line: line)
+        let start = entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let distance = min(230, max(0, app.frame.maxY - 90 - entry.frame.midY))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+        XCTAssertTrue(app.buttons["captureGarment"].waitForExistence(timeout: 15), file: file, line: line)
+    }
+
     /// Only synthetic capture fixtures expose this explicit recognition
     /// control. Initial-state and unsupported-device tests must opt in to this
     /// helper rather than having navigation silently arm their shutter.

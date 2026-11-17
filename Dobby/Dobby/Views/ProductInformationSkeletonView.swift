@@ -1,34 +1,14 @@
 import SwiftUI
 
-/// Presentation only: the editable product, drafts and measurements stay intact underneath.
+/// Field-only presentation: photos stay visible in their original section, while
+/// the editable product, drafts and measurements remain intact underneath.
 struct ProductInformationSkeletonView: View {
-    let photoCount: Int
     let measurementColumnCount: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            placeholder(height: 50, radius: 16)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    title("제품 사진", isRequired: true)
-                    Spacer()
-                    (Text("\(photoCount)").foregroundStyle(Color(photoCount > 10 ? "AccentsRed" : "BrandNeutral500"))
-                     + Text("/10").foregroundStyle(Color("BrandNeutral500")))
-                        .font(.custom("Pretendard-Medium", size: 16, relativeTo: .callout))
-                }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(0..<max(4, min(photoCount, 10)), id: \.self) { _ in
-                            placeholder(height: 108, radius: 8).frame(width: 77)
-                        }
-                    }
-                }
-                .scrollDisabled(true)
-            }
-
+        VStack(alignment: .leading, spacing: 40) {
             field("제품명", height: 52, isRequired: true)
-            field("설명", height: 203, isRequired: true)
+            field("상세 설명", height: 204, isRequired: true)
             field("가격", height: 52, isRequired: true)
             field("브랜드", height: 52)
 
@@ -58,24 +38,38 @@ struct ProductInformationSkeletonView: View {
     }
 
     private func field(_ name: String, height: CGFloat, isRequired: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             title(name, isRequired: isRequired)
-            placeholder(height: height, radius: 14)
+            placeholder(height: height, radius: 16)
         }
     }
 
     private func title(_ name: String, isRequired: Bool = false) -> some View {
-        HStack(spacing: 2) {
-            Text(name).foregroundStyle(Color("BrandNeutralBlack"))
-            if isRequired { Text("*").foregroundStyle(Color("BrandMain500")) }
-        }
-        .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
-        .tracking(-0.43)
+        ProductFieldTitle(title: name, isRequired: isRequired)
     }
 
     private func placeholder(height: CGFloat, radius: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: radius)
             .fill(Color("BrandNeutral50"))
             .frame(height: height)
+    }
+}
+
+/// Shared photo placeholders for AI generation and album/camera imports.
+struct ProductPhotoSkeletonStrip: View {
+    let photoCount: Int
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 16) {
+                ForEach(0..<max(4, min(photoCount, 10)), id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color("BrandNeutral50"))
+                        .frame(width: 77, height: 108)
+                }
+            }
+        }
+        .scrollDisabled(true)
+        .allowsHitTesting(false)
     }
 }

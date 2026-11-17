@@ -41,6 +41,9 @@ struct CameraPhotoView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("촬영 사진")
+        .accessibilityAddTraits(.isImage)
         .task(id: loadIdentity) {
             let identity = loadIdentity
             let requestID = UUID()

@@ -10,10 +10,17 @@ struct ProductLibraryDraftCard: View {
 
     var body: some View {
         ProductDraftCard(step: draft.step, relativeSaveTime: relativeSaveTime,
-                         stageAccessibilityIdentifier: "library.draft.stage.\(garment.id.uuidString)",
-                         usesLibraryTypography: true) {
+                         stageAccessibilityIdentifier: "library.draft.stage.\(garment.id.uuidString)") {
             thumbnail
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(accessibleProductName), 작업 이어서 하기, 현재 \(draft.step.title)")
+        .accessibilityValue("사진 \(garment.productPhotos.count)장, \(relativeSaveTime) 저장")
+    }
+
+    private var accessibleProductName: String {
+        let name = garment.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "이름 없는 상품" : name
     }
 
     private var thumbnail: some View {

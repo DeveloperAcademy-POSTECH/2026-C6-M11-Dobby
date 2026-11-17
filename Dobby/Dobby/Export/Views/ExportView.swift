@@ -2,6 +2,8 @@ import SwiftData
 import SwiftUI
 
 struct ExportView: View {
+    private static let navigationTitle = "플랫폼 업로드하기"
+
     let product: ExportProduct
     private let onRequestExit: ((ExportReturnDestination) throws -> Void)?
     @Binding var showFruits: Bool
@@ -11,6 +13,7 @@ struct ExportView: View {
     @State private var selectionSaveError: String?
     @State private var closeError: String?
     @State private var showCafe24 = false
+    @State private var isCafe24Uploading = false
     @State private var showInstagram = false
 
     init(product: ExportProduct, showFruits: Binding<Bool>,
@@ -23,14 +26,16 @@ struct ExportView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                ExportContentView(product: product, completedChannels: completedChannels,
-                                  onSelectChannel: didSelectChannel)
-            }
+            ExportContentView(product: product, completedChannels: completedChannels,
+                              onSelectChannel: didSelectChannel)
+            .frame(maxHeight: .infinity, alignment: .top)
             .background(Color(.brandNeutralWhite))
-            .navigationTitle("플랫폼 업로드하기")
+            .navigationTitle(Self.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    ExportToolbarTitle(title: Self.navigationTitle)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(
                         systemImage: "xmark",
@@ -46,21 +51,26 @@ struct ExportView: View {
                 }
             }
             .navigationDestination(isPresented: $showCafe24) {
-                Cafe24ExportView(product: product, onRequestExit: requestExit) { _ in
-                    completedChannels.insert(.cafe24)
-                    try? ExportCompletionRecorder.record(productID: product.id, channel: .cafe24,
-                                                         in: modelContext)
+                Cafe24ExportView(
+                    product: product,
+                    onRequestExit: requestExit,
+                    onUploadingChanged: { isCafe24Uploading = $0 }
+                ) { _ in
+                    recordCompletion(for: .cafe24)
                 }
             }
             .navigationDestination(isPresented: $showInstagram) {
                 InstagramExportView(product: product, onRequestExit: requestExit) { _ in
-                    completedChannels.insert(.instagram)
-                    try? ExportCompletionRecorder.record(productID: product.id, channel: .instagram,
-                                                         in: modelContext)
+                    recordCompletion(for: .instagram)
                 }
             }
         }
         .toast(bottomPadding: 112)
+        .overlay {
+            if isCafe24Uploading {
+                PlatformUploadingOverlay(platformName: "카페24")
+            }
+        }
         .alert("플랫폼 기록을 저장하지 못했어요", isPresented: Binding(
             get: { selectionSaveError != nil },
             set: { if !$0 { selectionSaveError = nil } }
@@ -106,6 +116,15 @@ struct ExportView: View {
         }
     }
 
+    private func recordCompletion(for channel: ExportChannel) {
+        completedChannels.insert(channel)
+        do {
+            try ExportCompletionRecorder.record(productID: product.id, channel: channel, in: modelContext)
+        } catch {
+            selectionSaveError = "업로드는 완료됐지만 보관함에 업로드 기록을 저장하지 못했어요.\n\(error.localizedDescription)"
+        }
+    }
+
     private func recordSelection(_ channel: ExportChannel) -> Bool {
         do {
             try GarmentStore.recordSelectedExportChannel(channel, productID: product.id, in: modelContext)
@@ -130,6 +149,7 @@ private struct ExportContentView: View {
         }
         .frame(maxWidth: 337)
         .padding(.horizontal, 32)
+        .padding(.top, 20)
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity)
     }

@@ -68,9 +68,7 @@ extension ExportProduct {
             measurements: measurements,
             photos: photos.map(\.data),
             category: garment.category.isEmpty ? nil : garment.category,
-            completedChannels: Set(garment.exports.filter(\.succeeded).compactMap {
-                ExportChannel(rawValue: $0.channelRaw)
-            })
+            completedChannels: Set(garment.completedExportChannels)
         )
     }
 }

@@ -13,6 +13,7 @@ final class ProductDraftResumeTests: XCTestCase {
         let id = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
         let draft = app.buttons.matching(identifier: "library.draft.\(id)").firstMatch
         XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        attachScreenshot(app, name: "library-updated-draft-card")
         draft.press(forDuration: 0.8)
         let remove = app.buttons["library.delete.\(id)"]
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
@@ -25,6 +26,8 @@ final class ProductDraftResumeTests: XCTestCase {
         app.buttons["library.edit-mode"].tap()
         XCTAssertTrue(remove.waitForNonExistence(timeout: 5))
         XCTAssertTrue(draft.waitForExistence(timeout: 5))
+        draft.tap()
+        assertResumedStage("제품 상세 촬영", app: app)
     }
 
     func testInformationBackUsesDoneStateBeforeAndAfterHomeResume() {
@@ -35,12 +38,12 @@ final class ProductDraftResumeTests: XCTestCase {
         openNewInformation(in: app)
 
         let done = app.buttons["product-info.done"]
-        XCTAssertFalse(done.isEnabled)
+        XCTAssertTrue(done.isEnabled)
         returnFromEmptyInformationToDetails(in: app)
         app.buttons["camera.selectPhotos"].tap()
         assertResumedStage("제품 정보 입력", app: app)
 
-        // One populated field enables Done even while other required fields are missing.
+        // Done stays enabled while required fields are missing, including after resume.
         let name = "QA partial information"
         replaceText(in: field("name", in: app), with: name, app: app)
         XCTAssertTrue(done.isEnabled)
@@ -66,7 +69,7 @@ final class ProductDraftResumeTests: XCTestCase {
 
         // Clearing the last value must restore the detail-return route on a resumed draft too.
         replaceText(in: field("name", in: app), with: "", app: app)
-        XCTAssertFalse(done.isEnabled)
+        XCTAssertTrue(done.isEnabled)
         returnFromEmptyInformationToDetails(in: app)
     }
 
@@ -336,7 +339,8 @@ final class ProductDraftResumeTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         openMeasurementResult(in: app)
-        _ = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
+        app.buttons["confirmGarmentMeasurement"].tap()
+        XCTAssertTrue(app.buttons["camera.startDetailCapture"].waitForExistence(timeout: 15))
         app.terminate()
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
@@ -346,10 +350,19 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(card.frame.minX, 0)
         XCTAssertLessThanOrEqual(card.frame.maxX, app.frame.width)
         attachScreenshot(app, name: "home-draft-accessibility-text")
-        app.scrollViews.firstMatch.swipeUp()
-        XCTAssertTrue(card.isHittable)
-        attachScreenshot(app, name: "home-draft-accessibility-scrolled")
+        let start = app.buttons["product-flow.start"]
+        XCTAssertTrue(start.isHittable)
+        let arrow = app.buttons["home.pullArrow"]
+        XCTAssertTrue(arrow.waitForExistence(timeout: 5))
+        let arrowFrame = arrow.frame
+        let cardFrame = card.frame
+        let screenEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.66))
+        screenEdge.press(forDuration: 0.05, thenDragTo: screenEdge.withOffset(CGVector(dx: 0, dy: -160)))
+        XCTAssertEqual(arrow.frame, arrowFrame)
+        XCTAssertEqual(card.frame, cardFrame)
         card.tap()
+        let detailGuide = app.buttons["camera.startDetailCapture"]
+        if detailGuide.waitForExistence(timeout: 3) { detailGuide.tap() }
         assertResumedStage("제품 상세 촬영", app: app)
     }
 
@@ -521,9 +534,7 @@ final class ProductDraftResumeTests: XCTestCase {
     }
 
     private func openMeasurementResult(in app: XCUIApplication) {
-        let start = app.buttons["product-flow.start"]
-        XCTAssertTrue(start.waitForExistence(timeout: 10))
-        start.tap()
+        startMeasurementFromHome(in: app)
         XCTAssertTrue(app.staticTexts["product-flow.fixture"].waitForExistence(timeout: 10))
         let capture = app.buttons["captureGarment"]
         XCTAssertTrue(capture.waitForExistence(timeout: 10))
@@ -707,7 +718,6 @@ final class ProductDraftResumeTests: XCTestCase {
         let card = app.buttons["home.resume"]
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         XCTAssertTrue(card.label.contains(stage))
-        for _ in 0..<5 where !card.isHittable { app.scrollViews.firstMatch.swipeUp() }
         XCTAssertTrue(card.isHittable)
     }
 

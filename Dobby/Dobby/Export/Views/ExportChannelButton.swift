@@ -43,6 +43,7 @@ struct ExportChannelButton: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(channel.shortTitle)
         .accessibilityValue(showsCompletionStatus ? (isComplete ? "업로드 완료" : "업로드 전") : "")
+        .accessibilityHint(showsCompletionStatus ? "계정 연결과 업로드 화면을 엽니다." : "상품 정보를 복사해서 옮기는 화면을 엽니다.")
     }
 }
 

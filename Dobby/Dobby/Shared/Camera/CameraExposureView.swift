@@ -106,16 +106,30 @@ struct CameraExposureView: View {
     private var headerButtons: some View {
         HStack {
             Button("더보기로 돌아가기", systemImage: "chevron.left", action: onBack)
+                .labelStyle(.iconOnly).buttonStyle(.bordered).tint(.primary)
+                .buttonBorderShape(.circle).controlSize(.large)
                 .accessibilityIdentifier("camera.exposureBack")
             Spacer()
             if abs(value) > 0.01 {
-                Button("노출 초기화", systemImage: "arrow.counterclockwise") { change(0, generatesFeedback: false) }
-                    .disabled(state.exposureRange == nil)
-                    .accessibilityIdentifier("camera.exposureReset")
+                resetButton
             }
         }
-        .labelStyle(.iconOnly).buttonStyle(.bordered).tint(.primary)
-        .buttonBorderShape(.circle).controlSize(.large)
+    }
+
+    private var resetButton: some View {
+        Button { change(0, generatesFeedback: false) } label: {
+            Image(systemName: "arrow.counterclockwise")
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(.black.opacity(0.2), in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(state.exposureRange == nil)
+        .accessibilityLabel("노출 초기화")
+        .accessibilityIdentifier("camera.exposureReset")
     }
 
     private func ruler(range: ClosedRange<Double>) -> some View {
@@ -150,8 +164,13 @@ struct CameraExposureView: View {
             .onEnded { _ in finishDrag() })
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("노출 조절").accessibilityValue("\(valueText) EV")
+        .accessibilityHint("위아래로 쓸어 노출을 0.1 EV씩 조절합니다")
         .accessibilityAdjustableAction { direction in
-            change(value + (direction == .increment ? 0.1 : -0.1))
+            switch direction {
+            case .increment: change(value + 0.1)
+            case .decrement: change(value - 0.1)
+            @unknown default: break
+            }
         }
         .accessibilityIdentifier("camera.exposureRuler")
     }

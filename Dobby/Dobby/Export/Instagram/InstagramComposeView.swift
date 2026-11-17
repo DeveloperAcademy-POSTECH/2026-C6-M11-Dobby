@@ -1,19 +1,23 @@
 import SwiftUI
+import UIKit
 
 struct InstagramComposeView: View {
     let account: InstagramAccount
     @Binding var draft: InstagramExportDraft
     let isDisabled: Bool
+    let onDismissKeyboard: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .trailing, spacing: 24) {
                 InstagramAccountCard(account: account)
-                    .frame(maxWidth: 363)
-                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismissKeyboard)
                 InstagramPhotoEditor(photos: draft.photos)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismissKeyboard)
                     .disabled(isDisabled)
-                InstagramCaptionEditor(draft: $draft)
+                InstagramCaptionEditor(draft: $draft, onDismissKeyboard: onDismissKeyboard)
                     .disabled(isDisabled)
                     .frame(maxWidth: 363)
                     .frame(maxWidth: .infinity)
@@ -21,9 +25,19 @@ struct InstagramComposeView: View {
             .padding(.top, 20)
             .padding(.bottom, 44)
             .frame(maxWidth: .infinity)
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismissKeyboard)
+            }
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color(.brandNeutralWhite).ignoresSafeArea())
+        .background {
+            Color(.brandNeutralWhite)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onDismissKeyboard)
+                .ignoresSafeArea()
+        }
     }
 }
 
@@ -31,21 +45,9 @@ private struct InstagramAccountCard: View {
     let account: InstagramAccount
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("이 계정으로 게시물을 올릴게요")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-            HStack(spacing: 11) {
-                InstagramProfileImage(url: account.profilePictureURL)
-                Text("@\(account.username)")
-                    .font(.title3.weight(.medium))
-                    .lineLimit(1)
-            }
+        ExportUploadAccountCard(accountLabel: "@\(account.username)") {
+            InstagramProfileImage(url: account.profilePictureURL)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -59,13 +61,18 @@ private struct InstagramPhotoEditor: View {
                 .foregroundStyle(Color(.brandNeutral950))
                 .frame(maxWidth: 363, alignment: .topLeading)
                 .frame(maxWidth: .infinity)
+                .accessibilityAddTraits(.isHeader)
             GeometryReader { geometry in
                 let horizontalInset = max(0, (geometry.size.width - 363) / 2)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 8) {
-                        ForEach(photos) { photo in
+                        ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                             InstagramDraftPhotoCell(photo: photo)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("업로드할 상품 사진 \(index + 1)")
+                                .accessibilityValue("전체 \(photos.count)장")
+                                .accessibilityAddTraits(.isImage)
                         }
                     }
                 }
@@ -95,10 +102,14 @@ private struct InstagramDraftPhotoCell: View {
 
 private struct InstagramCaptionEditor: View {
     @Binding var draft: InstagramExportDraft
+    let onDismissKeyboard: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            InstagramCaptionHeader(onReset: { draft.resetCaption() })
+            InstagramCaptionHeader(onDismissKeyboard: onDismissKeyboard) {
+                onDismissKeyboard()
+                draft.resetCaption()
+            }
             InstagramCaptionInput(text: $draft.caption)
 
             if let validationMessage = draft.validationMessage,
@@ -106,24 +117,29 @@ private struct InstagramCaptionEditor: View {
                 Text(validationMessage)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .onTapGesture(perform: onDismissKeyboard)
             }
         }
     }
 }
 
 private struct InstagramCaptionHeader: View {
+    let onDismissKeyboard: () -> Void
     let onReset: () -> Void
 
     var body: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("캡션")
                     .font(.custom("Pretendard-SemiBold", fixedSize: 17))
                     .foregroundStyle(Color(.brandNeutral950))
+                    .accessibilityAddTraits(.isHeader)
                 Text("눌러서 직접 글을 수정할 수 있어요")
                     .font(.custom("Pretendard-Regular", fixedSize: 14))
                     .foregroundStyle(Color(.brandNeutral700))
             }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onDismissKeyboard)
             Spacer()
             InstagramResetButton(action: onReset)
         }
@@ -133,19 +149,191 @@ private struct InstagramCaptionHeader: View {
 
 private struct InstagramCaptionInput: View {
     @Binding var text: String
+    @State private var contentHeight: CGFloat = 22
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            TextField("", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.custom("Pretendard-Regular", fixedSize: 17))
-                .foregroundStyle(Color(.label))
-                .lineLimit(1...)
+            InstagramGrowingCaptionTextView(text: $text, contentHeight: $contentHeight)
+                .frame(height: contentHeight, alignment: .topLeading)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 14))
+        .background {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.brandNeutral50))
+                // Keep taps on the editor padding from reaching the dismissal background.
+                .onTapGesture { }
+        }
+    }
+}
+
+/// Expands with the caption and keeps the active caret above the keyboard.
+private struct InstagramGrowingCaptionTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var contentHeight: CGFloat
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.adjustsFontForContentSizeCategory = false
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        context.coordinator.textView = textView
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.parent = self
+        // VoiceOver focuses the native editor that also manages the caret.
+        textView.accessibilityLabel = "인스타그램 캡션"
+        textView.accessibilityHint = "업로드할 게시물의 글을 수정합니다."
+        guard textView.markedTextRange == nil else { return }
+
+        if textView.text != text {
+            let selection = textView.selectedRange
+            textView.attributedText = NSAttributedString(string: text, attributes: textAttributes)
+            textView.selectedRange = NSRange(
+                location: min(selection.location, textView.text.utf16.count),
+                length: 0
+            )
+        }
+        textView.typingAttributes = textAttributes
+        context.coordinator.updateLayout(in: textView)
+    }
+
+    private var textAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: UIFont(name: "Pretendard-Regular", size: 17) ?? UIFont.systemFont(ofSize: 17),
+            .foregroundColor: UIColor.label
+        ]
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: InstagramGrowingCaptionTextView
+        weak var textView: UITextView?
+        private var keyboardFrame = CGRect.null
+        private var layoutTask: Task<Void, Never>?
+
+        init(_ parent: InstagramGrowingCaptionTextView) {
+            self.parent = parent
+            super.init()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameDidChange),
+                name: UIResponder.keyboardDidChangeFrameNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameDidChange),
+                name: UIResponder.keyboardDidShowNotification,
+                object: nil
+            )
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
+            updateLayout(in: textView)
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            textView.typingAttributes = parent.textAttributes
+            updateLayout(in: textView)
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            updateLayout(in: textView)
+        }
+
+        func updateLayout(in textView: UITextView) {
+            layoutTask?.cancel()
+            layoutTask = Task { @MainActor [weak self, weak textView] in
+                await Task.yield()
+                guard !Task.isCancelled, let self, let textView else { return }
+
+                textView.layoutIfNeeded()
+                let width = textView.bounds.width
+                var heightChanged = false
+                if width > 0 {
+                    let fittingHeight = ceil(textView.sizeThatFits(
+                        CGSize(width: width, height: .greatestFiniteMagnitude)
+                    ).height)
+                    let height = max(22, fittingHeight)
+                    if abs(parent.contentHeight - height) > 0.5 {
+                        parent.contentHeight = height
+                        heightChanged = true
+                    }
+                }
+                if heightChanged {
+                    await Task.yield()
+                }
+                await revealCaret(in: textView)
+            }
+        }
+
+        @objc private func keyboardFrameDidChange(_ notification: Notification) {
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
+                return
+            }
+            keyboardFrame = frame
+            guard let textView, textView.isFirstResponder else { return }
+            updateLayout(in: textView)
+        }
+
+        @MainActor
+        private func revealCaret(in textView: UITextView) async {
+            guard let scrollView = enclosingScrollView(of: textView) else { return }
+
+            // UIKit may report the new selection before the scroll view releases the tap.
+            for _ in 0..<8 {
+                guard !Task.isCancelled, textView.isFirstResponder,
+                      !scrollView.isDragging, !scrollView.isDecelerating else { return }
+                guard scrollView.isTracking else { break }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+
+            guard !Task.isCancelled, textView.isFirstResponder,
+                  !scrollView.isTracking,
+                  !scrollView.isDragging,
+                  !scrollView.isDecelerating,
+                  let window = textView.window else { return }
+
+            window.layoutIfNeeded()
+            guard !Task.isCancelled, let position = textView.selectedTextRange?.end else { return }
+            let caretFrame = textView.caretRect(for: position)
+            var targetFrame = textView.convert(caretFrame, to: scrollView).insetBy(dx: 0, dy: -12)
+            targetFrame.size.height += uncoveredKeyboardOverlapHeight(scrollView: scrollView)
+            scrollView.scrollRectToVisible(targetFrame, animated: false)
+        }
+
+        private func enclosingScrollView(of textView: UITextView) -> UIScrollView? {
+            var ancestor = textView.superview
+            while let view = ancestor {
+                if let scrollView = view as? UIScrollView {
+                    return scrollView
+                }
+                ancestor = view.superview
+            }
+            return nil
+        }
+
+        private func uncoveredKeyboardOverlapHeight(scrollView: UIScrollView) -> CGFloat {
+            guard !keyboardFrame.isNull, let window = scrollView.window else { return 0 }
+            let keyboardFrameInWindow = window.convert(keyboardFrame, from: window.screen.coordinateSpace)
+            let scrollFrameInWindow = scrollView.convert(scrollView.bounds, to: window)
+            let overlap = scrollFrameInWindow.intersection(keyboardFrameInWindow).height
+            return max(0, overlap - scrollView.adjustedContentInset.bottom)
+        }
     }
 }
 
@@ -163,6 +351,8 @@ private struct InstagramResetButton: View {
                 .foregroundStyle(Color(.brandNeutral800))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("캡션 초기화")
+        .accessibilityHint("수정한 캡션을 원래 상품 정보로 되돌립니다.")
     }
 }
 
@@ -192,7 +382,8 @@ struct InstagramProfileImage: View {
     InstagramComposeView(
         account: .preview,
         draft: $draft,
-        isDisabled: false
+        isDisabled: false,
+        onDismissKeyboard: {}
     )
 }
 
@@ -230,14 +421,14 @@ struct InstagramProfileImage: View {
 #Preview("캡션 편집", traits: .sizeThatFitsLayout) {
     @Previewable @State var draft = InstagramExportDraft(product: .instagramPreview)
 
-    InstagramCaptionEditor(draft: $draft)
+    InstagramCaptionEditor(draft: $draft, onDismissKeyboard: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutralWhite))
 }
 
 #Preview("캡션 제목", traits: .sizeThatFitsLayout) {
-    InstagramCaptionHeader(onReset: {})
+    InstagramCaptionHeader(onDismissKeyboard: {}, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutralWhite))

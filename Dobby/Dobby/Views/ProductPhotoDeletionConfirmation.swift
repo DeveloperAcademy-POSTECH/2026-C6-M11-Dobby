@@ -10,7 +10,6 @@ struct ProductPhotoDeletionConfirmation: View {
     @ScaledMetric(relativeTo: .callout) private var messageFontSize: CGFloat = 16
     @ScaledMetric(relativeTo: .callout) private var messageLineHeight: CGFloat = 24
     @ScaledMetric(relativeTo: .callout) private var buttonHeight: CGFloat = 54
-    @AccessibilityFocusState private var titleIsFocused: Bool
 
     var body: some View {
         VStack(spacing: 16) {
@@ -19,8 +18,9 @@ struct ProductPhotoDeletionConfirmation: View {
                     .font(.headline)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityFocused($titleIsFocused)
+                    .accessibilityModalHeading()
+                    .accessibilityHint("동작 메뉴에서 삭제 취소를 선택하거나 두 손가락으로 문질러 닫을 수 있어요")
+                    .accessibilityAction(named: "삭제 취소") { onCancel() }
 
                 message
             }
@@ -37,6 +37,7 @@ struct ProductPhotoDeletionConfirmation: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("product-gallery.confirm-delete")
+            .accessibilityHint("현재 사진을 제품 사진 목록에서 삭제합니다")
         }
         .padding(16)
         .frame(maxWidth: 242)
@@ -46,7 +47,6 @@ struct ProductPhotoDeletionConfirmation: View {
         .accessibilityAddTraits(.isModal)
         .accessibilityIdentifier("product-gallery.delete-confirmation")
         .accessibilityAction(.escape, onCancel)
-        .onAppear { titleIsFocused = true }
     }
 
     private var message: some View {

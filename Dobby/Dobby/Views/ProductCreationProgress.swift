@@ -102,11 +102,15 @@ extension View {
 
 private struct ProductCreationProgressPresenter: UIViewControllerRepresentable {
     let stage: ProductCreationStage?
+    @Environment(\.measurementCaptureChromeOpacity) private var chromeOpacity
+    @Environment(\.measurementCaptureCover) private var captureCover
 
     func makeUIViewController(context: Context) -> Presenter { Presenter() }
 
     func updateUIViewController(_ presenter: Presenter, context: Context) {
         presenter.stage = stage
+        presenter.progressOpacity = chromeOpacity
+        presenter.captureCover = captureCover
         presenter.updateProgress()
     }
 
@@ -116,7 +120,10 @@ private struct ProductCreationProgressPresenter: UIViewControllerRepresentable {
 
     final class Presenter: UIViewController {
         var stage: ProductCreationStage?
+        var progressOpacity: Double = 1
+        var captureCover: MeasurementCaptureCover?
         let bar = ProductCreationProgressBar(stage: .measurement)
+        private let coverMask = CALayer()
         private var isVisible = false
         private weak var insetNavigation: UINavigationController?
         private var originalInsets: UIEdgeInsets?
@@ -145,6 +152,7 @@ private struct ProductCreationProgressPresenter: UIViewControllerRepresentable {
         }
 
         func restore() {
+            bar.layer.mask = nil
             bar.removeFromSuperview()
             if let originalInsets { insetNavigation?.additionalSafeAreaInsets = originalInsets }
             insetNavigation = nil
@@ -164,10 +172,61 @@ private struct ProductCreationProgressPresenter: UIViewControllerRepresentable {
                 navigation.additionalSafeAreaInsets.top += ProductCreationHeaderLayout.navigationInset
             }
             bar.configure(stage: stage)
+            // The native bar sits above SwiftUI's Home cover. Match its full
+            // held opacity too, including corners outside a fitted smaller reel.
+            let opacity = progressOpacity.isFinite ? min(1, max(0, progressOpacity)) : 1
+            let reveal = captureCover.map {
+                $0.revealOpacity.isFinite ? min(1, max(0, $0.revealOpacity)) : 0
+            } ?? 1
+            bar.alpha = CGFloat(opacity * reveal)
+            bar.isHidden = opacity * reveal <= 0
             if bar.superview !== navigation.view { navigation.view.addSubview(bar) }
             navigation.view.bringSubviewToFront(bar)
             let top = navigation.view.convert(CGPoint(x: 0, y: window.safeAreaInsets.top), from: window).y
             bar.frame = CGRect(x: 0, y: top, width: navigation.view.bounds.width, height: ProductCreationHeaderLayout.progressHeight)
+            updateCoverMask(in: window)
+        }
+
+        private func updateCoverMask(in window: UIWindow) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            defer { CATransaction.commit() }
+            guard let captureCover, captureCover.diameter.isFinite, captureCover.diameter > 0,
+                  captureCover.center.x.isFinite, captureCover.center.y.isFinite,
+                  bar.bounds.width > 0, bar.bounds.height > 0 else {
+                bar.layer.mask = nil
+                return
+            }
+
+            // The progress bar is attached directly to the native navigation
+            // controller. Mirror the Home cover here so its high layer order
+            // cannot paint a registration segment through the moving reel.
+            let frame = window.convert(bar.bounds, from: bar)
+            let radius = captureCover.diameter / 2
+            let circle = CGRect(x: captureCover.center.x - radius - frame.minX,
+                y: captureCover.center.y - radius - frame.minY,
+                width: captureCover.diameter, height: captureCover.diameter)
+            let lowerTop = min(bar.bounds.height, max(0, captureCover.center.y - frame.minY))
+            guard circle.intersects(bar.bounds) || lowerTop < bar.bounds.height else {
+                bar.layer.mask = nil
+                return
+            }
+
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = window.screen.scale
+            format.opaque = false
+            let image = UIGraphicsImageRenderer(size: bar.bounds.size, format: format).image { context in
+                UIColor.white.setFill()
+                context.fill(bar.bounds)
+                context.cgContext.setBlendMode(.clear)
+                context.cgContext.fillEllipse(in: circle)
+                context.cgContext.fill(CGRect(x: 0, y: lowerTop,
+                    width: bar.bounds.width, height: bar.bounds.height - lowerTop))
+            }
+            coverMask.frame = bar.bounds
+            coverMask.contentsScale = format.scale
+            coverMask.contents = image.cgImage
+            bar.layer.mask = coverMask
         }
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct Cafe24ConnectionView: View {
     let isLoading: Bool
@@ -38,6 +39,9 @@ struct Cafe24ConnectionView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("카페24 계정 연결하기")
+            .accessibilityValue(isLoading ? "연결 중" : "연결 전")
         }
         .frame(maxWidth: 362, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 20)
@@ -54,15 +58,25 @@ struct Cafe24ConnectionView: View {
 
 private struct Cafe24ConnectionHeader: View {
     var body: some View {
+        let titleFont = UIFont(name: "Pretendard-Bold", size: 24) ?? .boldSystemFont(ofSize: 24)
+        let titleLineSpacing = max(0, 32 - titleFont.lineHeight)
+        let descriptionFont = UIFont(name: "Pretendard-Regular", size: 17) ?? .systemFont(ofSize: 17)
+        let descriptionLineSpacing = max(0, 22 - descriptionFont.lineHeight)
+
         VStack(alignment: .leading, spacing: 48) {
             Text("가지고 계신 카페24 계정과 \n연결할게요")
-                .font(.system(size: 24, weight: .bold))
+                .font(.custom("Pretendard-Bold", fixedSize: 24))
+                .tracking(-0.26)
+                .lineSpacing(titleLineSpacing)
                 .foregroundStyle(Color(.brandNeutralBlack))
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
 
             Text("먼저 카페24 ID를 입력하고 아래 버튼을 눌러\n계정 연결을 완료해주세요.")
-                .font(.body.weight(.regular))
+                .font(.custom("Pretendard-Regular", fixedSize: 17))
+                .tracking(-0.43)
+                .lineSpacing(descriptionLineSpacing)
                 .foregroundStyle(Color(.brandNeutral600))
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .fixedSize(horizontal: false, vertical: true)

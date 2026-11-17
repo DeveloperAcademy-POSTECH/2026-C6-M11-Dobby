@@ -1,59 +1,287 @@
 import SwiftUI
 import UIKit
 
+private nonisolated enum Cafe24InputField: Hashable {
+    case productName, productDescription, price
+}
+
 struct Cafe24ProductView: View {
     @Binding var draft: Cafe24ExportDraft
-    let isCompleted: Bool
+    @FocusState private var focusedField: Cafe24InputField?
+    let mallID: String
     let isDisabled: Bool
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                if isCompleted {
-                    Cafe24CompletionHeader()
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    ExportUploadAccountCard(accountLabel: "@\(mallID).cafe24.com") {
+                        EmptyView()
+                    }
+                    .onTapGesture(perform: dismissKeyboard)
+                    Cafe24ProductPhotos(photos: draft.photos)
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: dismissKeyboard)
+                    Cafe24ProductNameField(text: $draft.productName, focus: $focusedField) {
+                        dismissKeyboard()
+                        draft.resetProductName()
+                    }
+                    .disabled(isDisabled)
+                    .id(Cafe24InputField.productName)
+                    Cafe24ProductDescriptionField(text: $draft.productDescription, focus: $focusedField) {
+                        dismissKeyboard()
+                        draft.resetProductDescription()
+                    }
+                    .disabled(isDisabled)
+                    Cafe24PriceField(priceText: $draft.priceText, focus: $focusedField) {
+                        dismissKeyboard()
+                        draft.resetPrice()
+                    }
+                    .disabled(isDisabled)
+                    .id(Cafe24InputField.price)
                 }
-                Cafe24ProductPhotos(photos: draft.photos)
-                Cafe24ProductNameField(text: $draft.productName) {
-                    draft.resetProductName()
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 43)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
+                .background {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: dismissKeyboard)
                 }
-                .disabled(areFieldsDisabled)
-                Cafe24ProductDescriptionField(text: $draft.productDescription) {
-                    draft.resetProductDescription()
-                }
-                .disabled(areFieldsDisabled)
-                Cafe24PriceField(priceText: $draft.priceText) {
-                    draft.resetPrice()
-                }
-                .disabled(areFieldsDisabled)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 43)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
+            .scrollDismissesKeyboard(.interactively)
+            .background {
+                Color(.brandNeutralWhite)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismissKeyboard)
+                    .ignoresSafeArea()
+            }
+            .onChange(of: focusedField) {
+                revealFocusedField(using: proxy)
+            }
+            .onReceive(NotificationCenter.default.publisher(
+                for: UIResponder.keyboardDidShowNotification
+            )) { _ in
+                revealFocusedField(using: proxy)
+            }
+            .onChange(of: isDisabled) {
+                if isDisabled { dismissKeyboard() }
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
-        .background(Color(.brandNeutralWhite).ignoresSafeArea())
     }
 
-    private var areFieldsDisabled: Bool { isDisabled || isCompleted }
+    private func dismissKeyboard() {
+        focusedField = nil
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+    }
+
+    private func revealFocusedField(using proxy: ScrollViewProxy) {
+        guard let focusedField, focusedField != .productDescription else { return }
+
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(focusedField, anchor: .center)
+            }
+        }
+    }
 }
 
-private struct Cafe24CompletionHeader: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Text("카페24에 업로드 완료 🎉")
-                .font(.title3.bold())
-            HStack(spacing: 0) {
-                Text("연결된 계정에 자동 업로드를 ")
-                Text("완료")
-                    .foregroundStyle(Color(.brandMain500))
-                Text("했어요")
-            }
-            .font(.body)
+private struct Cafe24GrowingDescriptionTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var contentHeight: CGFloat
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.adjustsFontForContentSizeCategory = false
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        context.coordinator.textView = textView
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.parent = self
+        guard textView.markedTextRange == nil else { return }
+
+        let displayedText = ProductTextLimit.truncated(text, maximumLength: ProductTextLimit.detail)
+        if textView.text != displayedText {
+            let selection = textView.selectedRange
+            textView.attributedText = NSAttributedString(string: displayedText, attributes: textAttributes)
+            textView.selectedRange = NSRange(
+                location: min(selection.location, textView.text.utf16.count),
+                length: 0
+            )
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        if displayedText != text {
+            Task { @MainActor in
+                await Task.yield()
+                context.coordinator.parent.text = displayedText
+            }
+        }
+        textView.typingAttributes = textAttributes
+        context.coordinator.updateLayout(in: textView)
+    }
+
+    private var textAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: UIFont(name: "Pretendard-Regular", size: 17) ?? UIFont.systemFont(ofSize: 17),
+            .foregroundColor: UIColor(named: "BrandNeutralBlack") ?? UIColor.label
+        ]
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: Cafe24GrowingDescriptionTextView
+        weak var textView: UITextView?
+        private var keyboardFrame = CGRect.null
+
+        init(_ parent: Cafe24GrowingDescriptionTextView) {
+            self.parent = parent
+            super.init()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameDidChange),
+                name: UIResponder.keyboardDidChangeFrameNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameDidChange),
+                name: UIResponder.keyboardDidShowNotification,
+                object: nil
+            )
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard textView.markedTextRange == nil else { return }
+            guard textView.text.count <= ProductTextLimit.detail else {
+                restoreAcceptedText(in: textView)
+                return
+            }
+            parent.text = textView.text
+            updateLayout(in: textView)
+        }
+
+        private func restoreAcceptedText(in textView: UITextView) {
+            let acceptedText = ProductTextLimit.truncated(
+                parent.text,
+                maximumLength: ProductTextLimit.detail
+            )
+            let selectionLocation = min(textView.selectedRange.location, acceptedText.utf16.count)
+            textView.attributedText = NSAttributedString(string: acceptedText, attributes: parent.textAttributes)
+            textView.selectedRange = NSRange(location: selectionLocation, length: 0)
+            textView.typingAttributes = parent.textAttributes
+            if parent.text != acceptedText {
+                parent.text = acceptedText
+            }
+            updateLayout(in: textView)
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange,
+                      replacementText replacement: String) -> Bool {
+            guard textView.markedTextRange == nil else { return true }
+            guard let textRange = Range(range, in: textView.text) else { return false }
+            let newText = textView.text.replacingCharacters(in: textRange, with: replacement)
+            return ProductTextLimit.allowsChange(
+                from: textView.text,
+                to: newText,
+                maximumLength: ProductTextLimit.detail
+            )
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            textView.typingAttributes = parent.textAttributes
+            updateLayout(in: textView)
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            updateLayout(in: textView)
+        }
+
+        func updateLayout(in textView: UITextView) {
+            Task { @MainActor [weak self, weak textView] in
+                await Task.yield()
+                guard let self, let textView, let selection = textView.selectedTextRange else { return }
+
+                textView.layoutIfNeeded()
+                let width = textView.bounds.width
+                var heightChanged = false
+                if width > 0 {
+                    let fittingHeight = ceil(textView.sizeThatFits(
+                        CGSize(width: width, height: .greatestFiniteMagnitude)
+                    ).height)
+                    let height = max(22, fittingHeight)
+                    if abs(parent.contentHeight - height) > 0.5 {
+                        parent.contentHeight = height
+                        heightChanged = true
+                    }
+                }
+                if heightChanged {
+                    await Task.yield()
+                    textView.window?.layoutIfNeeded()
+                }
+                revealCaret(selection.end, in: textView)
+            }
+        }
+
+        @objc private func keyboardFrameDidChange(_ notification: Notification) {
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else {
+                return
+            }
+            keyboardFrame = frame
+            guard let textView, textView.isFirstResponder else { return }
+            updateLayout(in: textView)
+        }
+
+        @MainActor
+        private func revealCaret(_ position: UITextPosition, in textView: UITextView) {
+            guard textView.isFirstResponder,
+                  let scrollView = enclosingScrollView(of: textView),
+                  !scrollView.isTracking,
+                  !scrollView.isDragging,
+                  !scrollView.isDecelerating else { return }
+
+            let caretFrame = textView.caretRect(for: position)
+            var targetFrame = textView.convert(caretFrame, to: scrollView).insetBy(dx: 0, dy: -12)
+            targetFrame.size.height += uncoveredKeyboardOverlapHeight(scrollView: scrollView)
+            scrollView.scrollRectToVisible(targetFrame, animated: false)
+        }
+
+        private func enclosingScrollView(of textView: UITextView) -> UIScrollView? {
+            var ancestor = textView.superview
+            while let view = ancestor {
+                if let scrollView = view as? UIScrollView {
+                    return scrollView
+                }
+                ancestor = view.superview
+            }
+            return nil
+        }
+
+        private func uncoveredKeyboardOverlapHeight(scrollView: UIScrollView) -> CGFloat {
+            guard !keyboardFrame.isNull, let window = scrollView.window else { return 0 }
+            let keyboardFrameInWindow = window.convert(keyboardFrame, from: window.screen.coordinateSpace)
+            let scrollFrameInWindow = scrollView.convert(scrollView.bounds, to: window)
+            let overlap = scrollFrameInWindow.intersection(keyboardFrameInWindow).height
+            return max(0, overlap - scrollView.adjustedContentInset.bottom)
+        }
     }
 }
 
@@ -64,6 +292,7 @@ private struct Cafe24ProductPhotos: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("업로드할 사진")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Cafe24PhotoStrip(photos: photos)
         }
@@ -78,9 +307,12 @@ private struct Cafe24PhotoStrip: View {
             LazyHStack(spacing: 8) {
                 if photos.isEmpty {
                     Cafe24ProductPhoto(data: nil)
+                        .accessibilityLabel("업로드할 상품 사진 없음")
                 } else {
                     ForEach(photos.indices, id: \.self) { index in
                         Cafe24ProductPhoto(data: photos[index])
+                            .accessibilityLabel("업로드할 상품 사진 \(index + 1)")
+                            .accessibilityValue("전체 \(photos.count)장")
                     }
                 }
             }
@@ -106,72 +338,134 @@ private struct Cafe24ProductPhoto: View {
         .frame(width: 152, height: 212)
         .background(Color(.brandNeutral100))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isImage)
     }
 }
 
 private struct Cafe24ProductNameField: View {
     @Binding var text: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
+    @State private var inputText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품명", onReset: onReset)
-            TextField("상품명 입력", text: $text)
+            TextField("상품명 입력", text: $inputText)
+                .focused(focus, equals: .productName)
                 .font(.body)
-                .foregroundStyle(Color(.brandNeutral800))
+                .foregroundStyle(Color(.brandNeutralBlack))
                 .padding(.horizontal, 16)
                 .frame(minHeight: 52)
-                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel("카페24 상품명")
+                .onAppear { synchronizeInputText(with: text) }
+                .onChange(of: text) { _, newText in
+                    synchronizeInputText(with: newText)
+                }
+                .onChange(of: inputText) { _, newText in
+                    updateText(with: newText)
+                }
+        }
+    }
+
+    private func synchronizeInputText(with newText: String) {
+        let limitedText = ProductTextLimit.truncated(newText, maximumLength: ProductTextLimit.name)
+        if inputText != limitedText {
+            inputText = limitedText
+        }
+        if text != limitedText {
+            text = limitedText
+        }
+    }
+
+    private func updateText(with newText: String) {
+        guard newText.count <= ProductTextLimit.name else {
+            if inputText != text {
+                inputText = text
+            }
+            return
+        }
+        if text != newText {
+            text = newText
         }
     }
 }
 
 private struct Cafe24ProductDescriptionField: View {
     @Binding var text: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
+    @State private var contentHeight: CGFloat = 22
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "상품 설명", onReset: onReset)
-            TextField("상품 설명", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.body)
-                .foregroundStyle(Color(.brandNeutral800))
-                .lineLimit(1...)
+            Cafe24GrowingDescriptionTextView(text: $text, contentHeight: $contentHeight)
+                .focused(focus, equals: .productDescription)
+                .frame(height: contentHeight, alignment: .topLeading)
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text("상품 설명")
+                            .font(.custom("Pretendard-Regular", fixedSize: 17))
+                            .foregroundStyle(Color(.brandNeutral300))
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel("카페24 상품 설명")
         }
     }
 }
 
 private struct Cafe24PriceField: View {
     @Binding var priceText: String
+    let focus: FocusState<Cafe24InputField?>.Binding
     let onReset: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Cafe24EditorHeader(title: "판매가", onReset: onReset)
-            Cafe24PriceInput(priceText: $priceText)
+            Cafe24PriceInput(priceText: $priceText, focus: focus)
         }
     }
 }
 
 private struct Cafe24PriceInput: View {
     @Binding var priceText: String
+    let focus: FocusState<Cafe24InputField?>.Binding
 
     var body: some View {
-        HStack(spacing: 8) {
-            TextField("판매가 입력", text: $priceText)
+        HStack(alignment: .center) {
+            TextField("판매가 입력", text: formattedPrice)
+                .focused(focus, equals: .price)
                 .keyboardType(.numberPad)
-                .multilineTextAlignment(.trailing)
+                .font(.custom("Pretendard-SemiBold", size: 17, relativeTo: .headline))
+                .foregroundStyle(Color(.brandNeutralBlack))
+                .accessibilityLabel("카페24 판매가, 원")
+            Spacer()
             Text("원")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 52)
-        .background(Color(.brandNeutral100), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .background(Color(.brandNeutral50), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var formattedPrice: Binding<String> {
+        Binding {
+            guard let price = Int(priceText.filter(\.isNumber)) else { return priceText }
+            return price.formatted(.number.locale(Locale(identifier: "ko_KR")))
+        } set: { text in
+            priceText = String(text.filter(\.isNumber))
+        }
     }
 }
 
@@ -180,10 +474,12 @@ private struct Cafe24EditorHeader: View {
     let onReset: () -> Void
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        HStack(alignment: .center) {
             Cafe24EditorTitle(title: title)
             Spacer()
             Cafe24ResetButton(action: onReset)
+                .accessibilityLabel("\(title) 초기화")
+                .accessibilityHint("수정한 \(title)을 원래 상품 정보로 되돌립니다.")
         }
     }
 }
@@ -195,6 +491,7 @@ private struct Cafe24EditorTitle: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.body.weight(.medium))
+                .accessibilityAddTraits(.isHeader)
             Text("눌러서 직접 글을 수정할 수 있어요")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -220,26 +517,9 @@ private struct Cafe24ResetButton: View {
 
     Cafe24ProductView(
         draft: $draft,
-        isCompleted: false,
+        mallID: "myshop",
         isDisabled: false
     )
-}
-
-#Preview("업로드 완료") {
-    @Previewable @State var draft = Cafe24ExportDraft(product: .demo)
-
-    Cafe24ProductView(
-        draft: $draft,
-        isCompleted: true,
-        isDisabled: false
-    )
-}
-
-#Preview("완료 안내", traits: .sizeThatFitsLayout) {
-    Cafe24CompletionHeader()
-        .frame(width: 363)
-        .padding()
-        .background(Color(.brandNeutral50))
 }
 
 #Preview("업로드할 사진", traits: .sizeThatFitsLayout) {
@@ -270,8 +550,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("상품명 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var text = "빈티지 재킷"
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24ProductNameField(text: $text, onReset: {})
+    Cafe24ProductNameField(text: $text, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))
@@ -279,8 +560,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("상품 설명 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var text = "가볍게 걸치기 좋은 빈티지 재킷입니다."
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24ProductDescriptionField(text: $text, onReset: {})
+    Cafe24ProductDescriptionField(text: $text, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))
@@ -288,8 +570,9 @@ private struct Cafe24ResetButton: View {
 
 #Preview("판매가 입력", traits: .sizeThatFitsLayout) {
     @Previewable @State var priceText = "89,000"
+    @Previewable @FocusState var focusedField: Cafe24InputField?
 
-    Cafe24PriceField(priceText: $priceText, onReset: {})
+    Cafe24PriceField(priceText: $priceText, focus: $focusedField, onReset: {})
         .frame(width: 363)
         .padding()
         .background(Color(.brandNeutral50))

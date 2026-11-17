@@ -35,6 +35,43 @@ enum InstagramIntegrationError: LocalizedError {
     }
 }
 
+struct InstagramUploadTiming {
+    private static let logger = Logger(subsystem: "com.dobby.instagram", category: "UploadTiming")
+    let id: String?
+    let photoCount: Int
+
+    init(photoCount: Int) {
+        self.photoCount = photoCount
+        #if DEBUG
+        id = UUID().uuidString
+        #else
+        id = nil
+        #endif
+    }
+
+    func log(_ stage: String, since start: ContinuousClock.Instant, outcome: String, bodyBytes: Int = 0) {
+        guard let id else { return }
+        let elapsed = start.duration(to: .now).components
+        let milliseconds = elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
+        Self.logger.notice(
+            "instagram_upload_timing id=\(id, privacy: .public) stage=\(stage, privacy: .public) durationMs=\(milliseconds) outcome=\(outcome, privacy: .public) photoCount=\(photoCount) bodyBytes=\(bodyBytes)"
+        )
+    }
+
+    func measure<T>(_ stage: String, operation: () throws -> T) rethrows -> T {
+        guard id != nil else { return try operation() }
+        let start = ContinuousClock.now
+        do {
+            let result = try operation()
+            log(stage, since: start, outcome: "ok")
+            return result
+        } catch {
+            log(stage, since: start, outcome: "error")
+            throw error
+        }
+    }
+}
+
 @MainActor
 final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentationContextProviding {
     static let maximumImageCount = 10
@@ -44,8 +81,8 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
 
     init(session: URLSession = .shared) { self.session = session; super.init() }
 
-    func account() async throws -> InstagramAccount? {
-        let result: InstagramAccountResponse = try await send(path: "account", body: nil)
+    func account(timing: InstagramUploadTiming? = nil) async throws -> InstagramAccount? {
+        let result: InstagramAccountResponse = try await send(path: "account", body: nil, timing: timing)
         guard result.connectionMode == "oauth" else {
             throw InstagramIntegrationError.message("Instagram 서버를 OAuth 로그인 버전으로 업데이트해 주세요.")
         }
@@ -100,7 +137,13 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
         preconditionFailure("Instagram 로그인 창을 표시할 활성 화면이 없습니다.")
     }
 
-    func publish(images: [Data], caption: String, accountID: String, requestID: String) async throws -> InstagramPublishResult {
+    func publish(
+        images: [Data],
+        caption: String,
+        accountID: String,
+        requestID: String,
+        timing: InstagramUploadTiming
+    ) async throws -> InstagramPublishResult {
         let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.utf16.count <= 2200 else {
             throw InstagramIntegrationError.message("게시물 내용은 1~2,200자 이내로 입력해 주세요.")
@@ -111,10 +154,18 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
         guard images.count <= Self.maximumImageCount else {
             throw InstagramIntegrationError.message("Instagram에는 사진을 최대 10장까지 게시할 수 있습니다.")
         }
-        let jpegs = try Self.prepareImages(images)
-        let body = try JSONEncoder().encode(Payload(caption: text,
-            imagesBase64: jpegs.map { $0.base64EncodedString() }, accountID: accountID, requestID: requestID))
-        let result: InstagramPublishResult = try await send(path: "publish", body: body)
+        let jpegs = try timing.measure("prepare_images") {
+            try Self.prepareImages(images)
+        }
+        let body = try timing.measure("encode_body") {
+            try JSONEncoder().encode(Payload(
+                caption: text,
+                imagesBase64: jpegs.map { $0.base64EncodedString() },
+                accountID: accountID,
+                requestID: requestID
+            ))
+        }
+        let result: InstagramPublishResult = try await send(path: "publish", body: body, timing: timing)
         guard result.published else { throw InstagramIntegrationError.message("게시 완료를 확인하지 못했습니다. Instagram에서 확인 후 다시 시도해 주세요.") }
         return result
     }
@@ -154,12 +205,18 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
     private struct LoginStart: Decodable { let authorizationURL: String; let attempt: String }
     private struct DisconnectResult: Decodable { let disconnected: Bool }
 
-    private func send<T: Decodable>(path: String, body: Data?) async throws -> T {
+    private func send<T: Decodable>(
+        path: String,
+        body: Data?,
+        timing: InstagramUploadTiming? = nil
+    ) async throws -> T {
         guard let address = Bundle.main.object(forInfoDictionaryKey: "InstagramBackendBaseURL") as? String,
               let url = URL(string: address), url.scheme == "https", url.host != nil,
               !address.contains("YOUR-"), !address.contains("$("),
-              let key = DobbyInstallationAuth.appAPIKey() else {
-            throw InstagramIntegrationError.message("Instagram 서버 주소와 앱 접근 키를 로컬 설정에 입력해 주세요.")
+              let key = Bundle.main.object(forInfoDictionaryKey: "InstagramWorkerAppAPIKey") as? String,
+              DobbyInstallationAuth.isValidAppAPIKey(key) else {
+            Self.logger.error("[Instagram] /\(path, privacy: .public) Worker configuration unavailable")
+            throw InstagramIntegrationError.message("지금 인스타그램 연동을 사용할 수 없어요. 문제가 계속되면 문의해 주세요.")
         }
         var request = URLRequest(url: url.appendingPathComponent(path))
         request.httpMethod = body == nil ? "GET" : "POST"
@@ -167,11 +224,17 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
         request.setValue(key, forHTTPHeaderField: "X-Dobby-App-Key")
         request.setValue("Bearer \(try DobbyInstallationAuth.installationToken())", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let id = timing?.id {
+            request.setValue(id, forHTTPHeaderField: "X-Dobby-Upload-Timing")
+        }
         request.httpBody = body
+        let start = ContinuousClock.now
         let data: Data
         let response: URLResponse
-        do { (data, response) = try await session.data(for: request) }
-        catch {
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            timing?.log("\(path)_http", since: start, outcome: "network_error", bodyBytes: body?.count ?? 0)
             let code = (error as NSError).code
             Self.logger.error("[Instagram] /\(path, privacy: .public) network code=\(code)")
             throw InstagramIntegrationError.message(path == "publish"
@@ -179,8 +242,10 @@ final class InstagramIntegrationClient: NSObject, ASWebAuthenticationPresentatio
                 : "서버에 연결할 수 없습니다. 네트워크를 확인해 주세요. (\(code))")
         }
         guard let http = response as? HTTPURLResponse else {
+            timing?.log("\(path)_http", since: start, outcome: "invalid_response", bodyBytes: body?.count ?? 0)
             throw InstagramIntegrationError.message("서버 응답을 확인할 수 없습니다.")
         }
+        timing?.log("\(path)_http", since: start, outcome: "http_\(http.statusCode)", bodyBytes: body?.count ?? 0)
         Self.logger.info("[Instagram] /\(path, privacy: .public) HTTP \(http.statusCode)")
         guard (200..<300).contains(http.statusCode) else {
             let failure = try? JSONDecoder().decode(InstagramErrorResponse.self, from: data)

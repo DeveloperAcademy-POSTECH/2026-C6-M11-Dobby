@@ -5,7 +5,6 @@ struct ProductDraftCard<Thumbnail: View>: View {
     let step: ProductDraftStep
     let relativeSaveTime: String
     var stageAccessibilityIdentifier: String? = nil
-    var usesLibraryTypography = false
     @ViewBuilder let thumbnail: () -> Thumbnail
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var typeScale: CGFloat = 1
@@ -22,12 +21,11 @@ struct ProductDraftCard<Thumbnail: View>: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 4) {
                     Text("작업 이어서 하기")
-                        .font(.custom(usesLibraryTypography ? "Pretendard-SemiBold" : "Pretendard-Bold",
-                                      fixedSize: (usesLibraryTypography ? 17 : 16) * typeScale))
+                        .font(.custom("Pretendard-Bold", fixedSize: 16 * typeScale))
                         .tracking(-0.43 * typeScale)
                         .foregroundStyle(.black)
                         .lineLimit(usesVerticalLayout ? nil : 1)
-                        .frame(height: usesVerticalLayout ? nil : (usesLibraryTypography ? 22 : 24) * typeScale)
+                        .frame(height: usesVerticalLayout ? nil : 24 * typeScale)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(stageColor)
@@ -35,36 +33,40 @@ struct ProductDraftCard<Thumbnail: View>: View {
                         .accessibilityHidden(true)
                 }
 
-                Spacer(minLength: 0)
+                Spacer().frame(height: 20 * typeScale)
 
-                VStack(alignment: .leading, spacing: 6 * typeScale) {
+                VStack(alignment: .leading, spacing: 4 * typeScale) {
                     Text(step.title)
-                        .font(.custom("Pretendard-SemiBold", fixedSize: 14 * typeScale))
-                        .tracking((usesLibraryTypography ? -0.23 : -0.43) * typeScale)
+                        .font(.custom("Pretendard-Bold", fixedSize: 12 * typeScale))
+                        .tracking(-0.43 * typeScale)
                         .foregroundStyle(stageColor)
                         .lineLimit(usesVerticalLayout ? nil : 1)
-                        .frame(height: usesVerticalLayout ? nil : (usesLibraryTypography ? 20 : 21) * typeScale)
+                        .frame(height: usesVerticalLayout ? nil : 18 * typeScale)
                         .accessibilityLabel("현재 \(step.title)")
                         .accessibilityIdentifier(stageAccessibilityIdentifier ?? "draft-card.stage")
                     Text(relativeSaveTime)
-                        .font(.custom(usesLibraryTypography ? "Pretendard-Regular" : "Pretendard-Medium", fixedSize: 12 * typeScale))
-                        .tracking(usesLibraryTypography ? 0 : -0.43 * typeScale)
+                        .font(.custom("Pretendard-Medium", fixedSize: 12 * typeScale))
+                        .tracking(-0.43 * typeScale)
                         .foregroundStyle(dateColor)
                         .lineLimit(usesVerticalLayout ? nil : 1)
-                        .frame(height: usesVerticalLayout ? nil : (usesLibraryTypography ? 16 : 18) * typeScale)
+                        .frame(height: usesVerticalLayout ? nil : 18 * typeScale)
                 }
             }
+            // Center the text group in Figma's 95pt column; its visible
+            // content fits alongside the 93pt photo with a 5.5pt top inset.
+            .padding(.top, usesVerticalLayout ? 0 : 5.5 * typeScale)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: usesVerticalLayout ? nil : 88 * typeScale, alignment: .topLeading)
+            .frame(height: usesVerticalLayout ? nil : 93 * typeScale,
+                   alignment: .topLeading)
 
             thumbnail()
-                .frame(width: 88, height: 88)
-                .clipShape(RoundedRectangle(cornerRadius: 11.136))
+                .frame(width: 123, height: 93)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
                 .accessibilityHidden(true)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: usesVerticalLayout ? nil : max(125, 88 * typeScale + 32))
+        .frame(height: usesVerticalLayout ? nil : max(125, 93 * typeScale + 32))
         .background(Color("BrandNeutralWhite"), in: RoundedRectangle(cornerRadius: 24))
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .contentShape(RoundedRectangle(cornerRadius: 24))

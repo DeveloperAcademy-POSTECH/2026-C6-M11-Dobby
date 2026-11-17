@@ -11,7 +11,7 @@ struct UploadLoadingAnimation: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private static let uploadAnimation = LottieAnimation.named("ProgressIndicator")
-    // Shared tape artwork, with the designer's position track and composition timing.
+    // Designer-supplied square AI composition, including its embedded images.
     private static let aiAnimation = LottieAnimation.named("AIProgressIndicator")
 
     let source: Source
@@ -29,7 +29,7 @@ struct UploadLoadingAnimation: View {
             .playbackMode(playbackMode)
             .backgroundBehavior(.pauseAndRestore)
             .resizable()
-            .aspectRatio(contentMode: .fill)
+            .aspectRatio(contentMode: source == .aiInformation ? .fit : .fill)
             .frame(width: width, height: height)
             .clipped()
             .accessibilityHidden(true)
@@ -37,12 +37,13 @@ struct UploadLoadingAnimation: View {
 
     private var playbackMode: LottiePlaybackMode {
         if reduceMotion {
-            return .paused(at: .progress(0))
+            // AI begins with an empty reveal; frame 45 keeps both tape strips visible.
+            return .paused(at: .progress(source == .aiInformation ? 45.0 / 379.0 : 0))
         }
         guard scenePhase == .active else {
             return .paused(at: .currentFrame)
         }
-        // Each resource owns its timing. AI uses the designer's 40-frame composition.
+        // Play each supplied composition at its own frame rate and loop it in full.
         return .playing(.fromProgress(0, toProgress: 1, loopMode: .loop))
     }
 }
@@ -53,6 +54,6 @@ struct UploadLoadingAnimation: View {
 }
 
 #Preview("AI 정보 애니메이션", traits: .sizeThatFitsLayout) {
-    UploadLoadingAnimation(source: .aiInformation, width: 328, height: 90)
+    UploadLoadingAnimation(source: .aiInformation, width: 280, height: 280)
         .background(Color(.brandNeutralWhite))
 }

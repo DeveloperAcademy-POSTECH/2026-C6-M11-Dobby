@@ -266,14 +266,18 @@ struct ProductLibraryView: View {
 
     private var emptyLibrary: some View {
         GeometryReader { geometry in
+            // Figma starts the message 297pt below the status bar on an 874pt window.
+            let messageTop = headerMetrics.statusBarHeight
+                + max(0, headerMetrics.windowHeight - headerMetrics.statusBarHeight) * (297.0 / 812.0)
             let contentHeight = emptyTitleLineHeight + emptyDescriptionLineHeight + emptyButtonHeight + 32
-            // Keep the design's position above center while adapting to the available height.
-            let topSpacing = max(0, geometry.size.height - contentHeight) * 0.37
+            // Keep the entire message and button inside the viewport as the keyboard reduces it.
+            let maximumTopSpacing = max(0, geometry.size.height - contentHeight - 20)
+            let topSpacing = min(maximumTopSpacing, max(0, messageTop - geometry.frame(in: .global).minY))
 
             ScrollView {
                 VStack(spacing: 0) {
                     Text("보관함이 비어있어요")
-                        .font(.title2.bold())
+                        .font(.custom("Pretendard-Bold", size: 22, relativeTo: .title2))
                         .tracking(-0.26)
                         .foregroundStyle(LibraryStyle.primary)
                         .frame(minHeight: emptyTitleLineHeight)
@@ -281,7 +285,7 @@ struct ProductLibraryView: View {
                         .accessibilityIdentifier("library.empty.title")
 
                     Text("작업을 시작해보세요")
-                        .font(.body)
+                        .font(.custom("Pretendard-Regular", size: 17, relativeTo: .body))
                         .tracking(-0.43)
                         .foregroundStyle(.secondary)
                         .frame(minHeight: emptyDescriptionLineHeight)
@@ -289,12 +293,12 @@ struct ProductLibraryView: View {
 
                     Button(action: onStartMeasurement) {
                         Text("실측 시작하기")
-                            .font(.callout.weight(.semibold).italic())
+                            .font(.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout))
                             .tracking(-0.31)
                             .foregroundStyle(LibraryStyle.background)
                             .padding(.horizontal, 24)
                             .frame(minWidth: 146, minHeight: emptyButtonHeight)
-                            .background(Color("HomeAccent"), in: Capsule())
+                            .background(Color("BrandMain500"), in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 24)
@@ -327,6 +331,7 @@ struct ProductLibraryView: View {
             .buttonStyle(.plain)
             .modifier(LibraryCardEditGesture(onEdit: { setEditing(true) }))
             .accessibilityIdentifier("library.product.\(garment.id.uuidString)")
+            .accessibilityHint("상품 상세 정보를 엽니다. 동작 메뉴에서 보관함 수정을 선택할 수 있습니다.")
         }
     }
 
@@ -351,7 +356,7 @@ struct ProductLibraryView: View {
                 .buttonStyle(.plain)
                 .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
                 .accessibilityIdentifier("library.draft.\(garment.id.uuidString)")
-                .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다. 길게 누르면 보관함을 수정합니다.")
+                .accessibilityHint("저장한 \(draft.step.title)부터 작업을 이어갑니다. 동작 메뉴에서 보관함 수정을 선택할 수 있습니다.")
             }
         }
     }
@@ -375,7 +380,7 @@ struct ProductLibraryView: View {
             .buttonStyle(.plain)
             .modifier(LibraryCardEditGesture(onEdit: { setEditing(true, selectingDrafts: true) }))
             .accessibilityIdentifier("library.draft-product.\(garment.id.uuidString)")
-            .accessibilityHint("임시저장한 상품 작업을 이어갑니다.")
+            .accessibilityHint("임시저장한 상품 작업을 이어갑니다. 동작 메뉴에서 보관함 수정을 선택할 수 있습니다.")
         }
     }
 
@@ -419,6 +424,7 @@ struct ProductLibraryView: View {
         .buttonStyle(.plain)
         .offset(x: -17.5, y: -19.5)
         .accessibilityLabel("\(garment.name.isEmpty ? "상품" : garment.name) 삭제")
+        .accessibilityHint("삭제하기 전에 확인 창을 엽니다.")
         .accessibilityIdentifier("\(identifierPrefix).\(garment.id.uuidString)")
     }
 

@@ -17,5 +17,6 @@ struct CameraMoreButton: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
         .accessibilityLabel("촬영 옵션")
+        .accessibilityHint("노출과 사진 비율을 조절합니다")
     }
 }

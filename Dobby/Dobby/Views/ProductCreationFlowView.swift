@@ -5,6 +5,7 @@ import UIKit
 /// Holds the same product and photo session through the complete creation flow.
 struct ProductCreationFlowView: View {
     @Environment(\.returnFromExport) private var returnFromExport
+    @Environment(\.measurementCaptureActivation) private var captureActivation
     private enum Step: Hashable { case details, information, completed }
     private enum ExitAction { case save, discard }
     let controller: CopyActivityController
@@ -87,10 +88,15 @@ struct ProductCreationFlowView: View {
                     destination(for: step)
                 }
         }
+        .transformPreference(MeasurementCaptureColorSchemePreferenceKey.self) { scheme in
+            // The root capture/result publishes its own current style. Once a
+            // destination is pushed, the visible step owns the window style.
+            if let step = path.last { scheme = step == .details ? .dark : .light }
+        }
         // Each generation screen locks its own controls. Disabling this ancestor
         // would also disable native error-alert actions created as loading ends.
         .disabled(isFinishing || pendingExitAction != nil)
-        .accessibilityHidden(autofillLoadingPresentation != nil)
+        .accessibilityHidden(autofillLoadingPresentation != nil || pendingExitAction != nil || isFinishing)
         .overlay {
             if let presentation = autofillLoadingPresentation {
                 ProductAutofillLoadingView(onCancel: presentation.onCancel)
@@ -100,6 +106,7 @@ struct ProductCreationFlowView: View {
             if isFinishing {
                 ProgressView(cleanupAction == .discard ? "작업을 삭제하는 중…" : "작업을 저장하는 중…")
                     .padding().background(.regularMaterial, in: Capsule())
+                    .accessibilityAddTraits(.isModal)
             }
         }
         .overlay {
@@ -122,10 +129,10 @@ struct ProductCreationFlowView: View {
             if productID != nil { pendingExportDestination = nil }
         }
         .onChange(of: copyHomeProduct?.id) { _, _ in
-            guard let product = copyHomeProduct else { return }
-            showFruits = true
-            exportProduct = product
-            copyHomeProduct = nil
+            presentPendingCopyHomeProduct()
+        }
+        .onChange(of: captureActivation) { _, activation in
+            if activation == .active { presentPendingCopyHomeProduct() }
         }
         .alert(cleanupAction == .discard ? "작성 중인 제품을 삭제하지 못했어요" : "작성 중인 제품을 저장하지 못했어요", isPresented: Binding(
             get: { cleanupError != nil }, set: { if !$0 { cleanupError = nil } })) {
@@ -156,6 +163,15 @@ struct ProductCreationFlowView: View {
             guard path.last == .information else { return }
             synchronizeInformationPhotoSelection()
         }
+    }
+
+    private func presentPendingCopyHomeProduct() {
+        // A returning copy-helper link must not open an export from the
+        // noninteractive capture preview underneath an uncommitted home pull.
+        guard captureActivation == .active, isPresented, let product = copyHomeProduct else { return }
+        showFruits = true
+        exportProduct = product
+        copyHomeProduct = nil
     }
 
     @ViewBuilder
@@ -193,7 +209,8 @@ struct ProductCreationFlowView: View {
     private var fixtureBanner: some View {
         if isFixture {
             Text("연결 흐름 미리보기 · 합성 측정값")
-                .font(.caption).frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
+                .font(.caption).frame(maxWidth: .infinity).padding(6)
+                .background(.orange.opacity(0.15), ignoresSafeAreaEdges: [])
                 .accessibilityIdentifier("product-flow.fixture")
         }
     }

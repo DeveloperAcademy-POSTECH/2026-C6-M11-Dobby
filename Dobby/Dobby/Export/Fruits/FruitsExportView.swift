@@ -54,7 +54,7 @@ struct FruitsExportView: View {
                 FruitsTransferIndicator()
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .safeAreaInset(edge: .bottom, spacing: 43) {
             FruitsExportBottomAction(
                 hasCopied: hasCopied,
                 isLoading: opening
@@ -78,7 +78,12 @@ struct FruitsExportView: View {
     }
 
     private func copy(_ field: ProductCopyField) {
-        ClipboardWriter().copyText(product.marketplacePayload.value(for: field))
+        let value = product.marketplacePayload.value(for: field)
+        guard field != .brand || !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        ClipboardWriter().copyText(value)
         hasCopied = true
         toastPresenter.show(field.fruitsToastMessage)
     }
@@ -140,6 +145,8 @@ private struct FruitsExportBottomAction: View {
             .buttonStyle(FruitsExportButtonStyle())
             .disabled(!hasCopied || isLoading)
             .accessibilityIdentifier("export.fruits.open")
+            .accessibilityValue(isLoading ? "후루츠패밀리를 여는 중" : "")
+            .accessibilityHint(hasCopied ? "실측 사이즈를 작은 화면에 띄우고 후루츠패밀리 앱을 엽니다." : "먼저 상품 정보의 복사 버튼을 누르세요.")
         }
         .padding(.horizontal, 33)
         .padding(.top, 16)
@@ -205,6 +212,7 @@ private extension ProductCopyField {
         case .description: "설명을 복사했어요"
         case .brand: "브랜드를 복사했어요"
         case .measurements: "실측 사이즈를 복사했어요"
+        case .price: "가격을 복사했어요"
         }
     }
 }

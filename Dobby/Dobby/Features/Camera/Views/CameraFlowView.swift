@@ -14,11 +14,12 @@ struct CameraFlowView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let model: ProductPhotoModel
+    let model: any DetailPhotoCaptureModeling
     let camera: CameraPreviewSession?
     @State private var permission: CameraPermission
     let onComplete: (ProductPhotoOutput) async throws -> Void
     let onExit: (() -> Void)?
+    let showsCreationProgress: Bool
     var previewSource: CapturedAsset.Source?
     private let background = Color.black
     @State private var captureRequested = false
@@ -41,9 +42,10 @@ struct CameraFlowView: View {
         let canOpenSettings: Bool
     }
 
-    init(model: ProductPhotoModel, permission: CameraPermission,
+    init(model: any DetailPhotoCaptureModeling, permission: CameraPermission,
          camera: CameraPreviewSession? = nil,
          previewSource: CapturedAsset.Source? = nil,
+         showsCreationProgress: Bool = true,
          onExit: (() -> Void)? = nil,
          onComplete: @escaping (ProductPhotoOutput) async throws -> Void) {
         self.model = model
@@ -52,6 +54,7 @@ struct CameraFlowView: View {
         self.onComplete = onComplete
         self.onExit = onExit
         self.previewSource = previewSource
+        self.showsCreationProgress = showsCreationProgress
     }
 
     var body: some View {
@@ -66,7 +69,7 @@ struct CameraFlowView: View {
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .navigationTitle("제품 상세 촬영")
-        .productCreationProgress(isCompletingCapture ? nil : .details)
+        .productCreationProgress(isCompletingCapture || !showsCreationProgress ? nil : .details)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(onExit != nil || isCompletingCapture)
         .toolbarBackground(.black, for: .navigationBar)
@@ -82,7 +85,7 @@ struct CameraFlowView: View {
                     }
                         .buttonStyle(.plain)
                         .disabled(isExitDisabled)
-                        .accessibilityHidden(isCompletingCapture)
+                        .accessibilityHidden(isCompletingCapture || isMoreOptionsPresented)
                         .accessibilityLabel("뒤로가기")
                         .accessibilityIdentifier("product-flow.back")
                 }.sharedBackgroundVisibility(.hidden)
@@ -94,7 +97,7 @@ struct CameraFlowView: View {
         }
         .accessibilityHidden(isCompletingCapture)
         .overlay {
-            if isCompletingCapture {
+            if isCompletingCapture && !capturePhotosToSave.isEmpty {
                 DetailPhotoLibrarySavingOverlay(
                     savedCount: hasStartedLibrarySaving
                         ? min(librarySaver.savedCount, capturePhotosToSave.count) : 0,
@@ -208,6 +211,7 @@ struct CameraFlowView: View {
                         enabled: !isMoreOptionsPresented && !isPhotoOperationInProgress && scenePhase == .active
                             && (previewSource != nil || camera?.state == .running),
                         bottomSafeAreaInset: bottomSafeAreaInset, portraitPhotoTop: photoTop))
+                    .accessibilityHidden(isMoreOptionsPresented)
                 if !isMoreOptionsPresented {
                     captureControls(in: geometry.size, bottomSafeAreaInset: bottomSafeAreaInset, photoTop: photoTop)
                         .animation(reduceMotion ? nil : .smooth(duration: 0.30),
@@ -276,6 +280,9 @@ struct CameraFlowView: View {
                 CameraLivePreviewView(camera: camera, aspectRatio: ratio, portraitPhotoTop: photoTop,
                     interactionEnabled: !isMoreOptionsPresented && !isPhotoOperationInProgress
                         && !isCaptureGuidePresented && !isGalleryPresented && scenePhase == .active)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("상세 촬영 카메라 미리보기")
+                    .accessibilityAddTraits(.isImage)
             } else {
                 ContentUnavailableView("카메라 연결이 필요해요", systemImage: "camera")
             }
@@ -287,15 +294,16 @@ struct CameraFlowView: View {
         .buttonStyle(.plain)
         .disabled(isPhotoOperationInProgress || model.allPhotosOutput == nil)
         .opacity(isPhotoOperationInProgress || model.allPhotosOutput == nil ? 0.5 : 1)
-        .accessibilityHidden(isCompletingCapture)
+        .accessibilityHidden(isCompletingCapture || isMoreOptionsPresented)
+        .accessibilityHint("촬영한 사진을 사진 앱에 저장한 후 제품 정보 입력으로 이동합니다.")
         .accessibilityIdentifier("camera.selectPhotos")
     }
 
     private var completionLabel: some View {
         Text("다음")
-            .font(.body.weight(.semibold)).foregroundStyle(.white)
+            .font(.body.weight(.semibold)).foregroundStyle(.primary)
             .frame(width: 76, height: ProductCreationHeaderLayout.toolbarHeight)
-            .glassEffect(.regular.tint(Color(red: 0.94, green: 0.24, blue: 0.07)).interactive(), in: Capsule())
+            .glassEffect(.regular.interactive(), in: Capsule())
             .contentShape(.interaction, Capsule())
     }
 
@@ -308,6 +316,10 @@ struct CameraFlowView: View {
                 MeasurementProcessingIndicator(phase: captureIndicatorPhase)
             }
         }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
+            .disabled(!canCapture)
+            .accessibilityAction { if canCapture { captureRequested = true } }
             .accessibilityLabel(isPhotoOperationInProgress ? "상세 사진 처리 중" : "상세 사진 촬영")
             .accessibilityValue(isPhotoOperationInProgress ? "촬영 중" : canCapture ? "촬영 가능" : "카메라 준비 중")
             .accessibilityHint(previewSource == nil ? "사진을 촬영하고 상세 사진 목록에 추가합니다."
@@ -337,6 +349,7 @@ struct CameraFlowView: View {
             Button { isGalleryPresented = true } label: {
                 CameraPhotoView(source: (model.photos.last ?? model.selectablePhotos.last)?.source ?? .mockPlaceholder,
                                 maximumPixelSize: 192)
+                    .accessibilityHidden(true)
                     .frame(width: 48, height: 48).clipShape(Circle())
                     .contentShape(Circle())
             }
@@ -345,6 +358,8 @@ struct CameraFlowView: View {
             .position(x: controls.accessory.x + controls.accessory.width / 2,
                 y: controls.accessory.y + controls.accessory.height / 2)
             .accessibilityLabel("촬영한 사진 보기")
+            .accessibilityValue("\(model.selectablePhotos.count)장")
+            .accessibilityHint("실측 사진과 상세 사진을 확인하거나 삭제합니다.")
             .accessibilityIdentifier("camera.openGallery")
         }
     }
@@ -393,7 +408,7 @@ struct CameraFlowView: View {
         guard let output = model.allPhotosOutput else { return }
         captureOutputToSave = output
         didSaveAllCapturePhotos = false
-        capturePhotosToSave = output.selectedPhotos
+        capturePhotosToSave = model.photosRequiringLibrarySave
         hasStartedLibrarySaving = false
         isCompletingCapture = true
     }

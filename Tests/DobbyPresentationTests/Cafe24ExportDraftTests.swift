@@ -39,4 +39,13 @@ final class Cafe24ExportDraftTests: XCTestCase {
         XCTAssertTrue(draft.canPublish)
         XCTAssertEqual(draft.price, 10000)
     }
+
+    func testDraftKeepsTrimmedAppCategory() {
+        var product = ExportProduct.demo
+        product.category = "  아우터  "
+
+        let draft = Cafe24ExportDraft(product: product)
+
+        XCTAssertEqual(draft.category, "아우터")
+    }
 }

@@ -4,14 +4,22 @@ import UIKit
 import ImageIO
 
 struct ContentView: View {
-    private enum HomeTab: Hashable { case capture, library, settings }
     private struct CreationRequest: Identifiable {
         let id = UUID()
         let productID: UUID?
+        var homeTransition: HomeMeasurementTransitionSeed? = nil
+        var homeSnapshot: UIImage? = nil
+    }
+    private struct HomeMeasurementSession: Identifiable {
+        let id = UUID()
+        var seed: HomeMeasurementTransitionSeed
+        let snapshot: UIImage?
+        var isCommitted = false
     }
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Garment.updatedAt, order: .reverse) private var garments: [Garment]
-    @State private var tab: HomeTab = .capture
+    @State private var tab: MainTab = .capture
     @State private var libraryPath: [UUID] = []
     @State private var libraryIsEditing = false
     @State private var creationRequest: CreationRequest?
@@ -24,6 +32,12 @@ struct ContentView: View {
     @State private var routeTask: Task<Void, Never>?
     @State private var pendingExportDestination: ExportReturnDestination?
     @State private var exportReturnNavigationID = UUID()
+    @State private var editingAutofillLoadingPresentation: ProductAutofillLoadingPresentation?
+    @State private var homeSnapshotSource = HomeMeasurementSnapshotSource()
+    @State private var homeMeasurementSession: HomeMeasurementSession?
+    @State private var homeCaptureColorScheme: ColorScheme = .dark
+    @State private var homeMeasurementIdentity = UUID()
+    @State private var homeMeasurementHaptics = HomeMeasurementHaptics()
 
 #if DEBUG
     init(previewLibrary: Bool = false, previewEditing: Bool = false) {
@@ -33,75 +47,68 @@ struct ContentView: View {
 #endif
 
     var body: some View {
-        TabView(selection: $tab) {
-            Tab("홈", systemImage: libraryIsEditing ? "house" : "house.fill", value: HomeTab.capture) {
-                HomeView(resumeCandidate: HomeResumeCandidate.latest(in: garments),
-                    onResumeDraft: { startCreation(resuming: $0) },
-                    onStartCapture: { startCreation() })
-#if DEBUG
-                    .overlay(alignment: .bottomTrailing) {
-                        if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
-                            Button("측정 실험실") { showLiDAR = true }
-                                .font(.footnote)
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .padding(.trailing, 20)
-                                .padding(.bottom, 12)
-                                .accessibilityIdentifier("openLiDARLab")
-                        }
-                    }
-#endif
-            }
-            Tab("보관함", systemImage: "hanger", value: HomeTab.library) {
-                NavigationStack(path: $libraryPath) {
-                    ProductLibraryView(garments: garments, isEditing: $libraryIsEditing,
-                        onStartMeasurement: { startCreation() },
-                        onResumeDraft: { startCreation(resuming: $0) })
-#if DEBUG
-                    .toolbar {
-                        if ProductAppStorage.fixtureDirectory != nil {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("내보내기 샘플", systemImage: "shippingbox") {
-                                    openDebugExportSample()
-                                }
-                                .accessibilityIdentifier("debug.export-sample")
-                            }
-                        }
-                    }
-#endif
-                    .navigationDestination(for: UUID.self) { productID in
-                        if let garment = garments.first(where: { $0.id == productID }) {
-                            ProductSavedDetailView(garment: garment, controller: controller,
-                                                   onExitToLibrary: { libraryPath.removeAll() })
-                        }
-                    }
-                }
-                .tint(libraryPath.isEmpty
-                    ? LibraryStyle.primary : Color("HomeAccent"))
-            }
-            Tab("설정", systemImage: "gearshape.fill", value: HomeTab.settings) {
-                NavigationStack {
-                    SettingsView()
+        mainContent
+            .allowsHitTesting(editingAutofillLoadingPresentation == nil)
+            .accessibilityHidden(editingAutofillLoadingPresentation != nil)
+            .overlay {
+                if let presentation = editingAutofillLoadingPresentation {
+                    ProductAutofillLoadingView(onCancel: presentation.onCancel)
                 }
             }
-        }
-        .tint(Color.primary)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if ProductAppStorage.fixtureDirectory != nil {
-                Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
-                    .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
-                    .allowsHitTesting(false)
-            }
-        }
-        .fullScreenCover(item: $creationRequest) { request in
-            ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
-                copyHomeProduct: $creationCopyHomeProduct,
-                resumeProductID: request.productID,
-                onDraftSaved: returnHomeFromCreation,
-                onDraftDiscarded: returnHomeFromCreation,
-                onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
-                onCancel: { creationRequest = nil })
+    }
+
+    private var mainContent: some View {
+        ZStack {
+            tabs
+                .opacity(homeMeasurementSession?.isCommitted == true ? 0 : 1)
+                .accessibilityHidden(homeMeasurementSession?.isCommitted == true)
+            if let session = homeMeasurementSession {
+                HomeMeasurementInteractivePresentation(seed: session.seed, snapshot: session.snapshot,
+                    isCommitted: session.isCommitted) {
+                    HomeMeasurementCaptureHost(id: session.id) {
+                        makeCreationFlow(isPresented: homeCreationIsPresented(id: session.id))
+                    }
+                    .environment(\.measurementCaptureActivation, session.isCommitted ? .active : .previewIfAuthorized)
+                }
+                .transformEnvironment(\.colorScheme) { scheme in
+                    if !session.isCommitted { scheme = .dark }
+                }
                 .tint(Color("HomeAccent"))
+                .onPreferenceChange(MeasurementCaptureColorSchemePreferenceKey.self) { scheme in
+                    if let scheme { homeCaptureColorScheme = scheme }
+                }
+                .id(session.id)
+                .zIndex(1)
+            }
+        }
+        .tint(Color("BrandNeutralBlack"))
+        .background { HomeMeasurementSnapshotAnchor(source: homeSnapshotSource).allowsHitTesting(false) }
+        .fullScreenCover(item: $creationRequest) { request in
+            HomeMeasurementPresentation(seed: request.homeTransition, snapshot: request.homeSnapshot) {
+                ProductCreationFlowView(container: context.container, controller: controller, isPresented: creationIsPresented,
+                    copyHomeProduct: $creationCopyHomeProduct,
+                    resumeProductID: request.productID,
+                    onDraftSaved: returnHomeFromCreation,
+                    onDraftDiscarded: returnHomeFromCreation,
+                    onFinish: { creationRequest = nil; libraryPath.removeAll(); tab = .library },
+                    onCancel: { creationRequest = nil })
+            }
+            .tint(Color("HomeAccent"))
+        }
+        .onChange(of: creationRequest?.id) { previous, current in
+            if previous != nil && current == nil {
+                homeMeasurementHaptics.stop()
+                // TabView can keep Home mounted underneath a full-screen cover.
+                // Reset its held gesture/card opacity explicitly on every exit.
+                homeMeasurementIdentity = UUID()
+                cancelHomeMeasurementPreview()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { homeMeasurementHaptics.stop() }
+        }
+        .onChange(of: tab) { _, selected in
+            if selected != .capture { abortHomeMeasurementPreview() }
         }
         .fullScreenCover(isPresented: $showLiDAR) {
             LiDARLabView().safeAreaInset(edge: .top, spacing: 0) {
@@ -132,6 +139,92 @@ struct ContentView: View {
             ExportReturnNavigationAction(id: exportReturnNavigationID, action: { @MainActor destination in
                 returnFromExport(to: destination)
             }))
+        .preferredColorScheme(homeMeasurementSession?.isCommitted == true ? homeCaptureColorScheme : nil)
+    }
+
+    private var tabs: some View {
+        TabView(selection: $tab) {
+            Tab(value: MainTab.capture) {
+                HomeView(resumeCandidate: HomeResumeCandidate.latest(in: garments),
+                    onResumeDraft: { startCreation(resuming: $0) },
+                    onStartCapture: { startCreation() },
+                    onPrepareMeasurementTransition: prepareHomeMeasurementTransition,
+                    onMeasurementTransitionChanged: updateHomeMeasurementTransition,
+                    onCancelMeasurementTransition: cancelHomeMeasurementPreview,
+                    onBeginMeasurementTransition: startHomeMeasurementTransition,
+                    measurementHaptics: homeMeasurementHaptics)
+                    .id(homeMeasurementIdentity)
+#if DEBUG
+                    .overlay(alignment: .bottomTrailing) {
+                        if ProcessInfo.processInfo.arguments.contains("--show-measurement-lab") {
+                            Button("측정 실험실") { showLiDAR = true }
+                                .font(.footnote)
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .padding(.trailing, 20)
+                                .padding(.bottom, 12)
+                                .accessibilityIdentifier("openLiDARLab")
+                        }
+                    }
+#endif
+                    .safeAreaInset(edge: .bottom, spacing: 0) { fixtureBanner }
+            } label: {
+                MainTab.capture.label(selected: tab, symbol: libraryIsEditing ? "house" : "house.fill")
+            }
+            .accessibilityLabel(Text(MainTab.capture.title))
+            Tab(value: MainTab.library) {
+                NavigationStack(path: $libraryPath) {
+                    ProductLibraryView(garments: garments, isEditing: $libraryIsEditing,
+                        onStartMeasurement: { startCreation() },
+                        onResumeDraft: { startCreation(resuming: $0) })
+#if DEBUG
+                    .toolbar {
+                        if ProductAppStorage.fixtureDirectory != nil {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("내보내기 샘플", systemImage: "shippingbox") {
+                                    openDebugExportSample()
+                                }
+                                .accessibilityIdentifier("debug.export-sample")
+                            }
+                        }
+                    }
+#endif
+                    .navigationDestination(for: UUID.self) { productID in
+                        if let garment = garments.first(where: { $0.id == productID }) {
+                            ProductSavedDetailView(garment: garment, controller: controller,
+                                onExitToLibrary: { libraryPath.removeAll() },
+                                onAIGenerationPresentationChange: { editingAutofillLoadingPresentation = $0 })
+                        }
+                    }
+                }
+                .tint(libraryPath.isEmpty
+                    ? LibraryStyle.primary : Color("HomeAccent"))
+                .safeAreaInset(edge: .bottom, spacing: 0) { fixtureBanner }
+            } label: {
+                MainTab.library.label(selected: tab, symbol: "hanger")
+            }
+            .accessibilityLabel(Text(MainTab.library.title))
+            Tab(value: MainTab.settings) {
+                NavigationStack {
+                    SettingsView()
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) { fixtureBanner }
+            } label: {
+                MainTab.settings.label(selected: tab, symbol: "gearshape.fill")
+            }
+            .accessibilityLabel(Text(MainTab.settings.title))
+        }
+        .tint(Color("BrandNeutralBlack"))
+        .preferredColorScheme(homeMeasurementSession?.isCommitted == true ? nil : .light)
+    }
+
+    @ViewBuilder
+    private var fixtureBanner: some View {
+        if ProductAppStorage.fixtureDirectory != nil {
+            Text("연결 흐름 미리보기 · 합성 측정값").font(.caption)
+                .frame(maxWidth: .infinity).padding(6).background(.orange.opacity(0.15))
+                .allowsHitTesting(false)
+        }
     }
 
     private func finishExportDismissal() {
@@ -149,6 +242,7 @@ struct ContentView: View {
         showFruits = false
         showLiDAR = false
         creationRequest = nil
+        finishHomeMeasurementSession()
         libraryPath.removeAll()
         libraryIsEditing = false
         tab = destination == .library ? .library : .capture
@@ -156,13 +250,80 @@ struct ContentView: View {
 
     private func returnHomeFromCreation() {
         creationRequest = nil
+        finishHomeMeasurementSession()
         libraryPath.removeAll()
         tab = .capture
     }
 
     private func startCreation(resuming productID: UUID? = nil) {
+        guard creationRequest == nil, homeMeasurementSession?.isCommitted != true else { return }
+        abortHomeMeasurementPreview()
+        homeMeasurementHaptics.stop()
         libraryIsEditing = false
         creationRequest = CreationRequest(productID: productID)
+    }
+
+    private func prepareHomeMeasurementTransition(_ seed: HomeMeasurementTransitionSeed) {
+        guard creationRequest == nil, homeMeasurementSession == nil, tab == .capture else { return }
+        // Capture the live home, including its current draft card and native
+        // tab bar, before the first drag changes its appearance.
+        let snapshot = homeSnapshotSource.snapshot()
+        let canvasSize = homeSnapshotSource.canvasSize ?? seed.canvasSize
+        let heldSeed = HomeMeasurementTransitionSeed(pull: seed.pull, canvasSize: canvasSize,
+            artworkWidth: seed.artworkWidth, bottomChromeTop: homeSnapshotSource.bottomChromeTop, tapeLead: seed.tapeLead)
+        homeCaptureColorScheme = .dark
+        homeMeasurementSession = HomeMeasurementSession(seed: heldSeed, snapshot: snapshot)
+    }
+
+    private func updateHomeMeasurementTransition(_ seed: HomeMeasurementTransitionSeed) {
+        guard var session = homeMeasurementSession, !session.isCommitted else { return }
+        session.seed = .init(pull: seed.pull, canvasSize: session.seed.canvasSize,
+            artworkWidth: session.seed.artworkWidth, bottomChromeTop: session.seed.bottomChromeTop, tapeLead: seed.tapeLead)
+        homeMeasurementSession = session
+    }
+
+    private func startHomeMeasurementTransition(_ seed: HomeMeasurementTransitionSeed) {
+        guard creationRequest == nil, tab == .capture,
+              homeMeasurementSession?.isCommitted == false else { return }
+        updateHomeMeasurementTransition(seed)
+        libraryIsEditing = false
+        homeMeasurementHaptics.finishPull()
+        homeMeasurementSession?.isCommitted = true
+    }
+
+    private func cancelHomeMeasurementPreview() {
+        guard homeMeasurementSession?.isCommitted == false else { return }
+        homeMeasurementSession = nil
+    }
+
+    private func abortHomeMeasurementPreview() {
+        guard homeMeasurementSession?.isCommitted == false else { return }
+        finishHomeMeasurementSession()
+    }
+
+    private func finishHomeMeasurementSession() {
+        guard homeMeasurementSession != nil else { return }
+        homeMeasurementSession = nil
+        creationCopyHomeProduct = nil
+        homeMeasurementHaptics.stop()
+        homeMeasurementIdentity = UUID()
+    }
+
+    private func homeCreationIsPresented(id: UUID) -> Binding<Bool> {
+        Binding(get: { homeMeasurementSession?.id == id }, set: { presented in
+            if !presented, homeMeasurementSession?.id == id { finishHomeMeasurementSession() }
+        })
+    }
+
+    private func makeCreationFlow(isPresented: Binding<Bool>) -> ProductCreationFlowView {
+        ProductCreationFlowView(container: context.container, controller: controller, isPresented: isPresented,
+            copyHomeProduct: $creationCopyHomeProduct,
+            onDraftSaved: returnHomeFromCreation, onDraftDiscarded: returnHomeFromCreation,
+            onFinish: {
+                finishHomeMeasurementSession()
+                libraryPath.removeAll()
+                tab = .library
+            }, onCancel: finishHomeMeasurementSession)
     }
 
     private var creationIsPresented: Binding<Bool> {
@@ -197,6 +358,7 @@ struct ContentView: View {
             return
         }
         guard url.scheme == "dobby-copy", url.host == "home" else { return }
+        abortHomeMeasurementPreview()
         controller.refresh()
         guard let session = controller.session else {
             linkError = "진행 중인 복사 도우미가 없어요. 보관함에서 제품을 골라 내보내기를 시작해 주세요."
@@ -210,7 +372,7 @@ struct ContentView: View {
             },
             photos: saved?.photos ?? [])
         routeTask?.cancel()
-        if creationRequest != nil {
+        if creationRequest != nil || homeMeasurementSession?.isCommitted == true {
             // A previous product's copy helper can return while a new draft is
             // open. Keep its context and captures alive below the export cover.
             creationCopyHomeProduct = restored
@@ -227,12 +389,21 @@ struct ContentView: View {
     }
 }
 
+/// Keep the capture subtree stable while only the decorative gesture pose changes.
+private struct HomeMeasurementCaptureHost: View {
+    let id: UUID
+    let content: () -> ProductCreationFlowView
+
+    var body: some View { content() }
+}
+
 struct ProductSavedDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.returnFromExport) private var returnFromExport
     @Bindable var garment: Garment
     let controller: CopyActivityController
     let onExitToLibrary: () -> Void
+    var onAIGenerationPresentationChange: ((ProductAutofillLoadingPresentation?) -> Void)? = nil
     @State private var showInformation = false
     @State private var editSession: ProductInformationEditSession?
     @State private var editError: String?
@@ -290,7 +461,7 @@ struct ProductSavedDetailView: View {
                     }, onComplete: { _ in
                         editSession.reflectSavedChanges(in: garment)
                         showInformation = false
-                    })
+                    }, onAIGenerationPresentationChange: onAIGenerationPresentationChange)
             }
         }
         .alert("제품 정보를 열 수 없어요", isPresented: Binding(

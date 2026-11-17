@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum Cafe24UploadState {
     case idle
@@ -15,7 +16,10 @@ private enum Cafe24UploadState {
 }
 
 struct Cafe24ExportView: View {
+    private static let navigationTitle = "카페24로 업로드하기"
+
     let onRequestExit: (ExportReturnDestination) -> Void
+    let onUploadingChanged: (Bool) -> Void
     let onPublished: (Cafe24PublishResult) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var client = Cafe24IntegrationClient()
@@ -25,32 +29,42 @@ struct Cafe24ExportView: View {
     @State private var isLoadingConnection = true
     @State private var connectionError: String?
     @State private var uploadState: Cafe24UploadState = .idle
+    @State private var showsStorefront = false
     @State private var isConnecting = false
     @State private var isDisconnecting = false
     @State private var message: String?
-    @State private var isConfirmingRepublish = false
+    @State private var uploadRequestID = UUID()
 
     init(
         product: ExportProduct,
+        client: Cafe24IntegrationClient? = nil,
         onRequestExit: @escaping (ExportReturnDestination) -> Void = { _ in },
+        onUploadingChanged: @escaping (Bool) -> Void = { _ in },
         onPublished: @escaping (Cafe24PublishResult) -> Void = { _ in }
     ) {
         self.onRequestExit = onRequestExit
+        self.onUploadingChanged = onUploadingChanged
         self.onPublished = onPublished
+        _client = State(initialValue: client ?? Cafe24IntegrationClient())
         _draft = State(initialValue: Cafe24ExportDraft(product: product))
     }
 
     var body: some View {
         Group {
-            if showsConnectionCompletion {
+            if case let .completed(result) = uploadState {
+                Cafe24UploadCompletionView(
+                    onOpenLibrary: { onRequestExit(.library) },
+                    onOpenCafe24: { openCafe24(result: result) }
+                )
+            } else if showsConnectionCompletion {
                 Cafe24ConnectionCompletionView(
                     onOpenLibrary: { onRequestExit(.library) },
                     onContinueToUpload: { showsConnectionCompletion = false }
                 )
-            } else if connectedMallID != nil {
+            } else if let connectedMallID {
                 Cafe24ProductView(
                     draft: $draft,
-                    isCompleted: uploadState.isCompleted,
+                    mallID: connectedMallID,
                     isDisabled: uploadState.isUploading
                 )
             } else {
@@ -61,12 +75,17 @@ struct Cafe24ExportView: View {
                 )
             }
         }
-        .navigationTitle("카페24로 내보내기")
+        .accessibilityHidden(uploadState.isUploading)
+        .navigationTitle(Self.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
-        .toolbar(showsConnectionCompletion ? .hidden : .visible, for: .navigationBar)
+        .toolbar(showsCompletion ? .hidden : .visible, for: .navigationBar)
         .toolbar {
-            if !uploadState.isUploading && !showsConnectionCompletion {
+            ToolbarItem(placement: .principal) {
+                ExportToolbarTitle(title: Self.navigationTitle)
+                    .accessibilityHidden(uploadState.isUploading)
+            }
+            if !uploadState.isUploading && !showsCompletion {
                 ToolbarItem(placement: .topBarLeading) {
                     ExportNavigationButton(
                         systemImage: "chevron.left",
@@ -76,7 +95,7 @@ struct Cafe24ExportView: View {
                     }
                 }
             }
-            if connectedMallID != nil && !uploadState.isUploading && !isDisconnecting && !showsConnectionCompletion {
+            if connectedMallID != nil && !uploadState.isUploading && !isDisconnecting && !showsCompletion {
                 ToolbarItem(placement: .topBarTrailing) {
                     ExportAccountMenu(
                         accessibilityLabel: "카페24 계정 메뉴",
@@ -87,38 +106,57 @@ struct Cafe24ExportView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if connectedMallID != nil && !showsConnectionCompletion {
+            if connectedMallID != nil && !showsCompletion {
                 ExportBottomActionBar {
                     ExportBottomAction(title: "업로드하기") {
-                        if uploadState.isCompleted {
-                            isConfirmingRepublish = true
-                        } else {
-                            Task { await publish() }
-                        }
+                        dismissKeyboard()
+                        Task { await publish() }
                     }
                 }
+                .accessibilityHidden(uploadState.isUploading)
             }
         }
-        .overlay {
-            if uploadState.isUploading {
-                PlatformUploadingOverlay(platformName: "카페24")
-            }
+        .onChange(of: uploadState.isUploading) { _, isUploading in
+            onUploadingChanged(isUploading)
+        }
+        .onDisappear {
+            onUploadingChanged(false)
         }
         .interactiveDismissDisabled(uploadState.isUploading)
-        .task { await loadStatus() }
-        .confirmationDialog("상품을 한 번 더 올릴까요?", isPresented: $isConfirmingRepublish,
-                            titleVisibility: .visible) {
-            Button("다시 업로드하기") { Task { await publish() } }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text("다시 업로드하면 같은 쇼핑몰에 새 상품이 추가됩니다.")
+        .sheet(isPresented: $showsStorefront) {
+            if case let .completed(result) = uploadState, let url = result.storefrontURL {
+                Cafe24StorefrontBrowser(url: url)
+                    .ignoresSafeArea()
+            }
         }
+        .task { await loadStatus() }
         .alert("카페24 안내", isPresented: Binding(
             get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("확인", role: .cancel) {}
             } message: {
                 Text(message ?? "")
             }
+    }
+
+    private var showsCompletion: Bool {
+        showsConnectionCompletion || uploadState.isCompleted
+    }
+
+    private func openCafe24(result: Cafe24PublishResult) {
+        guard result.storefrontURL != nil else {
+            message = "연동한 카페24 쇼핑몰 주소를 확인할 수 없습니다."
+            return
+        }
+        showsStorefront = true
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     private func loadStatus() async {
@@ -158,8 +196,10 @@ struct Cafe24ExportView: View {
         uploadState = .uploading
         do {
             let result = try await client.publish(
+                requestID: uploadRequestID.uuidString,
                 productName: draft.productName,
                 description: draft.productDescription,
+                category: draft.category,
                 price: price,
                 images: draft.photos
             )
@@ -204,8 +244,7 @@ private struct Cafe24ConnectionCompletionView: View {
                 title: "업로드하러 가기",
                 accessibilityIdentifier: "export.cafe24.continueToUpload",
                 action: onContinueToUpload
-            ),
-            primaryFontSize: 17
+            )
         )
     }
 }

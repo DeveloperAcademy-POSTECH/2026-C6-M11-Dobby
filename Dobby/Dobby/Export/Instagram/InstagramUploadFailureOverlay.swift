@@ -8,12 +8,15 @@ struct InstagramUploadFailureOverlay: View {
         ZStack {
             Color.black.opacity(0.6)
                 .ignoresSafeArea()
+                .accessibilityHidden(true)
             InstagramUploadFailureContent(
                 onCancel: onCancel,
                 onRetry: onRetry
             )
         }
         .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape, onCancel)
     }
 }
 
@@ -41,11 +44,13 @@ private struct InstagramUploadFailureMessage: View {
         VStack(spacing: 8) {
             Text("자동 업로드 실패")
                 .font(.custom("Pretendard-Bold", fixedSize: 20))
+                .accessibilityModalHeading()
+                .foregroundStyle(Color(.accentsRed))
             Text("인스타그램 자동 업로드에 실패했어요\n다시 업로드할까요?")
                 .font(.custom("Pretendard-Regular", fixedSize: 16))
                 .multilineTextAlignment(.center)
+                .foregroundStyle(Color(.brandNeutralBlack))
         }
-        .foregroundStyle(Color(.brandNeutral900))
         .padding(.vertical, 12)
     }
 }

@@ -8,6 +8,7 @@ final class LibraryDeletionTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
         app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 15))
         defer { app.terminate() }
 
         app.tabBars.buttons["보관함"].tap()
@@ -32,7 +33,7 @@ final class LibraryDeletionTests: XCTestCase {
         attachScreenshot(app, name: "library-edit-mode")
 
         remove.tap()
-        let alert = app.alerts["이 작업을 삭제하겠습니까?"]
+        let alert = app.descendants(matching: .any)["library.delete-confirmation"].firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         XCTAssertTrue(alert.staticTexts["삭제된 작업은 복구할 수 없어요"].exists)
         XCTAssertTrue(alert.buttons["취소"].exists)
@@ -69,6 +70,7 @@ final class LibraryDeletionTests: XCTestCase {
 
         app.terminate()
         app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 15))
         app.tabBars.buttons["보관함"].tap()
         expectEmptyLibrary(in: app)
         XCTAssertFalse(app.buttons["library.product.\(productID)"].exists)

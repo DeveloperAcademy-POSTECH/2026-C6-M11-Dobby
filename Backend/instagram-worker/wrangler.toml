@@ -22,9 +22,17 @@ id = "REPLACE_WITH_EXISTING_MEDIA_KV_NAMESPACE_ID"
 name = "INSTAGRAM_CONNECTIONS"
 class_name = "InstagramConnection"
 
+[[durable_objects.bindings]]
+name = "INSTAGRAM_ACCOUNT_CONNECTIONS"
+class_name = "InstagramAccountConnections"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["InstagramConnection"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["InstagramAccountConnections"]
 
 # Set through Cloudflare Secrets, never here:
 # DOBBY_APP_API_KEY, INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET

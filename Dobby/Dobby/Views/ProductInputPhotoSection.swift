@@ -14,10 +14,20 @@ struct ProductInputPhotoSection: View {
     @State private var expandedPhoto: GarmentPhoto?
     @State private var showsDeletionError = false
     @State private var showsPhotoPicker = false
-    @State private var showsCamera = false
+    // Presentation and its payload share one identity. A separate Bool cover
+    // can build its first content from the previous render's empty photo state.
+    @State private var cameraPresentation: CameraPresentation?
+
+    private struct CameraPresentation: Identifiable {
+        let id = UUID()
+        let garmentID: UUID
+        let sessionID: UUID
+        let photos: [CapturedAsset]
+        let fixtureSource: CapturedAsset.Source?
+    }
     @State private var pickedItems: [PhotosPickerItem] = []
     @State private var isImporting = false
-    @State private var importTask: Task<Void, Never>?
+    @State private var pendingPhotoCount = 0
     @State private var importError: String?
 
     var body: some View {
@@ -26,18 +36,33 @@ struct ProductInputPhotoSection: View {
                 ProductFieldTitle(title: "제품 사진", isRequired: true)
                 Spacer()
                 HStack(spacing: 0) {
-                    Text("\(garment.productPhotos.count)")
-                        .foregroundStyle(garment.productPhotos.count > ProductPhotoLimit.maximumCount
+                    Text("\(displayedPhotoCount)")
+                        .foregroundStyle(displayedPhotoCount > ProductPhotoLimit.maximumCount
                             ? ProductInformationStyle.error : Color(allowsEditing ? "BrandNeutral500" : "BrandNeutral800"))
                     Text("/\(ProductPhotoLimit.maximumCount)").foregroundStyle(Color("BrandNeutral500"))
                 }
                 .font(.custom(allowsEditing ? "Pretendard-Medium" : "Pretendard-Regular", size: allowsEditing ? 16 : 14, relativeTo: .subheadline))
                 .tracking(allowsEditing ? -0.16 : 0)
-                .accessibilityLabel("제품 사진 \(garment.productPhotos.count)장, 최대 \(ProductPhotoLimit.maximumCount)장")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("제품 사진 \(displayedPhotoCount)장, 최대 \(ProductPhotoLimit.maximumCount)장")
+                .accessibilityValue(displayedPhotoCount > ProductPhotoLimit.maximumCount
+                    ? "등록 가능 장수를 초과했어요" : "")
+                .accessibilityHint(displayedPhotoCount > ProductPhotoLimit.maximumCount
+                    ? "사진을 제외해 \(ProductPhotoLimit.maximumCount)장 이하로 맞춰주세요" : "")
                 .accessibilityIdentifier("product-info.photo-count")
             }
             .frame(minHeight: allowsEditing ? 22 : nil)
-            photoRow.padding(.horizontal, -20)
+            if isImporting {
+                ProductPhotoSkeletonStrip(photoCount: displayedPhotoCount)
+                    .contentMargins(.horizontal, 20, for: .scrollContent)
+                    .padding(.top, allowsRemoval ? 4 : 0)
+                    .padding(.horizontal, -20)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("제품 사진을 불러오고 있어요")
+                    .accessibilityIdentifier("product-info.photos.importing")
+            } else {
+                photoRow.padding(.horizontal, -20)
+            }
         }
         .fullScreenCover(item: $expandedPhoto) { photo in
             ProductPhotoGalleryView(photos: garment.productPhotos, initialPhotoID: photo.id,
@@ -50,18 +75,21 @@ struct ProductInputPhotoSection: View {
                 .presentationBackground(.clear)
         }
         .photosPicker(isPresented: $showsPhotoPicker, selection: photoPickerSelection,
-                      maxSelectionCount: max(1, remainingCapacity), matching: .images)
-        .fullScreenCover(isPresented: $showsCamera) {
-            ProductInputCameraPicker { data in
-                showsCamera = false
-                guard let data else { return }
+                      maxSelectionCount: nil, matching: .images)
+        .fullScreenCover(item: $cameraPresentation) { presentation in
+            ProductInputCameraPicker(garmentID: presentation.garmentID,
+                captureSessionID: presentation.sessionID, existingPhotos: presentation.photos,
+                fixtureSource: presentation.fixtureSource,
+                onCancel: { cameraPresentation = nil }) { photos, removedPhotoIDs in
+                pendingPhotoCount = photos.count
                 setImporting(true)
-                importTask = Task { await importPhotos([data]) }
+                defer { setImporting(false) }
+                try await ProductPhotoImportStore.applyAdditionalCapture(photos, removing: removedPhotoIDs,
+                    to: garment, in: context)
+                cameraPresentation = nil
             }
-            .ignoresSafeArea()
         }
         .onDisappear {
-            importTask?.cancel()
             onImportingChange?(false)
         }
         .task(id: pickedItems) {
@@ -94,29 +122,53 @@ struct ProductInputPhotoSection: View {
         Binding(get: { pickedItems }, set: { items in
             // Lock the parent before PhotosPicker dismisses, not in a later
             // view update that could let Done race the asynchronous import.
-            if !items.isEmpty { setImporting(true) }
+            if !items.isEmpty {
+                pendingPhotoCount = items.count
+                setImporting(true)
+            }
             pickedItems = items
         })
     }
 
+    private var displayedPhotoCount: Int {
+        garment.productPhotos.count + pendingPhotoCount
+    }
+
     private func setImporting(_ busy: Bool) {
+        if !busy { pendingPhotoCount = 0 }
         onImportingChange?(busy)
         isImporting = busy
     }
 
-    private var remainingCapacity: Int {
-        max(0, ProductPhotoModel.maximumSelectionCount - garment.productPhotos.count)
+    private func openCamera() {
+        do {
+            let sessionID = garment.measurementPhoto?.measurementSessionID ?? UUID()
+            // Snapshot once per presentation, preserving the draft's exact visible
+            // order/IDs and product-only rotations without lending file ownership.
+            let photos = try ProductPhotoImportStore.capturePreviewPhotos(for: garment, sessionID: sessionID)
+            cameraPresentation = CameraPresentation(garmentID: garment.id, sessionID: sessionID,
+                photos: photos, fixtureSource: fixtureCameraSource)
+        } catch { importError = error.localizedDescription }
+    }
+
+    private var fixtureCameraSource: CapturedAsset.Source? {
+#if DEBUG
+        guard ProductAppStorage.fixtureDirectory != nil,
+              let photo = garment.productPhotos.first ?? garment.photos.first else { return nil }
+        let url = GarmentStore.url(for: photo)
+        guard let metadata = try? ProductPhotoHandoff.metadata(for: url) else { return nil }
+        return .localFile(url, metadata: metadata)
+#else
+        return nil
+#endif
     }
 
     private var photoRow: some View {
         ProductPhotoReorderStrip(photos: garment.productPhotos, spacing: 16,
             topInset: allowsRemoval ? 4 : 0,
             onReorder: { GarmentStore.reorderProductPhotos(ids: $0, in: garment) },
-            leadingContent: AnyView(addPhotoButton)) { photo in
+            includesRemovalButton: allowsRemoval, leadingContent: AnyView(addPhotoButton)) { photo in
                 photoCell(photo)
-                    .accessibilityHint("길게 누른 뒤 좌우로 드래그해 순서를 바꿀 수 있어요")
-                    .accessibilityAction(named: "앞으로 이동") { movePhoto(photo.id, offset: -1) }
-                    .accessibilityAction(named: "뒤로 이동") { movePhoto(photo.id, offset: 1) }
             }
             .frame(height: 108 + (allowsRemoval ? 4 : 0))
             .accessibilityIdentifier("product-info.photo-strip")
@@ -124,8 +176,8 @@ struct ProductInputPhotoSection: View {
 
     private var addPhotoButton: some View {
         Menu {
-            Button("사진 촬영하기", systemImage: "camera.fill") { showsCamera = true }
-                .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+            Button("사진 촬영하기", systemImage: "camera.fill", action: openCamera)
+                .accessibilityIdentifier("product-info.take-photos")
             Button("앨범에서 선택하기", systemImage: "photo") { showsPhotoPicker = true }
         } label: {
             VStack(spacing: 4) {
@@ -139,31 +191,37 @@ struct ProductInputPhotoSection: View {
             .overlay { RoundedRectangle(cornerRadius: 16).stroke(Color("BrandNeutral200"), lineWidth: allowsEditing ? 1 : 0.5) }
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
-        .disabled(remainingCapacity == 0 || isImporting)
+        .disabled(isImporting)
         .accessibilityLabel("제품 사진 추가")
+        .accessibilityHint("사진 촬영 또는 앨범에서 선택할 수 있어요")
         .accessibilityIdentifier("product-info.add-photo")
-    }
-
-    private func importPhotos(_ data: [Data]) async {
-        defer { setImporting(false) }
-        do { for bytes in data { try await appendPhoto(bytes) } }
-        catch is CancellationError { } catch { importError = error.localizedDescription }
     }
 
     private func appendPhoto(_ data: Data) async throws {
         try await ProductPhotoImportStore.append(data, to: garment, in: context)
+        pendingPhotoCount = max(0, pendingPhotoCount - 1)
     }
 
     @ViewBuilder private func photoCell(_ photo: GarmentPhoto) -> some View {
+        let index = garment.productPhotos.firstIndex { $0.id == photo.id } ?? 0
+        let count = garment.productPhotos.count
         if allowsRemoval {
-            ProductInputEditablePhoto(photo: photo, onExpand: { expand(photo) },
-                                      onDelete: { deletePhoto(photo.id) })
+            ProductInputEditablePhoto(photo: photo, index: index, count: count,
+                onExpand: { expand(photo) }, onDelete: { deletePhoto(photo.id) },
+                onMoveEarlier: { movePhoto(photo.id, offset: -1) },
+                onMoveLater: { movePhoto(photo.id, offset: 1) })
         } else {
             Button { expand(photo) } label: {
                 ProductInputPhotoImage(photo: photo)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("제품 사진 확대")
+            .accessibilityValue("\(count)장 중 \(index + 1)번째 사진")
+            .accessibilityHint("동작 메뉴에서 사진 순서를 바꿀 수 있어요")
+            .accessibilityActions {
+                if index > 0 { Button("앞으로 이동") { movePhoto(photo.id, offset: -1) } }
+                if index + 1 < count { Button("뒤로 이동") { movePhoto(photo.id, offset: 1) } }
+            }
             .accessibilityIdentifier("product-info.photo.\(photo.id)")
         }
     }
@@ -175,6 +233,7 @@ struct ProductInputPhotoSection: View {
         ids.insert(moved, at: index + offset)
         if GarmentStore.reorderProductPhotos(ids: ids, in: garment) {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            VoiceOverAnnouncement.post("제품 사진을 \(index + offset + 1)번째로 이동했어요")
         }
     }
 
@@ -194,14 +253,22 @@ struct ProductInputPhotoSection: View {
     }
 
     private func deletePhoto(_ id: UUID) {
-        do { _ = try removePhoto(id) } catch { showsDeletionError = true }
+        do {
+            if try removePhoto(id) {
+                VoiceOverAnnouncement.post("제품 사진에서 제외했어요. \(garment.productPhotos.count)장이 남았어요")
+            }
+        } catch { showsDeletionError = true }
     }
 }
 
 private struct ProductInputEditablePhoto: View {
     let photo: GarmentPhoto
+    let index: Int
+    let count: Int
     let onExpand: () -> Void
     let onDelete: () -> Void
+    let onMoveEarlier: () -> Void
+    let onMoveLater: () -> Void
 
     var body: some View {
         Button(action: onExpand) {
@@ -209,6 +276,13 @@ private struct ProductInputEditablePhoto: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("제품 사진 확대")
+        .accessibilityValue("\(count)장 중 \(index + 1)번째 사진")
+        .accessibilityHint("동작 메뉴에서 순서를 바꾸거나 제품 사진에서 제외할 수 있어요")
+        .accessibilityActions {
+            if index > 0 { Button("앞으로 이동", action: onMoveEarlier) }
+            if index + 1 < count { Button("뒤로 이동", action: onMoveLater) }
+            Button("제품 사진에서 제외", action: onDelete)
+        }
         .accessibilityIdentifier("product-info.photo.\(photo.id)")
         .overlay(alignment: .topTrailing) {
             Button(action: onDelete) {
@@ -217,7 +291,7 @@ private struct ProductInputEditablePhoto: View {
                     Image(systemName: "minus")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 17, height: 17)
+                        .frame(width: ProductPhotoRemovalBadgeLayout.diameter, height: ProductPhotoRemovalBadgeLayout.diameter)
                         .background(Color("BrandNeutral700"), in: Circle())
                 }
                 .frame(width: 44, height: 44)
@@ -225,10 +299,12 @@ private struct ProductInputEditablePhoto: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("제품 사진 삭제")
+            .accessibilityValue("\(count)장 중 \(index + 1)번째 사진")
+            .accessibilityHint("이 사진을 제품 사진 목록에서 제외합니다")
             .accessibilityIdentifier("product-info.delete-photo.\(photo.id)")
             // The visible badge overhangs by four points, while the hit area
             // stays out of the next thumbnail (including the eight-point gap).
-            .offset(x: 4, y: -3)
+            .offset(x: ProductPhotoRemovalBadgeLayout.trailingOverflow, y: -ProductPhotoRemovalBadgeLayout.topOverflow)
         }
     }
 }

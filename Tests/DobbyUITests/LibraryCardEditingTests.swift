@@ -7,6 +7,7 @@ final class LibraryCardEditingTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
         app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 15))
         defer { app.terminate() }
         app.tabBars.buttons["보관함"].tap()
         let badge = app.buttons["library.draft-count"]
@@ -25,6 +26,7 @@ final class LibraryCardEditingTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
         app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 15))
         defer { app.terminate() }
         app.tabBars.buttons["보관함"].tap()
         let sample = app.buttons["debug.export-sample"]
@@ -57,6 +59,7 @@ final class LibraryCardEditingTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
         app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 15))
         defer { app.terminate() }
 
         app.tabBars.buttons["보관함"].tap()
@@ -81,7 +84,7 @@ final class LibraryCardEditingTests: XCTestCase {
 
         // Cancelling deletion keeps the product and editing mode intact.
         remove.tap()
-        let alert = app.alerts["이 작업을 삭제하겠습니까?"]
+        let alert = app.descendants(matching: .any)["library.delete-confirmation"].firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.buttons["취소"].tap()
         XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
@@ -105,6 +108,7 @@ final class LibraryCardEditingTests: XCTestCase {
 
         app.terminate()
         app.launch()
+        XCTAssertTrue(app.buttons["product-flow.start"].waitForExistence(timeout: 15))
         app.tabBars.buttons["보관함"].tap()
         XCTAssertTrue(app.staticTexts["library.empty.title"].waitForExistence(timeout: 10))
         XCTAssertFalse(card.exists)

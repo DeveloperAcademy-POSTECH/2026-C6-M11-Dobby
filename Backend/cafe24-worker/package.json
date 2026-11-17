@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "deploy:dev": "npx --yes wrangler@4.147.0 deploy --config wrangler.dev.local.toml",
+    "tail:dev": "npx --yes wrangler@4.147.0 tail --config wrangler.dev.local.toml"
   }
 }

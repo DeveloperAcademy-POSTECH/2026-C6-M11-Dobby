@@ -1,7 +1,11 @@
 // Public template. Actual values live in the ignored DobbySecrets.xcconfig file.
 CAFE24_BACKEND_BASE_URL =
+CAFE24_DEV_BACKEND_BASE_URL =
+DOBBY_CAFE24_DEV_APP_API_KEY =
 INSTAGRAM_BACKEND_BASE_URL =
 DOBBY_INSTAGRAM_APP_API_KEY =
+INSTAGRAM_DEV_BACKEND_BASE_URL =
+DOBBY_INSTAGRAM_DEV_APP_API_KEY =
 DOBBY_APP_API_KEY =
 
 #include? "DobbySecrets.xcconfig"

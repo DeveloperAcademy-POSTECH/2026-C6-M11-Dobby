@@ -7,6 +7,7 @@ struct MeasurementResultSummary: View {
     let values: [MeasurementValue]
     let isRecalculating: Bool
     let overlaysPhoto: Bool
+    var usesSquareCaptureStyle = false
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @ScaledMetric(relativeTo: .body) private var cardHeight: CGFloat = 75
@@ -18,8 +19,9 @@ struct MeasurementResultSummary: View {
         // The caller already supplies visible values. Reorder only the known
         // top fields for this screen; preserve every bottom/unknown value and
         // its relative order without changing the shared export presentation.
-        let topOrder = ["top.shoulderWidth", "top.chestWidth", "top.totalLength",
-                        "top.frontLength", "top.sleeveLengthLeft"]
+        let topOrder = usesSquareCaptureStyle
+            ? ["top.shoulderWidth", "top.chestWidth", "top.totalLength", "top.frontLength", "top.sleeveLengthLeft"]
+            : ["top.totalLength", "top.shoulderWidth", "top.chestWidth", "top.frontLength", "top.sleeveLengthLeft"]
         return values.enumerated().sorted { lhs, rhs in
             let left = topOrder.firstIndex(of: lhs.element.id) ?? topOrder.count
             let right = topOrder.firstIndex(of: rhs.element.id) ?? topOrder.count
@@ -96,9 +98,7 @@ struct MeasurementResultSummary: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
             Text(displayText(for: value))
-                // The design's Callout/Emphasized style is Semibold Italic.
-                // Use the bundled Semibold face with SwiftUI's italic trait.
-                .font(.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout).italic())
+                .font(valueFont)
                 .tracking(-0.31)
                 .foregroundStyle(.black)
                 .frame(maxWidth: .infinity, minHeight: valueLineHeight)
@@ -113,6 +113,13 @@ struct MeasurementResultSummary: View {
         .accessibilityLabel(title(for: value))
         .accessibilityValue(accessibilityValue(for: value))
         .accessibilityIdentifier("garmentResultMeasurementCard_\(value.id)")
+    }
+
+    private var valueFont: Font {
+        let font = Font.custom("Pretendard-SemiBold", size: 16, relativeTo: .callout)
+        // The 1:1 design uses upright Callout/Emphasized text; retain the
+        // existing italic styling for the other result compositions.
+        return usesSquareCaptureStyle ? font : font.italic()
     }
 
     private func title(for value: MeasurementValue) -> String {
@@ -131,7 +138,8 @@ struct MeasurementResultSummary: View {
         guard value.hasUsableMeasurement else {
             return value.failureFeedback.map { "측정 불가. \($0.reason) \($0.recovery)" } ?? "측정 불가"
         }
-        return displayText(for: value)
+        guard let meters = value.meters else { return "측정 불가" }
+        return MeasurementDisplayText.centimeters(meters * 100) + " 센티미터"
     }
 }
 
@@ -200,9 +208,16 @@ struct MeasurementResultSheet: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("실측값 패널")
                 .accessibilityValue(isExpanded ? "펼쳐짐" : "접힘")
+                .accessibilityHint("두 번 탭해 펼치거나 접습니다. 위아래로 쓸어서도 조절할 수 있어요")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { settle(expanded: !isExpanded) }
-                .accessibilityAdjustableAction { settle(expanded: $0 == .increment) }
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: settle(expanded: true)
+                    case .decrement: settle(expanded: false)
+                    @unknown default: break
+                    }
+                }
                 .accessibilityIdentifier("garmentResultSheetHandle")
         }
         .frame(height: expandedHeight, alignment: .top)

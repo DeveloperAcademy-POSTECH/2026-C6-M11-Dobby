@@ -85,7 +85,7 @@ struct ProductLibraryCard: View {
     }
 
     private var platformBadges: some View {
-        let channels = garment.selectedExportChannels
+        let channels = garment.completedExportChannels
         return HStack(spacing: -4) {
             ForEach(Array(channels.enumerated()), id: \.element) { index, channel in
                 Image(channel.libraryBadgeAssetName)
@@ -99,16 +99,25 @@ struct ProductLibraryCard: View {
         .frame(maxWidth: .infinity, minHeight: 22, maxHeight: 22, alignment: .leading)
         .padding(.vertical, 4)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("선택한 내보내기 플랫폼: " + channels.map(\.title).joined(separator: ", "))
+        .accessibilityLabel("업로드 완료 플랫폼: " + channels.map(\.title).joined(separator: ", "))
         .accessibilityIdentifier("library.platforms.\(garment.id.uuidString)")
         .accessibilityHidden(channels.isEmpty)
     }
 
     private var cardAccessibilityLabel: String {
-        var values = [displayBrand, displayName]
-        values.append(displayPrice)
-        if !garment.selectedExportChannels.isEmpty {
-            values.append("선택한 내보내기 플랫폼: " + garment.selectedExportChannels.map(\.title).joined(separator: ", "))
+        var values = [garment.name.isBlank ? "이름 없는 상품" : garment.name,
+                      garment.brand.isBlank ? "브랜드 없음" : "브랜드 \(garment.brand)"]
+        if let price = garment.price {
+            values.append("가격 \(price.formatted(.number.locale(Locale(identifier: "ko_KR"))))원")
+        } else {
+            values.append("가격 미입력")
+        }
+        values.append("사진 \(garment.productPhotos.count)장")
+        if showsDraftPlaceholders, let draft = garment.creationDraft {
+            values.append("임시저장, 현재 \(draft.step.title)")
+        }
+        if !garment.completedExportChannels.isEmpty {
+            values.append("업로드 완료 플랫폼: " + garment.completedExportChannels.map(\.title).joined(separator: ", "))
         }
         if let registrationDateText {
             values.append((showsDraftPlaceholders ? "임시저장일: " : "최초 등록일: ") + registrationDateText)

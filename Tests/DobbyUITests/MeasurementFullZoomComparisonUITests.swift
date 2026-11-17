@@ -41,7 +41,7 @@ final class MeasurementFullZoomComparisonUITests: XCTestCase {
         let initialOtherCoordinates = try XCTUnwrap(otherPoint.value as? String)
         let initialPointSeparation = abs(otherPoint.frame.midX - point.frame.midX)
         XCTAssertTrue(initialValue.contains("cm"))
-        XCTAssertTrue(initialCoordinates.hasPrefix("x ") && initialCoordinates.contains(", y "))
+        XCTAssertNotNil(Self.measurementPhotoCoordinates(in: initialCoordinates))
         XCTAssertGreaterThan(initialLabel.width, 0)
         XCTAssertGreaterThan(initialLabel.height, 0)
         XCTAssertGreaterThan(initialPointSeparation, 0)
@@ -219,10 +219,7 @@ final class MeasurementFullZoomComparisonUITests: XCTestCase {
     }
 
     private static func coordinates(in text: String) -> CGPoint? {
-        let pieces = text.split { $0 == " " || $0 == "," }
-        guard pieces.count == 4, pieces[0] == "x", pieces[2] == "y",
-              let x = Double(pieces[1]), let y = Double(pieces[3]) else { return nil }
-        return CGPoint(x: x, y: y)
+        measurementPhotoCoordinates(in: text)
     }
 
     private func assertFrame(_ actual: CGRect, equals expected: CGRect,

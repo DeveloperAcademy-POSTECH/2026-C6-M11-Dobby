@@ -72,9 +72,9 @@ struct ProductAutofillInputSnapshot: Equatable {
 
     func apply(_ draft: ProductAutofillDraft, to garment: Garment) throws {
         guard matches(garment) else { throw ProductAutofillCompletionFailure.changedInformation }
-        garment.name = draft.productName
+        garment.name = ProductTextLimit.truncated(draft.productName, maximumLength: ProductTextLimit.name)
         garment.brand = draft.brand ?? ""
-        garment.detail = draft.description
+        garment.detail = ProductTextLimit.truncated(draft.description, maximumLength: ProductTextLimit.detail)
         garment.aiSources = draft.sources
         garment.aiInformationGeneratedAt = .now
     }

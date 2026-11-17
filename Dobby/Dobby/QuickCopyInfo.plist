@@ -14,13 +14,15 @@
 		</dict>
 	</array>
 	<key>Cafe24AppAPIKey</key>
-	<string>$(DOBBY_APP_API_KEY)</string>
+	<string>$(CAFE24_WORKER_APP_API_KEY)</string>
 	<key>Cafe24BackendBaseURL</key>
-	<string>$(CAFE24_BACKEND_BASE_URL)</string>
+	<string>$(CAFE24_WORKER_BASE_URL)</string>
 	<key>InstagramAppAPIKey</key>
 	<string>$(DOBBY_INSTAGRAM_APP_API_KEY)</string>
 	<key>InstagramBackendBaseURL</key>
-	<string>$(INSTAGRAM_BACKEND_BASE_URL)</string>
+	<string>$(INSTAGRAM_WORKER_BASE_URL)</string>
+	<key>InstagramWorkerAppAPIKey</key>
+	<string>$(INSTAGRAM_WORKER_APP_API_KEY)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSPhotoLibraryAddUsageDescription</key>

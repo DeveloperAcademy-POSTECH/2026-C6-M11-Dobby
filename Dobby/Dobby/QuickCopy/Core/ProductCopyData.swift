@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 nonisolated enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
-    case productName, description, brand, measurements
+    case productName, description, brand, measurements, price
 
     var id: String { rawValue }
     var title: String {
@@ -11,6 +11,7 @@ nonisolated enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
         case .description: "설명 복사"
         case .brand: "브랜드명 복사"
         case .measurements: "실측 사이즈 복사"
+        case .price: "가격 복사"
         }
     }
     var copiedMessage: String {
@@ -19,6 +20,7 @@ nonisolated enum ProductCopyField: String, Codable, CaseIterable, Identifiable {
         case .description: "설명이 복사되었습니다."
         case .brand: "브랜드명이 복사되었습니다."
         case .measurements: "실측 사이즈가 복사되었습니다."
+        case .price: "가격이 복사되었습니다."
         }
     }
 }
@@ -49,7 +51,13 @@ nonisolated struct ProductCopyPayload: Codable, Equatable, Hashable {
         case .description: description
         case .brand: brand
         case .measurements: measurements
+        case .price: formattedPrice
         }
+    }
+
+    private var formattedPrice: String {
+        guard let numericPrice = Int(price) else { return price }
+        return numericPrice.formatted(.number.grouping(.automatic))
     }
 }
 
@@ -59,6 +67,7 @@ nonisolated struct ProductCopyValues: Codable, Equatable, Hashable {
     let brand: String
     let measurements: String
     var measurementItems: [ProductCopyMeasurement]? = nil
+    let price: String
 
     func value(for field: ProductCopyField) -> String {
         switch field {
@@ -66,7 +75,13 @@ nonisolated struct ProductCopyValues: Codable, Equatable, Hashable {
         case .description: description
         case .brand: brand
         case .measurements: measurements
+        case .price: formattedPrice
         }
+    }
+
+    private var formattedPrice: String {
+        guard let numericPrice = Int(price) else { return price }
+        return numericPrice.formatted(.number.grouping(.automatic))
     }
 }
 

@@ -10,6 +10,7 @@ struct ExportSectionCard<Content: View>: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 if let subtitle {
                     Text(subtitle)
                         .font(.caption)

@@ -1,5 +1,6 @@
 import AuthenticationServices
 import Foundation
+import ImageIO
 import OSLog
 import Security
 import UIKit
@@ -64,20 +65,74 @@ final class Cafe24IntegrationClient: NSObject, ASWebAuthenticationPresentationCo
         }
     }
 
-    func publish(productName rawProductName: String, description: String, price: Int,
-                 images: [Data]) async throws -> Cafe24PublishResult {
+    func publish(requestID: String, productName rawProductName: String, description: String,
+                 category: String?, price: Int, images: [Data]) async throws -> Cafe24PublishResult {
         let productName = rawProductName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !productName.isEmpty else { throw Cafe24IntegrationError.invalidProductName }
+        guard !productName.isEmpty, productName.count <= ProductTextLimit.name else {
+            throw Cafe24IntegrationError.invalidProductName
+        }
+        guard description.count <= ProductTextLimit.detail else {
+            throw Cafe24IntegrationError.invalidProductDescription
+        }
         guard price >= 0 else { throw Cafe24IntegrationError.invalidPrice }
+        guard !images.isEmpty else { throw Cafe24IntegrationError.missingImage }
         guard images.count <= Self.maximumImageCount else {
             throw Cafe24IntegrationError.tooManyImages
         }
         var request = try authorizedRequest(path: "/products", method: "POST")
+        let preparation = Task.detached(priority: .userInitiated) {
+            try images.map { image in
+                try Task.checkCancellation()
+                return try autoreleasepool {
+                    try Self.makeUploadJPEG(from: image).base64EncodedString()
+                }
+            }
+        }
+        let imagesBase64 = try await withTaskCancellationHandler {
+            try await preparation.value
+        } onCancel: {
+            preparation.cancel()
+        }
+        try Task.checkCancellation()
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(Cafe24PublishRequest(
-            productName: productName, description: description, price: price, supplyPrice: price,
-            imagesBase64: images.map { $0.base64EncodedString() }))
+            requestID: requestID, productName: productName, description: description,
+            category: category, price: price, imagesBase64: imagesBase64))
         return try await send(request, as: Cafe24PublishResult.self)
+    }
+
+    nonisolated private static func makeUploadJPEG(from data: Data) throws -> Data {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            throw Cafe24IntegrationError.imagePreparationFailed
+        }
+
+        for maxPixelSize in [1600, 1200, 900, 640] {
+            try Task.checkCancellation()
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+                kCGImageSourceShouldCacheImmediately: true
+            ] as CFDictionary) else {
+                throw Cafe24IntegrationError.imagePreparationFailed
+            }
+
+            for quality in [0.85, 0.7, 0.55] {
+                try Task.checkCancellation()
+                let bytes = NSMutableData()
+                guard let encoder = CGImageDestinationCreateWithData(bytes, "public.jpeg" as CFString, 1, nil) else {
+                    throw Cafe24IntegrationError.imagePreparationFailed
+                }
+                CGImageDestinationAddImage(encoder, image, [
+                    kCGImageDestinationLossyCompressionQuality: quality
+                ] as CFDictionary)
+                guard CGImageDestinationFinalize(encoder) else {
+                    throw Cafe24IntegrationError.imagePreparationFailed
+                }
+                if bytes.length <= 1_000_000 { return bytes as Data }
+            }
+        }
+        throw Cafe24IntegrationError.imagePreparationFailed
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {

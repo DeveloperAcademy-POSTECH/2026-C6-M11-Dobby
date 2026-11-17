@@ -19,6 +19,12 @@ struct FruitsCopyCard: View {
             )
             FruitsCopyDivider()
             FruitsCopyFieldView(
+                field: .price,
+                value: product.marketplacePayload.value(for: .price),
+                onCopy: onCopy
+            )
+            FruitsCopyDivider()
+            FruitsCopyFieldView(
                 field: .brand,
                 value: product.marketplacePayload.brand,
                 onCopy: onCopy
