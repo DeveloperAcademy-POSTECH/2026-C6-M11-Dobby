@@ -437,11 +437,18 @@ final class AppRoutingTests: XCTestCase {
         let originalHeight = description.frame.height
         tapVisibleInput(description, in: app)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        description.typeText(String(repeating: "line\n", count: 12) + "end")
+        let originalText = description.value as? String
+        let addedText = String(repeating: "\n", count: 16) + "end"
+        description.typeText(addedText)
         XCTAssertTrue((description.value as? String)?.contains("end") == true)
-        XCTAssertEqual(description.frame.height, originalHeight, accuracy: 1)
+        XCTAssertGreaterThan(description.frame.height, originalHeight)
         assertEditorBottomAboveKeyboard(description, in: app)
         attachKeyboardScreenshot("saved-product-description-keyboard")
+
+        description.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: addedText.count))
+        XCTAssertEqual(description.value as? String, originalText)
+        XCTAssertEqual(description.frame.height, originalHeight, accuracy: 1)
+        assertEditorBottomAboveKeyboard(description, in: app)
 
         dismissKeyboardByTappingBackground(beside: description, in: app)
         let price = app.textFields["product-info.price"]
