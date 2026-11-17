@@ -80,6 +80,20 @@ final class HomeMeasurementTransitionTests: XCTestCase {
         XCTAssertEqual(HomeMeasurementMotion.pose(seed: seed, progress: 2), final)
     }
 
+    func testFittedArtworkKeepsItsHomeSizeInTheFullScreenTransition() {
+        let canvas = CGSize(width: 375, height: 667)
+        let seed = HomeMeasurementTransitionSeed(pull: 100, canvasSize: canvas, artworkWidth: 180)
+        let compactHome = HomeMeasurementTransitionSeed(pull: 100,
+            canvasSize: CGSize(width: seed.artworkWidth, height: canvas.height))
+        let home = HomeMeasurementMotion.pose(seed: compactHome, progress: 0)
+        let release = HomeMeasurementMotion.pose(seed: seed, progress: 0)
+        XCTAssertEqual(release.bodyCenter.x, canvas.width / 2)
+        XCTAssertEqual(release.bodyCenter.y, home.bodyCenter.y)
+        XCTAssertEqual(release.bodyDiameter, home.bodyDiameter)
+        let finish = HomeMeasurementMotion.pose(seed: seed, progress: 1)
+        XCTAssertGreaterThanOrEqual(finish.bodyCenter.y - finish.bodyDiameter / 2, canvas.height)
+    }
+
     func testMaskAndBodyAdvanceContinuouslyWithoutRevealingGapsOnDifferentScreens() {
         let pulls: [CGFloat] = [87.5, 100, 270]
         for size in [CGSize(width: 320, height: 568), CGSize(width: 375, height: 667),

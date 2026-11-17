@@ -242,7 +242,8 @@ struct ContentView: View {
         let snapshot = preparedHomeSnapshot ?? homeSnapshotSource.snapshot()
         let canvasSize = homeSnapshotSource.canvasSize ?? seed.canvasSize
         let request = CreationRequest(productID: nil,
-            homeTransition: .init(pull: seed.pull, canvasSize: canvasSize), homeSnapshot: snapshot)
+            homeTransition: .init(pull: seed.pull, canvasSize: canvasSize, artworkWidth: seed.artworkWidth),
+            homeSnapshot: snapshot)
         preparedHomeSnapshot = nil
         // Only this entry replaces UIKit's cover slide with the designed wipe.
         // Resume and library entry keep their existing presentation behaviour.

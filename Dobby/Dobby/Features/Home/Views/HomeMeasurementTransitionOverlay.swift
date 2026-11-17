@@ -130,6 +130,7 @@ struct HomeMeasurementTapeArtwork: View {
         let pose = HomeMeasurementMotion.pose(seed: seed, progress: progress)
         Canvas { context, _ in
             guard pose.scale > 0 else { return }
+            context.translateBy(x: (seed.canvasSize.width - seed.artworkWidth) / 2, y: 0)
             context.scaleBy(x: pose.scale, y: pose.scale)
             let pull = seed.pull
             let drop = pose.drop / pose.scale
