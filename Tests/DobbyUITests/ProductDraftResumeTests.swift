@@ -336,7 +336,8 @@ final class ProductDraftResumeTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         openMeasurementResult(in: app)
-        _ = saveDraftViaHome(stage: "상세 촬영 단계", app: app)
+        app.buttons["confirmGarmentMeasurement"].tap()
+        XCTAssertTrue(app.buttons["camera.startDetailCapture"].waitForExistence(timeout: 15))
         app.terminate()
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
@@ -346,10 +347,17 @@ final class ProductDraftResumeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(card.frame.minX, 0)
         XCTAssertLessThanOrEqual(card.frame.maxX, app.frame.width)
         attachScreenshot(app, name: "home-draft-accessibility-text")
-        app.scrollViews.firstMatch.swipeUp()
-        XCTAssertTrue(card.isHittable)
-        attachScreenshot(app, name: "home-draft-accessibility-scrolled")
+        let start = app.buttons["product-flow.start"]
+        XCTAssertTrue(start.isHittable)
+        let startFrame = start.frame
+        let cardFrame = card.frame
+        let screenEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.66))
+        screenEdge.press(forDuration: 0.05, thenDragTo: screenEdge.withOffset(CGVector(dx: 0, dy: -160)))
+        XCTAssertEqual(start.frame, startFrame)
+        XCTAssertEqual(card.frame, cardFrame)
         card.tap()
+        let detailGuide = app.buttons["camera.startDetailCapture"]
+        if detailGuide.waitForExistence(timeout: 3) { detailGuide.tap() }
         assertResumedStage("제품 상세 촬영", app: app)
     }
 
@@ -521,9 +529,7 @@ final class ProductDraftResumeTests: XCTestCase {
     }
 
     private func openMeasurementResult(in app: XCUIApplication) {
-        let start = app.buttons["product-flow.start"]
-        XCTAssertTrue(start.waitForExistence(timeout: 10))
-        start.tap()
+        startMeasurementFromHome(in: app)
         XCTAssertTrue(app.staticTexts["product-flow.fixture"].waitForExistence(timeout: 10))
         let capture = app.buttons["captureGarment"]
         XCTAssertTrue(capture.waitForExistence(timeout: 10))
@@ -707,7 +713,6 @@ final class ProductDraftResumeTests: XCTestCase {
         let card = app.buttons["home.resume"]
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         XCTAssertTrue(card.label.contains(stage))
-        for _ in 0..<5 where !card.isHittable { app.scrollViews.firstMatch.swipeUp() }
         XCTAssertTrue(card.isHittable)
     }
 

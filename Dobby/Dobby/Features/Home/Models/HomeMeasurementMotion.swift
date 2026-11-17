@@ -5,10 +5,12 @@ import Foundation
 nonisolated struct HomeMeasurementTransitionSeed: Equatable, Sendable {
     let pull: CGFloat
     let canvasSize: CGSize
+    let artworkWidth: CGFloat
 
-    init(pull: CGFloat, canvasSize: CGSize) {
+    init(pull: CGFloat, canvasSize: CGSize, artworkWidth: CGFloat? = nil) {
         self.pull = HomeMeasurementMotion.clampedPull(pull)
         self.canvasSize = canvasSize
+        self.artworkWidth = artworkWidth ?? canvasSize.width
     }
 }
 
@@ -78,20 +80,22 @@ nonisolated enum HomeMeasurementMotion {
 
     static func pose(seed: HomeMeasurementTransitionSeed, progress: Double) -> HomeMeasurementTransitionPose {
         let size = seed.canvasSize
-        let scale = max(0, size.width.isFinite ? size.width / referenceSize.width : 0)
+        let scale = max(0, seed.artworkWidth.isFinite ? seed.artworkWidth / referenceSize.width : 0)
         let t = min(1, max(0, progress.isFinite ? progress : 0))
         let enter = smooth(t)
         let pull = clampedPull(seed.pull)
         let follow = max(0, pull - 22.5) * 0.24
-        let drop = follow + (1225 - follow) * CGFloat(pow(t, 1.45))
-        let centerY = -17 + drop
-        let radius: CGFloat = 302
-        let sideUpperEdge = centerY - sqrt(radius * radius - 201 * 201)
         let height = scale > 0 && size.height.isFinite ? max(0, size.height / scale) : referenceSize.height
+        let radius: CGFloat = 302
+        let finalDrop = max(1225, height + radius + 17)
+        let drop = follow + (finalDrop - follow) * CGFloat(pow(t, 1.45))
+        let centerY = -17 + drop
+        let halfViewportWidth = scale > 0 ? size.width / (2 * scale) : 0
+        let sideUpperEdge = centerY - sqrt(max(0, radius * radius - halfViewportWidth * halfViewportWidth))
         let edge = max((height + 22) * CGFloat(smooth((t - 0.27) / 0.63)), sideUpperEdge + 23)
         return HomeMeasurementTransitionPose(scale: scale, pull: pull * scale,
             follow: follow * scale, drop: drop * scale,
-            bodyCenter: CGPoint(x: 201 * scale, y: centerY * scale),
+            bodyCenter: CGPoint(x: size.width / 2, y: centerY * scale),
             bodyDiameter: 604 * scale, bodyRotationRadians: -0.215 * enter,
             homeOpacity: 1 - smooth(Double(pull / 125) + t * 1.4),
             homeDrift: 15 * CGFloat(enter) * scale,
