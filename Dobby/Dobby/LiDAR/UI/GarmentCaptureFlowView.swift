@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 /// Product capture flow; the measurement lab remains available independently.
+/// Presentation branch #279 omits the floor-level cue for wall-mounted garments.
 struct GarmentCaptureFlowView: View {
     @StateObject private var captureSession = GarmentCaptureSession()
     private var camera: ARKitCaptureProvider { captureSession.camera }
@@ -52,7 +53,6 @@ struct GarmentCaptureFlowView: View {
     @State private var showsPlacementTutorial = false
     @State private var previewSkipsPlacementTutorial = false
     @State private var hasInitializedCapturePresentation = false
-    @StateObject private var levelGuide = GarmentCameraLevelGuide()
 
     init(archive: MeasurementArchive = MeasurementArchive(), preview: Bool = false,
          onConfirmedRecord: ((SavedMeasurement) async throws -> Void)? = nil,
@@ -146,7 +146,6 @@ struct GarmentCaptureFlowView: View {
         .onChange(of: captureActivation) { _, _ in
             guard !isPreview, model == nil else { return }
             if !permitsCameraStartup {
-                levelGuide.stop()
                 cancel()
                 camera.stop()
             } else if !camera.isRunning {
@@ -185,7 +184,7 @@ struct GarmentCaptureFlowView: View {
                 closeCameraOptions()
                 aspectTransitionID = nil
                 isChangingAspectRatio = false
-                levelGuide.stop(); clearPreviewFocus(); cancel(); camera.stop(); previewRecognized = false
+                clearPreviewFocus(); cancel(); camera.stop(); previewRecognized = false
                 if isPreview { synchronizePreviewOptions(invalidate: true) }
             }
             else if !isPreview, model == nil { restartCamera() }
@@ -195,12 +194,8 @@ struct GarmentCaptureFlowView: View {
             closeCameraOptions()
             aspectTransitionID = nil
             isChangingAspectRatio = false
-            levelGuide.stop(); clearPreviewFocus(); cancel(); camera.stop()
+            clearPreviewFocus(); cancel(); camera.stop()
             if isPreview { syntheticOptions.synchronize(exposure: 0, available: false, invalidatePendingRequests: true) }
-        }
-        .onChange(of: model == nil) { _, isCamera in
-            if isCamera, !isPreview, scenePhase == .active, permitsCameraStartup { levelGuide.start() }
-            else { levelGuide.stop() }
         }
         .task(id: processingSnapshot?.frame.frameID) {
             guard let snapshot = processingSnapshot else { return }
@@ -271,19 +266,6 @@ struct GarmentCaptureFlowView: View {
                         .transition(.opacity)
                         .accessibilityHidden(showsPlacementTutorial || showsCameraOptions)
                         .opacity(captureChromeOpacity)
-                }
-                if shouldShowLevelGuide, !showsPlacementTutorial, !showsCameraOptions {
-                    VStack(spacing: 109) {
-                        Image("MeasurementLevelTop").resizable().scaledToFit().frame(width: 161, height: 23)
-                        Image("MeasurementLevelBottom").resizable().scaledToFit().frame(width: 229, height: 38)
-                    }
-                    .position(x: photoRect.midX,
-                        y: photoRect.minY + photoRect.height * (389.5 - 146) / 536)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("카메라를 바닥과 평행하게 맞춰주세요")
-                    .accessibilityIdentifier("garmentCameraLevelGuide")
-                    .allowsHitTesting(false)
-                    .opacity(captureChromeOpacity)
                 }
                 if showsPlacementTutorial {
                     GarmentCaptureTutorialView(skipsTutorial: isPreview ? $previewSkipsPlacementTutorial : $skipsPlacementTutorial) {
@@ -384,12 +366,6 @@ struct GarmentCaptureFlowView: View {
             zoomSelector
                 .position(x: chrome.zoomCenterX, y: chrome.zoomCenterY)
         }
-    }
-
-    private var shouldShowLevelGuide: Bool {
-        !isCapturing && !silhouetteVisible && (isPreview
-            ? ProcessInfo.processInfo.arguments.contains("--garment-preview-level-guide")
-            : levelGuide.needsLevelAdvice)
     }
 
     private var selectedZoom: CameraZoom { isPreview ? previewControls.selectedZoom : camera.cameraControls.selectedZoom }
@@ -734,7 +710,6 @@ struct GarmentCaptureFlowView: View {
             guard camera.frameStatus?.hasDepth == true else { return "LiDAR 깊이 데이터를 준비하고 있어요" }
             guard service != nil else { return "측정 기능을 준비하고 있어요" }
         }
-        if shouldShowLevelGuide { return "핸드폰을 수평으로 들어주세요" }
         if canTakePhoto { return "옷 인식 완료! 촬영 버튼을 눌러주세요" }
         if canUseCameraControls { return "옷이 잘리지 않게 카메라 안에 넣어주세요" }
         if isPreview { return "옷 한 벌 전체가 보이도록 평평하게 펼쳐주세요" }
@@ -949,7 +924,6 @@ struct GarmentCaptureFlowView: View {
     private func restartCamera() {
         guard !isPreview, model == nil, scenePhase == .active, permitsCameraStartup,
               cameraRestartTask == nil else { return }
-        levelGuide.start()
         let token = UUID()
         cameraRestartID = token
         cameraRestartTask = Task {

@@ -141,17 +141,17 @@ final class GarmentHiFiUITests: XCTestCase {
     }
 
     @MainActor
-    func testLevelGuidanceDoesNotBypassTheRecognitionShutterGate() throws {
+    func testPresentationCaptureOmitsLevelGuideAndKeepsRecognitionShutterGate() throws {
         continueAfterFailure = false
         let app = openPreview(arguments: ["--garment-preview-top", "--garment-preview-level-guide"])
         let guidance = app.descendants(matching: .any)["captureGuidance"].firstMatch
-        XCTAssertEqual(guidance.label, "핸드폰을 수평으로 들어주세요")
-        XCTAssertTrue(app.descendants(matching: .any)["garmentCameraLevelGuide"].firstMatch.exists)
+        XCTAssertEqual(guidance.label, "옷이 잘리지 않게 카메라 안에 넣어주세요")
+        XCTAssertFalse(app.descendants(matching: .any)["garmentCameraLevelGuide"].firstMatch.exists)
         let shutter = app.buttons["captureGarment"]
-        XCTAssertFalse(shutter.isEnabled, "Level guidance alone must not arm the shutter")
+        XCTAssertFalse(shutter.isEnabled, "Removing the level guide must not bypass garment recognition")
         XCTAssertEqual(shutter.value as? String, "옷 인식 대기")
         XCTAssertFalse(app.buttons["confirmGarmentMeasurement"].exists)
-        screenshot("hifi96-level-guidance")
+        screenshot("presentation279-without-level-guidance")
         recognizeGarment(in: app)
         shutter.tap()
         XCTAssertTrue(app.buttons["confirmGarmentMeasurement"].waitForExistence(timeout: 10))
