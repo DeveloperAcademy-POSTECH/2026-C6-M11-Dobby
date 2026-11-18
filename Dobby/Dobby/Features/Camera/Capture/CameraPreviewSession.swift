@@ -23,14 +23,18 @@ final class CameraPreviewSession: CaptureProviding {
     @ObservationIgnored private let driver = CameraPreviewDriver()
     @ObservationIgnored private let store = CameraPhotoStore()
     @ObservationIgnored private let processor = DetailPhotoProcessor()
+    // Navigation may briefly display two UIKit hosts. Keep the capture graph
+    // connected to one layer for the whole detail session.
+    let previewLayer: AVCaptureVideoPreviewLayer
     var isPreviewTransitioning = false
-    @ObservationIgnored var previewCrop: (() -> CGRect?)?
-    @ObservationIgnored var rotationAngle: CGFloat = 90
-    @ObservationIgnored private var wantsRunning = false
+    @ObservationIgnored private var visiblePreviews: Set<UUID> = []
+    private var wantsRunning: Bool { !visiblePreviews.isEmpty }
     @ObservationIgnored private var revision = 0
 
     init(optionController: (any DetailCameraControlling)? = nil) {
         options = DetailCameraOptions(controller: optionController ?? driver)
+        previewLayer = AVCaptureVideoPreviewLayer(session: driver.session)
+        previewLayer.videoGravity = .resizeAspectFill
     }
 
     // View에는 프리뷰 레이어 연결만 허용한다. 구성·시작·중지는 driver가 직렬 처리한다.
@@ -57,7 +61,15 @@ final class CameraPreviewSession: CaptureProviding {
 
     func capture(sessionID: UUID, garmentID: UUID) async throws -> CapturedAsset {
         try Task.checkCancellation()
-        guard canCapture, let crop = previewCrop?() else { throw CameraFailure.cameraUnavailable }
+        guard canCapture, previewLayer.superlayer != nil, !previewLayer.bounds.isEmpty,
+              let connection = previewLayer.connection, connection.isActive else {
+            throw CameraFailure.cameraUnavailable
+        }
+        let rotationAngle = connection.videoRotationAngle
+        let sensorRect = previewLayer.metadataOutputRectConverted(fromLayerRect: previewLayer.bounds)
+        guard let crop = DetailPreviewCropMapping.uprightRect(sensorRect, rotationAngle: rotationAngle) else {
+            throw CameraFailure.cameraUnavailable
+        }
         options.clearPreviewFocus()
         isCapturing = true
         defer { isCapturing = false }
@@ -85,9 +97,17 @@ final class CameraPreviewSession: CaptureProviding {
         try await store.discardUncommitted(asset)
     }
 
-    func setActive(_ active: Bool) {
-        guard wantsRunning != active else { return }
-        wantsRunning = active
+    func setActive(_ active: Bool, previewID: UUID) {
+        let wasRunningRequested = wantsRunning
+        if active { visiblePreviews.insert(previewID) }
+        else { visiblePreviews.remove(previewID) }
+        guard wantsRunning != wasRunningRequested else { return }
+        updateSession()
+    }
+
+    func stop() {
+        guard wantsRunning else { return }
+        visiblePreviews.removeAll()
         updateSession()
     }
 
