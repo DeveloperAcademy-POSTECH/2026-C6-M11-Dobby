@@ -4,34 +4,37 @@ import Observation
 /// Shared by generation entry points. A cancelled or replaced request cannot publish a late result.
 @MainActor @Observable
 final class ProductAutofillSession {
-    private(set) var isGenerating = false
-    private var requestID: UUID?
-    private let generator: any ProductAutofillGenerating
+    private var activeRequest: Task<ProductAutofillDraft, Error>?
+    private let autofill: ShowcaseProductAutofill
+
+    var isGenerating: Bool { activeRequest != nil }
 
     init(generator: (any ProductAutofillGenerating)? = nil, diagnosticOrigin: String = "productFlow") {
-        self.generator = generator ?? ProductAutofillClient.makeDefault(diagnosticOrigin: diagnosticOrigin)
+        autofill = generator.map { ShowcaseProductAutofill(generator: $0) }
+            ?? ProductAutofillClient.makeDefault(diagnosticOrigin: diagnosticOrigin)
     }
 
-    func generate(photos: [CapturedAsset]) async throws -> ProductAutofillDraft {
-        guard !isGenerating else { throw CancellationError() }
-        let identifier = UUID()
-        requestID = identifier
-        isGenerating = true
-        defer {
-            if requestID == identifier {
-                requestID = nil
-                isGenerating = false
-            }
-        }
-        let draft = try await generator.generate(photos: Array(photos.prefix(5)))
+    func generate(photos: [CapturedAsset], additionalPhotoURLs: [URL] = []) async throws -> ProductAutofillDraft {
         try Task.checkCancellation()
-        guard requestID == identifier else { throw CancellationError() }
+        guard activeRequest == nil else { throw CancellationError() }
+        let request = Task {
+            try await autofill.generate(photos: photos, additionalPhotoURLs: additionalPhotoURLs)
+        }
+        activeRequest = request
+        defer { if activeRequest == request { activeRequest = nil } }
+        let draft = try await withTaskCancellationHandler {
+            try await request.value
+        } onCancel: {
+            request.cancel()
+        }
+        try Task.checkCancellation()
+        guard activeRequest == request else { throw CancellationError() }
         return draft
     }
 
     func cancel() {
-        requestID = nil
-        isGenerating = false
+        activeRequest?.cancel()
+        activeRequest = nil
     }
 }
 

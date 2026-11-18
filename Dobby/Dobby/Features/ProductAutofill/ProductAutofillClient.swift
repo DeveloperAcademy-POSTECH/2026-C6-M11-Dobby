@@ -157,13 +157,19 @@ actor ProductAutofillClient: ProductAutofillGenerating {
     }
 
     @MainActor
-    static func makeDefault(diagnosticOrigin: String = "productFlow") -> any ProductAutofillGenerating {
+    static func makeDefault(diagnosticOrigin: String = "productFlow") -> ShowcaseProductAutofill {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
         if let mode = fixtureMode(environment: environment, isFixture: ProductAppStorage.fixtureDirectory != nil) {
-            return ProductAutofillFixtureClient(mode: mode)
+            return ShowcaseProductAutofill(generator: ProductAutofillFixtureClient(mode: mode))
         }
         #endif
+        return ShowcaseProductAutofill(generator: makeLive(diagnosticOrigin: diagnosticOrigin),
+                                      match: { try ShowcaseGarmentMatcher.match(photoURLs: $0) })
+    }
+
+    @MainActor
+    private static func makeLive(diagnosticOrigin: String) -> ProductAutofillClient {
         if let appAPIKey = DobbyInstallationAuth.appAPIKey() {
             return ProductAutofillClient(diagnosticOrigin: diagnosticOrigin, appAuthorizationProvider: {
                 try DobbyInstallationAuth.authorization(appAPIKey: appAPIKey)

@@ -40,17 +40,19 @@ final class ProductInformationEditSession {
     /// Generate against the current editing draft. Only Done persists these changes.
     func generateInformation() async throws {
         let before = ProductAutofillInputSnapshot(garment: garment)
-        let photos = Array(garment.productPhotos.prefix(5))
+        let photos = garment.productPhotos
         guard !photos.isEmpty else { throw ProductAutofillError.invalidPhotos }
         let sessionID = UUID()
-        let assets = try photos.map { photo in
+        let uploadLimit = ProductAutofillPhotoEncoder.maximumPhotoCount
+        let assets = try photos.prefix(uploadLimit).map { photo in
             let url = photosDirectory.appending(path: photo.fileName)
             return CapturedAsset(id: photo.id, sessionID: sessionID, garmentID: garment.id,
                 purpose: .detail, capturedAt: photo.capturedAt,
                 source: .localFile(url, metadata: try ProductPhotoHandoff.metadata(for: url)))
         }
         let photoState = ProductInformationEditSnapshot(garment: garment, measurementInput: measurementInput)
-        let draft = try await autofill.generate(photos: assets)
+        let otherPhotos = photos.dropFirst(uploadLimit).map { photosDirectory.appending(path: $0.fileName) }
+        let draft = try await autofill.generate(photos: assets, additionalPhotoURLs: otherPhotos)
         try Task.checkCancellation()
         guard !photoState.hasChanges(in: garment, measurementInput: measurementInput) else {
             throw ProductAutofillCompletionFailure.changedInformation
