@@ -4,6 +4,26 @@ import XCTest
 /// Isolated synthetic fixtures verify navigation and draft retention, not camera accuracy.
 final class DetailPhotoBackNavigationUITests: XCTestCase {
     @MainActor
+    func testReturnToResultAndReenterDetailsAfterTakingPhoto() {
+        let app = launchResult(isTop: true)
+        defer { app.terminate() }
+        let originalPoints = measurementPoints(in: app)
+        XCTAssertFalse(originalPoints.isEmpty)
+        for pass in 0..<2 {
+            app.buttons["confirmGarmentMeasurement"].tap()
+            waitForDetails(in: app, expectsGuide: pass == 0)
+            if pass == 0 {
+                let shutter = app.buttons["camera.captureDetail"]
+                shutter.tap()
+                waitEnabled(shutter)
+            }
+            XCTAssertEqual(app.buttons["camera.openGallery"].value as? String, "3장")
+            returnToMeasurementResult(in: app)
+            XCTAssertEqual(measurementPoints(in: app), originalPoints)
+        }
+    }
+
+    @MainActor
     func testDetailBackReturnsToTopAndBottomResultsWithoutExitConfirmation() {
         for isTop in [true, false] {
             let app = launchResult(isTop: isTop)
@@ -81,9 +101,7 @@ final class DetailPhotoBackNavigationUITests: XCTestCase {
         app.launchArguments = ["--flow-preview", "--flow-test-store", UUID().uuidString]
         if isTop { app.launchArguments.append("--garment-preview-top") }
         app.launch()
-        let start = app.buttons["product-flow.start"]
-        XCTAssertTrue(start.waitForExistence(timeout: 15))
-        start.tap()
+        startMeasurementFromHome(in: app)
         let capture = app.buttons["captureGarment"]
         XCTAssertTrue(capture.waitForExistence(timeout: 15))
         armSyntheticGarmentCapture(in: app)

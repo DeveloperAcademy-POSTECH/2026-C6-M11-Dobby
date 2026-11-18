@@ -11,12 +11,10 @@ import UIKit
 
 /// 영상 표시만 담당한다. 카메라 구성·시작·중지는 CameraPreviewSession의 책임이다.
 struct CameraPreviewSurface: UIViewRepresentable {
-    let session: AVCaptureSession
+    let previewLayer: AVCaptureVideoPreviewLayer
     /// Surface-local photograph bounds, excluding decorative camera surroundings.
     /// Nil preserves the full-surface contract for callers without camera chrome.
     var photoRect: CGRect?
-    var onRotationChange: (CGFloat) -> Void = { _ in }
-    var onFramingReady: (@escaping () -> CGRect?) -> Void = { _ in }
     var interactionEnabled = false
     var controlCapabilities = CameraControlCapabilities.unavailable
     var controlState: CameraControlState?
@@ -25,27 +23,18 @@ struct CameraPreviewSurface: UIViewRepresentable {
     var onExposureAdjustmentActive: (Bool) -> Void = { _ in }
 
     func makeUIView(context: Context) -> PreviewView {
-        let view = PreviewView(frame: .zero)
-        view.previewLayer.videoGravity = .resizeAspectFill
-        view.previewLayer.session = session
+        let view = PreviewView(frame: .zero, previewLayer: previewLayer)
         configure(view)
-        onFramingReady { [weak view] in view?.normalizedPhotoCrop() }
         return view
     }
 
     func updateUIView(_ view: PreviewView, context: Context) {
-        if view.previewLayer.session !== session {
-            view.invalidateFocusFeedback()
-            view.previewLayer.session = session
-        }
         configure(view)
         view.updateRotation()
-        onFramingReady { [weak view] in view?.normalizedPhotoCrop() }
     }
 
     private func configure(_ view: PreviewView) {
         view.photoRect = photoRect
-        view.onRotationChange = onRotationChange
         view.interactionEnabled = interactionEnabled
         view.controlCapabilities = controlCapabilities
         view.controlState = controlState
@@ -57,12 +46,11 @@ struct CameraPreviewSurface: UIViewRepresentable {
 
     static func dismantleUIView(_ view: PreviewView, coordinator: ()) {
         view.tearDownInteraction()
-        view.previewLayer.session = nil
     }
 
     final class PreviewView: UIView {
-        override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
-        var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+        private let previewLayer: AVCaptureVideoPreviewLayer
+        private var hostsPreview: Bool { previewLayer.superlayer === layer }
         var photoRect: CGRect? {
             didSet { if photoRect != oldValue { invalidateFocusFeedback() } }
         }
@@ -73,7 +61,6 @@ struct CameraPreviewSurface: UIViewRepresentable {
             let clipped = photoRect.intersection(bounds)
             return clipped.isNull ? .zero : clipped
         }
-        var onRotationChange: (CGFloat) -> Void = { _ in }
         var interactionEnabled = false
         var controlCapabilities = CameraControlCapabilities.unavailable
         var controlState: CameraControlState? {
@@ -94,7 +81,8 @@ struct CameraPreviewSurface: UIViewRepresentable {
         private var lastOrientation: UIInterfaceOrientation?
         private var reduceMotionObserver: NSObjectProtocol?
 
-        override init(frame: CGRect) {
+        init(frame: CGRect, previewLayer: AVCaptureVideoPreviewLayer) {
+            self.previewLayer = previewLayer
             super.init(frame: frame)
             clipsToBounds = true
             reduceMotionObserver = NotificationCenter.default.addObserver(
@@ -110,7 +98,7 @@ struct CameraPreviewSurface: UIViewRepresentable {
         /// The preview layer already knows its aspect-fill crop, orientation,
         /// mirroring and zoom. Device controls need its uncropped sensor point.
         private func sensorPoint(at location: CGPoint) -> ImagePoint? {
-            guard interactionEnabled, window != nil, previewLayer.connection?.isActive == true,
+            guard hostsPreview, interactionEnabled, window != nil, previewLayer.connection?.isActive == true,
                   !photoViewport.isEmpty, photoViewport.contains(location) else { return nil }
             let converted = previewLayer.captureDevicePointConverted(fromLayerPoint: location)
             let point = ImagePoint(x: Double(converted.x), y: Double(converted.y))
@@ -118,7 +106,7 @@ struct CameraPreviewSurface: UIViewRepresentable {
         }
 
         func updateFocus() {
-            let enabled = interactionEnabled && controlCapabilities.focusSupported
+            let enabled = hostsPreview && interactionEnabled && controlCapabilities.focusSupported
                 && window != nil && !photoViewport.isEmpty && previewLayer.connection?.isActive == true
             interaction.capabilities = controlCapabilities
             interaction.visibleViewport = photoViewport
@@ -153,25 +141,21 @@ struct CameraPreviewSurface: UIViewRepresentable {
             onFocus = { _, _ in }
             onExposure = { _ in }
             onExposureAdjustmentActive = { _ in }
-            onRotationChange = { _ in }
+            if hostsPreview { previewLayer.removeFromSuperlayer() }
             if let reduceMotionObserver {
                 NotificationCenter.default.removeObserver(reduceMotionObserver)
                 self.reduceMotionObserver = nil
             }
         }
 
-        /// Convert the surface-local photograph using the current lens and zoom.
-        /// Navigation and controls do not enlarge the video surface or saved crop.
-        func normalizedPhotoCrop() -> CGRect? {
-            layoutIfNeeded()
-            guard let connection = previewLayer.connection, connection.isActive,
-                  !photoViewport.isEmpty else { return nil }
-            let sensorRect = previewLayer.metadataOutputRectConverted(fromLayerRect: photoViewport)
-            return DetailPreviewCropMapping.uprightRect(sensorRect, rotationAngle: connection.videoRotationAngle)
-        }
-
         override func layoutSubviews() {
             super.layoutSubviews()
+            if hostsPreview {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                previewLayer.frame = bounds
+                CATransaction.commit()
+            }
             if lastBounds != bounds {
                 invalidateFocusFeedback()
                 lastBounds = bounds
@@ -181,12 +165,18 @@ struct CameraPreviewSurface: UIViewRepresentable {
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            if window == nil { invalidateFocusFeedback() }
-            else { updateRotation() }
+            if window != nil {
+                layer.insertSublayer(previewLayer, at: 0)
+                setNeedsLayout()
+                updateRotation()
+            } else {
+                if hostsPreview { previewLayer.removeFromSuperlayer() }
+                invalidateFocusFeedback()
+            }
         }
 
         func updateRotation() {
-            guard let connection = previewLayer.connection,
+            guard hostsPreview, let connection = previewLayer.connection,
                   let orientation = window?.windowScene?.effectiveGeometry.interfaceOrientation else {
                 updateFocus()
                 return
@@ -207,7 +197,6 @@ struct CameraPreviewSurface: UIViewRepresentable {
             if connection.videoRotationAngle != angle, connection.isVideoRotationAngleSupported(angle) {
                 connection.videoRotationAngle = angle
             }
-            onRotationChange(angle)
             updateFocus()
         }
     }
