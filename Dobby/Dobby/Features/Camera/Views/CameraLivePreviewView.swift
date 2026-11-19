@@ -17,18 +17,18 @@ struct CameraLivePreviewView: View {
     var portraitPhotoTop: CGFloat? = nil
     var interactionEnabled = true
     @State private var isVisible = false
+    @State private var previewID = UUID()
 
     var body: some View {
         DetailAspectRatioPreview(aspectRatio: aspectRatio, prefersBottomAlignedPortrait: true,
                                portraitPhotoTop: portraitPhotoTop) { photoRect in
-            CameraPreviewSurface(session: camera.session, photoRect: photoRect,
-                onRotationChange: { camera.rotationAngle = $0 },
-                onFramingReady: { camera.previewCrop = $0 },
+            CameraPreviewSurface(previewLayer: camera.previewLayer, photoRect: photoRect,
                 interactionEnabled: interactionEnabled && scenePhase == .active && camera.canAdjustPreview,
                 controlCapabilities: camera.options.previewControlCapabilities,
                 controlState: camera.options.previewControlState,
                 onFocus: { camera.requestFocus(at: $0, requestID: $1) },
                 onExposure: { camera.requestExposure($0) })
+                .id(ObjectIdentifier(camera))
         }
             .accessibilityLabel("후면 카메라 실시간 미리보기")
             .overlay {
@@ -54,13 +54,14 @@ struct CameraLivePreviewView: View {
             }
             .onAppear {
                 isVisible = true
-                camera.setActive(scenePhase == .active)
+                camera.setActive(scenePhase == .active, previewID: previewID)
             }
-            .onChange(of: scenePhase) { _, phase in camera.setActive(isVisible && phase == .active) }
+            .onChange(of: scenePhase) { _, phase in
+                camera.setActive(isVisible && phase == .active, previewID: previewID)
+            }
             .onDisappear {
                 isVisible = false
-                camera.previewCrop = nil
-                camera.setActive(false)
+                camera.setActive(false, previewID: previewID)
             }
             .onReceive(NotificationCenter.default.publisher(for: AVCaptureSession.runtimeErrorNotification, object: camera.session).receive(on: DispatchQueue.main)) { _ in
                 camera.reportUnavailable("카메라 오류가 발생했어요. 다시 시도해 주세요.")

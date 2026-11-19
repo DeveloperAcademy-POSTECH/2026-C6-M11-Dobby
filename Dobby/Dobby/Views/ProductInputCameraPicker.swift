@@ -60,7 +60,7 @@ struct ProductInputCameraPicker: View {
 
     private func finish() {
         hasFinished = true
-        camera?.setActive(false)
+        camera?.stop()
         // Do not attach cleanup to onDisappear: presenting the shared capture
         // gallery also hides this screen, but must retain its temporary files.
         Task { await model.discardTemporaryPhotos() }

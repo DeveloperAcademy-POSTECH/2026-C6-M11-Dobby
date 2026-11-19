@@ -5,6 +5,46 @@ import XCTest
 
 @MainActor
 final class DetailExtendedPreviewTests: XCTestCase {
+    func testDetailNavigationReusesOneCameraPreviewLayerAcrossOverlappingViews() throws {
+        let camera = CameraPreviewSession()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        let root = UIViewController()
+        window.rootViewController = root
+        window.isHidden = false
+        defer { window.isHidden = true }
+
+        func showDetailPreview() -> UIHostingController<CameraLivePreviewView> {
+            let host = UIHostingController(rootView: CameraLivePreviewView(camera: camera))
+            root.addChild(host)
+            host.view.frame = root.view.bounds
+            root.view.addSubview(host.view)
+            host.didMove(toParent: root)
+            host.view.layoutIfNeeded()
+            return host
+        }
+
+        func videoLayer(in layer: CALayer) -> AVCaptureVideoPreviewLayer? {
+            if let preview = layer as? AVCaptureVideoPreviewLayer { return preview }
+            for child in layer.sublayers ?? [] {
+                if let preview = videoLayer(in: child) { return preview }
+            }
+            return nil
+        }
+
+        var outgoing = showDetailPreview()
+        let preview = try XCTUnwrap(videoLayer(in: outgoing.view.layer))
+        for _ in 0..<2 {
+            let incoming = showDetailPreview()
+            XCTAssertTrue(videoLayer(in: incoming.view.layer) === preview)
+            outgoing.willMove(toParent: nil)
+            outgoing.view.removeFromSuperview()
+            outgoing.removeFromParent()
+            XCTAssertTrue(videoLayer(in: incoming.view.layer) === preview)
+            XCTAssertTrue(preview.session === camera.session)
+            outgoing = incoming
+        }
+    }
+
     func testFigmaPhotographFillsWidthAndEndsAtScreenBottom() {
         let layout = DetailCameraPreviewLayout(containerSize: CGSize(width: 402, height: 874),
             aspectRatio: .sixteenNine, prefersBottomAlignedPortrait: true)
@@ -72,7 +112,8 @@ final class DetailExtendedPreviewTests: XCTestCase {
     func testPhotoSizedSurfaceUsesLocalFocusCoordinatesAndRejectsInvalidRectangles() {
         let layout = DetailCameraPreviewLayout(containerSize: CGSize(width: 402, height: 874),
             aspectRatio: .sixteenNine, prefersBottomAlignedPortrait: true)
-        let view = CameraPreviewSurface.PreviewView(frame: layout.previewFrame)
+        let view = CameraPreviewSurface.PreviewView(frame: layout.previewFrame,
+            previewLayer: AVCaptureVideoPreviewLayer())
         defer { view.tearDownInteraction() }
         view.photoRect = layout.photoRectInPreview
         XCTAssertEqual(view.photoViewport, view.bounds)
