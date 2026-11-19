@@ -12,12 +12,17 @@ nonisolated enum ShowcaseGarment: Sendable, Hashable {
 /// Verifies the color and structure of a reference patch after aligning its printed
 /// mark or fabric landmarks with the photographed garment.
 nonisolated enum ShowcaseGarmentMatcher {
+    private static let garmentScales = [640, 450, 320, 225, 160, 112]
+    // Smaller lettering and thread loops need closer scale spacing than whole pockets.
+    private static let intermediateLabelScales = [540, 380, 270, 190, 135]
+
     private struct Reference {
         let garment: ShowcaseGarment
         let points: [Landmark]
         let image: Raster
         let mark: Mark?
         let verifyTail: Bool
+        let usesLabelScales: Bool
     }
 
     private static let references: [Reference] = [
@@ -26,12 +31,18 @@ nonisolated enum ShowcaseGarmentMatcher {
         (.chakTee, "ShowcaseChakFront"),
         (.chakTee, "ShowcaseChakNeck"),
         (.zaraShorts, "ShowcaseZaraPockets"),
-        (.zaraShorts, "ShowcaseZaraSeams")
+        (.zaraShorts, "ShowcaseZaraSeams"),
+        (.zaraShorts, "ShowcaseZaraFly"),
+        (.zaraShorts, "ShowcaseZaraWaistband"),
+        (.zaraShorts, "ShowcaseZaraLabelStitch")
     ].compactMap { garment, name in
         guard let url = Bundle.main.url(forResource: name, withExtension: "jpg"),
-              let image = thumbnail(url), let raster = Raster(image, longest: 160) else { return nil }
-        return Reference(garment: garment, points: garment == .zaraShorts ? landmarks(image) : [], image: raster,
-                         mark: garment == .chakTee ? raster.orangeMarks().first : nil, verifyTail: name == "ShowcaseChakBack")
+              let image = thumbnail(url), let raster = Raster(image, longest: garment == .zaraShorts ? 45 : 160) else { return nil }
+        let usesLabelScales = name == "ShowcaseZaraLabelStitch"
+        let scales = usesLabelScales ? garmentScales + intermediateLabelScales : garmentScales
+        return Reference(garment: garment, points: garment == .zaraShorts ? landmarks(image, scales: scales) : [], image: raster,
+                         mark: garment == .chakTee ? raster.orangeMarks().first : nil, verifyTail: name == "ShowcaseChakBack",
+                         usesLabelScales: usesLabelScales)
     }
 
     static func match(photoURLs: [URL]) throws -> ShowcaseGarment? {
@@ -65,7 +76,9 @@ nonisolated enum ShowcaseGarmentMatcher {
     }
 
     private static func matchingGarments(in image: CGImage) throws -> Set<ShowcaseGarment> {
-        guard let raster = Raster(image, longest: 640) else { return [] }
+        // Compare the fly's wash, label and stitching at a coarser sampling scale:
+        // fine denim fibers shift between captures even when the same seams align.
+        guard let raster = Raster(image, longest: 640), let denim = Raster(image, longest: 156) else { return [] }
         let marks = raster.orangeMarks()
         var points: [Landmark]?
         var matches: Set<ShowcaseGarment> = []
@@ -76,8 +89,12 @@ nonisolated enum ShowcaseGarmentMatcher {
                     matches.insert(reference.garment)
                 }
             } else {
-                if points == nil { points = landmarks(image) }
-                if corresponds(reference, to: points ?? [], image: raster) { matches.insert(reference.garment) }
+                if points == nil { points = landmarks(image, scales: garmentScales) }
+                var candidates = points ?? []
+                if reference.usesLabelScales {
+                    candidates += landmarks(image, scales: intermediateLabelScales)
+                }
+                if corresponds(reference, to: candidates, image: denim) { matches.insert(reference.garment) }
             }
         }
         return matches
@@ -145,10 +162,10 @@ nonisolated enum ShowcaseGarmentMatcher {
         }
     }()
 
-    private static func landmarks(_ image: CGImage) -> [Landmark] {
+    private static func landmarks(_ image: CGImage, scales: [Int]) -> [Landmark] {
         var points: [Landmark] = []
         let longest = max(image.width, image.height)
-        for level in [640, 450, 320, 225, 160, 112] {
+        for level in scales {
             let scale = Float(level) / Float(longest)
             let width = Int(Float(image.width) * scale), height = Int(Float(image.height) * scale)
             guard width > 24, height > 24,
@@ -243,11 +260,11 @@ nonisolated enum ShowcaseGarmentMatcher {
             count += 1
         }
 
-        func exceeds(_ threshold: Float, minimumVariance: Float = 0) -> Bool {
-            guard count > 0 else { return false }
+        func score(minimumVariance: Float = 0) -> Float {
+            guard count > 0 else { return -1 }
             let energy = squares - sum * sum / count
-            guard min(energy.x, energy.y) > minimumVariance * count else { return false }
-            return products - sum.x * sum.y / count > threshold * sqrt(energy.x * energy.y)
+            guard min(energy.x, energy.y) > minimumVariance * count else { return -1 }
+            return (products - sum.x * sum.y / count) / sqrt(energy.x * energy.y)
         }
     }
 
@@ -321,7 +338,13 @@ nonisolated enum ShowcaseGarmentMatcher {
 
         // Verify the actual pattern across the patch after geometric alignment.
         // This rejects matches made up of repeated strokes from a brand label or seams.
-        func matches(_ other: Raster, transform: simd_float2x2, offset: SIMD2<Float>, divisions: Int = 6, requireTail: Bool = false) -> Bool {
+        func matches(_ other: Raster, transform: simd_float2x2, offset: SIMD2<Float>, requireTail: Bool = false) -> Bool {
+            similarity(other, transform: transform, offset: offset, divisions: 6) > 0.63
+                && similarity(other, transform: transform, offset: offset, divisions: 20, requireTail: requireTail) > 0.82
+        }
+
+        func similarity(_ other: Raster, transform: simd_float2x2, offset: SIMD2<Float>, divisions: Int,
+                        requireTail: Bool = false) -> Float {
             var pattern = Correlation(), tail = Correlation()
             var chromaError: Float = 0
             for row in 0..<divisions {
@@ -341,10 +364,9 @@ nonisolated enum ShowcaseGarmentMatcher {
                 }
             }
             guard pattern.count >= Float(divisions * divisions) * 0.82,
-                  chromaError < 32 * pattern.count,
-                  pattern.exceeds(divisions == 6 ? 0.63 : 0.82, minimumVariance: 18) else { return false }
-            if divisions > 6 { return !requireTail || tail.exceeds(0.6) }
-            return matches(other, transform: transform, offset: offset, divisions: 20, requireTail: requireTail)
+                  chromaError < 32 * pattern.count else { return -1 }
+            if requireTail && tail.score() <= 0.6 { return -1 }
+            return pattern.score(minimumVariance: 18)
         }
     }
 
@@ -384,6 +406,7 @@ nonisolated enum ShowcaseGarmentMatcher {
             }
         }
         guard distinct.count >= 2 else { return false }
+        var candidatesToRefine: [(score: Float, alignment: Alignment)] = []
         for (index, a) in distinct.enumerated() {
             for b in distinct.dropFirst(index + 1) {
                 let source = b.from - a.from, target = b.to - a.to
@@ -392,9 +415,60 @@ nonisolated enum ShowcaseGarmentMatcher {
                 let rotation = SIMD2(simd_dot(source, target), source.x * target.y - source.y * target.x) / length
                 let transform = simd_float2x2(rotation, SIMD2(-rotation.y, rotation.x))
                 let offset = a.to - transform * a.from
-                if reference.image.matches(image, transform: transform, offset: offset) { return true }
+                guard reference.image.similarity(image, transform: transform, offset: offset, divisions: 6) > 0.48 else { continue }
+                let score = reference.image.similarity(image, transform: transform, offset: offset, divisions: 12)
+                if score > 0.83 && reference.image.matches(image, transform: transform, offset: offset) { return true }
+                guard score > 0.44 else { continue }
+                if candidatesToRefine.count < 3 || score > candidatesToRefine[2].score {
+                    let insertion = candidatesToRefine.firstIndex { score > $0.score } ?? candidatesToRefine.endIndex
+                    candidatesToRefine.insert((score, Alignment(transform: transform, offset: offset)), at: insertion)
+                    if candidatesToRefine.count > 3 { candidatesToRefine.removeLast() }
+                }
             }
         }
-        return false
+        return candidatesToRefine.contains { $0.alignment.refinedMatch(reference: reference.image, photo: image) }
     }
+
+    private struct Alignment {
+        var transform: simd_float2x2
+        var offset: SIMD2<Float>
+
+        /// Nearby landmark pairs establish where to look. The best few placements
+        /// account for camera angle and the way the cloth hangs.
+        func refinedMatch(reference: Raster, photo: Raster) -> Bool {
+            var best = self
+            let center = SIMD2(Float(reference.width), Float(reference.height)) / (2 * reference.size)
+            let scale = simd_length(transform.columns.0)
+            for step: Float in [0.065, 0.035, 0.018, 0.01] {
+                var bestScore = best.score(reference: reference, photo: photo, divisions: 16)
+                // Translate in x/y, then adjust each axis of the linear transform around the patch center.
+                for parameter in 0..<6 {
+                    let start = best
+                    for direction: Float in [-1, 1] {
+                        var candidate = start
+                        let delta = direction * step * scale
+                        if parameter < 2 {
+                            candidate.offset[parameter] += delta
+                        } else {
+                            let column = (parameter - 2) / 2, row = (parameter - 2) % 2
+                            candidate.transform[column][row] += 2 * delta
+                            candidate.offset[row] -= 2 * delta * center[column]
+                        }
+                        let score = candidate.score(reference: reference, photo: photo, divisions: 16)
+                        if score > bestScore {
+                            bestScore = score
+                            best = candidate
+                        }
+                    }
+                }
+            }
+            // Verify with a denser, independent sampling grid and the same required correlation.
+            return best.score(reference: reference, photo: photo, divisions: 24) > 0.82
+        }
+
+        private func score(reference: Raster, photo: Raster, divisions: Int) -> Float {
+            reference.similarity(photo, transform: transform, offset: offset, divisions: divisions)
+        }
+    }
+
 }
