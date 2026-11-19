@@ -12,6 +12,14 @@ final class ShowcaseGarmentMatcherTests: XCTestCase {
         }
     }
 
+    func testShortsMatchFromTheBackOnTheChakDisplayAndRejectAMixedSelection() throws {
+        let back = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "showcase-shorts-back-wide", withExtension: "jpg"))
+        XCTAssertEqual(try ShowcaseGarmentMatcher.match(photoURLs: [back]), .zaraShorts)
+
+        let shirt = try reference("ShowcaseChakBack")
+        XCTAssertNil(try ShowcaseGarmentMatcher.match(photoURLs: [back, shirt]))
+    }
+
     func testEmptyChakDisplayAndOtherGarmentsFallThrough() throws {
         let display = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "showcase-empty-display", withExtension: "jpg"))
         let jacket = try XCTUnwrap(Bundle.main.url(forResource: "library-preview-polo-jacket", withExtension: "png"))
