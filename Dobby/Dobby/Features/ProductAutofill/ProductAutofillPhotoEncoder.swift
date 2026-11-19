@@ -14,13 +14,19 @@ nonisolated enum ProductAutofillPhotoEncoder {
         let imageDataUrl: String
     }
 
-    static func encode(_ photos: [CapturedAsset], totalBudget: Int = maximumTotalBytes) throws -> [Photo] {
-        let selected = Array(photos.prefix(maximumPhotoCount))
-        guard totalBudget > 0, totalBudget <= maximumTotalBytes, let first = selected.first,
-              selected.allSatisfy({ $0.garmentID == first.garmentID && $0.sessionID == first.sessionID }),
-              Set(selected.map(\.id)).count == selected.count else {
+    /// A measurement retake keeps detail photos from the same garment's previous camera session.
+    static func validateSelection(_ photos: [CapturedAsset]) throws {
+        guard let first = photos.first,
+              photos.allSatisfy({ $0.garmentID == first.garmentID }),
+              Set(photos.map(\.id)).count == photos.count else {
             throw ProductAutofillError.invalidPhotos
         }
+    }
+
+    static func encode(_ photos: [CapturedAsset], totalBudget: Int = maximumTotalBytes) throws -> [Photo] {
+        try validateSelection(photos)
+        guard totalBudget > 0, totalBudget <= maximumTotalBytes else { throw ProductAutofillError.invalidPhotos }
+        let selected = photos.prefix(maximumPhotoCount)
         // A per-image share guarantees the aggregate limit even for five noisy photos.
         let budget = min(maximumPhotoBytes, totalBudget / selected.count)
         return try selected.map { photo in

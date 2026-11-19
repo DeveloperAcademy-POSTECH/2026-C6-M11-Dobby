@@ -11,10 +11,9 @@ nonisolated struct ShowcaseProductAutofill: Sendable {
     @concurrent
     func generate(photos: [CapturedAsset], additionalPhotoURLs: [URL] = []) async throws -> ProductAutofillDraft {
         try Task.checkCancellation()
+        try ProductAutofillPhotoEncoder.validateSelection(photos)
         let started = ContinuousClock.now
-        if let match, let first = photos.first,
-           Set(photos.map(\.id)).count == photos.count,
-           photos.allSatisfy({ $0.garmentID == first.garmentID && $0.sessionID == first.sessionID }) {
+        if let match {
             let urls = photos.compactMap { photo -> URL? in
                 guard case let .localFile(url, _) = photo.source else { return nil }
                 return url

@@ -30,6 +30,41 @@ final class ShowcaseProductAutofillTests: XCTestCase {
         XCTAssertTrue(requests.isEmpty)
     }
 
+    func testRetakenMeasurementAndRetainedDetailCanMatchTheSameShowcaseGarment() async throws {
+        let photos = makePhotos(2)
+        let retake = CapturedAsset(id: photos[0].id, sessionID: UUID(), garmentID: photos[0].garmentID,
+            purpose: .measurement, capturedAt: .now, source: photos[0].source)
+        let generator = RecordingGenerator()
+        let autofill = ShowcaseProductAutofill(generator: generator, match: { urls in
+            XCTAssertEqual(urls.map(\.lastPathComponent), ["0.jpg", "1.jpg"])
+            return .zaraShorts
+        }, sleepUntil: { _ in })
+
+        let draft = try await autofill.generate(photos: [retake, photos[1]])
+        XCTAssertEqual(draft.productName, "ZARA 연청 데님 쇼츠")
+        let requests = await generator.requests
+        XCTAssertTrue(requests.isEmpty)
+    }
+
+    func testInvalidSelectionNeverReachesMatcherOrGenerator() async throws {
+        let photos = makePhotos(ProductAutofillPhotoEncoder.maximumPhotoCount)
+        let generator = RecordingGenerator()
+        let autofill = ShowcaseProductAutofill(generator: generator, match: { _ in
+            XCTFail("An invalid selection reached the matcher.")
+            return nil
+        })
+        for selection in [photos + [photos[0]], photos + makePhotos(1), []] {
+            do {
+                _ = try await autofill.generate(photos: selection)
+                XCTFail("An invalid selection generated a draft.")
+            } catch let error as ProductAutofillError {
+                XCTAssertEqual(error, .invalidPhotos)
+            }
+        }
+        let requests = await generator.requests
+        XCTAssertTrue(requests.isEmpty)
+    }
+
     func testUnknownPhotosUseNormalGeneratorWithOnlyFirstFivePhotosAndNoDelay() async throws {
         let generator = RecordingGenerator()
         let photos = makePhotos(7)

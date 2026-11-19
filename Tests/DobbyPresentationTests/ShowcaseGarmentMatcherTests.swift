@@ -4,6 +4,22 @@ import XCTest
 
 @MainActor
 final class ShowcaseGarmentMatcherTests: XCTestCase {
+    func testShortsMatchFromTheWideDisplayAndWaistLabelIndependently() throws {
+        let bundle = Bundle(for: Self.self)
+        for name in ["showcase-shorts-wide", "showcase-shorts-waist-label"] {
+            let photo = try XCTUnwrap(bundle.url(forResource: name, withExtension: "jpg"))
+            XCTAssertEqual(try ShowcaseGarmentMatcher.match(photoURLs: [photo]), .zaraShorts, name)
+        }
+    }
+
+    func testEmptyChakDisplayAndOtherGarmentsFallThrough() throws {
+        let display = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "showcase-empty-display", withExtension: "jpg"))
+        let jacket = try XCTUnwrap(Bundle.main.url(forResource: "library-preview-polo-jacket", withExtension: "png"))
+        for photo in [display, jacket] {
+            XCTAssertNil(try ShowcaseGarmentMatcher.match(photoURLs: [photo]), photo.lastPathComponent)
+        }
+    }
+
     func testBothGarmentsMatchAfterThePrintOrPocketIsReframed() throws {
         for (name, expected) in [("ShowcaseChakChest", ShowcaseGarment.chakTee),
                                  ("ShowcaseZaraPockets", .zaraShorts)] {

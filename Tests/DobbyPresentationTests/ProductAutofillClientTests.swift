@@ -368,6 +368,16 @@ final class ProductAutofillClientTests: XCTestCase {
         XCTAssertEqual(encoded.map(\.id), photos.map { $0.id.uuidString })
     }
 
+    func testEncoderUploadsRetakenMeasurementAndRetainedDetailInSelectionOrder() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let originals = try makePhotos(count: 2, directory: directory)
+        let retake = CapturedAsset(id: originals[0].id, sessionID: UUID(), garmentID: originals[0].garmentID,
+            purpose: .measurement, capturedAt: .now, source: originals[0].source)
+        let encoded = try ProductAutofillPhotoEncoder.encode([retake, originals[1]])
+        XCTAssertEqual(encoded.map(\.id), [retake.id.uuidString, originals[1].id.uuidString])
+    }
+
     func testEncoderRejectsMissingFilesDuplicateIdentifiersAndMixedProducts() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
