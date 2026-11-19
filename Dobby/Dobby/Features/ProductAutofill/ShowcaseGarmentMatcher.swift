@@ -12,12 +12,17 @@ nonisolated enum ShowcaseGarment: Sendable, Hashable {
 /// Verifies the color and structure of a reference patch after aligning its printed
 /// mark or fabric landmarks with the photographed garment.
 nonisolated enum ShowcaseGarmentMatcher {
+    private static let garmentScales = [640, 450, 320, 225, 160, 112]
+    // Smaller lettering and thread loops need closer scale spacing than whole pockets.
+    private static let intermediateLabelScales = [540, 380, 270, 190, 135]
+
     private struct Reference {
         let garment: ShowcaseGarment
         let points: [Landmark]
         let image: Raster
         let mark: Mark?
         let verifyTail: Bool
+        let usesLabelScales: Bool
     }
 
     private static let references: [Reference] = [
@@ -28,13 +33,16 @@ nonisolated enum ShowcaseGarmentMatcher {
         (.zaraShorts, "ShowcaseZaraPockets"),
         (.zaraShorts, "ShowcaseZaraSeams"),
         (.zaraShorts, "ShowcaseZaraFly"),
-        (.zaraShorts, "ShowcaseZaraLabelStitch"),
-        (.zaraShorts, "ShowcaseZaraWaistband")
+        (.zaraShorts, "ShowcaseZaraWaistband"),
+        (.zaraShorts, "ShowcaseZaraLabelStitch")
     ].compactMap { garment, name in
         guard let url = Bundle.main.url(forResource: name, withExtension: "jpg"),
               let image = thumbnail(url), let raster = Raster(image, longest: garment == .zaraShorts ? 45 : 160) else { return nil }
-        return Reference(garment: garment, points: garment == .zaraShorts ? landmarks(image) : [], image: raster,
-                         mark: garment == .chakTee ? raster.orangeMarks().first : nil, verifyTail: name == "ShowcaseChakBack")
+        let usesLabelScales = name == "ShowcaseZaraLabelStitch"
+        let scales = usesLabelScales ? garmentScales + intermediateLabelScales : garmentScales
+        return Reference(garment: garment, points: garment == .zaraShorts ? landmarks(image, scales: scales) : [], image: raster,
+                         mark: garment == .chakTee ? raster.orangeMarks().first : nil, verifyTail: name == "ShowcaseChakBack",
+                         usesLabelScales: usesLabelScales)
     }
 
     static func match(photoURLs: [URL]) throws -> ShowcaseGarment? {
@@ -81,8 +89,12 @@ nonisolated enum ShowcaseGarmentMatcher {
                     matches.insert(reference.garment)
                 }
             } else {
-                if points == nil { points = landmarks(image) }
-                if corresponds(reference, to: points ?? [], image: denim) { matches.insert(reference.garment) }
+                if points == nil { points = landmarks(image, scales: garmentScales) }
+                var candidates = points ?? []
+                if reference.usesLabelScales {
+                    candidates += landmarks(image, scales: intermediateLabelScales)
+                }
+                if corresponds(reference, to: candidates, image: denim) { matches.insert(reference.garment) }
             }
         }
         return matches
@@ -150,10 +162,10 @@ nonisolated enum ShowcaseGarmentMatcher {
         }
     }()
 
-    private static func landmarks(_ image: CGImage) -> [Landmark] {
+    private static func landmarks(_ image: CGImage, scales: [Int]) -> [Landmark] {
         var points: [Landmark] = []
         let longest = max(image.width, image.height)
-        for level in [640, 450, 320, 225, 160, 112] {
+        for level in scales {
             let scale = Float(level) / Float(longest)
             let width = Int(Float(image.width) * scale), height = Int(Float(image.height) * scale)
             guard width > 24, height > 24,
