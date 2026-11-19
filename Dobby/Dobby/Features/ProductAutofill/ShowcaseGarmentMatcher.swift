@@ -34,6 +34,8 @@ nonisolated enum ShowcaseGarmentMatcher {
         (.zaraShorts, "ShowcaseZaraSeams"),
         (.zaraShorts, "ShowcaseZaraFly"),
         (.zaraShorts, "ShowcaseZaraWaistband"),
+        (.zaraShorts, "ShowcaseZaraRearYoke"),
+        (.zaraShorts, "ShowcaseZaraLeatherSeam"),
         (.zaraShorts, "ShowcaseZaraLabelStitch")
     ].compactMap { garment, name in
         guard let url = Bundle.main.url(forResource: name, withExtension: "jpg"),
